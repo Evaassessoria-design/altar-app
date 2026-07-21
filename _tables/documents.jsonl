@@ -1,0 +1,13 @@
+{"name":"users","id":10001}
+{"name":"events","id":10002}
+{"name":"briefings","id":10003}
+{"name":"checklistItems","id":10004}
+{"name":"eventTeam","id":10005}
+{"name":"purchaseItems","id":10006}
+{"name":"teamMembers","id":10007}
+{"name":"leads","id":10008}
+{"name":"transactions","id":10009}
+{"name":"contracts","id":10010}
+{"name":"budgetItems","id":10011}
+{"name":"eventPhotos","id":10012}
+{"name":"notifications","id":10013}

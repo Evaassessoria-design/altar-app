@@ -1,24 +1,12 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import type { MutationCtx, QueryCtx } from "./_generated/server";
-
-async function requireUser(ctx: QueryCtx | MutationCtx) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new ConvexError({ code: "UNAUTHENTICATED", message: "Não autenticado" });
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-    .unique();
-  if (!user) throw new ConvexError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
-  return user;
-}
+import { getOptionalIdentity, requireIdentity, requireUser } from "./lib/identity";
 
 // Generate upload URL for photo
 export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new ConvexError({ code: "UNAUTHENTICATED", message: "Não autenticado" });
+    await requireIdentity(ctx);
     return await ctx.storage.generateUploadUrl();
   },
 });
@@ -76,8 +64,7 @@ export const listPhotos = query({
     )),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return [];
+    if (!(await getOptionalIdentity(ctx))) return [];
 
     let photosQuery;
     if (args.category) {
@@ -145,8 +132,8 @@ export const deletePhoto = mutation({
 export const getPhotoCounts = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return { total: 0, antes: 0, montagem: 0, evento: 0, desmontagem: 0 };
+    if (!(await getOptionalIdentity(ctx)))
+      return { total: 0, antes: 0, montagem: 0, evento: 0, desmontagem: 0 };
     const photos = await ctx.db
       .query("eventPhotos")
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))

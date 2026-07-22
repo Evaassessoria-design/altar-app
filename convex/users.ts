@@ -1,7 +1,12 @@
 import { mutation, query, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
-import { syncAuthenticatedUser } from "./lib/identity";
+import {
+  getOptionalUser,
+  requireIdentity,
+  requireUser,
+  syncAuthenticatedUser,
+} from "./lib/identity";
 
 // Chamado pelo cliente logo após cadastro/login (Better Auth).
 // Vincula/cria a linha do app `users` — toda a lógica vive em lib/identity.ts.
@@ -56,32 +61,13 @@ export const updateCurrentUser = mutation({
 
 export const getCurrentUser = query({
   args: {},
-  handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return null;
-
-    return await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) =>
-        q.eq("tokenIdentifier", identity.tokenIdentifier),
-      )
-      .unique();
-  },
+  handler: async (ctx) => getOptionalUser(ctx),
 });
 
 export const getSubscriptionStatus = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return null;
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) =>
-        q.eq("tokenIdentifier", identity.tokenIdentifier),
-      )
-      .unique();
-
+    const user = await getOptionalUser(ctx);
     if (!user) return null;
 
     // Check if trial has expired
@@ -103,16 +89,8 @@ export const getSubscriptionStatus = query({
 export const activateSubscription = mutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new ConvexError({ message: "Não autenticado", code: "UNAUTHENTICATED" });
-
-    const caller = await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) =>
-        q.eq("tokenIdentifier", identity.tokenIdentifier),
-      )
-      .unique();
-    if (!caller || caller.role !== "admin") {
+    const caller = await requireUser(ctx);
+    if (caller.role !== "admin") {
       throw new ConvexError({ message: "Sem permissão", code: "FORBIDDEN" });
     }
 
@@ -124,12 +102,7 @@ export const activateSubscription = mutation({
 export const completeOnboarding = mutation({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return;
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-      .unique();
+    const user = await getOptionalUser(ctx);
     if (!user) return;
     await ctx.db.patch(user._id, { onboardingCompleted: true });
   },
@@ -145,16 +118,7 @@ export const updateProfile = mutation({
     logoStorageId: v.optional(v.id("_storage")),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new ConvexError({ message: "Não autenticado", code: "UNAUTHENTICATED" });
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) =>
-        q.eq("tokenIdentifier", identity.tokenIdentifier),
-      )
-      .unique();
-    if (!user) throw new ConvexError({ message: "Usuário não encontrado", code: "NOT_FOUND" });
+    const user = await requireUser(ctx);
 
     const patch: {
       name?: string;
@@ -179,8 +143,7 @@ export const updateProfile = mutation({
 export const generateLogoUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new ConvexError({ message: "Não autenticado", code: "UNAUTHENTICATED" });
+    await requireIdentity(ctx);
     return await ctx.storage.generateUploadUrl();
   },
 });
@@ -189,14 +152,7 @@ export const generateLogoUploadUrl = mutation({
 export const getLogoUrl = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return null;
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) =>
-        q.eq("tokenIdentifier", identity.tokenIdentifier),
-      )
-      .unique();
+    const user = await getOptionalUser(ctx);
     if (!user?.logoStorageId) return null;
     return await ctx.storage.getUrl(user.logoStorageId);
   },

@@ -1,25 +1,12 @@
 // Convex V8 runtime — mutations and queries for AI/contract features
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { ConvexError } from "convex/values";
-import type { MutationCtx } from "./_generated/server.d.ts";
-
-async function getAuthUser(ctx: MutationCtx) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new ConvexError({ code: "UNAUTHENTICATED", message: "Não autenticado" });
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-    .unique();
-  if (!user) throw new ConvexError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
-  return user;
-}
+import { requireIdentity, requireUser } from "./lib/identity";
 
 export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new ConvexError({ code: "UNAUTHENTICATED", message: "Não autenticado" });
+    await requireIdentity(ctx);
     return ctx.storage.generateUploadUrl();
   },
 });
@@ -31,7 +18,7 @@ export const saveContract = mutation({
     filename: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await getAuthUser(ctx);
+    const user = await requireUser(ctx);
     // Delete old contracts for this event
     const existing = await ctx.db
       .query("contracts")

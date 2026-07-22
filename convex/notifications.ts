@@ -1,29 +1,13 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
-import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel.d.ts";
-
-async function requireUser(ctx: QueryCtx | MutationCtx) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new ConvexError({ code: "UNAUTHENTICATED", message: "Não autenticado" });
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-    .unique();
-  if (!user) throw new ConvexError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
-  return user;
-}
+import { getOptionalUser, requireIdentity, requireUser } from "./lib/identity";
 
 // List latest 50 notifications for the current user
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return [];
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-      .unique();
+    const user = await getOptionalUser(ctx);
     if (!user) return [];
     return await ctx.db
       .query("notifications")
@@ -37,12 +21,7 @@ export const list = query({
 export const unreadCount = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return 0;
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-      .unique();
+    const user = await getOptionalUser(ctx);
     if (!user) return 0;
     const unread = await ctx.db
       .query("notifications")
@@ -93,12 +72,8 @@ export const remove = mutation({
 export const generateMyAlerts = mutation({
   args: {},
   handler: async (ctx): Promise<void> => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new ConvexError({ code: "UNAUTHENTICATED", message: "Não autenticado" });
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-      .unique();
+    await requireIdentity(ctx);
+    const user = await getOptionalUser(ctx);
     if (!user) return;
 
     const now = new Date();

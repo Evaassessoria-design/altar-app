@@ -36,13 +36,41 @@ export async function getOptionalUser(ctx: QueryCtx | MutationCtx) {
   return null;
 }
 
-/** Igual a getOptionalUser, mas lança UNAUTHENTICATED se não houver sessão. */
+/**
+ * Exige usuário do app. Mesma semântica de erro dos antigos helpers locais:
+ *  - sem sessão            → UNAUTHENTICATED
+ *  - sessão sem linha em `users` → NOT_FOUND
+ */
 export async function requireUser(ctx: QueryCtx | MutationCtx) {
-  const user = await getOptionalUser(ctx);
-  if (!user) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) {
     throw new ConvexError({ code: "UNAUTHENTICATED", message: "Não autenticado" });
   }
+  const user = await getOptionalUser(ctx);
+  if (!user) {
+    throw new ConvexError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
+  }
   return user;
+}
+
+// Contexto mínimo com `auth` — cobre QueryCtx, MutationCtx e ActionCtx.
+type AuthCtx = { auth: QueryCtx["auth"] };
+
+/** Sessão autenticada (sem exigir linha em `users`), ou null. */
+export async function getOptionalIdentity(ctx: AuthCtx) {
+  return ctx.auth.getUserIdentity();
+}
+
+/**
+ * Exige apenas sessão autenticada (para actions e mutations de upload que
+ * não dependem da linha em `users`). Lança UNAUTHENTICATED se deslogado.
+ */
+export async function requireIdentity(ctx: AuthCtx) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) {
+    throw new ConvexError({ code: "UNAUTHENTICATED", message: "Não autenticado" });
+  }
+  return identity;
 }
 
 /**

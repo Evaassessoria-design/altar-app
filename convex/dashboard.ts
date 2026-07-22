@@ -1,24 +1,12 @@
 import { query } from "./_generated/server";
-import { ConvexError } from "convex/values";
-import type { QueryCtx } from "./_generated/server.d.ts";
-
-async function getAuthUser(ctx: QueryCtx) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new ConvexError({ code: "UNAUTHENTICATED", message: "Não autenticado" });
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-    .unique();
-  if (!user) throw new ConvexError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
-  return user;
-}
+import { requireUser } from "./lib/identity";
 
 // ─── Dashboard summary data ───────────────────────────────────────────────────
 
 export const getDashboardStats = query({
   args: {},
   handler: async (ctx) => {
-    const user = await getAuthUser(ctx);
+    const user = await requireUser(ctx);
 
     const allEvents = await ctx.db
       .query("events")

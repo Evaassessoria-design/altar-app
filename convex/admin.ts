@@ -2,17 +2,13 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import type { QueryCtx, MutationCtx } from "./_generated/server.d.ts";
+import { getOptionalUser, requireUser } from "./lib/identity";
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────
 
 async function requireAdmin(ctx: QueryCtx | MutationCtx) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new ConvexError({ code: "UNAUTHENTICATED", message: "Não autenticado" });
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-    .unique();
-  if (!user || user.role !== "admin") {
+  const user = await requireUser(ctx);
+  if (user.role !== "admin") {
     throw new ConvexError({ code: "FORBIDDEN", message: "Acesso restrito a administradores" });
   }
   return user;
@@ -23,12 +19,7 @@ async function requireAdmin(ctx: QueryCtx | MutationCtx) {
 export const isAdmin = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return false;
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-      .unique();
+    const user = await getOptionalUser(ctx);
     return user?.role === "admin";
   },
 });

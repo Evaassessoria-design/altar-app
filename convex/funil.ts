@@ -1,23 +1,12 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
-import type { QueryCtx, MutationCtx } from "./_generated/server.d.ts";
-
-async function getAuthUser(ctx: QueryCtx | MutationCtx) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new ConvexError({ message: "Não autenticado", code: "UNAUTHENTICATED" });
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-    .unique();
-  if (!user) throw new ConvexError({ message: "Usuário não encontrado", code: "NOT_FOUND" });
-  return user;
-}
+import { requireUser } from "./lib/identity";
 
 export const listLeads = query({
   args: {},
   handler: async (ctx) => {
-    const user = await getAuthUser(ctx);
+    const user = await requireUser(ctx);
     return ctx.db
       .query("leads")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
@@ -41,7 +30,7 @@ export const createLead = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await getAuthUser(ctx);
+    const user = await requireUser(ctx);
     // Get max order for this stage
     const stageleads = await ctx.db
       .query("leads")
@@ -72,7 +61,7 @@ export const updateLead = mutation({
     order: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const user = await getAuthUser(ctx);
+    const user = await requireUser(ctx);
     const lead = await ctx.db.get(args.id);
     if (!lead || lead.userId !== user._id)
       throw new ConvexError({ message: "Lead não encontrado", code: "NOT_FOUND" });
@@ -84,7 +73,7 @@ export const updateLead = mutation({
 export const deleteLead = mutation({
   args: { id: v.id("leads") },
   handler: async (ctx, args) => {
-    const user = await getAuthUser(ctx);
+    const user = await requireUser(ctx);
     const lead = await ctx.db.get(args.id);
     if (!lead || lead.userId !== user._id)
       throw new ConvexError({ message: "Lead não encontrado", code: "NOT_FOUND" });
@@ -111,7 +100,7 @@ export const convertToEvent = mutation({
     ),
   },
   handler: async (ctx, args): Promise<string> => {
-    const user = await getAuthUser(ctx);
+    const user = await requireUser(ctx);
     const lead = await ctx.db.get(args.leadId);
     if (!lead || lead.userId !== user._id)
       throw new ConvexError({ message: "Lead não encontrado", code: "NOT_FOUND" });

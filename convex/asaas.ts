@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
+import { requireIdentity } from "./lib/identity";
 
 // Production API
 const ASAAS_BASE = "https://api.asaas.com/v3";
@@ -56,8 +57,7 @@ export const createCheckoutSession = action({
     existingCustomerId: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<{ paymentUrl: string; customerId: string }> => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new ConvexError({ message: "Não autenticado", code: "UNAUTHENTICATED" });
+    await requireIdentity(ctx);
 
     let customerId = args.existingCustomerId ?? "";
 
@@ -131,8 +131,7 @@ export const createCheckoutSession = action({
 export const cancelSubscription = action({
   args: { asaasSubscriptionId: v.string() },
   handler: async (ctx, args): Promise<{ ok: boolean }> => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new ConvexError({ message: "Não autenticado", code: "UNAUTHENTICATED" });
+    await requireIdentity(ctx);
 
     await asaasFetch(`/subscriptions/${args.asaasSubscriptionId}`, {
       method: "DELETE",

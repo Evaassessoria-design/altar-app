@@ -3,8 +3,8 @@
 import { v } from "convex/values";
 import OpenAI from "openai";
 import { action } from "./_generated/server";
-import { ConvexError } from "convex/values";
 import { api } from "./_generated/api";
+import { requireIdentity } from "./lib/identity";
 
 function makeOpenAI() {
   return new OpenAI({
@@ -21,8 +21,7 @@ export const extractBriefingFromContract = action({
     contractText: v.string(),
   },
   handler: async (ctx, args): Promise<{ fieldsUpdated: number }> => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new ConvexError({ code: "UNAUTHENTICATED", message: "Não autenticado" });
+    await requireIdentity(ctx);
 
     const client = makeOpenAI();
 
@@ -82,8 +81,7 @@ export const analyseLayout = action({
     imageUrl: v.string(),
   },
   handler: async (ctx, args): Promise<{ description: string; furnitureList: string }> => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new ConvexError({ code: "UNAUTHENTICATED", message: "Não autenticado" });
+    await requireIdentity(ctx);
 
     const client = makeOpenAI();
 
@@ -149,8 +147,7 @@ export const generateChecklistFromBriefing = action({
     briefingSummary: v.string(),
   },
   handler: async (ctx, args): Promise<{ itemsCreated: number }> => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new ConvexError({ code: "UNAUTHENTICATED", message: "Não autenticado" });
+    await requireIdentity(ctx);
 
     const client = makeOpenAI();
     const phaseLabel = args.phase === "pre" ? "pré-evento (carregamento)" : "pós-evento (conferência/devolução)";

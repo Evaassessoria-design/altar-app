@@ -1,25 +1,14 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
-import type { QueryCtx, MutationCtx } from "./_generated/server.d.ts";
-
-async function getAuthUser(ctx: QueryCtx | MutationCtx) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new ConvexError({ message: "Não autenticado", code: "UNAUTHENTICATED" });
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_token", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
-    .unique();
-  if (!user) throw new ConvexError({ message: "Usuário não encontrado", code: "NOT_FOUND" });
-  return user;
-}
+import { requireUser } from "./lib/identity";
 
 const txType = v.union(v.literal("income"), v.literal("expense"));
 
 export const listTransactions = query({
   args: {},
   handler: async (ctx) => {
-    const user = await getAuthUser(ctx);
+    const user = await requireUser(ctx);
     const items = await ctx.db
       .query("transactions")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
@@ -31,7 +20,7 @@ export const listTransactions = query({
 export const getSummary = query({
   args: {},
   handler: async (ctx) => {
-    const user = await getAuthUser(ctx);
+    const user = await requireUser(ctx);
     const txs = await ctx.db
       .query("transactions")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
@@ -87,7 +76,7 @@ export const addTransaction = mutation({
     eventId: v.optional(v.id("events")),
   },
   handler: async (ctx, args) => {
-    const user = await getAuthUser(ctx);
+    const user = await requireUser(ctx);
     return ctx.db.insert("transactions", { userId: user._id, ...args });
   },
 });
@@ -104,7 +93,7 @@ export const updateTransaction = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await getAuthUser(ctx);
+    const user = await requireUser(ctx);
     const tx = await ctx.db.get(args.id);
     if (!tx || tx.userId !== user._id)
       throw new ConvexError({ message: "Lançamento não encontrado", code: "NOT_FOUND" });
@@ -116,7 +105,7 @@ export const updateTransaction = mutation({
 export const togglePaid = mutation({
   args: { id: v.id("transactions") },
   handler: async (ctx, args) => {
-    const user = await getAuthUser(ctx);
+    const user = await requireUser(ctx);
     const tx = await ctx.db.get(args.id);
     if (!tx || tx.userId !== user._id)
       throw new ConvexError({ message: "Lançamento não encontrado", code: "NOT_FOUND" });
@@ -127,7 +116,7 @@ export const togglePaid = mutation({
 export const deleteTransaction = mutation({
   args: { id: v.id("transactions") },
   handler: async (ctx, args) => {
-    const user = await getAuthUser(ctx);
+    const user = await requireUser(ctx);
     const tx = await ctx.db.get(args.id);
     if (!tx || tx.userId !== user._id)
       throw new ConvexError({ message: "Lançamento não encontrado", code: "NOT_FOUND" });

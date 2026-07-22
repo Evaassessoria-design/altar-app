@@ -12,6 +12,7 @@ import type * as admin from "../admin.js";
 import type * as ai from "../ai.js";
 import type * as asaas from "../asaas.js";
 import type * as asaasWebhook from "../asaasWebhook.js";
+import type * as auth from "../auth.js";
 import type * as briefing from "../briefing.js";
 import type * as contracts from "../contracts.js";
 import type * as crons from "../crons.js";
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   ai: typeof ai;
   asaas: typeof asaas;
   asaasWebhook: typeof asaasWebhook;
+  auth: typeof auth;
   briefing: typeof briefing;
   contracts: typeof contracts;
   crons: typeof crons;
@@ -80,4 +82,6 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  betterAuth: import("@convex-dev/better-auth/_generated/component.js").ComponentApi<"betterAuth">;
+};

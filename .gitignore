@@ -28,3 +28,15 @@ tsconfig.tsbuildinfo
 
 # Environment variables
 .env*
+
+# Convex snapshot/export artifacts (não versionar dumps do banco)
+/_storage/
+/_tables/
+**/documents.jsonl
+**/generated_schema.jsonl
+snapshot_*.zip
+app.tar.gz
+
+# Usar apenas pnpm como gerenciador de pacotes
+package-lock.json
+yarn.lock

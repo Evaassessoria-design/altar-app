@@ -21,7 +21,8 @@ import PaywallPage from "./pages/app/paywall/page.tsx";
 import { useServiceWorker } from "@/hooks/use-service-worker.ts";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
-import { Authenticated } from "convex/react";
+import { Authenticated, Unauthenticated, AuthLoading } from "convex/react";
+import { Spinner } from "@/components/ui/spinner.tsx";
 
 // Guard: redirect to paywall if subscription expired
 function SubscriptionGuard({ children }: { children: React.ReactNode }) {
@@ -47,13 +48,25 @@ function AppRoutes() {
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/paywall" element={<PaywallPage />} />
 
-      {/* App routes — guarded by subscription */}
+      {/* App routes — protegidas: exigem autenticação + assinatura ativa.
+          Não autenticado → volta pro início (evita tela em branco).
+          Carregando auth → spinner. */}
       <Route element={
-        <Authenticated>
-          <SubscriptionGuard>
-            <AppLayout />
-          </SubscriptionGuard>
-        </Authenticated>
+        <>
+          <AuthLoading>
+            <div className="flex h-svh items-center justify-center">
+              <Spinner className="size-8" />
+            </div>
+          </AuthLoading>
+          <Unauthenticated>
+            <Navigate to="/" replace />
+          </Unauthenticated>
+          <Authenticated>
+            <SubscriptionGuard>
+              <AppLayout />
+            </SubscriptionGuard>
+          </Authenticated>
+        </>
       }>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/eventos" element={<Events />} />

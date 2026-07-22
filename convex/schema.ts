@@ -107,7 +107,10 @@ export default defineSchema({
   users: defineTable({
     name: v.string(),
     email: v.string(),
-    tokenIdentifier: v.string(), // Vínculo com Hercules/OIDC Auth
+    // Identidade Better Auth (novo modelo — id do usuário no componente de auth)
+    betterAuthId: v.optional(v.string()),
+    // Legado Hercules/OIDC — será removido na fase final da migração
+    tokenIdentifier: v.optional(v.string()),
     role: v.string(), // 'admin' | 'user'
     subscriptionStatus: v.string(), // 'trial' | 'active' | 'expired' | 'cancelled'
     trialStartDate: v.optional(v.string()),
@@ -125,6 +128,8 @@ export default defineSchema({
     subscriptionExpiresAt: v.optional(v.string()),
   })
     .index("by_token", ["tokenIdentifier"])
+    .index("by_better_auth_id", ["betterAuthId"])
+    .index("by_email", ["email"])
     .index("by_asaas_customer", ["asaasCustomerId"])
     .index("by_asaas_subscription", ["asaasSubscriptionId"]),
 

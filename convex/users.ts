@@ -1,7 +1,16 @@
 import { mutation, query, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
+import { syncAuthenticatedUser } from "./lib/identity";
 
+// Chamado pelo cliente logo após cadastro/login (Better Auth).
+// Vincula/cria a linha do app `users` — toda a lógica vive em lib/identity.ts.
+export const syncCurrentUser = mutation({
+  args: {},
+  handler: async (ctx) => syncAuthenticatedUser(ctx),
+});
+
+// LEGADO (Hercules/OIDC) — removido na fase final da migração.
 // Called after auth callback to sync user data
 export const updateCurrentUser = mutation({
   args: {},

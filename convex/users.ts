@@ -34,8 +34,8 @@ export const updateCurrentUser = mutation({
 
     const userId = await ctx.db.insert("users", {
       tokenIdentifier: identity.tokenIdentifier,
-      name: identity.name,
-      email: identity.email,
+      name: identity.name ?? "Usuário",
+      email: identity.email ?? "",
       role: isFirstUser ? "admin" : "user",
       subscriptionStatus: "trial",
       trialStartDate: now.toISOString(),

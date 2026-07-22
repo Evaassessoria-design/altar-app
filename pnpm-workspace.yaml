@@ -4,6 +4,7 @@ packages:
 onlyBuiltDependencies:
   - "@swc/core"
   - "@tailwindcss/oxide"
+  - core-js
   - esbuild
 
 blockExoticSubdeps: true
@@ -13,4 +14,5 @@ minimumReleaseAgeExclude:
   - "@usehercules/*"
 allowBuilds:
   "@swc/core": true
+  core-js: true
   esbuild: true

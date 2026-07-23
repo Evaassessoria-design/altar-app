@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes, Navigate, useLocation } from "react-router-dom";
 import { DefaultProviders } from "./components/providers/default.tsx";
 import AuthCallback from "./pages/auth/Callback.tsx";
+import LoginPage from "./pages/auth/Login.tsx";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import AppLayout from "./pages/app/layout.tsx";
@@ -46,6 +47,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<Index />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
+      <Route path="/login" element={<LoginPage />} />
       <Route path="/paywall" element={<PaywallPage />} />
 
       {/* App routes — protegidas: exigem autenticação + assinatura ativa.

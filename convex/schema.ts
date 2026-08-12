@@ -281,4 +281,13 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_read", ["userId", "isRead"]),
+
+  // Leads capturados pela landing page (visitantes não autenticados).
+  // Distinto de `leads` (funil de vendas interno de cada usuário do app).
+  landingLeads: defineTable({
+    name: v.string(),
+    email: v.string(),
+    whatsapp: v.optional(v.string()),
+    intent: v.union(v.literal("demo"), v.literal("beta")),
+  }).index("by_email", ["email"]),
 });

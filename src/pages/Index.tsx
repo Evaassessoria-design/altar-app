@@ -1,7 +1,9 @@
+import { useMemo, useState, type FormEvent } from "react";
 import { motion } from "motion/react";
 import { Authenticated, Unauthenticated, AuthLoading } from "convex/react";
+import { ConvexHttpClient } from "convex/browser";
+import { api } from "@/convex/_generated/api.js";
 import { SignInButton } from "@/components/ui/signin.tsx";
-import { Button } from "@/components/ui/button.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import {
   CalendarDays,
@@ -67,28 +69,66 @@ const features = [
   },
 ];
 
-const testimonials = [
+const credibility = [
   {
-    name: "Ana Paula Silva",
-    role: "Decoradora de Festas",
-    text: "O Altar transformou meu negócio. Antes tudo era em cadernos e planilhas. Agora tenho tudo organizado em um app lindo e fácil.",
-    stars: 5,
+    icon: Flower2,
+    title: "Nascido de eventos reais",
+    description:
+      "Cada funcionalidade existe porque resolveu um problema vivido na operação: briefing extenso, carregamento, equipe, financeiro.",
   },
   {
-    name: "Carla Mendes",
-    role: "Studio Decor & Eventos",
-    text: "A funcionalidade de IA que lê o contrato e preenche o briefing sozinha salvou horas do meu trabalho. Simplesmente incrível.",
-    stars: 5,
+    icon: Users,
+    title: "Feito para a rotina de quem gere eventos",
+    description:
+      "Pensado no fluxo real de uma empresa de decoração de eventos — não em um modelo genérico de gestão adaptado às pressas.",
   },
   {
-    name: "Fernanda Costa",
-    role: "Casamentos & Formaturas",
-    text: "O checklist de carregamento com fotos é o que eu precisava. Nunca mais esqueci um item importante em casa!",
-    stars: 5,
+    icon: Sparkles,
+    title: "Tecnologia com propósito",
+    description:
+      "IA e automação aplicadas onde economizam horas do seu trabalho — sem substituir o seu olhar.",
   },
 ];
 
+const primaryCta =
+  "bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer px-8 py-4 rounded-xl text-base font-semibold transition-colors inline-flex items-center gap-2 shadow-lg shadow-primary/20";
+
+const secondaryCta =
+  "bg-card text-foreground border border-border hover:border-primary/40 cursor-pointer px-8 py-4 rounded-xl text-base font-semibold transition-colors inline-flex items-center gap-2";
+
 export default function Index() {
+  // O cliente reativo do app usa `expectAuth: true` e segura chamadas até
+  // haver login. Como a landing é pública (visitante anônimo), a captura de
+  // leads usa um cliente HTTP one-shot, sem o gate de autenticação.
+  const convexHttp = useMemo(
+    () => new ConvexHttpClient(import.meta.env.VITE_CONVEX_URL as string),
+    [],
+  );
+  const [intent, setIntent] = useState<"demo" | "beta">("demo");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">(
+    "idle",
+  );
+
+  async function handleLeadSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!name.trim() || !email.trim()) return;
+    setStatus("sending");
+    try {
+      await convexHttp.mutation(api.landingLeads.submit, {
+        name: name.trim(),
+        email: email.trim(),
+        whatsapp: whatsapp.trim() || undefined,
+        intent,
+      });
+      setStatus("sent");
+    } catch {
+      setStatus("error");
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -131,35 +171,56 @@ export default function Index() {
             transition={{ duration: 0.7, ease: "easeOut" }}
           >
             <span className="inline-block bg-primary/10 text-primary text-sm font-medium px-4 py-1.5 rounded-full mb-6">
-              Plataforma para Decoradores de Eventos
+              Para empresas de decoração de eventos
             </span>
             <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-balance mb-6 leading-tight">
-              Gerencie seus eventos{" "}
-              <span className="text-primary">com elegância</span>
+              Cresça sua empresa sem perder o{" "}
+              <span className="text-primary">padrão que construiu sua reputação</span>
+              .
             </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-10 text-balance">
-              Do primeiro contato até a execução do evento. Briefing digital,
-              checklist com fotos, equipe, financeiro e inteligência artificial —
-              tudo em um só app.
+            <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-8 text-balance">
+              Sua empresa já entrega eventos impecáveis. Agora ela precisa operar
+              com a mesma excelência. O ALTAR organiza briefing, equipe, compras e
+              financeiro em uma operação previsível — do primeiro contato à
+              entrega — para o seu negócio crescer com consistência.
             </p>
+            <div className="inline-flex items-center gap-3 rounded-full border border-border bg-card/60 px-5 py-2.5 mb-10">
+              <Flower2 className="size-4 text-primary flex-shrink-0" />
+              <span className="text-sm text-muted-foreground">
+                Nascido da operação real da{" "}
+                <span className="font-semibold text-foreground">
+                  Casando no Interior
+                </span>{" "}
+                — criado por quem vive a gestão de eventos, não por uma software
+                house.
+              </span>
+            </div>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               <Unauthenticated>
-                <SignInButton className="bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer px-8 py-4 rounded-xl text-base font-semibold transition-colors inline-flex items-center gap-2 shadow-lg shadow-primary/20">
-                  Começar grátis por 14 dias <ArrowRight className="size-5" />
-                </SignInButton>
+                <a
+                  href="#agendar"
+                  onClick={() => setIntent("demo")}
+                  className={primaryCta}
+                >
+                  Solicitar um diagnóstico <ArrowRight className="size-5" />
+                </a>
+                <a
+                  href="#agendar"
+                  onClick={() => setIntent("beta")}
+                  className={secondaryCta}
+                >
+                  Entrar na Lista Beta
+                </a>
               </Unauthenticated>
               <Authenticated>
-                <a
-                  href="/dashboard"
-                  className="bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer px-8 py-4 rounded-xl text-base font-semibold transition-colors inline-flex items-center gap-2 shadow-lg shadow-primary/20"
-                >
+                <a href="/dashboard" className={primaryCta}>
                   Acessar meu painel <ArrowRight className="size-5" />
                 </a>
               </Authenticated>
-              <p className="text-sm text-muted-foreground">
-                Sem cartão de crédito • 14 dias grátis
-              </p>
             </div>
+            <p className="text-sm text-muted-foreground mt-4">
+              Diagnóstico gratuito da sua operação • Sem compromisso
+            </p>
           </motion.div>
         </div>
 
@@ -212,8 +273,8 @@ export default function Index() {
               <span className="text-primary">crescer</span>
             </h2>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              Ferramentas pensadas especialmente para decoradores de eventos que
-              querem profissionalizar seu negócio.
+              Ferramentas pensadas para negócios de eventos que querem sair do
+              operacional e crescer com consistência.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -238,42 +299,53 @@ export default function Index() {
               </motion.div>
             ))}
           </div>
+          <div className="mt-12 text-center">
+            <a
+              href="#agendar"
+              onClick={() => setIntent("demo")}
+              className={primaryCta}
+            >
+              Solicitar um diagnóstico <ArrowRight className="size-5" />
+            </a>
+          </div>
         </div>
       </section>
 
-      {/* Testimonials */}
+      {/* Criado por quem vive esse mercado */}
       <section className="py-20 px-4">
         <div className="max-w-5xl mx-auto">
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold mb-4">
-              Amado por decoradores em todo o Brasil
+              Criado por quem vive esse mercado
             </h2>
+            <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+              O ALTAR não nasceu em uma software house. Nasceu da experiência
+              prática da Casando no Interior — empresa especializada em
+              assessoria e gestão de casamentos no interior de São Paulo. Cada
+              funcionalidade veio de uma necessidade real da operação e, depois
+              de amadurecer nos casamentos, evoluiu para atender empresas de
+              eventos em geral.
+            </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {testimonials.map((t, i) => (
+            {credibility.map((item, i) => (
               <motion.div
-                key={t.name}
+                key={item.title}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.5, delay: i * 0.1, ease: "easeOut" }}
                 className="bg-card rounded-xl p-6 border border-border"
               >
-                <div className="flex gap-1 mb-3">
-                  {Array.from({ length: t.stars }).map((_, j) => (
-                    <Star
-                      key={j}
-                      className="size-4 text-primary fill-primary"
-                    />
-                  ))}
+                <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                  <item.icon className="size-5 text-primary" />
                 </div>
-                <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
-                  {'"'}{t.text}{'"'}
+                <h3 className="font-semibold text-foreground mb-2">
+                  {item.title}
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {item.description}
                 </p>
-                <div>
-                  <p className="font-semibold text-sm">{t.name}</p>
-                  <p className="text-xs text-muted-foreground">{t.role}</p>
-                </div>
               </motion.div>
             ))}
           </div>
@@ -283,9 +355,13 @@ export default function Index() {
       {/* Pricing */}
       <section className="py-20 px-4 bg-card/50">
         <div className="max-w-lg mx-auto text-center">
-          <h2 className="text-3xl font-bold mb-4">Preço simples e justo</h2>
+          <h2 className="text-3xl font-bold mb-4">
+            Depois do diagnóstico, o caminho fica claro
+          </h2>
           <p className="text-muted-foreground mb-10">
-            Uma assinatura. Acesso completo a todas as funcionalidades.
+            O diagnóstico define o que a sua empresa precisa primeiro. A
+            plataforma é o passo seguinte — uma assinatura, acesso completo, sem
+            surpresas.
           </p>
           <div className="bg-card rounded-2xl border-2 border-primary p-8 shadow-lg">
             <div className="inline-block bg-primary/10 text-primary text-xs font-semibold px-3 py-1 rounded-full mb-4">
@@ -318,9 +394,20 @@ export default function Index() {
               ))}
             </ul>
             <Unauthenticated>
-              <SignInButton className="w-full bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer py-4 rounded-xl text-base font-semibold transition-colors">
-                Começar 14 dias grátis
-              </SignInButton>
+              <a
+                href="#agendar"
+                onClick={() => setIntent("demo")}
+                className="block w-full bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer py-4 rounded-xl text-base font-semibold transition-colors text-center"
+              >
+                Solicitar um diagnóstico
+              </a>
+              <a
+                href="#agendar"
+                onClick={() => setIntent("beta")}
+                className="inline-block mt-4 text-sm text-muted-foreground hover:text-primary transition-colors"
+              >
+                Ainda não está pronto? Entre na Lista Beta →
+              </a>
             </Unauthenticated>
             <Authenticated>
               <a
@@ -331,6 +418,144 @@ export default function Index() {
               </a>
             </Authenticated>
           </div>
+        </div>
+      </section>
+
+      {/* Captura de leads — diagnóstico / Lista Beta */}
+      <section id="agendar" className="py-20 px-4">
+        <div className="max-w-lg mx-auto text-center">
+          <h2 className="text-3xl font-bold mb-4">
+            Comece por um diagnóstico da sua operação
+          </h2>
+          <p className="text-muted-foreground mb-10">
+            Solicite um diagnóstico gratuito — a primeira etapa da nossa reunião
+            consultiva. Ou entre na Lista Beta para acompanhar as novidades sem
+            compromisso.
+          </p>
+
+          {status === "sent" ? (
+            <div className="bg-card rounded-2xl border border-border p-8 shadow-lg text-center">
+              <CheckSquare className="size-8 text-primary mx-auto mb-4" />
+              <h3 className="text-xl font-semibold mb-2">
+                {intent === "demo"
+                  ? "Diagnóstico solicitado!"
+                  : "Você está na Lista Beta!"}
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                {intent === "demo"
+                  ? "Recebemos seu pedido. Entraremos em contato em breve para agendar o diagnóstico da sua operação."
+                  : "Obrigado pelo interesse. Você receberá as novidades do ALTAR em primeira mão."}
+              </p>
+            </div>
+          ) : (
+            <form
+              onSubmit={handleLeadSubmit}
+              className="bg-card rounded-2xl border border-border p-8 shadow-lg text-left space-y-4"
+            >
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIntent("demo")}
+                  className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors cursor-pointer ${
+                    intent === "demo"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:border-primary/30"
+                  }`}
+                >
+                  Quero um diagnóstico
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIntent("beta")}
+                  className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors cursor-pointer ${
+                    intent === "beta"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:border-primary/30"
+                  }`}
+                >
+                  Entrar na Lista Beta
+                </button>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="lead-name"
+                  className="block text-sm font-medium mb-1.5"
+                >
+                  Nome
+                </label>
+                <input
+                  id="lead-name"
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Seu nome"
+                  className="w-full rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="lead-email"
+                  className="block text-sm font-medium mb-1.5"
+                >
+                  E-mail
+                </label>
+                <input
+                  id="lead-email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="voce@empresa.com.br"
+                  className="w-full rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="lead-whatsapp"
+                  className="block text-sm font-medium mb-1.5"
+                >
+                  WhatsApp{" "}
+                  <span className="text-muted-foreground font-normal">
+                    (opcional)
+                  </span>
+                </label>
+                <input
+                  id="lead-whatsapp"
+                  type="tel"
+                  value={whatsapp}
+                  onChange={(e) => setWhatsapp(e.target.value)}
+                  placeholder="(11) 99999-9999"
+                  className="w-full rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+              </div>
+
+              {status === "error" && (
+                <p className="text-sm text-destructive">
+                  Não foi possível enviar. Tente novamente.
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={status === "sending"}
+                className="w-full bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer py-4 rounded-xl text-base font-semibold transition-colors disabled:opacity-60"
+              >
+                {status === "sending"
+                  ? "Enviando..."
+                  : intent === "demo"
+                    ? "Solicitar um diagnóstico"
+                    : "Entrar na Lista Beta"}
+              </button>
+            </form>
+          )}
+
+          <p className="text-xs text-muted-foreground mt-4">
+            Sem spam. Seus dados são usados apenas para contato sobre o ALTAR.
+          </p>
         </div>
       </section>
 
@@ -345,7 +570,7 @@ export default function Index() {
             &copy; {new Date().getFullYear()} Altar. Todos os direitos reservados.
           </p>
           <p className="text-sm text-muted-foreground">
-            Feito para decoradores de eventos
+            Feito para empresas de decoração de eventos, pela Casando no Interior
           </p>
         </div>
       </footer>

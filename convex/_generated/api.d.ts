@@ -22,6 +22,7 @@ import type * as financeiro from "../financeiro.js";
 import type * as funil from "../funil.js";
 import type * as gallery from "../gallery.js";
 import type * as http from "../http.js";
+import type * as landingLeads from "../landingLeads.js";
 import type * as lib_identity from "../lib/identity.js";
 import type * as notifications from "../notifications.js";
 import type * as orcamento from "../orcamento.js";
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   funil: typeof funil;
   gallery: typeof gallery;
   http: typeof http;
+  landingLeads: typeof landingLeads;
   "lib/identity": typeof lib_identity;
   notifications: typeof notifications;
   orcamento: typeof orcamento;

@@ -6,12 +6,18 @@ import { action, type ActionCtx } from "./_generated/server";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireIdentity } from "./lib/identity";
+import { getAiConfig } from "./lib/aiConfig";
 
-function makeOpenAI() {
-  return new OpenAI({
-    baseURL: "https://ai-gateway.hercules.app/v1",
-    apiKey: process.env.HERCULES_API_KEY,
-  });
+// Provedor definido por env (lib/aiConfig.ts). O Hercules continua funcionando
+// como fallback quando só HERCULES_API_KEY existe — é o caso do DEV hoje.
+function makeAiClient(effort?: "none" | "low" | "medium" | "high") {
+  const cfg = getAiConfig("documental");
+  return {
+    client: new OpenAI({ apiKey: cfg.apiKey, baseURL: cfg.baseURL }),
+    model: cfg.model,
+    // Só vai no payload quando o destino aceita (ver aiConfig).
+    reasoning: cfg.supportsReasoningEffort && effort ? { reasoning_effort: effort } : {},
+  };
 }
 
 // Autorização por evento no contexto de ACTION (sem ctx.db). Reutiliza
@@ -61,7 +67,7 @@ export const extractContractData = action({
     };
   }> => {
     await requireEventOwnerAction(ctx, args.eventId);
-    const client = makeOpenAI();
+    const { client, model, reasoning } = makeAiClient("low");
     const kindLabel = args.kind === "addendum" ? "adendo/anexo" : "contrato";
 
     const systemPrompt = `Você é um assistente que lê ${kindLabel}s de empresas de decoração de eventos no Brasil.
@@ -87,8 +93,8 @@ peças e observações. "items" deve listar cada item de decoração com sua cat
 Regras: use null/omita quando não encontrar; datas em AAAA-MM-DD; valores numéricos sem símbolo; NÃO invente. Responda SOMENTE o JSON.`;
 
     const response = await client.chat.completions.create({
-      model: "openai/gpt-5.6-luna",
-      reasoning_effort: "low",
+      model,
+      ...reasoning,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Documento (${kindLabel}):\n\n${args.contractText.slice(0, 12000)}` },
@@ -139,11 +145,11 @@ export const analyseLayout = action({
   handler: async (ctx, args): Promise<{ description: string; furnitureList: string }> => {
     await requireEventOwnerAction(ctx, args.eventId);
 
-    const client = makeOpenAI();
+    const { client, model, reasoning } = makeAiClient("low");
 
     const response = await client.chat.completions.create({
-      model: "openai/gpt-5.6-luna",
-      reasoning_effort: "low",
+      model,
+      ...reasoning,
       messages: [
         {
           role: "system",
@@ -193,12 +199,12 @@ export const generateChecklistFromBriefing = action({
   handler: async (ctx, args): Promise<{ itemsCreated: number }> => {
     await requireEventOwnerAction(ctx, args.eventId);
 
-    const client = makeOpenAI();
+    const { client, model, reasoning } = makeAiClient("none");
     const phaseLabel = args.phase === "pre" ? "pré-evento (carregamento)" : "pós-evento (conferência/devolução)";
 
     const response = await client.chat.completions.create({
-      model: "openai/gpt-5.6-luna",
-      reasoning_effort: "none",
+      model,
+      ...reasoning,
       messages: [
         {
           role: "system",

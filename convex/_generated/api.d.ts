@@ -27,6 +27,7 @@ import type * as health from "../health.js";
 import type * as http from "../http.js";
 import type * as landingLeads from "../landingLeads.js";
 import type * as layoutRenders from "../layoutRenders.js";
+import type * as lib_aiConfig from "../lib/aiConfig.js";
 import type * as lib_identity from "../lib/identity.js";
 import type * as lib_imageProvider from "../lib/imageProvider.js";
 import type * as lib_imageProviderConfig from "../lib/imageProviderConfig.js";
@@ -64,6 +65,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   landingLeads: typeof landingLeads;
   layoutRenders: typeof layoutRenders;
+  "lib/aiConfig": typeof lib_aiConfig;
   "lib/identity": typeof lib_identity;
   "lib/imageProvider": typeof lib_imageProvider;
   "lib/imageProviderConfig": typeof lib_imageProviderConfig;

@@ -6,6 +6,7 @@ import { action, type ActionCtx } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireIdentity } from "./lib/identity";
+import { getAiConfig } from "./lib/aiConfig";
 import { getImageProvider } from "./lib/imageProvider";
 import {
   getImageProviderConfig,
@@ -36,20 +37,14 @@ import {
 // `interpretSketch` não grava nada. Só `generatePremiumPlan` persiste.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const VISION_MODEL = process.env.ALTAR_VISION_MODEL ?? "openai/gpt-5.6-luna";
-
+// Mesma resolução por env da IA documental (lib/aiConfig.ts), no escopo de
+// visão — permite um modelo distinto via ALTAR_VISION_* sem duplicar lógica.
 function makeVisionClient() {
-  const baseURL =
-    process.env.ALTAR_VISION_BASE_URL ?? "https://ai-gateway.hercules.app/v1";
-  const apiKey = process.env.ALTAR_VISION_API_KEY ?? process.env.HERCULES_API_KEY;
-  if (!apiKey) {
-    throw new ConvexError({
-      code: "VISION_PROVIDER_UNCONFIGURED",
-      message:
-        "IA de leitura de croqui não configurada neste ambiente (defina HERCULES_API_KEY ou ALTAR_VISION_API_KEY no Convex).",
-    });
-  }
-  return new OpenAI({ baseURL, apiKey });
+  const cfg = getAiConfig("vision");
+  return {
+    client: new OpenAI({ apiKey: cfg.apiKey, baseURL: cfg.baseURL }),
+    model: cfg.model,
+  };
 }
 
 // Mesma regra de autorização das actions do Bloco 0: contexto de action não tem
@@ -141,10 +136,10 @@ export const interpretSketch = action({
 
     const blob = await loadSketch(ctx, args.storageId);
     const dataUrl = await blobToDataUrl(blob);
-    const client = makeVisionClient();
+    const { client, model } = makeVisionClient();
 
     const response = await client.chat.completions.create({
-      model: VISION_MODEL,
+      model,
       messages: [
         { role: "system", content: INTERPRETATION_SYSTEM_PROMPT },
         {

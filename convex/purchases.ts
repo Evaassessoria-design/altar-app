@@ -1,17 +1,19 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
-import { requireUser } from "./lib/identity";
+import { getOwnedEvent, requireEventOwner, requireUser } from "./lib/identity";
 
 export const listPurchases = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
+    // Query de listagem: degrada para vazio (não lança) — ver orcamento.listItems.
+    const event = await getOwnedEvent(ctx, args.eventId);
+    if (!event) return [];
     return ctx.db
       .query("purchaseItems")
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
       .collect()
-      .then((items) => items.filter((i) => i.userId === user._id));
+      .then((items) => items.filter((i) => i.userId === event.userId));
   },
 });
 
@@ -27,7 +29,7 @@ export const addPurchase = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
+    const { user } = await requireEventOwner(ctx, args.eventId);
     // Get max order
     const items = await ctx.db
       .query("purchaseItems")

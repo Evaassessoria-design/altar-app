@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { getOptionalIdentity, requireIdentity, requireUser } from "./lib/identity";
+import { getOwnedEvent, requireEventOwner, requireIdentity, requireUser } from "./lib/identity";
 
 // Generate upload URL for photo
 export const generateUploadUrl = mutation({
@@ -26,10 +26,7 @@ export const savePhoto = mutation({
     caption: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    const event = await ctx.db.get(args.eventId);
-    if (!event || event.userId !== user._id)
-      throw new ConvexError({ code: "FORBIDDEN", message: "Sem permissão" });
+    const { user } = await requireEventOwner(ctx, args.eventId);
 
     // Get current max order for this event
     const lastPhoto = await ctx.db
@@ -64,7 +61,7 @@ export const listPhotos = query({
     )),
   },
   handler: async (ctx, args) => {
-    if (!(await getOptionalIdentity(ctx))) return [];
+    if (!(await getOwnedEvent(ctx, args.eventId))) return [];
 
     let photosQuery;
     if (args.category) {
@@ -132,7 +129,7 @@ export const deletePhoto = mutation({
 export const getPhotoCounts = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
-    if (!(await getOptionalIdentity(ctx)))
+    if (!(await getOwnedEvent(ctx, args.eventId)))
       return { total: 0, antes: 0, montagem: 0, evento: 0, desmontagem: 0 };
     const photos = await ctx.db
       .query("eventPhotos")

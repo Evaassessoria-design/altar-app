@@ -1,5 +1,6 @@
 import { ConvexError } from "convex/values";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import type { Doc, Id } from "../_generated/dataModel";
 import { authComponent } from "../auth";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -51,6 +52,52 @@ export async function requireUser(ctx: QueryCtx | MutationCtx) {
     throw new ConvexError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
   }
   return user;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTORIZAÇÃO POR EVENTO
+// Regra única do app: quem chama só enxerga/altera eventos que são dele.
+// Toda função que recebe `eventId` DEVE passar por um destes dois helpers —
+// generalização do `assertEventOwner` que já existia em convex/suppliers.ts.
+//
+//  · requireEventOwner → lança NOT_FOUND (mutations e leituras que já lançavam)
+//  · getOwnedEvent     → devolve null    (queries que degradam para vazio)
+//
+// Ambos usam NOT_FOUND em vez de FORBIDDEN de propósito: um evento de outro
+// usuário não deve nem confirmar que existe.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Evento do usuário atual, ou `null` se não existe, não é dele, ou não há
+ * sessão. Para queries que hoje devolvem vazio em vez de lançar — mantém essa
+ * forma e evita quebrar a UI durante transições de rota/logout.
+ */
+export async function getOwnedEvent(
+  ctx: QueryCtx | MutationCtx,
+  eventId: Id<"events">,
+): Promise<Doc<"events"> | null> {
+  const user = await getOptionalUser(ctx);
+  if (!user) return null;
+  const event = await ctx.db.get(eventId);
+  if (!event || event.userId !== user._id) return null;
+  return event;
+}
+
+/**
+ * Exige que o evento pertença ao usuário atual. Devolve o par `{ user, event }`
+ * porque quase toda função precisa dos dois (evita um segundo `db.get`).
+ * Lança UNAUTHENTICATED sem sessão e NOT_FOUND se o evento não for do usuário.
+ */
+export async function requireEventOwner(
+  ctx: QueryCtx | MutationCtx,
+  eventId: Id<"events">,
+): Promise<{ user: Doc<"users">; event: Doc<"events"> }> {
+  const user = await requireUser(ctx);
+  const event = await ctx.db.get(eventId);
+  if (!event || event.userId !== user._id) {
+    throw new ConvexError({ code: "NOT_FOUND", message: "Evento não encontrado" });
+  }
+  return { user, event };
 }
 
 // Contexto mínimo com `auth` — cobre QueryCtx, MutationCtx e ActionCtx.

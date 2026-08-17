@@ -1,28 +1,27 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
-import { requireUser } from "./lib/identity";
+import { getOwnedEvent, requireEventOwner, requireUser } from "./lib/identity";
 
 export const listItems = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
+    // Query de listagem: degrada para vazio (não lança) — preserva o
+    // comportamento anterior quando o evento acabou de ser excluído.
+    const event = await getOwnedEvent(ctx, args.eventId);
+    if (!event) return [];
     return ctx.db
       .query("budgetItems")
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
       .collect()
-      .then((items) => items.filter((i) => i.userId === user._id).sort((a, b) => a.order - b.order));
+      .then((items) => items.filter((i) => i.userId === event.userId).sort((a, b) => a.order - b.order));
   },
 });
 
 export const getSummary = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-
-    const event = await ctx.db.get(args.eventId);
-    if (!event || event.userId !== user._id)
-      throw new ConvexError({ message: "Evento não encontrado", code: "NOT_FOUND" });
+    const { user, event } = await requireEventOwner(ctx, args.eventId);
 
     const budgetItems = await ctx.db
       .query("budgetItems")
@@ -91,7 +90,7 @@ export const addItem = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
+    const { user } = await requireEventOwner(ctx, args.eventId);
     const items = await ctx.db
       .query("budgetItems")
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))

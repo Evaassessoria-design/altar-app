@@ -1,7 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
-import { requireUser } from "./lib/identity";
+import { getOwnedEvent, requireEventOwner, requireUser } from "./lib/identity";
 
 // ─── Team Members ────────────────────────────────────────────────────────────
 
@@ -65,7 +65,9 @@ export const deleteMember = mutation({
 export const listEventTeam = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
+    // Query de listagem: degrada para vazio (não lança) — ver orcamento.listItems.
+    const event = await getOwnedEvent(ctx, args.eventId);
+    if (!event) return [];
     const assignments = await ctx.db
       .query("eventTeam")
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
@@ -73,7 +75,7 @@ export const listEventTeam = query({
     // Filter by user ownership and join with member data
     const results = await Promise.all(
       assignments
-        .filter((a) => a.userId === user._id)
+        .filter((a) => a.userId === event.userId)
         .map(async (a) => {
           const member = await ctx.db.get(a.teamMemberId);
           return { ...a, member };
@@ -91,7 +93,13 @@ export const addToEventTeam = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
+    const { user } = await requireEventOwner(ctx, args.eventId);
+    // O membro precisa ser da equipe do próprio usuário — senão daria para
+    // anexar a equipe de outra pessoa a um evento seu.
+    const member = await ctx.db.get(args.teamMemberId);
+    if (!member || member.userId !== user._id) {
+      throw new ConvexError({ message: "Membro não encontrado", code: "NOT_FOUND" });
+    }
     // Check not already added
     const existing = await ctx.db
       .query("eventTeam")

@@ -10,8 +10,10 @@
 
 import type * as admin from "../admin.js";
 import type * as ai from "../ai.js";
+import type * as aiVisual from "../aiVisual.js";
 import type * as asaas from "../asaas.js";
 import type * as asaasWebhook from "../asaasWebhook.js";
+import type * as assemblyItems from "../assemblyItems.js";
 import type * as auth from "../auth.js";
 import type * as briefing from "../briefing.js";
 import type * as contracts from "../contracts.js";
@@ -21,12 +23,18 @@ import type * as events from "../events.js";
 import type * as financeiro from "../financeiro.js";
 import type * as funil from "../funil.js";
 import type * as gallery from "../gallery.js";
+import type * as health from "../health.js";
 import type * as http from "../http.js";
 import type * as landingLeads from "../landingLeads.js";
+import type * as layoutRenders from "../layoutRenders.js";
 import type * as lib_identity from "../lib/identity.js";
+import type * as lib_imageProvider from "../lib/imageProvider.js";
+import type * as lib_imageProviderConfig from "../lib/imageProviderConfig.js";
+import type * as lib_plantaPrompt from "../lib/plantaPrompt.js";
 import type * as notifications from "../notifications.js";
 import type * as orcamento from "../orcamento.js";
 import type * as purchases from "../purchases.js";
+import type * as suppliers from "../suppliers.js";
 import type * as team from "../team.js";
 import type * as users from "../users.js";
 
@@ -39,8 +47,10 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   ai: typeof ai;
+  aiVisual: typeof aiVisual;
   asaas: typeof asaas;
   asaasWebhook: typeof asaasWebhook;
+  assemblyItems: typeof assemblyItems;
   auth: typeof auth;
   briefing: typeof briefing;
   contracts: typeof contracts;
@@ -50,12 +60,18 @@ declare const fullApi: ApiFromModules<{
   financeiro: typeof financeiro;
   funil: typeof funil;
   gallery: typeof gallery;
+  health: typeof health;
   http: typeof http;
   landingLeads: typeof landingLeads;
+  layoutRenders: typeof layoutRenders;
   "lib/identity": typeof lib_identity;
+  "lib/imageProvider": typeof lib_imageProvider;
+  "lib/imageProviderConfig": typeof lib_imageProviderConfig;
+  "lib/plantaPrompt": typeof lib_plantaPrompt;
   notifications: typeof notifications;
   orcamento: typeof orcamento;
   purchases: typeof purchases;
+  suppliers: typeof suppliers;
   team: typeof team;
   users: typeof users;
 }>;

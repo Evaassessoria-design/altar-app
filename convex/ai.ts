@@ -1,9 +1,10 @@
 "use node";
 
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import OpenAI from "openai";
-import { action } from "./_generated/server";
+import { action, type ActionCtx } from "./_generated/server";
 import { api } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { requireIdentity } from "./lib/identity";
 
 function makeOpenAI() {
@@ -13,75 +14,130 @@ function makeOpenAI() {
   });
 }
 
-// ─── AI: Extract briefing fields from contract text ───────────────────────────
+// Autorização por evento no contexto de ACTION (sem ctx.db). Reutiliza
+// `events.get`, que já resolve a identidade e devolve null para quem não é dono
+// — mesma regra do requireEventOwner usado nas queries/mutations.
+async function requireEventOwnerAction(ctx: ActionCtx, eventId: Id<"events">) {
+  await requireIdentity(ctx);
+  const event = await ctx.runQuery(api.events.get, { id: eventId });
+  if (!event) {
+    throw new ConvexError({ code: "NOT_FOUND", message: "Evento não encontrado" });
+  }
+  return event;
+}
 
-export const extractBriefingFromContract = action({
+// ─── AI: Extract STRUCTURED data from contract + adendo ───────────────────────
+// Fluxo único do ALTAR para IA Documental: LER → INTERPRETAR → MOSTRAR → REVISAR
+// → CONFIRMAR → APLICAR. Esta action APENAS LÊ e retorna JSON — NÃO altera
+// evento/financeiro/briefing. A aplicação acontece só após confirmação na UI
+// (events.update / financeiro.createReceivablesFromContract /
+// briefing.upsertBriefingFields). Nada é automático.
+export const extractContractData = action({
   args: {
     eventId: v.id("events"),
     contractText: v.string(),
+    kind: v.optional(v.union(v.literal("contract"), v.literal("addendum"))),
   },
-  handler: async (ctx, args): Promise<{ fieldsUpdated: number }> => {
-    await requireIdentity(ctx);
-
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    client: { name?: string; phone?: string; email?: string };
+    event: { name?: string; date?: string; location?: string };
+    finance: {
+      total?: number;
+      downPayment?: number;
+      installments: { description?: string; amount?: number; dueDate?: string }[];
+      paymentMethod?: string;
+    };
+    contracted: { item: string; quantity?: number }[];
+    addendum: { item: string; quantity?: number; change?: string }[];
+    decor: {
+      style?: string;
+      colorPalette?: string;
+      environments?: string;
+      items: { category?: string; item: string; quantity?: number }[];
+      notes?: string;
+    };
+  }> => {
+    await requireEventOwnerAction(ctx, args.eventId);
     const client = makeOpenAI();
+    const kindLabel = args.kind === "addendum" ? "adendo/anexo" : "contrato";
 
-    const systemPrompt = `Você é um assistente especializado em eventos de decoração no Brasil.
-Analise o texto do contrato/documento fornecido e extraia informações para preencher um briefing de evento.
-Retorne um objeto JSON com APENAS os campos encontrados claramente no documento.
-Campos possíveis (todos opcionais, retorne somente os encontrados):
-guestCount, theme, ceremonyTime, receptionTime, venueContact, venueRules,
-colorPalette, decorStyle, atmosphereDescription, tableClothColor, centerpiece,
-flowerTypes, flowerColors, bouquetStyle, flowerSupplier,
-guestTableType, guestTableCount, guestChairType, guestChairCount,
-sweetTableIncluded, loungeIncluded, lightingType, candleUse,
-cakeSupplier, cakeFlavor, cakeDesign, sweetsIncluded,
-generalNotes, specialRequests, restrictions, vendorContacts, setupTime, teardownTime, emergencyContact.
-Retorne SOMENTE o JSON válido, sem markdown nem explicações.`;
+    const systemPrompt = `Você é um assistente que lê ${kindLabel}s de empresas de decoração de eventos no Brasil.
+Extraia SOMENTE o que estiver claramente no documento. Retorne JSON válido no formato:
+{
+  "client": { "name": "", "phone": "", "email": "" },
+  "event": { "name": "", "date": "", "location": "" },
+  "finance": { "total": 0, "downPayment": 0, "installments": [ { "description": "", "amount": 0, "dueDate": "AAAA-MM-DD" } ], "paymentMethod": "" },
+  "contracted": [ { "item": "", "quantity": 0 } ],
+  "addendum": [ { "item": "", "quantity": 0, "change": "" } ],
+  "decor": {
+    "style": "",
+    "colorPalette": "",
+    "environments": "",
+    "items": [ { "category": "", "item": "", "quantity": 0 } ],
+    "notes": ""
+  }
+}
+O bloco "decor" cobre TODA informação de decoração/briefing descrita no documento: estilo, cores,
+ambientes, mobiliário, mesas, cadeiras, aparadores, lounges, bares, estruturas, arranjos, flores,
+peças e observações. "items" deve listar cada item de decoração com sua categoria (ex.: "mobiliário",
+"flores", "estrutura") e quantidade quando informada.
+Regras: use null/omita quando não encontrar; datas em AAAA-MM-DD; valores numéricos sem símbolo; NÃO invente. Responda SOMENTE o JSON.`;
 
     const response = await client.chat.completions.create({
       model: "openai/gpt-5.6-luna",
-      reasoning_effort: "none",
+      reasoning_effort: "low",
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: `Contrato:\n\n${args.contractText.slice(0, 8000)}` },
+        { role: "user", content: `Documento (${kindLabel}):\n\n${args.contractText.slice(0, 12000)}` },
       ],
     });
 
     const raw = response.choices[0]?.message?.content ?? "{}";
-    let fields: Record<string, string> = {};
+    const empty = {
+      client: {},
+      event: {},
+      finance: { installments: [] },
+      contracted: [],
+      addendum: [],
+      decor: { items: [] },
+    };
     try {
-      const parsed: unknown = JSON.parse(raw);
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        fields = Object.fromEntries(
-          Object.entries(parsed as Record<string, unknown>)
-            .filter(([, val]) => typeof val === "string" && (val as string).length > 0)
-            .map(([k, val]) => [k, String(val)]),
-        );
-      }
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      return {
+        client: (parsed.client as typeof empty.client) ?? {},
+        event: (parsed.event as typeof empty.event) ?? {},
+        finance: {
+          ...(parsed.finance as object),
+          installments:
+            ((parsed.finance as { installments?: [] })?.installments as []) ?? [],
+        },
+        contracted: (parsed.contracted as []) ?? [],
+        addendum: (parsed.addendum as []) ?? [],
+        decor: {
+          ...(parsed.decor as object),
+          items: ((parsed.decor as { items?: [] })?.items as []) ?? [],
+        },
+      };
     } catch {
-      // ignore
+      return empty;
     }
-
-    if (Object.keys(fields).length > 0) {
-      await ctx.runMutation(api.briefing.upsertBriefingFields, {
-        eventId: args.eventId,
-        fields,
-      });
-    }
-
-    return { fieldsUpdated: Object.keys(fields).length };
   },
 });
 
 // ─── AI: Analyse croqui/layout image ─────────────────────────────────────────
-
+// Esta action APENAS LÊ a imagem e retorna JSON — NÃO altera o briefing.
+// A aplicação (briefing.upsertBriefingFields) só acontece após revisão e
+// confirmação da decoradora na UI, seguindo o mesmo padrão do fluxo de contrato.
 export const analyseLayout = action({
   args: {
     eventId: v.id("events"),
     imageUrl: v.string(),
   },
   handler: async (ctx, args): Promise<{ description: string; furnitureList: string }> => {
-    await requireIdentity(ctx);
+    await requireEventOwnerAction(ctx, args.eventId);
 
     const client = makeOpenAI();
 
@@ -122,18 +178,6 @@ Responda SOMENTE com JSON: { "description": "...", "furnitureList": "item1, item
       result.description = raw;
     }
 
-    if (result.description || result.furnitureList) {
-      const combined = [
-        result.description,
-        result.furnitureList ? `\nItens identificados: ${result.furnitureList}` : "",
-      ].join("").trim();
-
-      await ctx.runMutation(api.briefing.upsertBriefingFields, {
-        eventId: args.eventId,
-        fields: { atmosphereDescription: combined },
-      });
-    }
-
     return result;
   },
 });
@@ -147,7 +191,7 @@ export const generateChecklistFromBriefing = action({
     briefingSummary: v.string(),
   },
   handler: async (ctx, args): Promise<{ itemsCreated: number }> => {
-    await requireIdentity(ctx);
+    await requireEventOwnerAction(ctx, args.eventId);
 
     const client = makeOpenAI();
     const phaseLabel = args.phase === "pre" ? "pré-evento (carregamento)" : "pós-evento (conferência/devolução)";

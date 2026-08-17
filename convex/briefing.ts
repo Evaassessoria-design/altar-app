@@ -1,7 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
-import { getOptionalIdentity, requireUser } from "./lib/identity";
+import { getOwnedEvent, requireEventOwner, requireUser } from "./lib/identity";
 
 // Briefing fields validator (all optional strings)
 const briefingFields = {
@@ -71,7 +71,7 @@ const briefingFields = {
 export const getBriefing = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
-    if (!(await getOptionalIdentity(ctx))) return null;
+    if (!(await getOwnedEvent(ctx, args.eventId))) return null;
     return await ctx.db
       .query("briefings")
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
@@ -82,14 +82,8 @@ export const getBriefing = query({
 export const upsertBriefing = mutation({
   args: { eventId: v.id("events"), ...briefingFields },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
     const { eventId, ...fields } = args;
-
-    // Verify ownership
-    const event = await ctx.db.get(eventId);
-    if (!event || event.userId !== user._id) {
-      throw new ConvexError({ message: "Evento não encontrado", code: "NOT_FOUND" });
-    }
+    const { user } = await requireEventOwner(ctx, eventId);
 
     const existing = await ctx.db
       .query("briefings")
@@ -111,7 +105,7 @@ export const upsertBriefingFields = mutation({
     fields: v.record(v.string(), v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
+    const { user } = await requireEventOwner(ctx, args.eventId);
 
     const existing = await ctx.db
       .query("briefings")
@@ -148,7 +142,7 @@ export const upsertBriefingFields = mutation({
 export const getChecklist = query({
   args: { eventId: v.id("events"), phase: v.union(v.literal("pre"), v.literal("post")) },
   handler: async (ctx, args) => {
-    if (!(await getOptionalIdentity(ctx))) return [];
+    if (!(await getOwnedEvent(ctx, args.eventId))) return [];
     return await ctx.db
       .query("checklistItems")
       .withIndex("by_event_phase", (q) =>
@@ -170,11 +164,7 @@ export const addChecklistItem = mutation({
     order: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    const event = await ctx.db.get(args.eventId);
-    if (!event || event.userId !== user._id) {
-      throw new ConvexError({ message: "Evento não encontrado", code: "NOT_FOUND" });
-    }
+    const { user } = await requireEventOwner(ctx, args.eventId);
     // Auto-compute order if not provided
     let order = args.order;
     if (order === undefined) {

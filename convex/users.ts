@@ -15,49 +15,10 @@ export const syncCurrentUser = mutation({
   handler: async (ctx) => syncAuthenticatedUser(ctx),
 });
 
-// LEGADO (Hercules/OIDC) — removido na fase final da migração.
-// Called after auth callback to sync user data
-export const updateCurrentUser = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return null;
-
-    const existing = await ctx.db
-      .query("users")
-      .withIndex("by_token", (q) =>
-        q.eq("tokenIdentifier", identity.tokenIdentifier),
-      )
-      .unique();
-
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        name: identity.name ?? existing.name,
-        email: identity.email ?? existing.email,
-      });
-      return existing._id;
-    }
-
-    // New user — start 14-day trial. First user becomes admin.
-    const now = new Date();
-    const trialEnd = new Date(now);
-    trialEnd.setDate(trialEnd.getDate() + 14);
-
-    const allUsers = await ctx.db.query("users").take(1);
-    const isFirstUser = allUsers.length === 0;
-
-    const userId = await ctx.db.insert("users", {
-      tokenIdentifier: identity.tokenIdentifier,
-      name: identity.name ?? "Usuário",
-      email: identity.email ?? "",
-      role: isFirstUser ? "admin" : "user",
-      subscriptionStatus: "trial",
-      trialStartDate: now.toISOString(),
-      trialEndDate: trialEnd.toISOString(),
-    });
-    return userId;
-  },
-});
+// REMOVIDO: `updateCurrentUser` (legado Hercules/OIDC). Indexava por
+// `tokenIdentifier` sem consultar `betterAuthId`/`by_email`, então criava um
+// SEGUNDO registro para um usuário que já existia — com trial novo. O vínculo
+// correto vive em `syncCurrentUser` → lib/identity.syncAuthenticatedUser.
 
 export const getCurrentUser = query({
   args: {},
@@ -113,6 +74,7 @@ export const updateProfile = mutation({
     name: v.optional(v.string()),
     phone: v.optional(v.string()),
     studioName: v.optional(v.string()),
+    cpfCnpj: v.optional(v.string()),
     currency: v.optional(v.string()),
     timezone: v.optional(v.string()),
     logoStorageId: v.optional(v.id("_storage")),
@@ -124,6 +86,7 @@ export const updateProfile = mutation({
       name?: string;
       phone?: string;
       studioName?: string;
+      cpfCnpj?: string;
       currency?: string;
       timezone?: string;
       logoStorageId?: typeof args.logoStorageId;
@@ -131,6 +94,7 @@ export const updateProfile = mutation({
     if (args.name !== undefined) patch.name = args.name;
     if (args.phone !== undefined) patch.phone = args.phone;
     if (args.studioName !== undefined) patch.studioName = args.studioName;
+    if (args.cpfCnpj !== undefined) patch.cpfCnpj = args.cpfCnpj;
     if (args.currency !== undefined) patch.currency = args.currency;
     if (args.timezone !== undefined) patch.timezone = args.timezone;
     if (args.logoStorageId !== undefined) patch.logoStorageId = args.logoStorageId;

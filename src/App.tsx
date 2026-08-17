@@ -1,6 +1,5 @@
 import { BrowserRouter, Route, Routes, Navigate, useLocation } from "react-router-dom";
 import { DefaultProviders } from "./components/providers/default.tsx";
-import AuthCallback from "./pages/auth/Callback.tsx";
 import LoginPage from "./pages/auth/Login.tsx";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
@@ -12,6 +11,8 @@ import EventBriefing from "./pages/app/events/[id]/briefing/page.tsx";
 import EventChecklist from "./pages/app/events/[id]/checklist/page.tsx";
 import OrcamentoPage from "./pages/app/events/[id]/orcamento/page.tsx";
 import GaleriaPage from "./pages/app/events/[id]/fotos/page.tsx";
+import FornecedoresPage from "./pages/app/events/[id]/fornecedores/page.tsx";
+import PlantaPage from "./pages/app/events/[id]/planta/page.tsx";
 import ConfiguracoesPage from "./pages/app/configuracoes/page.tsx";
 import EquipePage from "./pages/app/equipe/page.tsx";
 import ComprasPage from "./pages/app/compras/page.tsx";
@@ -24,6 +25,7 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import { Authenticated, Unauthenticated, AuthLoading } from "convex/react";
 import { Spinner } from "@/components/ui/spinner.tsx";
+import { ErrorBoundary } from "@/components/error-boundary.tsx";
 
 // Guard: redirect to paywall if subscription expired
 function SubscriptionGuard({ children }: { children: React.ReactNode }) {
@@ -31,11 +33,14 @@ function SubscriptionGuard({ children }: { children: React.ReactNode }) {
   const location = useLocation();
 
   // Allow access to configuracoes and paywall always
-  const exempt = ["/configuracoes", "/paywall", "/auth/callback"];
+  const exempt = ["/configuracoes", "/paywall"];
   if (exempt.some((p) => location.pathname.startsWith(p))) return <>{children}</>;
 
-  // If status loaded and expired → paywall
-  if (status !== undefined && status !== null && status.subscriptionStatus === "expired") {
+  // Sem assinatura válida → paywall. `cancelled` conta junto com `expired`:
+  // quem cancelou (ou teve a assinatura cancelada pelo webhook do Asaas) não
+  // deve seguir com acesso ao app.
+  const blocked = ["expired", "cancelled"];
+  if (status !== undefined && status !== null && blocked.includes(status.subscriptionStatus)) {
     return <Navigate to="/paywall" replace />;
   }
 
@@ -46,7 +51,6 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Index />} />
-      <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/paywall" element={<PaywallPage />} />
 
@@ -77,6 +81,8 @@ function AppRoutes() {
         <Route path="/eventos/:id/checklist/:phase" element={<EventChecklist />} />
         <Route path="/eventos/:id/orcamento" element={<OrcamentoPage />} />
         <Route path="/eventos/:id/fotos" element={<GaleriaPage />} />
+        <Route path="/eventos/:id/fornecedores" element={<FornecedoresPage />} />
+        <Route path="/eventos/:id/planta" element={<PlantaPage />} />
         <Route path="/equipe" element={<EquipePage />} />
         <Route path="/compras" element={<ComprasPage />} />
         <Route path="/financeiro" element={<FinanceiroPage />} />
@@ -95,7 +101,9 @@ export default function App() {
   return (
     <DefaultProviders>
       <BrowserRouter>
-        <AppRoutes />
+        <ErrorBoundary variant="screen">
+          <AppRoutes />
+        </ErrorBoundary>
       </BrowserRouter>
     </DefaultProviders>
   );

@@ -160,6 +160,34 @@ export const activateSubscriptionByCustomer = internalMutation({
   },
 });
 
+/**
+ * Pagamento em atraso — NÃO cancela a assinatura.
+ *
+ * `PAYMENT_OVERDUE` significa apenas que um boleto/cobrança venceu. O Asaas
+ * ainda vai tentar recobrar e, se de fato desistir, envia SUBSCRIPTION_DELETED —
+ * é aí que cancelamos. Tratar atraso como cancelamento tirava o acesso de quem
+ * paga um dia depois do vencimento.
+ *
+ * O status "overdue" mantém o acesso (período de tolerância) e serve de sinal
+ * para o painel administrativo. Quando o pagamento entra,
+ * `activateSubscriptionByCustomer` devolve para "active" sozinho.
+ */
+export const markSubscriptionOverdue = internalMutation({
+  args: { asaasCustomerId: v.string() },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_asaas_customer", (q) =>
+        q.eq("asaasCustomerId", args.asaasCustomerId),
+      )
+      .unique();
+    if (!user) return;
+    // Só rebaixa quem está ativo. Não sobrescreve cancelled/expired/trial.
+    if (user.subscriptionStatus !== "active") return;
+    await ctx.db.patch(user._id, { subscriptionStatus: "overdue" });
+  },
+});
+
 export const cancelSubscriptionByCustomer = internalMutation({
   args: { asaasCustomerId: v.string() },
   handler: async (ctx, args) => {

@@ -52,6 +52,12 @@ const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; clas
     icon: <CheckCircle className="size-3" />,
     className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
   },
+  // Pagamento em atraso — o acesso continua liberado enquanto o Asaas recobra.
+  overdue: {
+    label: "Em atraso",
+    icon: <Clock className="size-3" />,
+    className: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
+  },
   expired: {
     label: "Expirado",
     icon: <XCircle className="size-3" />,

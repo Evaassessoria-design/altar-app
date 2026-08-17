@@ -181,6 +181,8 @@ export default function ConfiguracoesPage() {
   const statusConfig = {
     trial: { label: "Trial gratuito", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-900/20", icon: Clock },
     active: { label: "Assinante ativo", color: "text-green-600 dark:text-green-400", bg: "bg-green-50 dark:bg-green-900/20", icon: BadgeCheck },
+    // Pagamento em atraso: acesso mantido enquanto o Asaas recobra.
+    overdue: { label: "Pagamento em atraso", color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-900/20", icon: AlertTriangle },
     expired: { label: "Trial expirado", color: "text-red-500", bg: "bg-red-50 dark:bg-red-900/20", icon: AlertTriangle },
     cancelled: { label: "Cancelado", color: "text-muted-foreground", bg: "bg-muted", icon: AlertTriangle },
   } as const;

@@ -30,12 +30,19 @@ export const asaasReceiver = httpAction(async (ctx, request) => {
     });
   }
 
+  // Atraso NÃO é cancelamento. O Asaas continua tentando recobrar; se desistir,
+  // manda SUBSCRIPTION_DELETED. Até lá o acesso é mantido (tolerância) e o
+  // status "overdue" sinaliza a situação no painel administrativo.
+  if (customerId && eventType === "PAYMENT_OVERDUE") {
+    await ctx.runMutation(internal.users.markSubscriptionOverdue, {
+      asaasCustomerId: customerId,
+    });
+  }
+
   // Cancelamentos / estornos → marca a assinatura como cancelada
   if (
     customerId &&
-    (eventType === "PAYMENT_REFUNDED" ||
-      eventType === "PAYMENT_OVERDUE" ||
-      eventType === "SUBSCRIPTION_DELETED")
+    (eventType === "PAYMENT_REFUNDED" || eventType === "SUBSCRIPTION_DELETED")
   ) {
     await ctx.runMutation(internal.users.cancelSubscriptionByCustomer, {
       asaasCustomerId: customerId,

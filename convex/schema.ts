@@ -37,6 +37,24 @@ const photoCategory = v.union(
   v.literal("desmontagem"),
 );
 
+// Interpretação estrutural de um croqui (IA Visual). `elementos` carrega a
+// CONTAGEM que precisa ser preservada no render (12 mesas continuam 12 mesas).
+// `tipo` é texto livre justamente para caber mesa/cadeira/palco/bar/pista/
+// lounge/buffet/altar/entrada/estrutura sem engessar o schema.
+const layoutInterpretation = v.object({
+  ambientes: v.array(v.string()),
+  elementos: v.array(
+    v.object({
+      tipo: v.string(),
+      quantidade: v.number(),
+      observacao: v.optional(v.string()),
+    }),
+  ),
+  circulacao: v.optional(v.string()),
+  acessos: v.optional(v.string()),
+  observacoes: v.optional(v.string()),
+});
+
 // All briefing fields are optional free-text (kept in sync with convex/briefing.ts)
 const briefingFields = {
   guestCount: v.optional(v.string()),
@@ -119,6 +137,7 @@ export default defineSchema({
     // Perfil / configurações
     phone: v.optional(v.string()),
     studioName: v.optional(v.string()),
+    cpfCnpj: v.optional(v.string()),
     currency: v.optional(v.string()),
     timezone: v.optional(v.string()),
     logoStorageId: v.optional(v.id("_storage")),
@@ -144,6 +163,9 @@ export default defineSchema({
     budget: v.optional(v.number()),
     status: eventStatus,
     notes: v.optional(v.string()),
+    // Importação do contrato por IA (status + pendências identificadas no doc).
+    contractAnalyzedAt: v.optional(v.string()),
+    contractPendings: v.optional(v.array(v.string())),
   })
     .index("by_user", ["userId"])
     .index("by_user_date", ["userId", "date"]),
@@ -203,12 +225,25 @@ export default defineSchema({
     .index("by_event", ["eventId"])
     .index("by_event_member", ["eventId", "teamMemberId"]),
 
+  // Documentos do evento (contrato, adendo, orçamento, referência, outros).
+  // `kind` ausente = contrato legado (compatibilidade com dados existentes).
+  // Preparação para "Pasta do Evento" — hoje só o contrato principal tem UI de
+  // upload; os demais tipos existem no schema para suportar a próxima etapa.
   contracts: defineTable({
     eventId: v.id("events"),
     userId: v.id("users"),
     storageId: v.id("_storage"),
     filename: v.string(),
     uploadedAt: v.string(),
+    kind: v.optional(
+      v.union(
+        v.literal("contract"),
+        v.literal("addendum"),
+        v.literal("budget"),
+        v.literal("reference"),
+        v.literal("other"),
+      ),
+    ),
   }).index("by_event", ["eventId"]),
 
   purchaseItems: defineTable({
@@ -290,4 +325,142 @@ export default defineSchema({
     whatsapp: v.optional(v.string()),
     intent: v.union(v.literal("demo"), v.literal("beta")),
   }).index("by_email", ["email"]),
+
+  // Dossiê operacional de fornecedores por evento. Base para o "Dossiê do Evento"
+  // futuro. Tudo opcional exceto category/companyName — não impacta eventos antigos.
+  // `operational` é uma lista flexível rótulo→valor (com grupo opcional para a UI,
+  // ex.: "operacao" / "mesa_posta" no Buffet). `category` é slug fixo OU texto livre.
+  eventSuppliers: defineTable({
+    userId: v.id("users"),
+    eventId: v.id("events"),
+    category: v.string(),
+    companyName: v.string(),
+    contactName: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    email: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    // Perfil do fornecedor (reutilizável no futuro — hoje vive no fornecedor do
+    // evento; a arquitetura permite extrair para uma tabela global depois).
+    logoStorageId: v.optional(v.id("_storage")),
+    instagram: v.optional(v.string()),
+    website: v.optional(v.string()),
+    address: v.optional(v.string()),
+    city: v.optional(v.string()),
+    state: v.optional(v.string()),
+    differentials: v.optional(v.string()),
+    commercialInfo: v.optional(v.string()),
+    bankInfo: v.optional(v.string()),
+    // Operacional (CORE — vale p/ Decor/Buffet/Bar).
+    status: v.optional(
+      v.union(
+        v.literal("cotacao"),
+        v.literal("em_negociacao"),
+        v.literal("contratado"),
+        v.literal("confirmado"),
+        v.literal("finalizado"),
+      ),
+    ),
+    alignments: v.optional(
+      v.array(
+        v.object({
+          date: v.string(),
+          note: v.string(),
+          by: v.optional(v.string()),
+          nextAction: v.optional(v.string()),
+        }),
+      ),
+    ),
+    // Próxima ação pendente do fornecedor neste evento (memória operacional /
+    // futura Saúde do Evento). Mostrada no card e na "Situação neste evento".
+    nextAction: v.optional(v.string()),
+    favorite: v.optional(v.boolean()),
+    operational: v.optional(
+      v.array(
+        v.object({
+          label: v.string(),
+          value: v.string(),
+          group: v.optional(v.string()),
+        }),
+      ),
+    ),
+    order: v.optional(v.number()),
+  })
+    .index("by_event", ["eventId"])
+    .index("by_event_category", ["eventId", "category"]),
+
+  // ── Itens operacionais de montagem (Caderno de Montagem) ───────────────────
+  // Genérica de propósito: serve para cadeiras, mesas, sofás, poltronas,
+  // aparadores, tapetes, lounges, arranjos, peças, iluminação e estruturas —
+  // por isso `area` é string e a tabela NÃO se chama "furniture".
+  //
+  // NÃO substitui o briefing: o texto do briefing é o combinado comercial;
+  // estes itens são o operacional da montagem. As duas camadas convivem.
+  assemblyItems: defineTable({
+    userId: v.id("users"),
+    eventId: v.id("events"),
+    // Casa com BRIEFING_AREAS em src/lib/briefing-areas.ts.
+    area: v.string(),
+    order: v.number(),
+    name: v.string(),
+    model: v.optional(v.string()),
+    quantity: v.optional(v.number()),
+    unit: v.optional(v.string()),
+    // Vínculo real + nome denormalizado (sobrevive à exclusão do fornecedor).
+    supplierId: v.optional(v.id("eventSuppliers")),
+    supplierName: v.optional(v.string()),
+    ambiente: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    // Duas fotos com papéis distintos: o que foi aprovado × o que foi contratado.
+    referencePhotoStorageId: v.optional(v.id("_storage")),
+    contractedPhotoStorageId: v.optional(v.id("_storage")),
+    includeInAssemblyReport: v.boolean(),
+    checkOnAssembly: v.boolean(),
+    // Audiência do item — permite os relatórios de cliente/interno no futuro
+    // sem mexer no schema.
+    visibility: v.union(
+      v.literal("interno"),
+      v.literal("cliente"),
+      v.literal("equipe"),
+    ),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  })
+    .index("by_event", ["eventId"])
+    .index("by_event_area", ["eventId", "area"]),
+
+  // ── IA VISUAL / Planta Premium ─────────────────────────────────────────────
+  // Histórico versionado das gerações de planta. Tabela EXCLUSIVA da IA Visual —
+  // não substitui nem toca em `contracts` (documentos) nem `eventPhotos` (galeria).
+  // O croqui original (`originalSketchStorageId`) nunca é apagado: cada versão
+  // guarda a referência ao arquivo de origem que a produziu.
+  layoutRenders: defineTable({
+    userId: v.id("users"),
+    eventId: v.id("events"),
+    // Origem — croqui enviado pela decoradora (preservado no storage).
+    originalSketchStorageId: v.id("_storage"),
+    originalSketchFilename: v.string(),
+    // O que a IA leu do croqui, JÁ com as correções da decoradora aplicadas
+    // (é exatamente o que foi enviado ao modelo de imagem).
+    interpretation: layoutInterpretation,
+    // Observações livres que a decoradora escreveu na revisão.
+    corrections: v.optional(v.string()),
+    // Resultado — ausente enquanto `status` é "generating" ou "failed".
+    outputStorageId: v.optional(v.id("_storage")),
+    // Rastreabilidade da geração.
+    provider: v.string(),
+    model: v.string(),
+    promptVersion: v.string(),
+    promptSnapshot: v.string(),
+    generationVersion: v.number(),
+    status: v.union(
+      v.literal("generating"),
+      v.literal("done"),
+      v.literal("failed"),
+    ),
+    errorMessage: v.optional(v.string()),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  })
+    .index("by_event", ["eventId"])
+    .index("by_event_version", ["eventId", "generationVersion"]),
 });

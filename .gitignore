@@ -40,3 +40,4 @@ app.tar.gz
 # Usar apenas pnpm como gerenciador de pacotes
 package-lock.json
 yarn.lock
+.vercel

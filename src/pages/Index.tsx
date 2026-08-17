@@ -93,9 +93,6 @@ const credibility = [
 const primaryCta =
   "bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer px-8 py-4 rounded-xl text-base font-semibold transition-colors inline-flex items-center gap-2 shadow-lg shadow-primary/20";
 
-const secondaryCta =
-  "bg-card text-foreground border border-border hover:border-primary/40 cursor-pointer px-8 py-4 rounded-xl text-base font-semibold transition-colors inline-flex items-center gap-2";
-
 export default function Index() {
   // O cliente reativo do app usa `expectAuth: true` e segura chamadas até
   // haver login. Como a landing é pública (visitante anônimo), a captura de
@@ -104,7 +101,6 @@ export default function Index() {
     () => new ConvexHttpClient(import.meta.env.VITE_CONVEX_URL as string),
     [],
   );
-  const [intent, setIntent] = useState<"demo" | "beta">("demo");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
@@ -121,7 +117,7 @@ export default function Index() {
         name: name.trim(),
         email: email.trim(),
         whatsapp: whatsapp.trim() || undefined,
-        intent,
+        intent: "demo",
       });
       setStatus("sent");
     } catch {
@@ -197,19 +193,8 @@ export default function Index() {
             </div>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               <Unauthenticated>
-                <a
-                  href="#agendar"
-                  onClick={() => setIntent("demo")}
-                  className={primaryCta}
-                >
-                  Solicitar um diagnóstico <ArrowRight className="size-5" />
-                </a>
-                <a
-                  href="#agendar"
-                  onClick={() => setIntent("beta")}
-                  className={secondaryCta}
-                >
-                  Entrar na Lista Beta
+                <a href="#agendar" className={primaryCta}>
+                  Começar agora <ArrowRight className="size-5" />
                 </a>
               </Unauthenticated>
               <Authenticated>
@@ -219,7 +204,7 @@ export default function Index() {
               </Authenticated>
             </div>
             <p className="text-sm text-muted-foreground mt-4">
-              Diagnóstico gratuito da sua operação • Sem compromisso
+              14 dias grátis • Sem cartão de crédito no cadastro
             </p>
           </motion.div>
         </div>
@@ -300,12 +285,8 @@ export default function Index() {
             ))}
           </div>
           <div className="mt-12 text-center">
-            <a
-              href="#agendar"
-              onClick={() => setIntent("demo")}
-              className={primaryCta}
-            >
-              Solicitar um diagnóstico <ArrowRight className="size-5" />
+            <a href="#agendar" className={primaryCta}>
+              Começar agora <ArrowRight className="size-5" />
             </a>
           </div>
         </div>
@@ -356,24 +337,25 @@ export default function Index() {
       <section className="py-20 px-4 bg-card/50">
         <div className="max-w-lg mx-auto text-center">
           <h2 className="text-3xl font-bold mb-4">
-            Depois do diagnóstico, o caminho fica claro
+            Toda a sua operação em um só lugar
           </h2>
           <p className="text-muted-foreground mb-10">
-            O diagnóstico define o que a sua empresa precisa primeiro. A
-            plataforma é o passo seguinte — uma assinatura, acesso completo, sem
-            surpresas.
+            Centralize eventos, equipe, fornecedores e financeiro numa operação
+            previsível. Uma assinatura, acesso completo, sem surpresas.
           </p>
           <div className="bg-card rounded-2xl border-2 border-primary p-8 shadow-lg">
             <div className="inline-block bg-primary/10 text-primary text-xs font-semibold px-3 py-1 rounded-full mb-4">
               14 dias grátis
             </div>
+            <p className="text-base text-muted-foreground line-through">De R$ 149,90/mês</p>
             <div className="mb-2">
-              <span className="text-5xl font-bold">R$ 79</span>
+              <span className="text-5xl font-bold">R$ 119</span>
               <span className="text-xl text-muted-foreground">,90</span>
               <span className="text-muted-foreground">/mês</span>
             </div>
+            <p className="text-sm text-primary font-medium mb-1">Condição Fundadora</p>
             <p className="text-sm text-muted-foreground mb-8">
-              Sem taxa de adesão. Cancele quando quiser.
+              Entre como empresa fundadora do ALTAR e garanta a condição especial de R$ 119,90/mês. Sem taxa de adesão. Cancele quando quiser.
             </p>
             <ul className="text-sm text-left space-y-3 mb-8">
               {[
@@ -396,18 +378,13 @@ export default function Index() {
             <Unauthenticated>
               <a
                 href="#agendar"
-                onClick={() => setIntent("demo")}
                 className="block w-full bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer py-4 rounded-xl text-base font-semibold transition-colors text-center"
               >
-                Solicitar um diagnóstico
+                Começar agora
               </a>
-              <a
-                href="#agendar"
-                onClick={() => setIntent("beta")}
-                className="inline-block mt-4 text-sm text-muted-foreground hover:text-primary transition-colors"
-              >
-                Ainda não está pronto? Entre na Lista Beta →
-              </a>
+              <p className="text-xs text-muted-foreground mt-3">
+                Sem cartão de crédito no cadastro. Você só paga depois dos 14 dias grátis.
+              </p>
             </Unauthenticated>
             <Authenticated>
               <a
@@ -421,30 +398,43 @@ export default function Index() {
         </div>
       </section>
 
-      {/* Captura de leads — diagnóstico / Lista Beta */}
+      {/* Captura de leads — Começar agora */}
       <section id="agendar" className="py-20 px-4">
         <div className="max-w-lg mx-auto text-center">
           <h2 className="text-3xl font-bold mb-4">
-            Comece por um diagnóstico da sua operação
+            Comece a organizar sua operação
           </h2>
-          <p className="text-muted-foreground mb-10">
-            Solicite um diagnóstico gratuito — a primeira etapa da nossa reunião
-            consultiva. Ou entre na Lista Beta para acompanhar as novidades sem
-            compromisso.
+          <p className="text-muted-foreground mb-8">
+            Deixe seu contato para começar a usar o ALTAR — a gente te
+            acompanha nos primeiros passos.
           </p>
+
+          {/* Jornada após o clique */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-10 text-left">
+            {[
+              "Crie sua conta",
+              "Organize seu primeiro evento",
+              "Experimente por 14 dias",
+              "Continue por R$ 119,90/mês como fundadora",
+            ].map((step, i) => (
+              <div key={step} className="flex items-start gap-2">
+                <span className="flex-shrink-0 size-5 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center mt-0.5">
+                  {i + 1}
+                </span>
+                <span className="text-xs text-muted-foreground leading-snug">
+                  {step}
+                </span>
+              </div>
+            ))}
+          </div>
 
           {status === "sent" ? (
             <div className="bg-card rounded-2xl border border-border p-8 shadow-lg text-center">
               <CheckSquare className="size-8 text-primary mx-auto mb-4" />
-              <h3 className="text-xl font-semibold mb-2">
-                {intent === "demo"
-                  ? "Diagnóstico solicitado!"
-                  : "Você está na Lista Beta!"}
-              </h3>
+              <h3 className="text-xl font-semibold mb-2">Tudo certo!</h3>
               <p className="text-sm text-muted-foreground">
-                {intent === "demo"
-                  ? "Recebemos seu pedido. Entraremos em contato em breve para agendar o diagnóstico da sua operação."
-                  : "Obrigado pelo interesse. Você receberá as novidades do ALTAR em primeira mão."}
+                Recebemos seu contato. Em breve falamos com você para começar
+                a usar o ALTAR.
               </p>
             </div>
           ) : (
@@ -452,31 +442,6 @@ export default function Index() {
               onSubmit={handleLeadSubmit}
               className="bg-card rounded-2xl border border-border p-8 shadow-lg text-left space-y-4"
             >
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIntent("demo")}
-                  className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors cursor-pointer ${
-                    intent === "demo"
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border text-muted-foreground hover:border-primary/30"
-                  }`}
-                >
-                  Quero um diagnóstico
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIntent("beta")}
-                  className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors cursor-pointer ${
-                    intent === "beta"
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border text-muted-foreground hover:border-primary/30"
-                  }`}
-                >
-                  Entrar na Lista Beta
-                </button>
-              </div>
-
               <div>
                 <label
                   htmlFor="lead-name"
@@ -544,17 +509,17 @@ export default function Index() {
                 disabled={status === "sending"}
                 className="w-full bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer py-4 rounded-xl text-base font-semibold transition-colors disabled:opacity-60"
               >
-                {status === "sending"
-                  ? "Enviando..."
-                  : intent === "demo"
-                    ? "Solicitar um diagnóstico"
-                    : "Entrar na Lista Beta"}
+                {status === "sending" ? "Enviando..." : "Começar agora"}
               </button>
             </form>
           )}
 
           <p className="text-xs text-muted-foreground mt-4">
             Sem spam. Seus dados são usados apenas para contato sobre o ALTAR.
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Sem cartão de crédito no cadastro — você só decide sobre o
+            pagamento depois dos 14 dias grátis.
           </p>
         </div>
       </section>

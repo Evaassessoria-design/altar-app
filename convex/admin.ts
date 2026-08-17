@@ -36,8 +36,8 @@ export const getStats = query({
     const expired = users.filter((u) => u.subscriptionStatus === "expired").length;
     const cancelled = users.filter((u) => u.subscriptionStatus === "cancelled").length;
 
-    // MRR = active subscribers × R$79,90
-    const mrr = active * 79.9;
+    // MRR = active subscribers × R$119,90
+    const mrr = active * 119.9;
 
     // Trial conversion rate = active / (active + expired) if > 0
     const conversionDenominator = active + expired;

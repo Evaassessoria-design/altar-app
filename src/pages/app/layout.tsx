@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useNavigate, Link } from "react-router-dom";
+import { Outlet, NavLink, useNavigate, Link, useLocation } from "react-router-dom";
 import { Authenticated, Unauthenticated, AuthLoading } from "convex/react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
@@ -20,6 +20,7 @@ import { useAuth } from "@/hooks/use-auth.ts";
 import { cn } from "@/lib/utils.ts";
 import { NotificationCenter } from "@/components/notification-center.tsx";
 import { OnboardingModal } from "@/components/onboarding-modal.tsx";
+import { ErrorBoundary } from "@/components/error-boundary.tsx";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ConvexError } from "convex/values";
@@ -41,6 +42,7 @@ const bottomNavItems = [
 ];
 
 function TrialBanner() {
+  const navigate = useNavigate();
   const status = useQuery(api.users.getSubscriptionStatus);
   const currentUser = useQuery(api.users.getCurrentUser);
   const createCheckout = useAction(api.asaas.createCheckoutSession);
@@ -54,14 +56,19 @@ function TrialBanner() {
     if (!currentUser) return;
     setLoading(true);
     try {
-      const { paymentUrl } = await createCheckout({
-        userName: currentUser.name ?? "Usuário",
-        userEmail: currentUser.email ?? "",
-        userId: currentUser._id,
-        existingCustomerId: currentUser.asaasCustomerId,
-      });
+      const { paymentUrl } = await createCheckout({});
       window.open(paymentUrl, "_blank");
     } catch (err) {
+      if (
+        err instanceof ConvexError &&
+        (err.data as { code?: string }).code === "PROFILE_INCOMPLETE"
+      ) {
+        toast.error("Antes de continuar, precisamos completar os dados da sua empresa.", {
+          description: "Adicione o CPF ou CNPJ em Dados da Empresa para continuar sua assinatura.",
+          action: { label: "Completar dados", onClick: () => navigate("/configuracoes") },
+        });
+        return;
+      }
       const msg = err instanceof ConvexError
         ? (err.data as { message: string }).message
         : "Erro ao gerar cobrança.";
@@ -89,6 +96,7 @@ function TrialBanner() {
 function AppLayoutInner() {
   const { signout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const isAdmin = useQuery(api.admin.isAdmin);
   const currentUser = useQuery(api.users.getCurrentUser);
 
@@ -187,7 +195,9 @@ function AppLayoutInner() {
         </header>
 
         <main className="flex-1 overflow-y-auto pb-20 md:pb-6">
-          <Outlet context={{ onOpenOnboarding: () => setShowOnboarding(true) }} />
+          <ErrorBoundary variant="page" resetKeys={[location.pathname]}>
+            <Outlet context={{ onOpenOnboarding: () => setShowOnboarding(true) }} />
+          </ErrorBoundary>
         </main>
 
         {/* Bottom nav — mobile */}

@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { useAction, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import { Button } from "@/components/ui/button.tsx";
@@ -21,6 +22,7 @@ const features = [
 ];
 
 export default function Paywall() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const currentUser = useQuery(api.users.getCurrentUser);
   const createCheckout = useAction(api.asaas.createCheckoutSession);
@@ -29,14 +31,19 @@ export default function Paywall() {
     if (!currentUser) return;
     setLoading(true);
     try {
-      const { paymentUrl } = await createCheckout({
-        userName: currentUser.name ?? "Usuário",
-        userEmail: currentUser.email ?? "",
-        userId: currentUser._id,
-        existingCustomerId: currentUser.asaasCustomerId,
-      });
+      const { paymentUrl } = await createCheckout({});
       window.open(paymentUrl, "_blank");
     } catch (err) {
+      if (
+        err instanceof ConvexError &&
+        (err.data as { code?: string }).code === "PROFILE_INCOMPLETE"
+      ) {
+        toast.error("Antes de continuar, precisamos completar os dados da sua empresa.", {
+          description: "Adicione o CPF ou CNPJ em Dados da Empresa para continuar sua assinatura.",
+          action: { label: "Completar dados", onClick: () => navigate("/configuracoes") },
+        });
+        return;
+      }
       const msg =
         err instanceof ConvexError
           ? (err.data as { message: string }).message
@@ -74,12 +81,16 @@ export default function Paywall() {
         {/* Pricing card */}
         <div className="bg-card border border-border rounded-2xl p-6 shadow-sm mb-4">
           {/* Price */}
+          <p className="text-sm text-muted-foreground line-through">De R$ 149,90/mês</p>
           <div className="flex items-end gap-1 mb-1">
-            <span className="text-4xl font-bold">R$ 79</span>
+            <span className="text-4xl font-bold">R$ 119</span>
             <span className="text-2xl font-bold text-muted-foreground">,90</span>
             <span className="text-muted-foreground text-sm mb-1">/mês</span>
           </div>
-          <p className="text-xs text-muted-foreground mb-6">Cancele quando quiser</p>
+          <p className="text-xs text-primary font-medium">Condição Fundadora</p>
+          <p className="text-xs text-muted-foreground mb-6">
+            Entre como empresa fundadora do ALTAR e garanta a condição especial de R$ 119,90/mês. Cancele quando quiser.
+          </p>
 
           {/* Features */}
           <ul className="space-y-2.5 mb-6">
@@ -102,7 +113,7 @@ export default function Paywall() {
             ) : (
               <Sparkles className="size-4" />
             )}
-            {loading ? "Gerando cobrança..." : "Assinar agora — R$ 79,90/mês"}
+            {loading ? "Gerando cobrança..." : "Começar agora — R$ 119,90/mês"}
           </Button>
 
           <p className="text-xs text-muted-foreground text-center mt-3">

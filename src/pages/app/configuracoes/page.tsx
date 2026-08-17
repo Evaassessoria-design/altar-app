@@ -98,6 +98,7 @@ export default function ConfiguracoesPage() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [studioName, setStudioName] = useState("");
+  const [cpfCnpj, setCpfCnpj] = useState("");
   const [currency, setCurrency] = useState("BRL");
   const [timezone, setTimezone] = useState("America/Sao_Paulo");
   const [initialized, setInitialized] = useState(false);
@@ -111,6 +112,7 @@ export default function ConfiguracoesPage() {
     setName(user.name ?? "");
     setPhone(user.phone ?? "");
     setStudioName(user.studioName ?? "");
+    setCpfCnpj(user.cpfCnpj ?? "");
     setCurrency(user.currency ?? "BRL");
     setTimezone(user.timezone ?? "America/Sao_Paulo");
     setInitialized(true);
@@ -123,6 +125,7 @@ export default function ConfiguracoesPage() {
         name: name.trim() || undefined,
         phone: phone.trim() || undefined,
         studioName: studioName.trim() || undefined,
+        cpfCnpj: cpfCnpj.trim() || undefined,
         currency,
         timezone,
       });
@@ -284,8 +287,8 @@ export default function ConfiguracoesPage() {
         </div>
       </SectionCard>
 
-      {/* ── Estúdio ── */}
-      <SectionCard icon={Building2} title="Dados do Estúdio" description="Informações que aparecem nos documentos" delay={0.1}>
+      {/* ── Empresa ── */}
+      <SectionCard icon={Building2} title="Dados da Empresa" description="Usados nos documentos e na assinatura (Asaas)" delay={0.1}>
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label>Nome do estúdio / empresa</Label>
@@ -294,6 +297,18 @@ export default function ConfiguracoesPage() {
               value={studioName}
               onChange={(e) => setStudioName(e.target.value)}
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label>CPF ou CNPJ</Label>
+            <Input
+              placeholder="Somente números"
+              inputMode="numeric"
+              value={cpfCnpj}
+              onChange={(e) => setCpfCnpj(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Necessário para gerar a assinatura. Seus dados de contato (telefone e e-mail) ficam no bloco acima.
+            </p>
           </div>
         </div>
       </SectionCard>
@@ -361,7 +376,7 @@ export default function ConfiguracoesPage() {
               )}
               {status === "active" && (
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Plano mensal — R$ 79,90/mês
+                  Plano mensal — R$ 119,90/mês
                 </p>
               )}
             </div>
@@ -391,7 +406,9 @@ export default function ConfiguracoesPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-semibold text-sm">Plano Altar Pro</p>
-                  <p className="text-xs text-muted-foreground">R$ 79,90/mês · PIX, boleto ou cartão</p>
+                  <p className="text-xs text-muted-foreground">
+                    <span className="line-through">R$ 149,90</span> R$ 119,90/mês · PIX, boleto ou cartão
+                  </p>
                 </div>
                 <Button
                   className="cursor-pointer gap-1.5"
@@ -401,14 +418,18 @@ export default function ConfiguracoesPage() {
                     if (!user) return;
                     setSubscribing(true);
                     try {
-                      const { paymentUrl } = await createCheckout({
-                        userName: user.name ?? "Usuário",
-                        userEmail: user.email ?? "",
-                        userId: user._id,
-                        existingCustomerId: user.asaasCustomerId,
-                      });
+                      const { paymentUrl } = await createCheckout({});
                       window.open(paymentUrl, "_blank");
                     } catch (err) {
+                      if (
+                        err instanceof ConvexError &&
+                        (err.data as { code?: string }).code === "PROFILE_INCOMPLETE"
+                      ) {
+                        toast.error("Antes de continuar, precisamos completar os dados da sua empresa.", {
+                          description: "Preencha o CPF ou CNPJ em Dados da Empresa (acima) e salve para continuar.",
+                        });
+                        return;
+                      }
                       const msg = err instanceof ConvexError
                         ? (err.data as { message: string }).message
                         : "Erro ao gerar cobrança.";

@@ -9,6 +9,7 @@ import {
   CalendarDays,
   MapPin,
   User,
+  Users,
   DollarSign,
   Plus,
   Pencil,
@@ -66,13 +67,32 @@ const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   cancelled: { label: "Cancelado", className: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
 };
 
+const HEALTH_CFG: Record<string, { dot: string; cls: string }> = {
+  complete: { dot: "🟢", cls: "text-green-600 dark:text-green-400" },
+  attention: { dot: "🟡", cls: "text-amber-600 dark:text-amber-400" },
+  incomplete: { dot: "🔴", cls: "text-red-600 dark:text-red-400" },
+};
+
+function HealthBadge({ health }: { health?: { percent: number; status: string } }) {
+  if (!health) return null;
+  const m = HEALTH_CFG[health.status] ?? HEALTH_CFG.incomplete;
+  return (
+    <span
+      className={cn("text-xs font-medium whitespace-nowrap", m.cls)}
+      title="Saúde do Evento"
+    >
+      {m.dot} {health.percent}%
+    </span>
+  );
+}
+
 export default function EventsPage() {
   const [filter, setFilter] = useState<FilterType>("all");
   const [showCreate, setShowCreate] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Doc<"events"> | null>(null);
   const [deletingId, setDeletingId] = useState<Id<"events"> | null>(null);
 
-  const events = useQuery(api.events.list, { filter });
+  const events = useQuery(api.health.listCards, { filter });
   const createEvent = useMutation(api.events.create);
   const updateEvent = useMutation(api.events.update);
   const removeEvent = useMutation(api.events.remove);
@@ -202,32 +222,34 @@ export default function EventsPage() {
                       <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
                         {TYPE_LABELS[event.type] ?? event.type}
                       </span>
+                      <HealthBadge health={event.health} />
                     </div>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2">
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1">
                         <CalendarDays className="size-3.5 flex-shrink-0" />
-                        <span>{format(new Date(event.date), "dd/MM/yyyy HH:mm", { locale: ptBR })}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <User className="size-3.5 flex-shrink-0" />
-                        <span className="truncate">{event.clientName}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground col-span-2">
+                        {format(new Date(event.date), "dd/MM/yyyy", { locale: ptBR })}
+                      </span>
+                      <span className="inline-flex items-center gap-1 min-w-0 max-w-[60%]">
                         <MapPin className="size-3.5 flex-shrink-0" />
                         <span className="truncate">{event.location}</span>
-                      </div>
-                      {event.budget !== undefined && (
-                        <div className="flex items-center gap-1.5 text-xs text-primary font-medium">
-                          <DollarSign className="size-3.5 flex-shrink-0" />
-                          <span>
-                            {event.budget.toLocaleString("pt-BR", {
-                              style: "currency",
-                              currency: "BRL",
-                            })}
-                          </span>
-                        </div>
+                      </span>
+                      {event.guestCount && (
+                        <span className="inline-flex items-center gap-1">
+                          <Users className="size-3.5 flex-shrink-0" />
+                          {event.guestCount}
+                        </span>
                       )}
                     </div>
+                    {(event.assessoria || event.responsible) && (
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-muted-foreground">
+                        {event.assessoria && (
+                          <span>Assessoria: <span className="text-foreground">{event.assessoria}</span></span>
+                        )}
+                        {event.responsible && (
+                          <span>Resp.: <span className="text-foreground">{event.responsible}</span></span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button

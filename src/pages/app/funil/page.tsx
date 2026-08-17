@@ -266,21 +266,47 @@ function ConvertDialog({
 
 function LeadCard({
   lead,
+  isDragging,
   onEdit,
   onDelete,
   onMoveStage,
+  onDragStart,
+  onDragEnd,
+  onDropBefore,
 }: {
   lead: Doc<"leads">;
+  isDragging: boolean;
   onEdit: (lead: Doc<"leads">) => void;
   onDelete: (lead: Doc<"leads">) => void;
   onMoveStage: (lead: Doc<"leads">, stage: Stage) => void;
+  onDragStart: (lead: Doc<"leads">) => void;
+  onDragEnd: () => void;
+  onDropBefore: (target: Doc<"leads">) => void;
 }) {
   const [converting, setConverting] = useState(false);
   const stageConfig = STAGES.find((s) => s.id === lead.stage)!;
   const nextStage = STAGES[STAGES.findIndex((s) => s.id === lead.stage) + 1];
 
   return (
-    <div className="bg-background border border-border rounded-xl p-3 space-y-2 shadow-sm">
+    <div
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", lead._id);
+        onDragStart(lead);
+      }}
+      onDragEnd={onDragEnd}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onDropBefore(lead);
+      }}
+      className={cn(
+        "bg-background border border-border rounded-xl p-3 space-y-2 shadow-sm cursor-grab active:cursor-grabbing transition-shadow",
+        isDragging && "opacity-50 ring-2 ring-primary/40 shadow-lg",
+      )}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm truncate">{lead.clientName}</p>
@@ -289,6 +315,7 @@ function LeadCard({
               href={`https://wa.me/55${lead.clientPhone.replace(/\D/g, "")}`}
               target="_blank"
               rel="noopener noreferrer"
+              draggable={false}
               className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
             >
               <Phone className="size-3" /> {lead.clientPhone}
@@ -369,17 +396,31 @@ function LeadCard({
 function KanbanColumn({
   stage,
   leads,
+  draggingId,
+  isDragOver,
   onAdd,
   onEdit,
   onDelete,
   onMoveStage,
+  onDragStart,
+  onDragEnd,
+  onDropBefore,
+  onColumnDragOver,
+  onDropColumn,
 }: {
   stage: typeof STAGES[number];
   leads: Doc<"leads">[];
+  draggingId: Id<"leads"> | null;
+  isDragOver: boolean;
   onAdd: (stage: Stage) => void;
   onEdit: (lead: Doc<"leads">) => void;
   onDelete: (lead: Doc<"leads">) => void;
   onMoveStage: (lead: Doc<"leads">, stage: Stage) => void;
+  onDragStart: (lead: Doc<"leads">) => void;
+  onDragEnd: () => void;
+  onDropBefore: (target: Doc<"leads">) => void;
+  onColumnDragOver: (stage: Stage) => void;
+  onDropColumn: (stage: Stage) => void;
 }) {
   const totalBudget = leads.reduce((s, l) => s + (l.budget ?? 0), 0);
 
@@ -400,19 +441,39 @@ function KanbanColumn({
           <Plus className="size-4" />
         </button>
       </div>
-      <div className="flex flex-col gap-2 flex-1">
+      <div
+        className={cn(
+          "flex flex-col gap-2 flex-1 rounded-xl p-1 -m-1 transition-colors",
+          isDragOver && "bg-primary/5 ring-2 ring-primary/30",
+        )}
+        onDragOver={(e) => {
+          e.preventDefault();
+          onColumnDragOver(stage.id);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          onDropColumn(stage.id);
+        }}
+      >
         {leads.map((lead) => (
           <LeadCard
             key={lead._id}
             lead={lead}
+            isDragging={draggingId === lead._id}
             onEdit={onEdit}
             onDelete={onDelete}
             onMoveStage={onMoveStage}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+            onDropBefore={onDropBefore}
           />
         ))}
         {leads.length === 0 && (
           <div
-            className="border-2 border-dashed border-border rounded-xl p-4 text-center text-xs text-muted-foreground cursor-pointer hover:border-primary/40 transition-colors"
+            className={cn(
+              "border-2 border-dashed border-border rounded-xl p-4 text-center text-xs text-muted-foreground cursor-pointer hover:border-primary/40 transition-colors",
+              isDragOver && "border-primary/50",
+            )}
             onClick={() => onAdd(stage.id)}
           >
             + Adicionar lead
@@ -432,6 +493,8 @@ export default function FunilPage() {
   const [creating, setCreating] = useState<Stage | null>(null);
   const [editing, setEditing] = useState<Doc<"leads"> | null>(null);
   const [deleting, setDeleting] = useState<Doc<"leads"> | null>(null);
+  const [dragging, setDragging] = useState<Doc<"leads"> | null>(null);
+  const [dragOverStage, setDragOverStage] = useState<Stage | null>(null);
 
   const handleCreate = async (values: LeadFormValues) => {
     try {
@@ -497,6 +560,49 @@ export default function FunilPage() {
     { contact: [], quote_sent: [], contracted: [], discarded: [] },
   );
 
+  // Ordem fracionária: insere entre vizinhos sem reindexar toda a coluna.
+  const orderBetween = (list: Doc<"leads">[], index: number): number => {
+    const prev = list[index - 1];
+    const next = list[index];
+    if (!prev && !next) return 0;
+    if (!prev) return next.order - 1;
+    if (!next) return prev.order + 1;
+    return (prev.order + next.order) / 2;
+  };
+
+  // Persiste stage + order UMA vez, ao soltar (nunca durante o arraste).
+  const moveTo = async (
+    dragged: Doc<"leads">,
+    targetStage: Stage,
+    beforeLead: Doc<"leads"> | null,
+  ) => {
+    if (beforeLead && beforeLead._id === dragged._id) return;
+    const targetList = leadsById[targetStage].filter((l) => l._id !== dragged._id);
+    const index = beforeLead
+      ? Math.max(0, targetList.findIndex((l) => l._id === beforeLead._id))
+      : targetList.length;
+    const newOrder = orderBetween(targetList, index);
+    if (dragged.stage === targetStage && dragged.order === newOrder) return;
+    try {
+      await updateLead({ id: dragged._id, stage: targetStage, order: newOrder });
+    } catch {
+      toast.error("Erro ao mover lead");
+    }
+  };
+
+  const endDrag = () => {
+    setDragging(null);
+    setDragOverStage(null);
+  };
+  const handleDropBefore = (target: Doc<"leads">) => {
+    if (dragging) void moveTo(dragging, target.stage, target);
+    endDrag();
+  };
+  const handleDropColumn = (stage: Stage) => {
+    if (dragging) void moveTo(dragging, stage, null);
+    endDrag();
+  };
+
   return (
     <div className="p-4 md:p-6 h-full flex flex-col">
       <div className="flex items-center justify-between mb-6">
@@ -524,10 +630,17 @@ export default function FunilPage() {
               key={stage.id}
               stage={stage}
               leads={leadsById[stage.id]}
+              draggingId={dragging?._id ?? null}
+              isDragOver={dragOverStage === stage.id}
               onAdd={(s) => setCreating(s)}
               onEdit={setEditing}
               onDelete={setDeleting}
               onMoveStage={handleMoveStage}
+              onDragStart={setDragging}
+              onDragEnd={endDrag}
+              onDropBefore={handleDropBefore}
+              onColumnDragOver={setDragOverStage}
+              onDropColumn={handleDropColumn}
             />
           ))}
         </div>

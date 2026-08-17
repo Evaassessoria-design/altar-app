@@ -3,11 +3,18 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { ConvexError } from "convex/values";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { requireIdentity } from "./lib/identity";
 
-// Production API
-const ASAAS_BASE = "https://api.asaas.com/v3";
+// Base URL por ambiente. ASAAS_ENV="sandbox" usa o sandbox do Asaas (homologação,
+// sem cobrança real); qualquer outro valor (ou ausente) usa PRODUÇÃO.
+// A ASAAS_API_KEY DEVE corresponder ao ambiente selecionado — nunca misturar
+// chave de sandbox com URL de produção (ou vice-versa).
+const ASAAS_ENV = process.env.ASAAS_ENV === "sandbox" ? "sandbox" : "production";
+const ASAAS_BASE =
+  ASAAS_ENV === "sandbox"
+    ? "https://api-sandbox.asaas.com/v3"
+    : "https://api.asaas.com/v3";
 
 function asaasHeaders() {
   const key = process.env.ASAAS_API_KEY;
@@ -50,33 +57,62 @@ async function asaasFetch(path: string, options: RequestInit = {}) {
 // ── Create Asaas customer + subscription and return payment URL ─────────────
 
 export const createCheckoutSession = action({
-  args: {
-    userName: v.string(),
-    userEmail: v.string(),
-    userId: v.id("users"),
-    existingCustomerId: v.optional(v.string()),
-  },
-  handler: async (ctx, args): Promise<{ paymentUrl: string; customerId: string }> => {
+  args: {},
+  handler: async (ctx): Promise<{ paymentUrl: string; customerId: string }> => {
     await requireIdentity(ctx);
 
-    let customerId = args.existingCustomerId ?? "";
+    // Reutiliza os dados da empresa já cadastrados (perfil do usuário). O usuário
+    // NÃO digita CPF/CNPJ aqui — os dados vêm de "Dados da Empresa" (Configurações).
+    const user = await ctx.runQuery(api.users.getCurrentUser);
+    if (!user) {
+      throw new ConvexError({ message: "Usuário não encontrado", code: "NOT_FOUND" });
+    }
 
-    // 1. Create customer if not exists yet
+    // Validação amigável: exige os dados obrigatórios do Asaas ANTES de chamá-lo.
+    const missing: string[] = [];
+    if (!user.name?.trim()) missing.push("nome");
+    if (!user.email?.trim()) missing.push("e-mail");
+    if (!user.phone?.trim()) missing.push("telefone");
+    if (!user.cpfCnpj?.trim()) missing.push("CPF/CNPJ");
+    if (missing.length > 0) {
+      throw new ConvexError({
+        code: "PROFILE_INCOMPLETE",
+        message: `Complete os dados da empresa (${missing.join(", ")}) em Dados da Empresa para continuar.`,
+      });
+    }
+
+    // Payload do customer com os dados atuais da empresa (inclui cpfCnpj).
+    const customerPayload = {
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      mobilePhone: user.phone,
+      cpfCnpj: user.cpfCnpj!.replace(/\D/g, ""),
+      externalReference: user._id,
+      notificationDisabled: false,
+    };
+
+    let customerId = user.asaasCustomerId ?? "";
+
     if (!customerId) {
-      const customer = await asaasFetch("/customers", {
+      // 1a. Cria o customer.
+      const customer = (await asaasFetch("/customers", {
         method: "POST",
-        body: JSON.stringify({
-          name: args.userName || "Usuário Altar",
-          email: args.userEmail,
-          externalReference: args.userId,
-          notificationDisabled: false,
-        }),
-      }) as { id: string };
+        body: JSON.stringify(customerPayload),
+      })) as { id: string };
 
       customerId = customer.id;
       await ctx.runMutation(internal.users.setAsaasCustomer, {
-        userId: args.userId,
+        userId: user._id,
         asaasCustomerId: customerId,
+      });
+    } else {
+      // 1b. Customer já existe — pode ter sido criado antes do cpfCnpj. Atualiza
+      // com os dados atuais (Asaas: POST /customers/{id}) para garantir o
+      // cpfCnpj ANTES de gerar a cobrança e evitar a rejeição do Asaas.
+      await asaasFetch(`/customers/${customerId}`, {
+        method: "POST",
+        body: JSON.stringify(customerPayload),
       });
     }
 
@@ -93,18 +129,18 @@ export const createCheckoutSession = action({
       body: JSON.stringify({
         customer: customerId,
         billingType: "UNDEFINED",
-        value: 79.9,
+        value: 119.9,
         nextDueDate: nextDue,
         cycle: "MONTHLY",
         description: "Altar Pro — Plano Mensal",
-        externalReference: args.userId,
+        externalReference: user._id,
         // No maxPayments = indefinite
       }),
     }) as { id: string; paymentLink: string | null };
 
     // Save subscriptionId immediately so webhook can match
     await ctx.runMutation(internal.users.setAsaasSubscription, {
-      userId: args.userId,
+      userId: user._id,
       asaasSubscriptionId: subscription.id,
     });
 

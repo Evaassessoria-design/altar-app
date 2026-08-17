@@ -27,12 +27,16 @@ import {
   Image,
   Loader2,
   Download,
+  Building2,
+  Wand2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils.ts";
 import { useRef, useState } from "react";
 import EventFormDialog from "../_components/event-form-dialog.tsx";
+import { ContractImportDialog } from "./_components/contract-import-dialog.tsx";
+import { LayoutAnalysisDialog } from "./_components/layout-analysis-dialog.tsx";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -78,6 +82,7 @@ export default function EventDetailsPage() {
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [importingContract, setImportingContract] = useState(false);
 
   const event = useQuery(api.events.get, { id: id as Id<"events"> });
   const updateEvent = useMutation(api.events.update);
@@ -94,17 +99,16 @@ export default function EventDetailsPage() {
 
   // AI / Contract state
   const contract = useQuery(api.contracts.getContract, { eventId: id as Id<"events"> });
+  const health = useQuery(api.health.getEventHealth, { eventId: id as Id<"events"> });
   const generateUploadUrl = useMutation(api.contracts.generateUploadUrl);
   const saveContract = useMutation(api.contracts.saveContract);
-  const extractBriefing = useAction(api.ai.extractBriefingFromContract);
-  const analyseLayout = useAction(api.ai.analyseLayout);
   const generateChecklist = useAction(api.ai.generateChecklistFromBriefing);
   const briefing = useQuery(api.briefing.getBriefing, { eventId: id as Id<"events"> });
   const purchases = useQuery(api.purchases.listPurchases, { eventId: id as Id<"events"> });
 
   const [contractUploading, setContractUploading] = useState(false);
-  const [contractAnalysing, setContractAnalysing] = useState(false);
   const [layoutAnalysing, setLayoutAnalysing] = useState(false);
+  const [layoutReview, setLayoutReview] = useState<string | null>(null);
   const [checklistGenerating, setChecklistGenerating] = useState<"pre" | "post" | null>(null);
   const [pdfGenerating, setPdfGenerating] = useState(false);
   const contractInputRef = useRef<HTMLInputElement>(null);
@@ -178,55 +182,18 @@ export default function EventDetailsPage() {
     }
   };
 
-  const handleExtractBriefing = async () => {
-    if (!contract?.url) return;
-    setContractAnalysing(true);
-    try {
-      // Fetch the contract text from URL
-      const res = await fetch(contract.url);
-      const text = await res.text();
-      const { fieldsUpdated } = await extractBriefing({
-        eventId: event._id,
-        contractText: text,
-      });
-      toast.success(`Briefing atualizado com ${fieldsUpdated} campo${fieldsUpdated !== 1 ? "s" : ""} extraído${fieldsUpdated !== 1 ? "s" : ""}!`);
-    } catch {
-      toast.error("Erro ao analisar contrato com IA");
-    } finally {
-      setContractAnalysing(false);
-    }
-  };
-
   const handleLayoutUpload = async (file: File) => {
     setLayoutAnalysing(true);
     try {
-      // Upload image to Convex storage temporarily
-      const uploadUrl = await generateUploadUrl();
-      const res = await fetch(uploadUrl, {
-        method: "POST",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
-      // Get the URL
-      const imageRes = await fetch(`${uploadUrl.split("/api/")[0]}/api/storage/${storageId}`).catch(() => null);
-      // Use object URL as fallback for vision
-      const imageUrl = URL.createObjectURL(file);
-      // Convert to base64 for the AI
-      const reader = new FileReader();
-      const base64 = await new Promise<string>((resolve) => {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("read error"));
         reader.readAsDataURL(file);
       });
-      await analyseLayout({
-        eventId: event._id,
-        imageUrl: base64,
-      });
-      toast.success("Layout analisado pela IA! Briefing atualizado.");
-      URL.revokeObjectURL(imageUrl);
-      void imageRes;
+      setLayoutReview(base64);
     } catch {
-      toast.error("Erro ao analisar imagem com IA");
+      toast.error("Erro ao ler a imagem selecionada");
     } finally {
       setLayoutAnalysing(false);
     }
@@ -428,8 +395,64 @@ export default function EventDetailsPage() {
             </div>
             <ChevronRight className="size-4 text-muted-foreground" />
           </Link>
+          <Link
+            to={`/eventos/${id}/fornecedores`}
+            className="flex items-center justify-between px-5 py-3.5 hover:bg-accent/50 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-3">
+              <Building2 className="size-5 text-primary" />
+              <div>
+                <p className="font-medium text-sm">Fornecedores</p>
+                <p className="text-xs text-muted-foreground">Dossiê operacional: assessoria, local, buffet, bar, doces, som & iluminação</p>
+              </div>
+            </div>
+            <ChevronRight className="size-4 text-muted-foreground" />
+          </Link>
+          <Link
+            to={`/eventos/${id}/planta`}
+            className="flex items-center justify-between px-5 py-3.5 hover:bg-accent/50 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-3">
+              <Wand2 className="size-5 text-primary" />
+              <div>
+                <p className="font-medium text-sm">Planta Premium</p>
+                <p className="text-xs text-muted-foreground">Transforme o croqui em uma planta 2D profissional, preservando o projeto</p>
+              </div>
+            </div>
+            <ChevronRight className="size-4 text-muted-foreground" />
+          </Link>
         </div>
       </div>
+
+      {/* Saúde do Evento */}
+      {health && (
+        <div className="bg-card rounded-xl border border-border overflow-hidden">
+          <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3">
+            <h2 className="font-semibold flex items-center gap-2">
+              {health.status === "complete" ? "🟢" : health.status === "attention" ? "🟡" : "🔴"} Saúde do Evento
+            </h2>
+            <span className="text-lg font-bold">{health.percent}%</span>
+          </div>
+          <div className="p-5 space-y-3">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+              {health.checks.map((c) => (
+                <div key={c.key} className="flex items-center gap-1.5 text-sm">
+                  <span>{c.ok ? "✓" : "○"}</span>
+                  <span className={c.ok ? "" : "text-muted-foreground"}>{c.label}</span>
+                </div>
+              ))}
+            </div>
+            {health.attention.length > 0 && (
+              <div className="border-t border-border pt-3 space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">O que falta</p>
+                {health.attention.map((a, i) => (
+                  <p key={i} className="text-sm text-amber-600 dark:text-amber-500">⚠️ {a}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Contrato + IA */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
@@ -482,27 +505,51 @@ export default function EventDetailsPage() {
               {contract ? "Substituir" : "Anexar Contrato"}
             </Button>
 
-            {/* AI extract button */}
+            {/* Ler contrato com IA → revisar → abastecer evento + financeiro + briefing */}
             {contract?.url && (
               <Button
+                variant="secondary"
                 size="sm"
-                disabled={contractAnalysing}
-                onClick={() => void handleExtractBriefing()}
+                onClick={() => setImportingContract(true)}
                 className="cursor-pointer gap-1.5"
               >
-                {contractAnalysing ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-                {contractAnalysing ? "Analisando..." : "Extrair Briefing com IA"}
+                <Sparkles className="size-3.5" /> Ler contrato com IA
               </Button>
             )}
           </div>
 
-          {contract && (
+          {event.contractAnalyzedAt ? (
+            <div className="rounded-lg bg-primary/5 border border-primary/20 px-3 py-2 text-xs">
+              <p className="text-primary font-medium">✓ Contrato importado e analisado</p>
+              <p className="text-muted-foreground">
+                {format(new Date(event.contractAnalyzedAt), "dd/MM/yyyy", { locale: ptBR })}
+                {event.contractPendings && event.contractPendings.length > 0
+                  ? ` · ${event.contractPendings.length} pendência(s) para revisar`
+                  : ""}
+              </p>
+              {event.contractPendings && event.contractPendings.length > 0 && (
+                <ul className="mt-1 space-y-0.5">
+                  {event.contractPendings.map((p, i) => (
+                    <li key={i} className="text-amber-600 dark:text-amber-500">⚠️ {p}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : contract ? (
             <p className="text-xs text-muted-foreground">
-              A IA lê o contrato e preenche automaticamente os campos do briefing.
+              "Ler contrato com IA" identifica cliente, evento, financeiro e itens — você revisa e confirma antes de aplicar.
             </p>
-          )}
+          ) : null}
         </div>
       </div>
+
+      {importingContract && contract?.url && (
+        <ContractImportDialog
+          event={event}
+          contractUrl={contract.url}
+          onClose={() => setImportingContract(false)}
+        />
+      )}
 
       {/* Análise de Croqui / Layout */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
@@ -511,7 +558,7 @@ export default function EventDetailsPage() {
         </h2>
         <div className="p-5 space-y-3">
           <p className="text-sm text-muted-foreground">
-            Envie uma foto ou imagem do croqui/layout e a IA descreve o ambiente e lista os itens identificados, preenchendo o briefing automaticamente.
+            Envie uma foto ou imagem do croqui/layout e a IA descreve o ambiente e lista os itens identificados para você revisar antes de aplicar ao briefing.
           </p>
           <input
             ref={layoutInputRef}
@@ -535,6 +582,14 @@ export default function EventDetailsPage() {
           </Button>
         </div>
       </div>
+
+      {layoutReview && (
+        <LayoutAnalysisDialog
+          eventId={event._id}
+          imageBase64={layoutReview}
+          onClose={() => setLayoutReview(null)}
+        />
+      )}
 
       {/* Checklists */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">

@@ -109,6 +109,25 @@ export const update = mutation({
   },
 });
 
+// Registra o status de importação do contrato por IA + pendências do documento.
+export const saveContractImport = mutation({
+  args: {
+    id: v.id("events"),
+    analyzedAt: v.string(),
+    pendings: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const event = await ctx.db.get(args.id);
+    if (!event || event.userId !== user._id)
+      throw new ConvexError({ message: "Evento não encontrado", code: "NOT_FOUND" });
+    await ctx.db.patch(args.id, {
+      contractAnalyzedAt: args.analyzedAt,
+      contractPendings: args.pendings,
+    });
+  },
+});
+
 export const remove = mutation({
   args: { id: v.id("events") },
   handler: async (ctx, args) => {

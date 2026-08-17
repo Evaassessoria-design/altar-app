@@ -20,12 +20,19 @@ import authConfig from "./auth.config";
 
 const siteUrl = process.env.SITE_URL!;
 
+// Origem extra TEMPORÁRIA para teste de Preview (ex.: URL exata *.vercel.app do
+// deploy de preview). É opcional: se PREVIEW_TRUSTED_ORIGIN não estiver definida,
+// nada muda e apenas `siteUrl` (produção) é confiável. Para remover depois do
+// teste, basta apagar a env no Convex: `npx convex env remove PREVIEW_TRUSTED_ORIGIN`.
+const previewOrigin = process.env.PREVIEW_TRUSTED_ORIGIN;
+const trustedOrigins = previewOrigin ? [siteUrl, previewOrigin] : [siteUrl];
+
 export const authComponent = createClient<DataModel>(components.betterAuth);
 
 export const createAuth = (ctx: GenericCtx<DataModel>) =>
   betterAuth({
     baseURL: process.env.CONVEX_SITE_URL,
-    trustedOrigins: [siteUrl],
+    trustedOrigins,
     database: authComponent.adapter(ctx),
     emailAndPassword: {
       enabled: true,

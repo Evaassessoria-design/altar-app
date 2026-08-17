@@ -175,7 +175,7 @@ export default function AdminPage() {
             icon={<DollarSign className="size-5 text-primary" />}
             label="MRR"
             value={stats.mrr.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-            sub="R$79,90 × assinantes ativos"
+            sub="R$119,90 × assinantes ativos"
           />
           <StatCard
             icon={<CalendarDays className="size-5 text-blue-500" />}

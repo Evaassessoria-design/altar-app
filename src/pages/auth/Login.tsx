@@ -41,10 +41,18 @@ export default function LoginPage() {
   const [signupPassword, setSignupPassword] = useState("");
 
   const finishAuth = async (studioName?: string) => {
-    // Garante a linha em `users` ANTES do Dashboard montar (vínculo por e-mail
-    // idempotente em lib/identity.ts). O <SyncUser/> global é o backup.
-    await syncCurrentUser();
-    if (studioName) await updateProfile({ studioName });
+    // Não bloquear a navegação no sync: sob `expectAuth`, a mutation fica em
+    // espera até o token do Convex propagar (cross-domain), o que pode travar o
+    // botão. Disparamos o sync em background (o <SyncUser/> global é a rede de
+    // segurança) e navegamos; o Dashboard só monta sob <Authenticated>.
+    void (async () => {
+      try {
+        await syncCurrentUser();
+        if (studioName) await updateProfile({ studioName });
+      } catch {
+        /* SyncUser global refaz o vínculo quando o Convex autenticar */
+      }
+    })();
     navigate("/dashboard", { replace: true });
   };
 

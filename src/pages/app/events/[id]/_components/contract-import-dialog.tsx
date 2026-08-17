@@ -129,7 +129,7 @@ export function ContractImportDialog({
         setDecorEnvironments(result.decor?.environments ?? "");
         setDecorNotes(result.decor?.notes ?? "");
       } catch {
-        if (active) setError("Não foi possível ler o contrato com IA. Verifique se a chave de IA (HERCULES_API_KEY) está configurada no Convex.");
+        if (active) setError("Não foi possível ler o contrato com IA. Verifique se a chave de IA (ALTAR_AI_API_KEY) está configurada no Convex.");
       } finally {
         if (active) setLoading(false);
       }

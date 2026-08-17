@@ -275,15 +275,7 @@ export default function ConfiguracoesPage() {
               className="bg-muted text-muted-foreground cursor-not-allowed"
             />
             <p className="text-xs text-muted-foreground">
-              O e-mail é gerenciado pelo Hercules Auth e não pode ser alterado aqui.{" "}
-              <a
-                href="https://auth.hercules.app"
-                target="_blank"
-                rel="noreferrer"
-                className="text-primary hover:underline inline-flex items-center gap-0.5"
-              >
-                Gerenciar conta <ExternalLink className="size-3" />
-              </a>
+              O e-mail é o identificador da sua conta e não pode ser alterado aqui.
             </p>
           </div>
         </div>
@@ -478,24 +470,9 @@ export default function ConfiguracoesPage() {
             </div>
           )}
 
-          {/* Password change */}
-          <div className="pt-2 border-t border-border">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium">Segurança da conta</p>
-                <p className="text-xs text-muted-foreground">Gerencie sua senha e métodos de login</p>
-              </div>
-              <a
-                href="https://auth.hercules.app"
-                target="_blank"
-                rel="noreferrer"
-              >
-                <Button variant="secondary" size="sm" className="cursor-pointer gap-1.5">
-                  <ExternalLink className="size-3.5" /> Portal Hercules Auth
-                </Button>
-              </a>
-            </div>
-          </div>
+          {/* Bloco "Portal Hercules Auth" removido: era um link externo para o
+              provedor OIDC antigo, que deixou de existir na migração para o
+              Better Auth. O fluxo estava morto. */}
         </div>
       </SectionCard>
     </div>

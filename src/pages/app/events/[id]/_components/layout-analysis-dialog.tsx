@@ -52,7 +52,7 @@ export function LayoutAnalysisDialog({
         setDescription(result.description ?? "");
         setFurnitureList(result.furnitureList ?? "");
       } catch {
-        if (active) setError("Não foi possível analisar a imagem com IA. Verifique se a chave de IA (HERCULES_API_KEY) está configurada no Convex.");
+        if (active) setError("Não foi possível analisar a imagem com IA. Verifique se a chave de IA (ALTAR_AI_API_KEY) está configurada no Convex.");
       } finally {
         if (active) setLoading(false);
       }

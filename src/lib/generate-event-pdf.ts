@@ -3,6 +3,7 @@ import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { Doc } from "@/convex/_generated/dataModel.d.ts";
+import { resolveAreasForAudience } from "./briefing-areas.ts";
 
 // ─── Brand colors (bege/dourado) ─────────────────────────────────────────────
 const PRIMARY: [number, number, number] = [178, 142, 96];      // #B28E60
@@ -16,103 +17,10 @@ const PAGE_W = 210;
 const MARGIN = 15;
 const CONTENT_W = PAGE_W - MARGIN * 2;
 
-function slugToLabel(key: string): string {
-  const MAP: Record<string, string> = {
-    guestCount: "Nº de Convidados",
-    theme: "Tema",
-    ceremonyTime: "Horário da Cerimônia",
-    receptionTime: "Horário da Recepção",
-    venueContact: "Contato do Espaço",
-    venueRules: "Regras do Espaço",
-    colorPalette: "Paleta de Cores",
-    decorStyle: "Estilo de Decoração",
-    referenceImages: "Imagens de Referência",
-    atmosphereDescription: "Descrição da Atmosfera",
-    tableClothColor: "Cor das Toalhas",
-    napkinStyle: "Guardanapos",
-    centerpiece: "Arranjo Central",
-    ceremony_arch: "Arco da Cerimônia",
-    aisle_decor: "Decoração do Corredor",
-    flowerTypes: "Tipos de Flores",
-    flowerColors: "Cores das Flores",
-    bouquetStyle: "Buquê",
-    boutonniere: "Boutonnière",
-    flowerSupplier: "Fornecedor de Flores",
-    flowerBudget: "Budget Flores",
-    corsage: "Corsage",
-    flowersNotes: "Obs. Flores",
-    guestTableType: "Tipo de Mesa",
-    guestTableCount: "Qtd. Mesas",
-    guestChairType: "Tipo de Cadeira",
-    guestChairCount: "Qtd. Cadeiras",
-    sweetTableIncluded: "Mesa de Doces",
-    sweetTableStyle: "Estilo Mesa de Doces",
-    loungeIncluded: "Lounge",
-    loungeDescription: "Desc. Lounge",
-    signTable: "Mesa de Assinaturas",
-    furnitureSupplier: "Fornecedor Mobiliário",
-    furnitureNotes: "Obs. Mobiliário",
-    lightingType: "Tipo de Iluminação",
-    lightingEffects: "Efeitos de Luz",
-    uplighting: "Uplighting",
-    stringLights: "Festão de Luz",
-    candleUse: "Velas",
-    lightingSupplier: "Fornecedor Iluminação",
-    lightingNotes: "Obs. Iluminação",
-    cakeSupplier: "Fornecedor Bolo",
-    cakeFlavor: "Sabor do Bolo",
-    cakeLayers: "Andares do Bolo",
-    cakeDesign: "Design do Bolo",
-    sweetsIncluded: "Docinhos",
-    sweetsDescription: "Desc. Docinhos",
-    weddingFavors: "Lembrancinhas",
-    drinkService: "Serviço de Bebidas",
-    cakeNotes: "Obs. Bolo/Doces",
-    generalNotes: "Observações Gerais",
-    specialRequests: "Pedidos Especiais",
-    restrictions: "Restrições",
-    vendorContacts: "Contatos de Fornecedores",
-    setupTime: "Horário de Montagem",
-    teardownTime: "Horário de Desmontagem",
-    parkingInfo: "Estacionamento",
-    accessibilityNeeds: "Acessibilidade",
-    insuranceInfo: "Seguro",
-    emergencyContact: "Contato de Emergência",
-    otherNotes: "Outras Observações",
-  };
-  return MAP[key] ?? key;
-}
-
-const BRIEFING_SECTIONS: { title: string; keys: string[] }[] = [
-  {
-    title: "Informações Gerais",
-    keys: ["guestCount", "theme", "ceremonyTime", "receptionTime", "venueContact", "venueRules"],
-  },
-  {
-    title: "Decoração",
-    keys: ["colorPalette", "decorStyle", "atmosphereDescription", "tableClothColor", "napkinStyle", "centerpiece", "ceremony_arch", "aisle_decor"],
-  },
-  {
-    title: "Flores",
-    keys: ["flowerTypes", "flowerColors", "bouquetStyle", "boutonniere", "flowerSupplier", "flowerBudget", "corsage", "flowersNotes"],
-  },
-  {
-    title: "Mobiliário",
-    keys: ["guestTableType", "guestTableCount", "guestChairType", "guestChairCount", "sweetTableIncluded", "sweetTableStyle", "loungeIncluded", "loungeDescription", "signTable", "furnitureSupplier", "furnitureNotes"],
-  },
-  {
-    title: "Iluminação",
-    keys: ["lightingType", "lightingEffects", "uplighting", "stringLights", "candleUse", "lightingSupplier", "lightingNotes"],
-  },
-  {
-    title: "Bolo e Doces",
-    keys: ["cakeSupplier", "cakeFlavor", "cakeLayers", "cakeDesign", "sweetsIncluded", "sweetsDescription", "weddingFavors", "drinkService", "cakeNotes"],
-  },
-  {
-    title: "Observações",
-    keys: ["generalNotes", "specialRequests", "restrictions", "vendorContacts", "setupTime", "teardownTime", "parkingInfo", "accessibilityNeeds", "emergencyContact", "otherNotes"],
-  },
-];
+// As seções do briefing vinham duplicadas aqui e na UI, e já tinham divergido
+// (`insuranceInfo` não saía em lugar nenhum, `referenceImages` faltava no PDF).
+// Agora vêm de src/lib/briefing-areas.ts — fonte única. Este é o relatório
+// completo do evento, então usa a audiência "interno".
 
 const TYPE_LABELS: Record<string, string> = {
   wedding: "Casamento",
@@ -282,27 +190,25 @@ export function generateEventPDF(data: EventReportData): void {
   // ── BRIEFING ──────────────────────────────────────────────────────────────
   if (briefing) {
     y = sectionHeader(doc, "Briefing do Evento", y);
-    let hasAnyField = false;
-    for (const section of BRIEFING_SECTIONS) {
-      const entries = section.keys
-        .map((k) => [k, (briefing as Record<string, unknown>)[k]])
-        .filter(([, v]) => typeof v === "string" && (v as string).trim().length > 0) as [string, string][];
-      if (entries.length === 0) continue;
-      hasAnyField = true;
-
+    // Campo vazio não aparece; área sem campo não aparece — as mesmas regras do
+    // Caderno de Montagem, aplicadas pela função compartilhada.
+    const areas = resolveAreasForAudience(briefing, "interno");
+    for (const area of areas) {
       y = addPageIfNeeded(doc, y, 12);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8);
       doc.setTextColor(...PRIMARY);
-      doc.text(section.title, MARGIN + 2, y + 3);
+      doc.text(area.label, MARGIN + 2, y + 3);
       y += 6;
 
-      for (const [key, val] of entries) {
-        y = fieldRow(doc, slugToLabel(key), val, y);
+      for (const group of area.groups) {
+        for (const field of group.fields) {
+          y = fieldRow(doc, field.label, field.value, y);
+        }
       }
       y += 2;
     }
-    if (!hasAnyField) {
+    if (areas.length === 0) {
       doc.setFont("helvetica", "italic");
       doc.setFontSize(8);
       doc.setTextColor(...MUTED);

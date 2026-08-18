@@ -145,6 +145,16 @@ export default defineSchema({
     asaasCustomerId: v.optional(v.string()),
     asaasSubscriptionId: v.optional(v.string()),
     subscriptionExpiresAt: v.optional(v.string()),
+    // ── Tipo de acesso (independente do estado de cobrança) ──────────────────
+    // AUSENTE = "client" — é o que todos os usuários atuais são, sem migração.
+    //   client   → comportamento normal (trial → paywall → Asaas)
+    //   beta     → acesso liberado até accessExpiresAt; depois volta a client
+    //   internal → acesso permanente, nunca cobra, fora das métricas de receita
+    accessType: v.optional(
+      v.union(v.literal("client"), v.literal("beta"), v.literal("internal")),
+    ),
+    // Epoch ms. Só tem efeito quando accessType === "beta".
+    accessExpiresAt: v.optional(v.number()),
   })
     .index("by_token", ["tokenIdentifier"])
     .index("by_better_auth_id", ["betterAuthId"])

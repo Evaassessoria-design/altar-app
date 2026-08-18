@@ -20,6 +20,9 @@ import {
   XCircle,
   Clock,
   ChevronDown,
+  ShieldCheck,
+  FlaskConical,
+  UserCheck,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -79,6 +82,7 @@ export default function AdminPage() {
   const updateSubscription = useMutation(api.admin.updateUserSubscription);
   const updateRole = useMutation(api.admin.updateUserRole);
   const deleteUser = useMutation(api.admin.deleteUser);
+  const setUserAccess = useMutation(api.admin.setUserAccess);
 
   const [deletingId, setDeletingId] = useState<Id<"users"> | null>(null);
   const [searchQ, setSearchQ] = useState("");
@@ -133,6 +137,41 @@ export default function AdminPage() {
     }
   };
 
+  // Define o tipo de acesso. Para "beta", pede a data de expiração — a mutation
+  // recusa beta sem data, então validamos antes para dar mensagem clara.
+  const handleAccess = async (
+    userId: Id<"users">,
+    accessType: "client" | "beta" | "internal",
+  ) => {
+    let accessExpiresAt: number | undefined;
+    if (accessType === "beta") {
+      const input = window.prompt(
+        "Acesso beta até que data? (AAAA-MM-DD)",
+        new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10),
+      );
+      if (!input) return;
+      const parsed = Date.parse(input + "T23:59:59");
+      if (Number.isNaN(parsed)) {
+        toast.error("Data inválida. Use o formato AAAA-MM-DD.");
+        return;
+      }
+      accessExpiresAt = parsed;
+    }
+    try {
+      await setUserAccess({ userId, accessType, accessExpiresAt });
+      toast.success(
+        accessType === "internal"
+          ? "Conta marcada como interna."
+          : accessType === "beta"
+            ? "Acesso beta definido."
+            : "Conta voltou ao acesso normal.",
+      );
+    } catch (e) {
+      if (e instanceof ConvexError) toast.error((e.data as { message: string }).message);
+      else toast.error("Erro ao definir o acesso");
+    }
+  };
+
   const handleDelete = async () => {
     if (!deletingId) return;
     try {
@@ -184,6 +223,12 @@ export default function AdminPage() {
             sub="R$119,90 × assinantes ativos"
           />
           <StatCard
+            icon={<ShieldCheck className="size-5 text-primary" />}
+            label="Contas Especiais"
+            value={stats.exemptTotal.toString()}
+            sub={`${stats.internal} internas · ${stats.beta} beta — fora do MRR`}
+          />
+          <StatCard
             icon={<CalendarDays className="size-5 text-blue-500" />}
             label="Total de Eventos"
             value={stats.eventsTotal.toString()}
@@ -296,6 +341,16 @@ export default function AdminPage() {
                           {statusCfg?.icon}
                           {statusCfg?.label ?? u.subscriptionStatus}
                         </span>
+                        {u.accessType === "internal" && (
+                          <span className="ml-1 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-primary/15 text-primary">
+                            <ShieldCheck className="size-3" /> Interna
+                          </span>
+                        )}
+                        {u.accessType === "beta" && (
+                          <span className="ml-1 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">
+                            <FlaskConical className="size-3" /> Beta
+                          </span>
+                        )}
                         {u.subscriptionStatus === "trial" && u.trialEndDate && (
                           <p className="text-xs text-muted-foreground mt-0.5">
                             até {format(new Date(u.trialEndDate), "dd/MM", { locale: ptBR })}
@@ -345,6 +400,25 @@ export default function AdminPage() {
                               className="cursor-pointer gap-2"
                             >
                               <XCircle className="size-4 text-red-400" /> Expirar assinatura
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => void handleAccess(u._id, "internal")}
+                              className="cursor-pointer gap-2"
+                            >
+                              <ShieldCheck className="size-4 text-primary" /> Marcar como interna
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => void handleAccess(u._id, "beta")}
+                              className="cursor-pointer gap-2"
+                            >
+                              <FlaskConical className="size-4 text-violet-500" /> Definir acesso beta…
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => void handleAccess(u._id, "client")}
+                              className="cursor-pointer gap-2"
+                            >
+                              <UserCheck className="size-4 text-muted-foreground" /> Voltar a cliente normal
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             {u.role !== "admin" ? (

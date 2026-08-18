@@ -5,6 +5,7 @@ import { action } from "./_generated/server";
 import { ConvexError } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { requireIdentity } from "./lib/identity";
+import { isBillingExempt } from "./lib/access";
 
 // Base URL por ambiente. ASAAS_ENV="sandbox" usa o sandbox do Asaas (homologação,
 // sem cobrança real); qualquer outro valor (ou ausente) usa PRODUÇÃO.
@@ -66,6 +67,16 @@ export const createCheckoutSession = action({
     const user = await ctx.runQuery(api.users.getCurrentUser);
     if (!user) {
       throw new ConvexError({ message: "Usuário não encontrado", code: "NOT_FOUND" });
+    }
+
+    // Contas isentas de cobrança (internal, ou beta vigente) não criam customer
+    // nem assinatura no Asaas. A guarda fica ANTES de qualquer chamada externa,
+    // então nada é registrado lá mesmo se a UI for contornada.
+    if (isBillingExempt(user)) {
+      throw new ConvexError({
+        code: "BILLING_EXEMPT",
+        message: "Esta conta tem acesso liberado e não gera cobrança.",
+      });
     }
 
     // Validação amigável: exige os dados obrigatórios do Asaas ANTES de chamá-lo.

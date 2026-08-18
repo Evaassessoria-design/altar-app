@@ -37,11 +37,10 @@ function SubscriptionGuard({ children }: { children: React.ReactNode }) {
   const exempt = ["/configuracoes", "/paywall"];
   if (exempt.some((p) => location.pathname.startsWith(p))) return <>{children}</>;
 
-  // Sem assinatura válida → paywall. `cancelled` conta junto com `expired`:
-  // quem cancelou (ou teve a assinatura cancelada pelo webhook do Asaas) não
-  // deve seguir com acesso ao app.
-  const blocked = ["expired", "cancelled"];
-  if (status !== undefined && status !== null && blocked.includes(status.subscriptionStatus)) {
+  // A decisão vem do backend (convex/lib/access.ts). O frontend não mantém mais
+  // lista de status proibidos: contas internal e beta vigente nunca são
+  // bloqueadas, e client segue exatamente a regra anterior.
+  if (status !== undefined && status !== null && status.access?.blocked) {
     return <Navigate to="/paywall" replace />;
   }
 

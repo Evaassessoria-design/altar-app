@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import type { QueryCtx, MutationCtx } from "./_generated/server.d.ts";
 import { getOptionalUser, requireUser } from "./lib/identity";
+import { resolveAccess } from "./lib/access";
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────
 
@@ -31,15 +32,24 @@ export const getStats = query({
     const users = await ctx.db.query("users").collect();
 
     const total = users.length;
-    const trial = users.filter((u) => u.subscriptionStatus === "trial").length;
-    const active = users.filter((u) => u.subscriptionStatus === "active").length;
-    const expired = users.filter((u) => u.subscriptionStatus === "expired").length;
-    const cancelled = users.filter((u) => u.subscriptionStatus === "cancelled").length;
 
-    // MRR = active subscribers × R$119,90
+    // Contas isentas (internal / beta vigente) NÃO são receita. Ficam fora do
+    // MRR e da taxa de conversão para não inflarem as métricas do negócio.
+    const exempt = users.filter((u) => resolveAccess(u).billingExempt);
+    const internal = users.filter((u) => (u.accessType ?? "client") === "internal").length;
+    const beta = users.filter((u) => (u.accessType ?? "client") === "beta").length;
+    const billable = users.filter((u) => !resolveAccess(u).billingExempt);
+
+    const trial = billable.filter((u) => u.subscriptionStatus === "trial").length;
+    const active = billable.filter((u) => u.subscriptionStatus === "active").length;
+    const overdue = billable.filter((u) => u.subscriptionStatus === "overdue").length;
+    const expired = billable.filter((u) => u.subscriptionStatus === "expired").length;
+    const cancelled = billable.filter((u) => u.subscriptionStatus === "cancelled").length;
+
+    // MRR = assinantes ativos e cobráveis × R$119,90
     const mrr = active * 119.9;
 
-    // Trial conversion rate = active / (active + expired) if > 0
+    // Conversão = ativos / (ativos + expirados), só entre contas cobráveis
     const conversionDenominator = active + expired;
     const conversionRate = conversionDenominator > 0
       ? Math.round((active / conversionDenominator) * 100)
@@ -52,8 +62,12 @@ export const getStats = query({
       total,
       trial,
       active,
+      overdue,
       expired,
       cancelled,
+      internal,
+      beta,
+      exemptTotal: exempt.length,
       mrr,
       conversionRate,
       eventsTotal: eventsTotal.length,
@@ -116,6 +130,42 @@ export const updateUserSubscription = mutation({
       patch.trialEndDate = end.toISOString();
     }
     await ctx.db.patch(args.userId, patch);
+  },
+});
+
+/**
+ * Define o tipo de acesso de um usuário. É a única porta para marcar uma conta
+ * como interna ou beta — protegida por requireAdmin, sem comparação de e-mail
+ * em lugar nenhum. Nenhum usuário é alterado automaticamente.
+ */
+export const setUserAccess = mutation({
+  args: {
+    userId: v.id("users"),
+    accessType: v.union(
+      v.literal("client"),
+      v.literal("beta"),
+      v.literal("internal"),
+    ),
+    // Epoch ms. Só faz sentido com accessType "beta".
+    accessExpiresAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const target = await ctx.db.get(args.userId);
+    if (!target) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
+    }
+    if (args.accessType === "beta" && args.accessExpiresAt === undefined) {
+      throw new ConvexError({
+        code: "BAD_REQUEST",
+        message: "Defina a data de expiração do acesso beta.",
+      });
+    }
+    await ctx.db.patch(args.userId, {
+      accessType: args.accessType,
+      // Fora do beta a data não tem efeito — limpamos para não deixar resíduo.
+      accessExpiresAt: args.accessType === "beta" ? args.accessExpiresAt : undefined,
+    });
   },
 });
 

@@ -1,6 +1,7 @@
 import { mutation, query, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
+import { resolveAccess } from "./lib/access";
 import {
   getOptionalUser,
   requireIdentity,
@@ -31,19 +32,21 @@ export const getSubscriptionStatus = query({
     const user = await getOptionalUser(ctx);
     if (!user) return null;
 
-    // Check if trial has expired
+    // Expiração do trial é calculada na leitura (não é persistida).
+    let effective = user;
+    let daysLeft: number | undefined;
     if (user.subscriptionStatus === "trial" && user.trialEndDate) {
       const trialEnd = new Date(user.trialEndDate);
       if (trialEnd < new Date()) {
-        return { ...user, subscriptionStatus: "expired" as const };
+        effective = { ...user, subscriptionStatus: "expired" };
+      } else {
+        daysLeft = Math.ceil((trialEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
       }
-      const daysLeft = Math.ceil(
-        (trialEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
-      );
-      return { ...user, daysLeft };
     }
 
-    return user;
+    // A decisão de bloquear nasce no backend (lib/access.ts). O frontend só lê
+    // `access.blocked` — não mantém mais a própria lista de status proibidos.
+    return { ...effective, daysLeft, access: resolveAccess(effective) };
   },
 });
 

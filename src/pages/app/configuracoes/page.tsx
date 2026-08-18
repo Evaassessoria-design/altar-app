@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   ChevronRight,
   KeyRound,
+  ShieldCheck,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils.ts";
@@ -188,6 +189,16 @@ export default function ConfiguracoesPage() {
     expired: { label: "Trial expirado", color: "text-red-500", bg: "bg-red-50 dark:bg-red-900/20", icon: AlertTriangle },
     cancelled: { label: "Cancelado", color: "text-muted-foreground", bg: "bg-muted", icon: AlertTriangle },
   } as const;
+
+  // Acesso especial (internal / beta vigente) tem precedência visual sobre o
+  // estado de cobrança: essas contas não pagam e não expiram.
+  const access = subStatus?.access;
+  const specialAccess =
+    access?.type === "internal"
+      ? { label: "Conta interna", detail: "Acesso permanente, sem cobrança." }
+      : access?.type === "beta" && !access.betaExpired
+        ? { label: "Acesso beta", detail: "Acesso liberado durante o período de testes." }
+        : null;
 
   const sc = statusConfig[status as keyof typeof statusConfig] ?? statusConfig.trial;
   const StatusIcon = sc.icon;
@@ -356,6 +367,16 @@ export default function ConfiguracoesPage() {
       </div>
 
       {/* ── Assinatura ── */}
+      {specialAccess && (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 flex items-start gap-3">
+          <ShieldCheck className="size-5 text-primary flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-primary">{specialAccess.label}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{specialAccess.detail}</p>
+          </div>
+        </div>
+      )}
+
       <SectionCard icon={CreditCard} title="Assinatura" description="Seu plano atual no Altar" delay={0.2}>
         <div className="space-y-4">
           {/* Status badge */}

@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes, Navigate, useLocation } from "react-router-dom";
 import { DefaultProviders } from "./components/providers/default.tsx";
 import LoginPage from "./pages/auth/Login.tsx";
+import ResetPasswordPage from "./pages/auth/ResetPassword.tsx";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import AppLayout from "./pages/app/layout.tsx";
@@ -52,6 +53,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<Index />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
       <Route path="/paywall" element={<PaywallPage />} />
 
       {/* App routes — protegidas: exigem autenticação + assinatura ativa.

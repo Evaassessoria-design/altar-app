@@ -22,9 +22,11 @@ import {
   BadgeCheck,
   AlertTriangle,
   ChevronRight,
+  KeyRound,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils.ts";
+import { authClient } from "@/lib/auth-client.ts";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -469,12 +471,108 @@ export default function ConfiguracoesPage() {
               </div>
             </div>
           )}
-
-          {/* Bloco "Portal Hercules Auth" removido: era um link externo para o
-              provedor OIDC antigo, que deixou de existir na migração para o
-              Better Auth. O fluxo estava morto. */}
+          {/* Segurança da conta — troca de senha via Better Auth. A senha nunca
+              passa pela tabela users do ALTAR: fica no componente betterAuth. */}
+          <div className="pt-2 border-t border-border">
+            <SecuritySection />
+          </div>
         </div>
       </SectionCard>
     </div>
+  );
+}
+
+// ─── Segurança da conta ─────────────────────────────────────────────────────
+
+const MIN_PASSWORD_LEN = 8;
+
+function SecuritySection() {
+  const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const clear = () => { setCurrent(""); setNext(""); setConfirm(""); };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (next.length < MIN_PASSWORD_LEN) {
+      toast.error("A nova senha precisa ter ao menos " + MIN_PASSWORD_LEN + " caracteres.");
+      return;
+    }
+    if (next !== confirm) { toast.error("As senhas não conferem."); return; }
+    if (next === current) { toast.error("A nova senha precisa ser diferente da atual."); return; }
+
+    setSaving(true);
+    try {
+      const { error } = await authClient.changePassword({
+        currentPassword: current,
+        newPassword: next,
+        // Encerra as sessões dos outros aparelhos; a atual continua ativa.
+        revokeOtherSessions: true,
+      });
+      if (error) {
+        toast.error(error.message ?? "Não foi possível alterar a senha. Confira a senha atual.");
+        return;
+      }
+      toast.success("Senha alterada! As sessões nos seus outros aparelhos foram encerradas.");
+      clear();
+      setOpen(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium">Segurança da conta</p>
+          <p className="text-xs text-muted-foreground">Altere a senha de acesso ao ALTAR</p>
+        </div>
+        <Button variant="secondary" size="sm" onClick={() => setOpen(true)} className="cursor-pointer gap-1.5">
+          <KeyRound className="size-3.5" /> Alterar senha
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <p className="text-sm font-medium">Alterar senha</p>
+      <div className="space-y-1.5">
+        <Label htmlFor="current-password">Senha atual</Label>
+        <Input id="current-password" type="password" autoComplete="current-password" required
+          value={current} onChange={(e) => setCurrent(e.target.value)} />
+      </div>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="next-password">Nova senha</Label>
+          <Input id="next-password" type="password" autoComplete="new-password" required
+            minLength={MIN_PASSWORD_LEN} value={next} onChange={(e) => setNext(e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="confirm-new-password">Confirmar nova senha</Label>
+          <Input id="confirm-new-password" type="password" autoComplete="new-password" required
+            minLength={MIN_PASSWORD_LEN} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+        </div>
+      </div>
+      {confirm.length > 0 && confirm !== next && (
+        <p className="text-xs text-destructive">As senhas não conferem.</p>
+      )}
+      <p className="text-xs text-muted-foreground">
+        Ao alterar, as sessões abertas nos seus outros aparelhos serão encerradas.
+      </p>
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" disabled={saving} className="cursor-pointer gap-1.5">
+          {saving ? <Loader2 className="size-3.5 animate-spin" /> : null}
+          Alterar senha
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={() => { clear(); setOpen(false); }} className="cursor-pointer">
+          Cancelar
+        </Button>
+      </div>
+    </form>
   );
 }

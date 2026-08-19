@@ -15,7 +15,6 @@ import {
   Shield,
   ShieldOff,
   Trash2,
-  RefreshCw,
   CheckCircle,
   XCircle,
   Clock,
@@ -23,6 +22,7 @@ import {
   ShieldCheck,
   FlaskConical,
   UserCheck,
+  Lock,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -120,7 +120,6 @@ export default function AdminPage() {
   const stats = useQuery(api.admin.getStats);
   const users = useAdminUsers();
 
-  const updateSubscription = useMutation(api.admin.updateUserSubscription);
   const updateRole = useMutation(api.admin.updateUserRole);
   const deleteUser = useMutation(api.admin.deleteUser);
   const setUserAccess = useMutation(api.admin.setUserAccess);
@@ -159,20 +158,11 @@ export default function AdminPage() {
     );
   });
 
-  const handleSubscription = async (
-    userId: Id<"users">,
-    status: "trial" | "active" | "expired" | "cancelled",
-    label: string,
-  ) => {
-    try {
-      await updateSubscription({ userId, status });
-      toast.success(`Assinatura alterada para ${label}`);
-    } catch (e) {
-      if (e instanceof ConvexError) toast.error((e.data as { message: string }).message);
-      else toast.error("Erro ao alterar assinatura");
-    }
-  };
-
+  // NÃO existe ação de assinatura aqui, e isso é deliberado. O estado de
+  // cobrança (trial/active/overdue/expired/cancelled) é escrito somente pelo
+  // fluxo Asaas → webhook (internalMutations em convex/users.ts). Um botão que
+  // gravasse "active" à mão criaria acesso pago sem assinatura no Asaas e
+  // inflaria MRR/conversão. Acesso de cortesia se faz por accessType.
   const handleRole = async (userId: Id<"users">, role: "admin" | "user") => {
     try {
       await updateRole({ userId, role });
@@ -261,7 +251,7 @@ export default function AdminPage() {
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Shield className="size-6 text-primary" /> Painel Administrativo
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Gestão de usuários e assinaturas</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Gestão de usuários e tipos de acesso</p>
         </div>
       </div>
 
@@ -356,6 +346,15 @@ export default function AdminPage() {
             className="text-sm border border-input rounded-lg px-3 py-1.5 bg-background focus:outline-none focus:ring-2 focus:ring-ring w-full sm:w-64"
           />
         </div>
+
+        <p className="flex items-start gap-2 px-5 py-2.5 text-xs text-muted-foreground bg-muted/30 border-b border-border">
+          <Lock className="size-3.5 mt-0.5 flex-shrink-0" />
+          <span>
+            A coluna <strong>Assinatura</strong> é somente leitura: o estado de cobrança vem do
+            Asaas, pelo webhook. Para liberar acesso sem cobrança, use{" "}
+            <strong>interna</strong> ou <strong>beta</strong> na coluna Acesso.
+          </span>
+        </p>
 
         {users === undefined ? (
           <div className="p-5 space-y-3">
@@ -458,25 +457,6 @@ export default function AdminPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-52">
-                            <DropdownMenuItem
-                              onClick={() => void handleSubscription(u._id, "active", "Ativo")}
-                              className="cursor-pointer gap-2"
-                            >
-                              <CheckCircle className="size-4 text-green-500" /> Ativar assinatura
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => void handleSubscription(u._id, "trial", "Trial")}
-                              className="cursor-pointer gap-2"
-                            >
-                              <RefreshCw className="size-4 text-yellow-500" /> Renovar trial (+14d)
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => void handleSubscription(u._id, "expired", "Expirado")}
-                              className="cursor-pointer gap-2"
-                            >
-                              <XCircle className="size-4 text-red-400" /> Expirar assinatura
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
                             <DropdownMenuItem
                               onClick={() => void handleAccess(u._id, "internal")}
                               className="cursor-pointer gap-2"

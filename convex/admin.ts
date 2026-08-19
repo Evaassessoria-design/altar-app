@@ -109,31 +109,17 @@ export const updateUserRole = mutation({
   },
 });
 
-export const updateUserSubscription = mutation({
-  args: {
-    userId: v.id("users"),
-    status: v.union(
-      v.literal("trial"),
-      v.literal("active"),
-      v.literal("expired"),
-      v.literal("cancelled"),
-    ),
-  },
-  handler: async (ctx, args) => {
-    await requireAdmin(ctx);
-    const patch: {
-      subscriptionStatus: "trial" | "active" | "expired" | "cancelled";
-      trialEndDate?: string;
-    } = { subscriptionStatus: args.status };
-    // If reactivating trial, extend 14 days from now
-    if (args.status === "trial") {
-      const end = new Date();
-      end.setDate(end.getDate() + 14);
-      patch.trialEndDate = end.toISOString();
-    }
-    await ctx.db.patch(args.userId, patch);
-  },
-});
+// NÃO adicionar aqui uma mutation que escreva `subscriptionStatus`.
+//
+// Existia `updateUserSubscription` (admin grava trial/active/expired/cancelled
+// à mão). Removida: gravar "active" concede acesso pago sem assinatura no
+// Asaas, conta no MRR (getStats: ativos cobráveis × R$119,90) e na conversão,
+// e ainda atrapalha o webhook — `markSubscriptionOverdue` só rebaixa quem está
+// "active", então um status forjado engole a transição real depois.
+//
+// Estado de cobrança é escrito SOMENTE pelo Asaas, via as internalMutations de
+// convex/users.ts chamadas por convex/asaasWebhook.ts. Para liberar acesso sem
+// cobrar, use `setUserAccess` (internal/beta) — que não toca em cobrança.
 
 /**
  * Define o tipo de acesso de um usuário. É a única porta para marcar uma conta

@@ -80,14 +80,16 @@ export const listUsers = query({
   handler: async (ctx) => {
     await requireAdmin(ctx);
     const users = await ctx.db.query("users").order("desc").collect();
-    // Annotate with event counts
+    // Anota a contagem de eventos + a decisão de acesso JÁ RESOLVIDA. O painel
+    // não reimplementa a regra client/beta/internal: lê o que resolveAccess
+    // decidiu — a mesma fonte da guarda de checkout e das métricas de MRR.
     const result = await Promise.all(
       users.map(async (u) => {
         const events = await ctx.db
           .query("events")
           .withIndex("by_user", (q) => q.eq("userId", u._id))
           .collect();
-        return { ...u, eventCount: events.length };
+        return { ...u, eventCount: events.length, access: resolveAccess(u) };
       }),
     );
     return result;

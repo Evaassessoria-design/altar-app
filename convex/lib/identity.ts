@@ -14,7 +14,17 @@ export async function getOptionalUser(ctx: QueryCtx | MutationCtx) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) return null;
 
-  const authUser = await authComponent.getAuthUser(ctx);
+  // safeGetAuthUser (API pública do componente) devolve `undefined` em vez de
+  // lançar quando a sessão não resolve mais — caso real durante rotação de
+  // sessão: o JWT do Convex ainda é válido, então getUserIdentity() responde,
+  // mas a sessão que o sustentava já foi apagada. Com `getAuthUser` isso
+  // estourava ConvexError("Unauthenticated") e derrubava a tela no ErrorBoundary.
+  // Uma função chamada getOptionalUser não deve lançar nesse cenário.
+  //
+  // Erros de banco ou de programação continuam propagando normalmente: a troca
+  // afeta apenas o caso "usuário não resolvido".
+  const authUser = await authComponent.safeGetAuthUser(ctx);
+  if (!authUser) return null;
   const betterAuthId = String(authUser._id);
 
   const linked = await ctx.db

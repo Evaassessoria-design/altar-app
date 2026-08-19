@@ -59,6 +59,13 @@ export default function ResetPasswordPage() {
         );
         return;
       }
+      // revokeSessionsOnPasswordReset apagou todas as sessões no servidor.
+      // Limpamos o estado local de autenticação para não sobrar token órfão
+      // apontando para uma sessão que não existe mais — é o que derrubava a
+      // tela no ErrorBoundary quando o reset partia de uma aba já logada.
+      await authClient.signOut().catch(() => {
+        /* já não havia sessão válida — seguir normalmente */
+      });
       setDone(true);
       toast.success("Senha redefinida! Entre com a nova senha.");
     } finally {

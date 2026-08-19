@@ -28,6 +28,7 @@ import {
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils.ts";
 import { authClient } from "@/lib/auth-client.ts";
+import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -508,6 +509,7 @@ export default function ConfiguracoesPage() {
 const MIN_PASSWORD_LEN = 8;
 
 function SecuritySection() {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -537,9 +539,17 @@ function SecuritySection() {
         toast.error(error.message ?? "Não foi possível alterar a senha. Confira a senha atual.");
         return;
       }
-      toast.success("Senha alterada! As sessões nos seus outros aparelhos foram encerradas.");
+      // revokeOtherSessions apaga TODAS as sessões e cria uma nova no servidor.
+      // Em cross-domain o JWT do Convex em cache ainda aponta para a sessão
+      // antiga por um instante, então em vez de deixar o app tropeçar nessa
+      // janela fazemos um logout controlado e mandamos para o login.
       clear();
       setOpen(false);
+      await authClient.signOut().catch(() => {
+        /* sessão já foi invalidada no servidor — seguir para o login mesmo assim */
+      });
+      toast.success("Senha alterada com sucesso. Entre novamente.");
+      navigate("/login", { replace: true });
     } finally {
       setSaving(false);
     }

@@ -50,17 +50,10 @@ export const getSubscriptionStatus = query({
   },
 });
 
-export const activateSubscription = mutation({
-  args: { userId: v.id("users") },
-  handler: async (ctx, args) => {
-    const caller = await requireUser(ctx);
-    if (caller.role !== "admin") {
-      throw new ConvexError({ message: "Sem permissão", code: "FORBIDDEN" });
-    }
-
-    await ctx.db.patch(args.userId, { subscriptionStatus: "active" });
-  },
-});
+// `activateSubscription` (admin marcava "active" à mão) foi removida pelo mesmo
+// motivo de `admin.updateUserSubscription`: simulava assinatura paga sem nada
+// no Asaas. Não tinha nenhum caller na UI. Ativação real chega por
+// `activateSubscriptionByCustomer`, abaixo, disparada pelo webhook.
 
 // Mark onboarding as complete
 export const completeOnboarding = mutation({

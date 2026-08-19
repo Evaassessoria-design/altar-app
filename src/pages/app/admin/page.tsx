@@ -15,7 +15,6 @@ import {
   Shield,
   ShieldOff,
   Trash2,
-  RefreshCw,
   CheckCircle,
   XCircle,
   Clock,
@@ -23,6 +22,7 @@ import {
   ShieldCheck,
   FlaskConical,
   UserCheck,
+  Lock,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -43,6 +43,47 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog.tsx";
+import { Input } from "@/components/ui/input.tsx";
+import { Label } from "@/components/ui/label.tsx";
+
+// Linha da listagem: o backend já anexa `access` (resolveAccess) e `eventCount`.
+type AdminUser = NonNullable<ReturnType<typeof useAdminUsers>>[number];
+function useAdminUsers() {
+  return useQuery(api.admin.listUsers);
+}
+
+/** Rótulo de cada tipo de acesso. `client` também aparece — nada fica implícito. */
+const ACCESS_CONFIG: Record<
+  "client" | "beta" | "internal",
+  { label: string; icon: React.ReactNode; className: string; note: string }
+> = {
+  client: {
+    label: "Cliente",
+    icon: <UserCheck className="size-3" />,
+    className: "bg-muted text-muted-foreground",
+    note: "Cobrança normal",
+  },
+  beta: {
+    label: "Beta",
+    icon: <FlaskConical className="size-3" />,
+    className: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
+    note: "Isenta enquanto vigente",
+  },
+  internal: {
+    label: "Interna",
+    icon: <ShieldCheck className="size-3" />,
+    className: "bg-primary/15 text-primary ring-1 ring-primary/30",
+    note: "Sem cobrança · fora do MRR",
+  },
+};
 
 const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; className: string }> = {
   trial: {
@@ -77,15 +118,19 @@ export default function AdminPage() {
   const navigate = useNavigate();
   const isAdmin = useQuery(api.admin.isAdmin);
   const stats = useQuery(api.admin.getStats);
-  const users = useQuery(api.admin.listUsers);
+  const users = useAdminUsers();
 
-  const updateSubscription = useMutation(api.admin.updateUserSubscription);
   const updateRole = useMutation(api.admin.updateUserRole);
   const deleteUser = useMutation(api.admin.deleteUser);
   const setUserAccess = useMutation(api.admin.setUserAccess);
 
   const [deletingId, setDeletingId] = useState<Id<"users"> | null>(null);
   const [searchQ, setSearchQ] = useState("");
+  // Diálogo de acesso beta — substitui window.prompt (que alguns navegadores
+  // bloqueiam e que não valida a data enquanto o admin digita).
+  const [betaTarget, setBetaTarget] = useState<AdminUser | null>(null);
+  const [betaDate, setBetaDate] = useState("");
+  const [savingBeta, setSavingBeta] = useState(false);
 
   // Redirect non-admins
   useEffect(() => {
@@ -113,20 +158,11 @@ export default function AdminPage() {
     );
   });
 
-  const handleSubscription = async (
-    userId: Id<"users">,
-    status: "trial" | "active" | "expired" | "cancelled",
-    label: string,
-  ) => {
-    try {
-      await updateSubscription({ userId, status });
-      toast.success(`Assinatura alterada para ${label}`);
-    } catch (e) {
-      if (e instanceof ConvexError) toast.error((e.data as { message: string }).message);
-      else toast.error("Erro ao alterar assinatura");
-    }
-  };
-
+  // NÃO existe ação de assinatura aqui, e isso é deliberado. O estado de
+  // cobrança (trial/active/overdue/expired/cancelled) é escrito somente pelo
+  // fluxo Asaas → webhook (internalMutations em convex/users.ts). Um botão que
+  // gravasse "active" à mão criaria acesso pago sem assinatura no Asaas e
+  // inflaria MRR/conversão. Acesso de cortesia se faz por accessType.
   const handleRole = async (userId: Id<"users">, role: "admin" | "user") => {
     try {
       await updateRole({ userId, role });
@@ -137,38 +173,60 @@ export default function AdminPage() {
     }
   };
 
-  // Define o tipo de acesso. Para "beta", pede a data de expiração — a mutation
-  // recusa beta sem data, então validamos antes para dar mensagem clara.
-  const handleAccess = async (
+  // Único caminho de alteração de tipo de acesso na tela: admin.setUserAccess.
+  // Nada aqui toca cobrança no Asaas — trocar para internal/beta apenas isenta
+  // a conta (a guarda de checkout e o MRR leem a mesma regra no backend).
+  const applyAccess = async (
     userId: Id<"users">,
     accessType: "client" | "beta" | "internal",
+    accessExpiresAt?: number,
   ) => {
-    let accessExpiresAt: number | undefined;
-    if (accessType === "beta") {
-      const input = window.prompt(
-        "Acesso beta até que data? (AAAA-MM-DD)",
-        new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10),
-      );
-      if (!input) return;
-      const parsed = Date.parse(input + "T23:59:59");
-      if (Number.isNaN(parsed)) {
-        toast.error("Data inválida. Use o formato AAAA-MM-DD.");
-        return;
-      }
-      accessExpiresAt = parsed;
-    }
+    await setUserAccess({ userId, accessType, accessExpiresAt });
+    toast.success(
+      accessType === "internal"
+        ? "Conta marcada como interna. Não gera cobrança nem entra no MRR."
+        : accessType === "beta"
+          ? "Acesso beta definido."
+          : "Conta voltou ao acesso de cliente.",
+    );
+  };
+
+  const handleAccess = async (
+    userId: Id<"users">,
+    accessType: "client" | "internal",
+  ) => {
     try {
-      await setUserAccess({ userId, accessType, accessExpiresAt });
-      toast.success(
-        accessType === "internal"
-          ? "Conta marcada como interna."
-          : accessType === "beta"
-            ? "Acesso beta definido."
-            : "Conta voltou ao acesso normal.",
-      );
+      await applyAccess(userId, accessType);
     } catch (e) {
       if (e instanceof ConvexError) toast.error((e.data as { message: string }).message);
       else toast.error("Erro ao definir o acesso");
+    }
+  };
+
+  // Beta exige data de validade — a mutation recusa beta sem ela, então o
+  // diálogo já entra com um padrão de 90 dias e valida antes de enviar.
+  const openBetaDialog = (u: AdminUser) => {
+    const current = u.accessExpiresAt ?? Date.now() + 90 * 86400000;
+    setBetaDate(toDateInput(current));
+    setBetaTarget(u);
+  };
+
+  const confirmBeta = async () => {
+    if (!betaTarget) return;
+    const parsed = Date.parse(betaDate + "T23:59:59");
+    if (!betaDate || Number.isNaN(parsed)) {
+      toast.error("Data inválida. Use o formato AAAA-MM-DD.");
+      return;
+    }
+    setSavingBeta(true);
+    try {
+      await applyAccess(betaTarget._id, "beta", parsed);
+      setBetaTarget(null);
+    } catch (e) {
+      if (e instanceof ConvexError) toast.error((e.data as { message: string }).message);
+      else toast.error("Erro ao definir o acesso");
+    } finally {
+      setSavingBeta(false);
     }
   };
 
@@ -193,7 +251,7 @@ export default function AdminPage() {
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Shield className="size-6 text-primary" /> Painel Administrativo
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Gestão de usuários e assinaturas</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Gestão de usuários e tipos de acesso</p>
         </div>
       </div>
 
@@ -289,6 +347,15 @@ export default function AdminPage() {
           />
         </div>
 
+        <p className="flex items-start gap-2 px-5 py-2.5 text-xs text-muted-foreground bg-muted/30 border-b border-border">
+          <Lock className="size-3.5 mt-0.5 flex-shrink-0" />
+          <span>
+            A coluna <strong>Assinatura</strong> é somente leitura: o estado de cobrança vem do
+            Asaas, pelo webhook. Para liberar acesso sem cobrança, use{" "}
+            <strong>interna</strong> ou <strong>beta</strong> na coluna Acesso.
+          </span>
+        </p>
+
         {users === undefined ? (
           <div className="p-5 space-y-3">
             {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
@@ -304,7 +371,8 @@ export default function AdminPage() {
                 <tr className="border-b border-border bg-muted/30">
                   <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground">Usuário</th>
                   <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground hidden sm:table-cell">Cadastro</th>
-                  <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground">Status</th>
+                  <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground">Assinatura</th>
+                  <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground">Acesso</th>
                   <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground hidden md:table-cell">Função</th>
                   <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground hidden lg:table-cell">Eventos</th>
                   <th className="px-3 py-3 w-10" />
@@ -313,8 +381,16 @@ export default function AdminPage() {
               <tbody className="divide-y divide-border">
                 {filteredUsers.map((u) => {
                   const statusCfg = STATUS_CONFIG[u.subscriptionStatus ?? "trial"];
+                  const isInternal = u.access.type === "internal";
                   return (
-                    <tr key={u._id} className="hover:bg-accent/30 transition-colors">
+                    <tr
+                      key={u._id}
+                      className={`transition-colors ${
+                        isInternal
+                          ? "bg-primary/5 hover:bg-primary/10"
+                          : "hover:bg-accent/30"
+                      }`}
+                    >
                       {/* Name/email */}
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-3 min-w-0">
@@ -341,21 +417,19 @@ export default function AdminPage() {
                           {statusCfg?.icon}
                           {statusCfg?.label ?? u.subscriptionStatus}
                         </span>
-                        {u.accessType === "internal" && (
-                          <span className="ml-1 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-primary/15 text-primary">
-                            <ShieldCheck className="size-3" /> Interna
-                          </span>
-                        )}
-                        {u.accessType === "beta" && (
-                          <span className="ml-1 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">
-                            <FlaskConical className="size-3" /> Beta
-                          </span>
-                        )}
                         {u.subscriptionStatus === "trial" && u.trialEndDate && (
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            até {format(new Date(u.trialEndDate), "dd/MM", { locale: ptBR })}
+                            até {format(new Date(u.trialEndDate), "dd/MM/yyyy", { locale: ptBR })}
                           </p>
                         )}
+                        {u.access.billingExempt && (
+                          <p className="text-xs text-muted-foreground mt-0.5">Isenta de cobrança</p>
+                        )}
+                      </td>
+
+                      {/* Tipo de acesso — client / beta / internal, sempre explícito */}
+                      <td className="px-3 py-3">
+                        <AccessCell user={u} />
                       </td>
 
                       {/* Role */}
@@ -384,32 +458,13 @@ export default function AdminPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-52">
                             <DropdownMenuItem
-                              onClick={() => void handleSubscription(u._id, "active", "Ativo")}
-                              className="cursor-pointer gap-2"
-                            >
-                              <CheckCircle className="size-4 text-green-500" /> Ativar assinatura
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => void handleSubscription(u._id, "trial", "Trial")}
-                              className="cursor-pointer gap-2"
-                            >
-                              <RefreshCw className="size-4 text-yellow-500" /> Renovar trial (+14d)
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => void handleSubscription(u._id, "expired", "Expirado")}
-                              className="cursor-pointer gap-2"
-                            >
-                              <XCircle className="size-4 text-red-400" /> Expirar assinatura
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
                               onClick={() => void handleAccess(u._id, "internal")}
                               className="cursor-pointer gap-2"
                             >
                               <ShieldCheck className="size-4 text-primary" /> Marcar como interna
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              onClick={() => void handleAccess(u._id, "beta")}
+                              onClick={() => openBetaDialog(u)}
                               className="cursor-pointer gap-2"
                             >
                               <FlaskConical className="size-4 text-violet-500" /> Definir acesso beta…
@@ -455,6 +510,47 @@ export default function AdminPage() {
         )}
       </div>
 
+      {/* Acesso beta — data de validade */}
+      <Dialog
+        open={betaTarget !== null}
+        onOpenChange={(o) => { if (!o && !savingBeta) setBetaTarget(null); }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FlaskConical className="size-4 text-violet-500" /> Acesso beta
+            </DialogTitle>
+            <DialogDescription>
+              {betaTarget?.name ?? betaTarget?.email ?? "Usuário"} terá acesso liberado e sem
+              cobrança até a data escolhida. Depois disso a conta volta a valer como cliente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="beta-expires">Válido até</Label>
+            <Input
+              id="beta-expires"
+              type="date"
+              value={betaDate}
+              min={toDateInput(Date.now())}
+              onChange={(e) => setBetaDate(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              className="cursor-pointer"
+              disabled={savingBeta}
+              onClick={() => setBetaTarget(null)}
+            >
+              Cancelar
+            </Button>
+            <Button className="cursor-pointer" disabled={savingBeta} onClick={() => void confirmBeta()}>
+              {savingBeta ? "Salvando…" : "Definir acesso beta"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete confirmation */}
       <AlertDialog open={!!deletingId} onOpenChange={(o) => { if (!o) setDeletingId(null); }}>
         <AlertDialogContent>
@@ -475,6 +571,50 @@ export default function AdminPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
+  );
+}
+
+// ─── Acesso ───────────────────────────────────────────────────────────────
+
+/** Epoch ms → "AAAA-MM-DD" no fuso local (o `<input type="date">` é local). */
+function toDateInput(ms: number): string {
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/**
+ * Tipo de acesso da conta. Lê `user.access`, que o backend já resolveu com
+ * `resolveAccess` — a mesma regra que isenta o checkout e exclui do MRR.
+ */
+function AccessCell({ user }: { user: AdminUser }) {
+  const cfg = ACCESS_CONFIG[user.access.type];
+  const expiresAt = user.accessExpiresAt;
+  return (
+    <div className="space-y-0.5">
+      <span
+        className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${cfg.className}`}
+      >
+        {cfg.icon}
+        {cfg.label}
+      </span>
+      {user.access.type === "beta" && expiresAt !== undefined && (
+        <p
+          className={`text-xs ${
+            user.access.betaExpired ? "text-red-500 font-medium" : "text-muted-foreground"
+          }`}
+        >
+          {user.access.betaExpired ? "expirou em " : "até "}
+          {format(new Date(expiresAt), "dd/MM/yyyy", { locale: ptBR })}
+        </p>
+      )}
+      {user.access.type === "beta" && expiresAt === undefined && (
+        <p className="text-xs text-muted-foreground">sem prazo definido</p>
+      )}
+      {user.access.type !== "beta" && (
+        <p className="text-xs text-muted-foreground">{cfg.note}</p>
+      )}
     </div>
   );
 }

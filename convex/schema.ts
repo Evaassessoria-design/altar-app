@@ -145,6 +145,11 @@ export default defineSchema({
     asaasCustomerId: v.optional(v.string()),
     asaasSubscriptionId: v.optional(v.string()),
     subscriptionExpiresAt: v.optional(v.string()),
+    // Epoch ms do PRIMEIRO aviso de atraso do Asaas. É o que dá fim ao período
+    // de tolerância da inadimplência (lib/access.ts). Zerado quando o pagamento
+    // entra. Ausente = tolerância não começou a correr (cadastros anteriores a
+    // esta regra continuam liberados até o próximo aviso de atraso).
+    overdueSince: v.optional(v.number()),
     // ── Tipo de acesso (independente do estado de cobrança) ──────────────────
     // AUSENTE = "client" — é o que todos os usuários atuais são, sem migração.
     //   client   → comportamento normal (trial → paywall → Asaas)
@@ -326,6 +331,23 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_read", ["userId", "isRead"]),
+
+  // ── Contas excluídas pelo administrador ────────────────────────────────────
+  // Registro mínimo (e-mail + quando) de quem foi excluído no painel admin.
+  // Serve a UM propósito: impedir que a mesma pessoa se cadastre de novo e ganhe
+  // OUTRO trial de 14 dias. Sem isso, excluir o usuário era um botão de
+  // "renovar teste grátis" — bastava entrar novamente.
+  //
+  // Quem volta continua conseguindo entrar (não é banimento), mas entra com a
+  // assinatura já expirada e vai direto ao paywall.
+  deletedAccounts: defineTable({
+    email: v.string(),
+    deletedAt: v.string(),
+    /** Quem apagou — para auditoria. */
+    deletedByUserId: v.optional(v.id("users")),
+    /** Já teve trial alguma vez? Hoje sempre true; campo mantido explícito. */
+    hadTrial: v.boolean(),
+  }).index("by_email", ["email"]),
 
   // Leads capturados pela landing page (visitantes não autenticados).
   // Distinto de `leads` (funil de vendas interno de cada usuário do app).

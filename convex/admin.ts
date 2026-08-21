@@ -1,9 +1,11 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import type { QueryCtx, MutationCtx } from "./_generated/server.d.ts";
 import { getOptionalUser, requireUser } from "./lib/identity";
 import { resolveAccess } from "./lib/access";
+import { deleteUserDataCascade } from "./lib/cascade";
+import { deleteBetterAuthAccount } from "./lib/authAccount";
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────
 
@@ -157,6 +159,122 @@ export const setUserAccess = mutation({
   },
 });
 
+/**
+ * Exclui um usuário DE VERDADE.
+ *
+ * Antes esta mutation apagava só a linha de `users`. Duas consequências, as
+ * duas graves:
+ *
+ *  · Todos os eventos, fotos, contratos e finanças daquela empresa ficavam no
+ *    banco sem dono — invisíveis e impossíveis de recuperar pela interface,
+ *    ainda ocupando storage pago.
+ *  · A CONTA DE LOGIN continuava existindo. A pessoa entrava de novo com a
+ *    mesma senha, `syncAuthenticatedUser` não achava linha em `users` e criava
+ *    uma nova — com 14 dias de trial. Excluir usuário era, na prática, um botão
+ *    de "renovar teste grátis", repetível à vontade.
+ *
+ * Agora acontece, nesta ordem:
+ *  1. cascata de todos os dados (lib/cascade.ts);
+ *  2. registro do e-mail em `deletedAccounts` — é o que impede o novo trial;
+ *  3. remoção da conta no Better Auth (sessões, credenciais e usuário);
+ *  4. remoção da linha de `users`.
+ *
+ * A ordem importa: o e-mail é lido antes de a linha sumir, e o registro em
+ * `deletedAccounts` é gravado antes da remoção do login — se algo falhar no
+ * meio, o pior caso é uma conta registrada como excluída que ainda consegue
+ * entrar, e não um trial renovado.
+ */
+// ─── Bootstrap / conta da fundadora ────────────────────────────────────────
+
+/**
+ * Garante que uma conta seja ADMIN e tenha acesso permanente sem cobrança.
+ *
+ * É uma `internalMutation` de propósito: NÃO é alcançável pelo aplicativo nem
+ * por nenhum usuário logado. Só roda pelo painel do Convex (Functions → run) ou
+ * pela CLI, por quem já tem acesso ao deployment. Isso resolve o problema do
+ * ovo e da galinha — se nenhuma conta for admin hoje, ninguém consegue abrir o
+ * /admin para promover a primeira.
+ *
+ * Não existe (e não deve existir) comparação de e-mail em nenhum caminho
+ * automático: o e-mail é um ARGUMENTO passado à mão por quem opera o banco.
+ *
+ * O que faz, de forma idempotente:
+ *   · role         → "admin"     (abre o Painel Admin)
+ *   · accessType   → "internal"  (acesso permanente, nunca cobra, fora do MRR)
+ *   · accessExpiresAt → limpo    (só faz sentido em conta beta)
+ *
+ * NÃO mexe em `subscriptionStatus`: contas `internal` são liberadas pelo tipo
+ * de acesso, não pelo estado de cobrança — é o que `resolveAccess` já decide.
+ * Assim o trial vencido continua registrado como fato histórico e o painel não
+ * passa a contar essa conta como assinante paga.
+ *
+ * Uso no painel do Convex:
+ *   internal.admin.grantInternalAccessByEmail
+ *   { "email": "pessoa@exemplo.com" }
+ */
+export const grantInternalAccessByEmail = internalMutation({
+  args: { email: v.string() },
+  handler: async (ctx, args) => {
+    const email = args.email.trim().toLowerCase();
+    const users = await ctx.db.query("users").collect();
+    const target = users.find((u) => u.email.trim().toLowerCase() === email);
+
+    if (!target) {
+      throw new ConvexError({
+        code: "NOT_FOUND",
+        message: `Nenhum usuário com o e-mail ${email}. Confira em Data → users.`,
+      });
+    }
+
+    await ctx.db.patch(target._id, {
+      role: "admin",
+      accessType: "internal",
+      accessExpiresAt: undefined,
+    });
+
+    const updated = await ctx.db.get(target._id);
+    return {
+      userId: target._id,
+      email: target.email,
+      name: target.name,
+      role: updated?.role,
+      accessType: updated?.accessType,
+      subscriptionStatus: updated?.subscriptionStatus,
+      blocked: updated ? resolveAccess(updated).blocked : null,
+    };
+  },
+});
+
+/**
+ * Diagnóstico somente-leitura: como está uma conta hoje.
+ * Também é interna — serve para conferir pelo painel do Convex, antes e depois
+ * de `grantInternalAccessByEmail`, sem precisar entrar no app.
+ */
+export const inspectAccountByEmail = internalQuery({
+  args: { email: v.string() },
+  handler: async (ctx, args) => {
+    const email = args.email.trim().toLowerCase();
+    const users = await ctx.db.query("users").collect();
+    const target = users.find((u) => u.email.trim().toLowerCase() === email);
+    if (!target) return null;
+
+    const access = resolveAccess(target);
+    return {
+      userId: target._id,
+      email: target.email,
+      name: target.name,
+      role: target.role,
+      isAdmin: target.role === "admin",
+      accessType: target.accessType ?? "client",
+      subscriptionStatus: target.subscriptionStatus,
+      trialEndDate: target.trialEndDate,
+      overdueSince: target.overdueSince,
+      createdAt: new Date(target._creationTime).toISOString(),
+      access,
+    };
+  },
+});
+
 export const deleteUser = mutation({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
@@ -164,6 +282,49 @@ export const deleteUser = mutation({
     if (me._id === args.userId) {
       throw new ConvexError({ code: "BAD_REQUEST", message: "Não é possível excluir sua própria conta" });
     }
+
+    const target = await ctx.db.get(args.userId);
+    if (!target) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
+    }
+
+    // 1. Dados do usuário (eventos + tudo que pende deles + tabelas do usuário).
+    const summary = await deleteUserDataCascade(ctx, args.userId);
+
+    // 2. Marca o e-mail como já tendo consumido o trial. Sem isso, cadastrar de
+    //    novo com o mesmo e-mail devolveria outros 14 dias grátis.
+    const email = target.email.trim().toLowerCase();
+    if (email) {
+      const existing = await ctx.db
+        .query("deletedAccounts")
+        .withIndex("by_email", (q) => q.eq("email", email))
+        .unique();
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          deletedAt: new Date().toISOString(),
+          deletedByUserId: me._id,
+          hadTrial: true,
+        });
+      } else {
+        await ctx.db.insert("deletedAccounts", {
+          email,
+          deletedAt: new Date().toISOString(),
+          deletedByUserId: me._id,
+          hadTrial: true,
+        });
+      }
+    }
+
+    // 3. Conta de login (Better Auth). Nunca derruba a exclusão: se o componente
+    //    recusar, os dados já saíram e o e-mail já está travado contra novo
+    //    trial — o resíduo é uma credencial órfã, não um usuário fantasma.
+    const authRemoval = target.betterAuthId
+      ? await deleteBetterAuthAccount(ctx, target.betterAuthId)
+      : { removed: false, reason: "sem conta Better Auth vinculada" as const };
+
+    // 4. Por fim, a linha do usuário.
     await ctx.db.delete(args.userId);
+
+    return { ...summary, authRemoval };
   },
 });

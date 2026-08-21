@@ -2,6 +2,7 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { requireUser } from "./lib/identity";
+import { deleteEventCascade } from "./lib/cascade";
 
 const eventType = v.union(
   v.literal("wedding"),
@@ -128,6 +129,17 @@ export const saveContractImport = mutation({
   },
 });
 
+/**
+ * Exclui o evento E TODOS os dados ligados a ele.
+ *
+ * A checagem de dono continua exatamente igual. O que mudou é o que acontece
+ * depois: antes só a linha do evento era apagada, deixando briefing, checklist,
+ * orçamento, compras, fotos, contratos, financeiro, fornecedores, montagem e
+ * plantas órfãos no banco — junto com os arquivos no storage. A tela já
+ * prometia à usuária que tudo seria apagado; agora é verdade.
+ *
+ * A cascata vive em lib/cascade.ts, compartilhada com a exclusão de usuário.
+ */
 export const remove = mutation({
   args: { id: v.id("events") },
   handler: async (ctx, args) => {
@@ -135,6 +147,6 @@ export const remove = mutation({
     const event = await ctx.db.get(args.id);
     if (!event || event.userId !== user._id)
       throw new ConvexError({ message: "Evento não encontrado", code: "NOT_FOUND" });
-    await ctx.db.delete(args.id);
+    return deleteEventCascade(ctx, args.id);
   },
 });

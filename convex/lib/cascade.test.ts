@@ -1,0 +1,323 @@
+import { describe, expect, it } from "vitest";
+import { convexTest } from "convex-test";
+import schema from "../schema";
+import { modules } from "../test.setup";
+import { deleteEventCascade, deleteUserDataCascade } from "./cascade";
+import type { Id } from "../_generated/dataModel";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRAVA DE REGRESSÃO — exclusão em cascata.
+//
+// O bug: `events.remove` apagava SÓ a linha do evento, e `admin.deleteUser` SÓ a
+// linha do usuário. Briefing, checklist, orçamento, compras, fotos, contratos,
+// financeiro, fornecedores, montagem e plantas ficavam órfãos no banco, junto
+// com os arquivos no storage — enquanto a tela dizia à usuária que tudo tinha
+// sido apagado.
+//
+// Estes testes montam um evento COMPLETO (uma linha em cada tabela que pende de
+// evento) e conferem que, depois da exclusão, o banco fica vazio. É isso que
+// faz uma tabela nova esquecida na cascata aparecer aqui.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Todas as tabelas que guardam linhas presas a um evento. */
+const EVENT_TABLES = [
+  "briefings",
+  "checklistItems",
+  "purchaseItems",
+  "budgetItems",
+  "eventTeam",
+  "transactions",
+  "eventPhotos",
+  "contracts",
+  "eventSuppliers",
+  "assemblyItems",
+  "layoutRenders",
+] as const;
+
+const NOW_ISO = "2026-08-21T12:00:00.000Z";
+
+/**
+ * Cria um usuário e um evento com UMA linha em cada tabela dependente,
+ * incluindo arquivos no storage. Devolve os ids para as asserções.
+ */
+async function seedFullEvent(ctx: {
+  db: {
+    insert: (table: string, doc: Record<string, unknown>) => Promise<string>;
+  };
+  storage: { store: (blob: Blob) => Promise<Id<"_storage">> };
+}) {
+  const userId = (await ctx.db.insert("users", {
+    name: "Decoradora Teste",
+    email: "decoradora@exemplo.com",
+    role: "user",
+    subscriptionStatus: "active",
+  })) as Id<"users">;
+
+  const eventId = (await ctx.db.insert("events", {
+    userId,
+    name: "Casamento Teste",
+    type: "wedding",
+    date: "2026-12-12",
+    location: "Salão",
+    clientName: "Cliente",
+    status: "confirmed",
+  })) as Id<"events">;
+
+  // Arquivos reais no storage — a cascata precisa removê-los também.
+  const photoFile = await ctx.storage.store(new Blob(["foto"]));
+  const contractFile = await ctx.storage.store(new Blob(["contrato"]));
+  const logoFile = await ctx.storage.store(new Blob(["logo-fornecedor"]));
+  const refFile = await ctx.storage.store(new Blob(["referencia"]));
+  const contractedFile = await ctx.storage.store(new Blob(["contratado"]));
+  const sketchFile = await ctx.storage.store(new Blob(["croqui"]));
+  const renderFile = await ctx.storage.store(new Blob(["planta"]));
+
+  await ctx.db.insert("briefings", { eventId, userId, guestCount: "120" });
+  await ctx.db.insert("checklistItems", {
+    eventId, userId, phase: "pre", name: "Cadeiras", order: 0, isChecked: false,
+  });
+  await ctx.db.insert("purchaseItems", {
+    eventId, userId, name: "Velas", isPurchased: false, order: 0,
+  });
+  await ctx.db.insert("budgetItems", {
+    eventId, userId, description: "Decoração", category: "decor",
+    quantity: 1, unitPrice: 5000, type: "income", order: 0,
+  });
+  const teamMemberId = await ctx.db.insert("teamMembers", {
+    userId, name: "Montador", role: "montagem",
+  });
+  await ctx.db.insert("eventTeam", { userId, eventId, teamMemberId });
+  await ctx.db.insert("transactions", {
+    userId, eventId, type: "income", category: "sinal",
+    description: "Sinal", amount: 2500, date: "2026-08-01", isPaid: true,
+  });
+  await ctx.db.insert("eventPhotos", {
+    userId, eventId, storageId: photoFile, filename: "foto.jpg",
+    category: "montagem", order: 0, uploadedAt: NOW_ISO,
+  });
+  await ctx.db.insert("contracts", {
+    eventId, userId, storageId: contractFile,
+    filename: "contrato.pdf", uploadedAt: NOW_ISO,
+  });
+  await ctx.db.insert("eventSuppliers", {
+    userId, eventId, category: "buffet",
+    companyName: "Buffet X", logoStorageId: logoFile,
+  });
+  await ctx.db.insert("assemblyItems", {
+    userId, eventId, area: "mesas", order: 0, name: "Mesa redonda",
+    referencePhotoStorageId: refFile, contractedPhotoStorageId: contractedFile,
+    includeInAssemblyReport: true, checkOnAssembly: true,
+    visibility: "interno", createdAt: NOW_ISO, updatedAt: NOW_ISO,
+  });
+  await ctx.db.insert("layoutRenders", {
+    userId, eventId,
+    originalSketchStorageId: sketchFile, originalSketchFilename: "croqui.jpg",
+    interpretation: { ambientes: ["salão"], elementos: [{ tipo: "mesa", quantidade: 12 }] },
+    outputStorageId: renderFile,
+    provider: "teste", model: "teste", promptVersion: "1",
+    promptSnapshot: "…", generationVersion: 1, status: "done",
+    createdAt: NOW_ISO, updatedAt: NOW_ISO,
+  });
+  await ctx.db.insert("notifications", {
+    userId, type: "event_soon", title: "Evento próximo", body: "…",
+    isRead: false, relatedEventId: eventId, createdAt: NOW_ISO,
+  });
+  await ctx.db.insert("leads", {
+    userId, clientName: "Cliente", stage: "contracted",
+    order: 0, convertedEventId: eventId,
+  });
+
+  return {
+    userId,
+    eventId,
+    files: [photoFile, contractFile, logoFile, refFile, contractedFile, sketchFile, renderFile],
+  };
+}
+
+describe("deleteEventCascade — não deixa nada para trás", () => {
+  it("apaga todas as linhas de todas as tabelas do evento", async () => {
+    const t = convexTest(schema, modules);
+    const { eventId } = await t.run((ctx) => seedFullEvent(ctx));
+
+    await t.run(async (ctx) => {
+      await deleteEventCascade(ctx, eventId);
+    });
+
+    await t.run(async (ctx) => {
+      expect(await ctx.db.get(eventId)).toBeNull();
+      for (const table of EVENT_TABLES) {
+        const rows = await ctx.db.query(table).collect();
+        expect(rows, `tabela ${table} ficou com linhas órfãs`).toHaveLength(0);
+      }
+    });
+  });
+
+  it("apaga também os arquivos no storage", async () => {
+    const t = convexTest(schema, modules);
+    const { eventId, files } = await t.run((ctx) => seedFullEvent(ctx));
+
+    await t.run(async (ctx) => {
+      await deleteEventCascade(ctx, eventId);
+    });
+
+    await t.run(async (ctx) => {
+      for (const file of files) {
+        expect(await ctx.storage.getUrl(file), `arquivo ${file} não foi apagado`).toBeNull();
+      }
+    });
+  });
+
+  it("apaga as notificações daquele evento", async () => {
+    const t = convexTest(schema, modules);
+    const { eventId } = await t.run((ctx) => seedFullEvent(ctx));
+
+    await t.run(async (ctx) => {
+      await deleteEventCascade(ctx, eventId);
+    });
+
+    await t.run(async (ctx) => {
+      expect(await ctx.db.query("notifications").collect()).toHaveLength(0);
+    });
+  });
+
+  it("PRESERVA o lead do funil, só limpando o vínculo com o evento", async () => {
+    // O lead é histórico comercial: sobrevive ao evento. Só o ponteiro morre.
+    const t = convexTest(schema, modules);
+    const { eventId } = await t.run((ctx) => seedFullEvent(ctx));
+
+    await t.run(async (ctx) => {
+      await deleteEventCascade(ctx, eventId);
+    });
+
+    await t.run(async (ctx) => {
+      const leads = await ctx.db.query("leads").collect();
+      expect(leads).toHaveLength(1);
+      expect(leads[0].convertedEventId).toBeUndefined();
+    });
+  });
+
+  it("não toca em outro evento do mesmo usuário", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, eventId } = await t.run((ctx) => seedFullEvent(ctx));
+
+    const outroEventoId = await t.run(async (ctx) => {
+      const outro = await ctx.db.insert("events", {
+        userId, name: "Outro", type: "birthday", date: "2027-01-01",
+        location: "Casa", clientName: "Outro Cliente", status: "planning",
+      });
+      await ctx.db.insert("briefings", { eventId: outro, userId, guestCount: "50" });
+      return outro;
+    });
+
+    await t.run(async (ctx) => {
+      await deleteEventCascade(ctx, eventId);
+    });
+
+    await t.run(async (ctx) => {
+      expect(await ctx.db.get(outroEventoId)).not.toBeNull();
+      expect(await ctx.db.query("briefings").collect()).toHaveLength(1);
+      // A equipe do usuário não pertence ao evento e continua existindo.
+      expect(await ctx.db.query("teamMembers").collect()).toHaveLength(1);
+    });
+  });
+
+  it("devolve a contagem do que saiu", async () => {
+    const t = convexTest(schema, modules);
+    const { eventId } = await t.run((ctx) => seedFullEvent(ctx));
+
+    const summary = await t.run((ctx) => deleteEventCascade(ctx, eventId));
+
+    expect(summary.events).toBe(1);
+    expect(summary.files).toBe(7);
+    expect(summary.documents).toBeGreaterThanOrEqual(EVENT_TABLES.length);
+  });
+
+  it("não quebra quando o arquivo já sumiu do storage", async () => {
+    // Exclusão repetida após falha parcial: `ctx.storage.delete` lança para um
+    // arquivo inexistente, e isso não pode abortar a limpeza do banco.
+    const t = convexTest(schema, modules);
+    const { eventId, files } = await t.run((ctx) => seedFullEvent(ctx));
+
+    await t.run(async (ctx) => {
+      await ctx.storage.delete(files[0]);
+    });
+
+    await expect(t.run((ctx) => deleteEventCascade(ctx, eventId))).resolves.toBeDefined();
+
+    await t.run(async (ctx) => {
+      expect(await ctx.db.get(eventId)).toBeNull();
+      expect(await ctx.db.query("eventPhotos").collect()).toHaveLength(0);
+    });
+  });
+});
+
+describe("deleteUserDataCascade — limpa tudo do usuário", () => {
+  it("apaga eventos, dependências e as tabelas do próprio usuário", async () => {
+    const t = convexTest(schema, modules);
+    const { userId } = await t.run((ctx) => seedFullEvent(ctx));
+
+    await t.run(async (ctx) => {
+      await deleteUserDataCascade(ctx, userId);
+    });
+
+    await t.run(async (ctx) => {
+      expect(await ctx.db.query("events").collect()).toHaveLength(0);
+      for (const table of EVENT_TABLES) {
+        expect(await ctx.db.query(table).collect(), `tabela ${table}`).toHaveLength(0);
+      }
+      // Tabelas do usuário fora de evento.
+      expect(await ctx.db.query("teamMembers").collect()).toHaveLength(0);
+      expect(await ctx.db.query("leads").collect()).toHaveLength(0);
+      expect(await ctx.db.query("notifications").collect()).toHaveLength(0);
+    });
+  });
+
+  it("não toca nos dados de OUTRO usuário", async () => {
+    const t = convexTest(schema, modules);
+    const { userId } = await t.run((ctx) => seedFullEvent(ctx));
+
+    const outroUserId = await t.run(async (ctx) => {
+      const outro = await ctx.db.insert("users", {
+        name: "Outra", email: "outra@exemplo.com",
+        role: "user", subscriptionStatus: "trial",
+      });
+      await ctx.db.insert("events", {
+        userId: outro, name: "Evento da outra", type: "corporate",
+        date: "2027-02-02", location: "Hotel", clientName: "Empresa", status: "planning",
+      });
+      await ctx.db.insert("teamMembers", { userId: outro, name: "Ajudante", role: "apoio" });
+      return outro;
+    });
+
+    await t.run(async (ctx) => {
+      await deleteUserDataCascade(ctx, userId);
+    });
+
+    await t.run(async (ctx) => {
+      const events = await ctx.db.query("events").collect();
+      expect(events).toHaveLength(1);
+      expect(events[0].userId).toBe(outroUserId);
+      expect(await ctx.db.query("teamMembers").collect()).toHaveLength(1);
+    });
+  });
+
+  it("apaga a logo da empresa do storage", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, logo } = await t.run(async (ctx) => {
+      const logo = await ctx.storage.store(new Blob(["logo-empresa"]));
+      const userId = await ctx.db.insert("users", {
+        name: "Com logo", email: "logo@exemplo.com", role: "user",
+        subscriptionStatus: "active", logoStorageId: logo,
+      });
+      return { userId, logo };
+    });
+
+    await t.run(async (ctx) => {
+      await deleteUserDataCascade(ctx, userId);
+    });
+
+    await t.run(async (ctx) => {
+      expect(await ctx.storage.getUrl(logo)).toBeNull();
+    });
+  });
+});

@@ -173,18 +173,69 @@ export async function syncAuthenticatedUser(ctx: MutationCtx) {
     }
   }
 
-  const now = new Date();
-  const trialEnd = new Date(now);
-  trialEnd.setDate(trialEnd.getDate() + 14);
   const isFirstUser = (await ctx.db.query("users").take(1)).length === 0;
+  const trial = await resolveTrialForNewUser(ctx, email);
 
   return ctx.db.insert("users", {
     betterAuthId,
     name,
     email: email || "",
     role: isFirstUser ? "admin" : "user",
+    ...trial,
+  });
+}
+
+/** Duração do período de teste de um cadastro novo. */
+export const TRIAL_DAYS = 14;
+
+/**
+ * Decide o estado de cobrança inicial de um cadastro NOVO.
+ *
+ * ── Trial só uma vez por e-mail ─────────────────────────────────────────────
+ * Um e-mail que já foi excluído pelo administrador NÃO ganha outro período
+ * gratuito. Antes, excluir o usuário no painel apagava só a linha de `users` e
+ * deixava a conta de login viva: bastava entrar de novo para ganhar 14 dias
+ * novos, quantas vezes quisesse.
+ *
+ * A conta é recriada mesmo assim — a pessoa consegue entrar, isto não é
+ * banimento — porém já expirada: ela cai no paywall e assina para voltar.
+ *
+ * Separada de `syncAuthenticatedUser` para poder ser testada sem uma sessão
+ * Better Auth de verdade (ver lib/identity.trial.test.ts).
+ */
+export async function resolveTrialForNewUser(
+  ctx: MutationCtx,
+  email: string | undefined | null,
+  now: Date = new Date(),
+): Promise<{
+  subscriptionStatus: "trial" | "expired";
+  trialStartDate: string;
+  trialEndDate: string;
+}> {
+  const normalized = email?.trim().toLowerCase();
+
+  const priorDeletion = normalized
+    ? await ctx.db
+        .query("deletedAccounts")
+        .withIndex("by_email", (q) => q.eq("email", normalized))
+        .unique()
+    : null;
+
+  if (priorDeletion?.hadTrial === true) {
+    // Trial já consumido: a data de fim é AGORA, então `getSubscriptionStatus`
+    // e `resolveAccess` tratam a conta como expirada desde o primeiro acesso.
+    return {
+      subscriptionStatus: "expired",
+      trialStartDate: now.toISOString(),
+      trialEndDate: now.toISOString(),
+    };
+  }
+
+  const trialEnd = new Date(now);
+  trialEnd.setDate(trialEnd.getDate() + TRIAL_DAYS);
+  return {
     subscriptionStatus: "trial",
     trialStartDate: now.toISOString(),
     trialEndDate: trialEnd.toISOString(),
-  });
+  };
 }

@@ -48,9 +48,32 @@ function TrialBanner() {
   const createCheckout = useAction(api.asaas.createCheckoutSession);
   const [loading, setLoading] = useState(false);
 
-  if (!status || status.subscriptionStatus !== "trial") return null;
-  const daysLeft = (status as { daysLeft?: number }).daysLeft;
-  if (daysLeft === undefined || daysLeft > 7) return null;
+  // Duas situações merecem aviso no topo:
+  //
+  //  · trial acabando (comportamento que já existia, inalterado);
+  //  · pagamento em atraso dentro do período de tolerância — novo, e necessário:
+  //    agora a inadimplência BLOQUEIA ao fim da tolerância, e cortar o acesso
+  //    sem aviso prévio seria pior do que o problema que corrigimos.
+  //
+  // `overdueDaysLeft` vem pronto do backend (convex/lib/access.ts); a tela não
+  // recalcula prazo nenhum.
+  const overdueDaysLeft = status?.access?.overdueDaysLeft;
+  const isOverdue =
+    status?.subscriptionStatus === "overdue" && overdueDaysLeft !== undefined;
+
+  const trialDaysLeft = (status as { daysLeft?: number } | null | undefined)?.daysLeft;
+  const isTrialEnding =
+    status?.subscriptionStatus === "trial" &&
+    trialDaysLeft !== undefined &&
+    trialDaysLeft <= 7;
+
+  if (!status || (!isTrialEnding && !isOverdue)) return null;
+
+  const message = isOverdue
+    ? `Pagamento em atraso. Regularize em ${overdueDaysLeft} dia${overdueDaysLeft === 1 ? "" : "s"} para não perder o acesso.`
+    : trialDaysLeft !== undefined && trialDaysLeft <= 0
+      ? "Seu período de teste expirou."
+      : `Seu trial termina em ${trialDaysLeft} dia${trialDaysLeft === 1 ? "" : "s"}.`;
 
   const handleSubscribe = async () => {
     if (!currentUser) return;
@@ -80,14 +103,10 @@ function TrialBanner() {
 
   return (
     <div className="bg-primary/10 border-b border-primary/20 px-4 py-2 flex items-center justify-between gap-2 text-sm text-primary font-medium">
-      <span>
-        {daysLeft <= 0
-          ? "Seu período de teste expirou."
-          : `Seu trial termina em ${daysLeft} dia${daysLeft === 1 ? "" : "s"}.`}
-      </span>
+      <span>{message}</span>
       <Button size="sm" className="cursor-pointer gap-1.5 h-7 text-xs" onClick={handleSubscribe} disabled={loading}>
         <Sparkles className="size-3" />
-        {loading ? "Aguarde..." : "Assinar agora"}
+        {loading ? "Aguarde..." : isOverdue ? "Regularizar" : "Assinar agora"}
       </Button>
     </div>
   );

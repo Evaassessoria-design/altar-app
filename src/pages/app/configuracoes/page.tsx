@@ -479,7 +479,9 @@ export default function ConfiguracoesPage() {
                     if (!user?.asaasSubscriptionId) return;
                     setCancelling(true);
                     try {
-                      await cancelSub({ asaasSubscriptionId: user.asaasSubscriptionId! });
+                      // O backend usa a assinatura gravada na própria conta —
+                      // nada de id vindo do navegador (ver convex/asaas.ts).
+                      await cancelSub({});
                       toast.success("Assinatura cancelada.");
                     } catch {
                       toast.error("Erro ao cancelar assinatura.");

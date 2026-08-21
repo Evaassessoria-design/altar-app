@@ -23,14 +23,39 @@ export type AccessDecision = {
   /** Se true, a navegação do app deve mandar para o paywall. */
   blocked: boolean;
   /** Motivo do bloqueio — só preenchido quando `blocked`. */
-  reason?: "trial_expired" | "subscription_cancelled";
+  reason?: "trial_expired" | "subscription_cancelled" | "payment_overdue";
   /** Conta com cobrança dispensada (internal, ou beta ainda vigente). */
   billingExempt: boolean;
   /** `beta` cuja data de acesso já passou — voltou a valer a regra de client. */
   betaExpired: boolean;
+  /**
+   * Dias inteiros que ainda restam de tolerância para uma conta inadimplente.
+   * Só é preenchido quando o status é `overdue` e a tolerância ainda não acabou
+   * — serve para o aviso "regularize em X dias" na interface.
+   */
+  overdueDaysLeft?: number;
 };
 
-/** Estados de cobrança que barram um `client`. `overdue` NÃO barra (tolerância). */
+/**
+ * ── PERÍODO DE TOLERÂNCIA PARA INADIMPLÊNCIA ────────────────────────────────
+ * Quantos dias uma conta com pagamento em atraso continua com acesso liberado
+ * antes de cair no paywall, contados a partir do PRIMEIRO aviso de atraso
+ * enviado pelo Asaas (gravado em `overdueSince`).
+ *
+ * Este é o único lugar a mudar caso a política comercial mude. Sete dias cobrem
+ * o caso comum (boleto pago com alguns dias de atraso, PIX no fim de semana)
+ * sem transformar a inadimplência em acesso gratuito permanente — que era o
+ * comportamento anterior, em que `overdue` nunca bloqueava.
+ */
+export const OVERDUE_TOLERANCE_DAYS = 7;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+export const OVERDUE_TOLERANCE_MS = OVERDUE_TOLERANCE_DAYS * DAY_MS;
+
+/**
+ * Estados de cobrança que barram um `client` incondicionalmente.
+ * `overdue` NÃO está aqui: ele tem regra própria, com prazo (ver abaixo).
+ */
 const BLOCKING_STATUSES: Record<string, AccessDecision["reason"]> = {
   expired: "trial_expired",
   cancelled: "subscription_cancelled",
@@ -38,8 +63,39 @@ const BLOCKING_STATUSES: Record<string, AccessDecision["reason"]> = {
 
 type AccessInput = Pick<
   Doc<"users">,
-  "subscriptionStatus" | "accessType" | "accessExpiresAt"
+  "subscriptionStatus" | "accessType" | "accessExpiresAt" | "overdueSince"
 >;
+
+/**
+ * Decisão de cobrança de uma conta `client` (ou `beta` já vencida).
+ *
+ * A tolerância só começa a correr quando existe `overdueSince`. Um cadastro
+ * marcado como `overdue` ANTES desta mudança não tem essa data e, por segurança,
+ * continua liberado: preferimos deixar alguém a mais dentro do app do que
+ * bloquear um cliente adimplente por falta de dado. O próximo aviso de atraso
+ * do Asaas grava a data e a contagem passa a valer normalmente.
+ */
+function resolveBillingBlock(
+  user: AccessInput,
+  now: number,
+): Pick<AccessDecision, "blocked" | "reason" | "overdueDaysLeft"> {
+  if (user.subscriptionStatus === "overdue") {
+    if (user.overdueSince === undefined) {
+      return { blocked: false };
+    }
+    const elapsed = now - user.overdueSince;
+    if (elapsed >= OVERDUE_TOLERANCE_MS) {
+      return { blocked: true, reason: "payment_overdue" };
+    }
+    return {
+      blocked: false,
+      overdueDaysLeft: Math.ceil((OVERDUE_TOLERANCE_MS - elapsed) / DAY_MS),
+    };
+  }
+
+  const reason = BLOCKING_STATUSES[user.subscriptionStatus];
+  return { blocked: reason !== undefined, reason };
+}
 
 /**
  * Resolve o acesso a partir do usuário.
@@ -63,22 +119,19 @@ export function resolveAccess(user: AccessInput, now: number = Date.now()): Acce
       return { type, blocked: false, billingExempt: true, betaExpired: false };
     }
     // Beta vencido cai exatamente na regra de client, sem exceção.
-    const reason = BLOCKING_STATUSES[user.subscriptionStatus];
     return {
       type,
-      blocked: reason !== undefined,
-      reason,
+      ...resolveBillingBlock(user, now),
       billingExempt: false,
       betaExpired: true,
     };
   }
 
-  // Client: comportamento atual, preservado byte a byte.
-  const reason = BLOCKING_STATUSES[user.subscriptionStatus];
+  // Client: trial/active/expired/cancelled seguem idênticos ao comportamento
+  // anterior; só `overdue` ganhou prazo.
   return {
     type: "client",
-    blocked: reason !== undefined,
-    reason,
+    ...resolveBillingBlock(user, now),
     billingExempt: false,
     betaExpired: false,
   };

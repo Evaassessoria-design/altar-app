@@ -151,7 +151,11 @@ export const activateSubscriptionByCustomer = internalMutation({
     await ctx.db.patch(user._id, {
       subscriptionStatus: "active",
       asaasSubscriptionId: args.asaasSubscriptionId ?? user.asaasSubscriptionId,
-      subscriptionExpiresAt: args.expiresAt,
+      subscriptionExpiresAt: args.expiresAt ?? user.subscriptionExpiresAt,
+      // O pagamento entrou: a contagem de tolerância da inadimplência zera.
+      // Sem isso, um cliente que atrasa, paga e atrasa de novo seria bloqueado
+      // pela data do atraso ANTIGO.
+      overdueSince: undefined,
     });
   },
 });
@@ -164,9 +168,12 @@ export const activateSubscriptionByCustomer = internalMutation({
  * é aí que cancelamos. Tratar atraso como cancelamento tirava o acesso de quem
  * paga um dia depois do vencimento.
  *
- * O status "overdue" mantém o acesso (período de tolerância) e serve de sinal
- * para o painel administrativo. Quando o pagamento entra,
- * `activateSubscriptionByCustomer` devolve para "active" sozinho.
+ * O status "overdue" mantém o acesso durante o período de tolerância definido
+ * em lib/access.ts (OVERDUE_TOLERANCE_DAYS) e serve de sinal para o painel
+ * administrativo. `overdueSince` guarda QUANDO o atraso começou — é o dado que
+ * faz a tolerância ter fim, em vez de virar acesso gratuito permanente.
+ * Quando o pagamento entra, `activateSubscriptionByCustomer` devolve para
+ * "active" e zera essa data sozinho.
  */
 export const markSubscriptionOverdue = internalMutation({
   args: { asaasCustomerId: v.string() },
@@ -178,9 +185,24 @@ export const markSubscriptionOverdue = internalMutation({
       )
       .unique();
     if (!user) return;
+
+    // Já está em atraso: preserva a data original (o Asaas reenvia
+    // PAYMENT_OVERDUE mais de uma vez, e reiniciar a contagem a cada aviso
+    // faria a tolerância nunca terminar). Só preenche se estiver faltando —
+    // é assim que um cadastro marcado antes desta regra entra na contagem.
+    if (user.subscriptionStatus === "overdue") {
+      if (user.overdueSince === undefined) {
+        await ctx.db.patch(user._id, { overdueSince: Date.now() });
+      }
+      return;
+    }
+
     // Só rebaixa quem está ativo. Não sobrescreve cancelled/expired/trial.
     if (user.subscriptionStatus !== "active") return;
-    await ctx.db.patch(user._id, { subscriptionStatus: "overdue" });
+    await ctx.db.patch(user._id, {
+      subscriptionStatus: "overdue",
+      overdueSince: Date.now(),
+    });
   },
 });
 
@@ -194,7 +216,10 @@ export const cancelSubscriptionByCustomer = internalMutation({
       )
       .unique();
     if (!user) return;
-    await ctx.db.patch(user._id, { subscriptionStatus: "cancelled" });
+    await ctx.db.patch(user._id, {
+      subscriptionStatus: "cancelled",
+      overdueSince: undefined,
+    });
   },
 });
 
@@ -208,6 +233,56 @@ export const cancelSubscriptionBySubscriptionId = internalMutation({
       )
       .unique();
     if (!user) return;
-    await ctx.db.patch(user._id, { subscriptionStatus: "cancelled" });
+    await ctx.db.patch(user._id, {
+      subscriptionStatus: "cancelled",
+      overdueSince: undefined,
+    });
+  },
+});
+
+/**
+ * Cancelamento a partir do que o aviso do Asaas traz — usado pelo webhook.
+ *
+ * Tenta primeiro pelo ID DA ASSINATURA (mais preciso: um cliente pode ter mais
+ * de uma assinatura no Asaas) e cai no ID do cliente quando não encontra
+ * ninguém. Esse fallback importa: um cadastro cujo `asaasSubscriptionId` não
+ * chegou a ser gravado continua sendo cancelado, como acontecia antes.
+ *
+ * Devolve como o usuário foi encontrado — útil nos testes e para diagnosticar
+ * um aviso que não casou com ninguém.
+ */
+export const cancelSubscriptionByAsaasRef = internalMutation({
+  args: {
+    asaasSubscriptionId: v.optional(v.string()),
+    asaasCustomerId: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<"subscription" | "customer" | "not_found"> => {
+    const bySubscription = args.asaasSubscriptionId
+      ? await ctx.db
+          .query("users")
+          .withIndex("by_asaas_subscription", (q) =>
+            q.eq("asaasSubscriptionId", args.asaasSubscriptionId),
+          )
+          .unique()
+      : null;
+
+    const user =
+      bySubscription ??
+      (args.asaasCustomerId
+        ? await ctx.db
+            .query("users")
+            .withIndex("by_asaas_customer", (q) =>
+              q.eq("asaasCustomerId", args.asaasCustomerId),
+            )
+            .unique()
+        : null);
+
+    if (!user) return "not_found";
+
+    await ctx.db.patch(user._id, {
+      subscriptionStatus: "cancelled",
+      overdueSince: undefined,
+    });
+    return bySubscription ? "subscription" : "customer";
   },
 });

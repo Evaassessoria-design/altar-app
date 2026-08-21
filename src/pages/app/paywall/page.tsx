@@ -21,11 +21,36 @@ const features = [
   "Suporte por WhatsApp",
 ];
 
+// Texto do topo por motivo de bloqueio. O motivo vem do backend
+// (convex/lib/access.ts) — a tela não reimplementa a regra, só a apresenta.
+const BLOCK_COPY: Record<string, { headline: string; description: string }> = {
+  payment_overdue: {
+    headline: "Pagamento em atraso",
+    description:
+      "Não identificamos o pagamento da sua mensalidade e o período de tolerância terminou. Regularize para voltar a usar o Altar.",
+  },
+  subscription_cancelled: {
+    headline: "Assinatura cancelada",
+    description:
+      "Sua assinatura foi cancelada. Assine novamente para recuperar o acesso — seus dados continuam salvos.",
+  },
+  trial_expired: {
+    headline: "Seu trial expirou",
+    description:
+      "Para continuar usando o Altar e ter acesso a todos os recursos, assine o plano mensal.",
+  },
+};
+
 export default function Paywall() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const currentUser = useQuery(api.users.getCurrentUser);
+  const subscription = useQuery(api.users.getSubscriptionStatus);
   const createCheckout = useAction(api.asaas.createCheckoutSession);
+
+  const { headline, description } =
+    BLOCK_COPY[subscription?.access?.reason ?? "trial_expired"] ??
+    BLOCK_COPY.trial_expired;
 
   const handleSubscribe = async () => {
     if (!currentUser) return;
@@ -69,13 +94,12 @@ export default function Paywall() {
           </div>
         </div>
 
-        {/* Header */}
+        {/* Header — o texto acompanha o MOTIVO do bloqueio (backend:
+            lib/access.ts). Antes dizia sempre "seu trial expirou", o que ficou
+            errado agora que o pagamento em atraso também bloqueia. */}
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold mb-2">Seu trial expirou</h1>
-          <p className="text-muted-foreground text-sm leading-relaxed">
-            Para continuar usando o Altar e ter acesso a todos os recursos,
-            assine o plano mensal.
-          </p>
+          <h1 className="text-2xl font-bold mb-2">{headline}</h1>
+          <p className="text-muted-foreground text-sm leading-relaxed">{description}</p>
         </div>
 
         {/* Pricing card */}

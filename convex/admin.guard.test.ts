@@ -114,3 +114,71 @@ describe("ferramentas internas de acesso da fundadora", () => {
     expect(block).toContain('role: "admin"');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRAVA — o painel mostra tudo no celular e as métricas não mentem.
+// A classificação em si é provada em admin.stats.test.ts; aqui travamos a
+// fiação: que a query devolva os campos e que a tela não os esconda de novo.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("listUsers devolve o perfil completo de cada usuário", () => {
+  const start = adminSource.indexOf("export const listUsers");
+  const block = adminSource.slice(start, adminSource.indexOf("export const", start + 1));
+
+  it.each([
+    ["eventCount", "quantidade de eventos"],
+    ["lastEventAt", "data do último evento criado"],
+    ["nextEventDate", "próximo evento agendado"],
+    ["access", "decisão de acesso resolvida no backend"],
+  ])("inclui %s (%s)", (campo) => {
+    expect(block).toContain(campo);
+  });
+});
+
+describe("getStats entrega todas as métricas pedidas", () => {
+  const start = adminSource.indexOf("export const getStats");
+  const block = adminSource.slice(start, adminSource.indexOf("export const", start + 1));
+
+  it.each([
+    "total", "trial", "expired", "active", "overdue", "overdueBlocked",
+    "cancelled", "beta", "internal", "eventsTotal",
+    "activeDay", "activeWeek", "activeMonth", "neverSeen",
+  ])("expõe %s", (m) => {
+    expect(block).toContain(m);
+  });
+
+  it("o MRR sai de contas cobráveis, nunca do total", () => {
+    // Se voltasse a ser `users.filter(...)`, contas internas virariam receita.
+    expect(block).toMatch(/const active = billable\.filter/);
+    expect(block).toContain("const mrr = active * 119.9");
+  });
+});
+
+describe("o painel não esconde informação no celular", () => {
+  const page = readFileSync(
+    join(__dirname, "..", "src", "pages", "app", "admin", "page.tsx"),
+    "utf8",
+  );
+
+  it("tem uma visão de cards para telas pequenas", () => {
+    expect(page).toContain("UserCard");
+    expect(page).toContain('className="md:hidden divide-y divide-border"');
+  });
+
+  it("nenhuma coluna da tabela volta a ser escondida por tamanho de tela", () => {
+    // Era exatamente isso que sumia com "Cadastro", "Função" e "Eventos".
+    const tabela = page.slice(page.indexOf('<div className="hidden md:block'));
+    expect(tabela).not.toMatch(/hidden (sm|md|lg):table-cell/);
+  });
+
+  it("o card mostra cadastro, último acesso e eventos", () => {
+    const start = page.indexOf("function UserCard");
+    const card = page.slice(start, page.indexOf("\nfunction ", start + 1));
+    expect(card).toContain("Cadastro");
+    expect(card).toContain("Último acesso");
+    expect(card).toContain("EventsSummary");
+    expect(card).toContain("SubscriptionCell");
+    expect(card).toContain("AccessCell");
+    expect(card).toContain("RoleBadge");
+  });
+});

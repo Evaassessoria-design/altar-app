@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { requireUser } from "./lib/identity";
 import { deleteEventCascade } from "./lib/cascade";
+import { requireActiveAccess } from "./lib/accessGuard";
 
 const eventType = v.union(
   v.literal("wedding"),
@@ -82,7 +83,9 @@ export const create = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
+    // Criar evento NOVO é o recurso pago central — exige acesso liberado.
+    // Editar e ler os eventos que já existem continua livre (ver lib/accessGuard.ts).
+    const user = await requireActiveAccess(ctx);
     return ctx.db.insert("events", { userId: user._id, ...args });
   },
 });

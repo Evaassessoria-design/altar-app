@@ -3,8 +3,9 @@ import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import type { QueryCtx, MutationCtx } from "./_generated/server.d.ts";
 import { getOptionalUser, requireUser } from "./lib/identity";
-import { resolveAccess } from "./lib/access";
+import { effectiveSubscriptionStatus, resolveAccess } from "./lib/access";
 import { deleteUserDataCascade } from "./lib/cascade";
+import { ACTIVE_WINDOWS, isActiveWithin } from "./lib/presence";
 import { deleteBetterAuthAccount } from "./lib/authAccount";
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────
@@ -32,23 +33,36 @@ export const getStats = query({
   handler: async (ctx) => {
     await requireAdmin(ctx);
     const users = await ctx.db.query("users").collect();
+    const now = Date.now();
 
     const total = users.length;
 
     // Contas isentas (internal / beta vigente) NÃO são receita. Ficam fora do
     // MRR e da taxa de conversão para não inflarem as métricas do negócio.
-    const exempt = users.filter((u) => resolveAccess(u).billingExempt);
+    const exempt = users.filter((u) => resolveAccess(u, now).billingExempt);
     const internal = users.filter((u) => (u.accessType ?? "client") === "internal").length;
     const beta = users.filter((u) => (u.accessType ?? "client") === "beta").length;
-    const billable = users.filter((u) => !resolveAccess(u).billingExempt);
+    const billable = users.filter((u) => !resolveAccess(u, now).billingExempt);
 
-    const trial = billable.filter((u) => u.subscriptionStatus === "trial").length;
-    const active = billable.filter((u) => u.subscriptionStatus === "active").length;
-    const overdue = billable.filter((u) => u.subscriptionStatus === "overdue").length;
-    const expired = billable.filter((u) => u.subscriptionStatus === "expired").length;
-    const cancelled = billable.filter((u) => u.subscriptionStatus === "cancelled").length;
+    // Status EFETIVO: um trial cujo prazo venceu conta como expirado, mesmo que
+    // o banco ainda diga "trial" (a expiração nunca é gravada). Sem isso, o
+    // painel mostrava trials mortos na coluna "em trial".
+    const statusDe = (u: (typeof users)[number]) => effectiveSubscriptionStatus(u, now);
 
-    // MRR = assinantes ativos e cobráveis × R$119,90
+    const trial = billable.filter((u) => statusDe(u) === "trial").length;
+    const active = billable.filter((u) => statusDe(u) === "active").length;
+    const overdue = billable.filter((u) => statusDe(u) === "overdue").length;
+    const expired = billable.filter((u) => statusDe(u) === "expired").length;
+    const cancelled = billable.filter((u) => statusDe(u) === "cancelled").length;
+
+    // Inadimplentes que JÁ passaram da tolerância e estão barrados agora. Separa
+    // "atrasou" de "perdeu o acesso" — são ações comerciais diferentes.
+    const overdueBlocked = billable.filter(
+      (u) => statusDe(u) === "overdue" && resolveAccess(u, now).blocked,
+    ).length;
+
+    // MRR = assinantes ativos e cobráveis × R$119,90.
+    // Contas internas e beta ficam de fora por construção (`billable`).
     const mrr = active * 119.9;
 
     // Conversão = ativos / (ativos + expirados), só entre contas cobráveis
@@ -56,6 +70,15 @@ export const getStats = query({
     const conversionRate = conversionDenominator > 0
       ? Math.round((active / conversionDenominator) * 100)
       : 0;
+
+    // ── Uso real ─────────────────────────────────────────────────────────────
+    // Quem de fato abriu o app na janela. Responde "quantas contas estão vivas?",
+    // que é diferente de "quantas existem". `lastSeenAt` ausente = nunca visto
+    // desde que a medição passou a existir.
+    const activeDay = users.filter((u) => isActiveWithin(u.lastSeenAt, ACTIVE_WINDOWS.day, now)).length;
+    const activeWeek = users.filter((u) => isActiveWithin(u.lastSeenAt, ACTIVE_WINDOWS.week, now)).length;
+    const activeMonth = users.filter((u) => isActiveWithin(u.lastSeenAt, ACTIVE_WINDOWS.month, now)).length;
+    const neverSeen = users.filter((u) => u.lastSeenAt === undefined).length;
 
     // Events count
     const eventsTotal = await ctx.db.query("events").collect();
@@ -65,6 +88,7 @@ export const getStats = query({
       trial,
       active,
       overdue,
+      overdueBlocked,
       expired,
       cancelled,
       internal,
@@ -73,6 +97,10 @@ export const getStats = query({
       mrr,
       conversionRate,
       eventsTotal: eventsTotal.length,
+      activeDay,
+      activeWeek,
+      activeMonth,
+      neverSeen,
     };
   },
 });
@@ -82,16 +110,42 @@ export const listUsers = query({
   handler: async (ctx) => {
     await requireAdmin(ctx);
     const users = await ctx.db.query("users").order("desc").collect();
-    // Anota a contagem de eventos + a decisão de acesso JÁ RESOLVIDA. O painel
-    // não reimplementa a regra client/beta/internal: lê o que resolveAccess
-    // decidiu — a mesma fonte da guarda de checkout e das métricas de MRR.
+    const now = Date.now();
+
+    // Anota, por usuário, tudo que o painel precisa mostrar sem recalcular nada
+    // na tela:
+    //  · `eventCount`     — quantos eventos criou;
+    //  · `lastEventAt`    — quando criou o ÚLTIMO (sinal de atividade real);
+    //  · `nextEventDate`  — próximo evento agendado, se houver;
+    //  · `access`         — decisão JÁ RESOLVIDA por resolveAccess, a mesma
+    //    fonte da guarda de checkout e das métricas de MRR. O painel não
+    //    reimplementa a regra client/beta/internal.
     const result = await Promise.all(
       users.map(async (u) => {
         const events = await ctx.db
           .query("events")
           .withIndex("by_user", (q) => q.eq("userId", u._id))
           .collect();
-        return { ...u, eventCount: events.length, access: resolveAccess(u) };
+
+        const lastEventAt = events.length
+          ? Math.max(...events.map((e) => e._creationTime))
+          : undefined;
+
+        // Próximo evento ainda por acontecer (data é string AAAA-MM-DD, então a
+        // comparação lexicográfica funciona e é a mesma usada em events.list).
+        const hoje = new Date().toISOString().slice(0, 10);
+        const futuros = events
+          .filter((e) => e.date >= hoje && e.status !== "cancelled" && e.status !== "completed")
+          .map((e) => e.date)
+          .sort();
+
+        return {
+          ...u,
+          eventCount: events.length,
+          lastEventAt,
+          nextEventDate: futuros[0],
+          access: resolveAccess(u, now),
+        };
       }),
     );
     return result;

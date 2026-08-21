@@ -6,6 +6,7 @@ import { action, type ActionCtx } from "./_generated/server";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireIdentity } from "./lib/identity";
+import { requireActiveAccessAction } from "./lib/accessGuard";
 import { getAiConfig } from "./lib/aiConfig";
 
 // Provedor definido por env (lib/aiConfig.ts). O Hercules continua funcionando
@@ -25,6 +26,8 @@ function makeAiClient(effort?: "none" | "low" | "medium" | "high") {
 // — mesma regra do requireEventOwner usado nas queries/mutations.
 async function requireEventOwnerAction(ctx: ActionCtx, eventId: Id<"events">) {
   await requireIdentity(ctx);
+  // IA custa dinheiro por chamada: conta bloqueada não dispara geração nenhuma.
+  await requireActiveAccessAction(ctx);
   const event = await ctx.runQuery(api.events.get, { id: eventId });
   if (!event) {
     throw new ConvexError({ code: "NOT_FOUND", message: "Evento não encontrado" });

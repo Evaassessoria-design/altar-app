@@ -23,6 +23,7 @@ import {
   FlaskConical,
   UserCheck,
   Lock,
+  Activity,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -142,7 +143,7 @@ export default function AdminPage() {
       <div className="p-6 space-y-4">
         <Skeleton className="h-8 w-48" />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)}
+          {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)}
         </div>
         <Skeleton className="h-96 rounded-xl" />
       </div>
@@ -258,7 +259,7 @@ export default function AdminPage() {
       {/* Stat cards */}
       {stats === undefined ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)}
+          {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)}
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -280,17 +281,44 @@ export default function AdminPage() {
             value={stats.mrr.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
             sub="R$119,90 × assinantes ativos"
           />
+          {/* Inadimplência separada em "ainda tem prazo" × "já perdeu o acesso":
+              são conversas comerciais diferentes com o cliente. */}
+          <StatCard
+            icon={<Clock className="size-5 text-orange-500" />}
+            label="Inadimplentes"
+            value={stats.overdue.toString()}
+            sub={
+              stats.overdueBlocked > 0
+                ? `${stats.overdueBlocked} já bloqueado${stats.overdueBlocked === 1 ? "" : "s"}`
+                : "todos dentro da tolerância"
+            }
+          />
+          <StatCard
+            icon={<XCircle className="size-5 text-zinc-400" />}
+            label="Cancelados"
+            value={stats.cancelled.toString()}
+            sub="Assinaturas encerradas"
+          />
           <StatCard
             icon={<ShieldCheck className="size-5 text-primary" />}
             label="Contas Especiais"
             value={stats.exemptTotal.toString()}
             sub={`${stats.internal} internas · ${stats.beta} beta — fora do MRR`}
-          />
-          <StatCard
+          />
+          <StatCard
             icon={<CalendarDays className="size-5 text-blue-500" />}
             label="Total de Eventos"
             value={stats.eventsTotal.toString()}
             sub="Criados por todos os usuários"
+          />
+          {/* Uso real: quem abriu o app, não quem apenas se cadastrou. */}
+          <StatCard
+            icon={<Activity className="size-5 text-green-500" />}
+            label="Usando de fato"
+            value={stats.activeWeek.toString()}
+            sub={`${stats.activeDay} hoje · ${stats.activeMonth} no mês${
+              stats.neverSeen > 0 ? ` · ${stats.neverSeen} sem registro` : ""
+            }`}
           />
         </div>
       )}
@@ -301,10 +329,11 @@ export default function AdminPage() {
           <h2 className="font-semibold mb-4 flex items-center gap-2">
             <TrendingUp className="size-4 text-primary" /> Distribuição de Assinaturas
           </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             {[
               { key: "trial", count: stats.trial, label: "Trial" },
               { key: "active", count: stats.active, label: "Ativo" },
+              { key: "overdue", count: stats.overdue, label: "Em atraso" },
               { key: "expired", count: stats.expired, label: "Expirado" },
               { key: "cancelled", count: stats.cancelled, label: "Cancelado" },
             ].map(({ key, count, label }) => {
@@ -365,148 +394,98 @@ export default function AdminPage() {
             {searchQ ? "Nenhum usuário encontrado." : "Nenhum usuário cadastrado."}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground">Usuário</th>
-                  <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground hidden sm:table-cell">Cadastro</th>
-                  <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground">Assinatura</th>
-                  <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground">Acesso</th>
-                  <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground hidden md:table-cell">Função</th>
-                  <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground hidden lg:table-cell">Eventos</th>
-                  <th className="px-3 py-3 w-10" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filteredUsers.map((u) => {
-                  const statusCfg = STATUS_CONFIG[u.subscriptionStatus ?? "trial"];
-                  const isInternal = u.access.type === "internal";
-                  return (
-                    <tr
-                      key={u._id}
-                      className={`transition-colors ${
-                        isInternal
-                          ? "bg-primary/5 hover:bg-primary/10"
-                          : "hover:bg-accent/30"
-                      }`}
-                    >
-                      {/* Name/email */}
-                      <td className="px-5 py-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                            <span className="text-xs font-bold text-primary">
-                              {(u.name ?? u.email ?? "?").slice(0, 2).toUpperCase()}
-                            </span>
-                          </div>
-                          <div className="min-w-0">
-                            <p className="font-medium truncate">{u.name ?? "—"}</p>
-                            <p className="text-xs text-muted-foreground truncate">{u.email ?? "—"}</p>
-                          </div>
-                        </div>
-                      </td>
+          <>
+            {/* ── CELULAR: cards ─────────────────────────────────────────────
+                A tabela escondia "Cadastro", "Função" e "Eventos" em telas
+                pequenas — justamente parte do que o painel existe para mostrar.
+                No cartão TODOS os campos aparecem, sem rolagem lateral. */}
+            <div className="md:hidden divide-y divide-border">
+              {filteredUsers.map((u) => (
+                <UserCard
+                  key={u._id}
+                  user={u}
+                  actions={
+                    <UserActions
+                      user={u}
+                      onAccess={handleAccess}
+                      onBeta={openBetaDialog}
+                      onRole={handleRole}
+                      onDelete={setDeletingId}
+                    />
+                  }
+                />
+              ))}
+            </div>
 
-                      {/* Created at */}
-                      <td className="px-3 py-3 text-xs text-muted-foreground hidden sm:table-cell whitespace-nowrap">
-                        {format(new Date(u._creationTime), "dd/MM/yyyy", { locale: ptBR })}
-                      </td>
+            {/* ── DESKTOP: tabela ────────────────────────────────────────── */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/30">
+                    <th className="text-left px-5 py-3 text-xs font-medium text-muted-foreground">Usuário</th>
+                    <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground">Cadastro</th>
+                    <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground">Último acesso</th>
+                    <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground">Assinatura</th>
+                    <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground">Acesso</th>
+                    <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground">Função</th>
+                    <th className="text-left px-3 py-3 text-xs font-medium text-muted-foreground">Eventos</th>
+                    <th className="px-3 py-3 w-10" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filteredUsers.map((u) => {
+                    const isInternal = u.access.type === "internal";
+                    return (
+                      <tr
+                        key={u._id}
+                        className={`transition-colors ${
+                          isInternal ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-accent/30"
+                        }`}
+                      >
+                        <td className="px-5 py-3">
+                          <UserIdentity user={u} />
+                        </td>
 
-                      {/* Status badge */}
-                      <td className="px-3 py-3">
-                        <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${statusCfg?.className ?? ""}`}>
-                          {statusCfg?.icon}
-                          {statusCfg?.label ?? u.subscriptionStatus}
-                        </span>
-                        {u.subscriptionStatus === "trial" && u.trialEndDate && (
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            até {format(new Date(u.trialEndDate), "dd/MM/yyyy", { locale: ptBR })}
-                          </p>
-                        )}
-                        {u.access.billingExempt && (
-                          <p className="text-xs text-muted-foreground mt-0.5">Isenta de cobrança</p>
-                        )}
-                      </td>
+                        <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                          {format(new Date(u._creationTime), "dd/MM/yyyy", { locale: ptBR })}
+                        </td>
 
-                      {/* Tipo de acesso — client / beta / internal, sempre explícito */}
-                      <td className="px-3 py-3">
-                        <AccessCell user={u} />
-                      </td>
+                        <td className="px-3 py-3 text-xs whitespace-nowrap">
+                          <LastSeen lastSeenAt={u.lastSeenAt} />
+                        </td>
 
-                      {/* Role */}
-                      <td className="px-3 py-3 hidden md:table-cell">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                          u.role === "admin"
-                            ? "bg-primary/15 text-primary"
-                            : "bg-muted text-muted-foreground"
-                        }`}>
-                          {u.role === "admin" ? "Admin" : "Usuário"}
-                        </span>
-                      </td>
+                        <td className="px-3 py-3">
+                          <SubscriptionCell user={u} />
+                        </td>
 
-                      {/* Event count */}
-                      <td className="px-3 py-3 text-xs text-muted-foreground hidden lg:table-cell text-center">
-                        {u.eventCount}
-                      </td>
+                        <td className="px-3 py-3">
+                          <AccessCell user={u} />
+                        </td>
 
-                      {/* Actions */}
-                      <td className="px-3 py-3">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 cursor-pointer">
-                              <ChevronDown className="size-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-52">
-                            <DropdownMenuItem
-                              onClick={() => void handleAccess(u._id, "internal")}
-                              className="cursor-pointer gap-2"
-                            >
-                              <ShieldCheck className="size-4 text-primary" /> Marcar como interna
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => openBetaDialog(u)}
-                              className="cursor-pointer gap-2"
-                            >
-                              <FlaskConical className="size-4 text-violet-500" /> Definir acesso beta…
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => void handleAccess(u._id, "client")}
-                              className="cursor-pointer gap-2"
-                            >
-                              <UserCheck className="size-4 text-muted-foreground" /> Voltar a cliente normal
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            {u.role !== "admin" ? (
-                              <DropdownMenuItem
-                                onClick={() => void handleRole(u._id, "admin")}
-                                className="cursor-pointer gap-2"
-                              >
-                                <Shield className="size-4 text-primary" /> Tornar admin
-                              </DropdownMenuItem>
-                            ) : (
-                              <DropdownMenuItem
-                                onClick={() => void handleRole(u._id, "user")}
-                                className="cursor-pointer gap-2"
-                              >
-                                <ShieldOff className="size-4 text-muted-foreground" /> Remover admin
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => setDeletingId(u._id)}
-                              className="cursor-pointer gap-2 text-destructive focus:text-destructive"
-                            >
-                              <Trash2 className="size-4" /> Excluir usuário
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        <td className="px-3 py-3">
+                          <RoleBadge role={u.role} />
+                        </td>
+
+                        <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                          <EventsSummary user={u} />
+                        </td>
+
+                        <td className="px-3 py-3">
+                          <UserActions
+                            user={u}
+                            onAccess={handleAccess}
+                            onBeta={openBetaDialog}
+                            onRole={handleRole}
+                            onDelete={setDeletingId}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
@@ -588,6 +567,235 @@ function toDateInput(ms: number): string {
  * Tipo de acesso da conta. Lê `user.access`, que o backend já resolveu com
  * `resolveAccess` — a mesma regra que isenta o checkout e exclui do MRR.
  */
+// ─────────────────────────────────────────────────────────────────────────────
+// Peças compartilhadas entre o CARD (celular) e a TABELA (desktop).
+// Uma definição só para cada informação: as duas visões nunca divergem.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Avatar + nome + e-mail. */
+function UserIdentity({ user }: { user: AdminUser }) {
+  return (
+    <div className="flex items-center gap-3 min-w-0">
+      <div className="size-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+        <span className="text-xs font-bold text-primary">
+          {(user.name ?? user.email ?? "?").slice(0, 2).toUpperCase()}
+        </span>
+      </div>
+      <div className="min-w-0">
+        <p className="font-medium truncate">{user.name ?? "—"}</p>
+        <p className="text-xs text-muted-foreground truncate">{user.email ?? "—"}</p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Último acesso em linguagem de gente ("há 3 h", "há 5 d").
+ *
+ * `undefined` significa duas coisas que não dá para distinguir e que por isso
+ * são ditas com honestidade: ou a conta nunca abriu o app, ou não abriu depois
+ * que a medição passou a existir. Nada é inventado.
+ */
+function LastSeen({ lastSeenAt }: { lastSeenAt?: number }) {
+  if (lastSeenAt === undefined) {
+    return <span className="text-muted-foreground italic">sem registro</span>;
+  }
+
+  const diff = Date.now() - lastSeenAt;
+  const horas = Math.floor(diff / 3_600_000);
+  const dias = Math.floor(diff / 86_400_000);
+
+  const rotulo =
+    diff < 3_600_000 ? "agora há pouco" : horas < 24 ? `há ${horas} h` : `há ${dias} d`;
+
+  // Verde = ativo na última semana; âmbar = no último mês; cinza = sumido.
+  const cor =
+    dias <= 7
+      ? "text-green-600 dark:text-green-400"
+      : dias <= 30
+        ? "text-amber-600 dark:text-amber-400"
+        : "text-muted-foreground";
+
+  return (
+    <span className={cor} title={format(new Date(lastSeenAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}>
+      {rotulo}
+    </span>
+  );
+}
+
+/** Etiqueta de assinatura + prazo do trial + aviso de tolerância/bloqueio. */
+function SubscriptionCell({ user }: { user: AdminUser }) {
+  const cfg = STATUS_CONFIG[user.subscriptionStatus ?? "trial"];
+  const overdueDaysLeft = user.access.overdueDaysLeft;
+
+  return (
+    <div className="space-y-0.5">
+      <span
+        className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${cfg?.className ?? ""}`}
+      >
+        {cfg?.icon}
+        {cfg?.label ?? user.subscriptionStatus}
+      </span>
+
+      {user.subscriptionStatus === "trial" && user.trialEndDate && (
+        <p className="text-xs text-muted-foreground">
+          até {format(new Date(user.trialEndDate), "dd/MM/yyyy", { locale: ptBR })}
+        </p>
+      )}
+
+      {/* Inadimplência: distingue "ainda tem prazo" de "já perdeu o acesso". */}
+      {user.subscriptionStatus === "overdue" && overdueDaysLeft !== undefined && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          tolerância: {overdueDaysLeft} dia{overdueDaysLeft === 1 ? "" : "s"}
+        </p>
+      )}
+      {user.subscriptionStatus === "overdue" && user.access.blocked && (
+        <p className="text-xs text-red-500 font-medium">bloqueada por inadimplência</p>
+      )}
+
+      {user.access.billingExempt && (
+        <p className="text-xs text-muted-foreground">Isenta de cobrança</p>
+      )}
+    </div>
+  );
+}
+
+function RoleBadge({ role }: { role: string }) {
+  return (
+    <span
+      className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+        role === "admin" ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
+      }`}
+    >
+      {role === "admin" ? "Admin" : "Usuário"}
+    </span>
+  );
+}
+
+/** Quantos eventos, quando foi o último criado e qual o próximo agendado. */
+function EventsSummary({ user }: { user: AdminUser }) {
+  return (
+    <div className="space-y-0.5">
+      <p className="font-medium text-foreground">
+        {user.eventCount} evento{user.eventCount === 1 ? "" : "s"}
+      </p>
+      {user.lastEventAt !== undefined && (
+        <p className="text-xs text-muted-foreground">
+          último criado {format(new Date(user.lastEventAt), "dd/MM/yyyy", { locale: ptBR })}
+        </p>
+      )}
+      {user.nextEventDate && (
+        <p className="text-xs text-muted-foreground">
+          próximo {format(new Date(user.nextEventDate + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Menu de ações — idêntico no card e na tabela. */
+function UserActions({
+  user,
+  onAccess,
+  onBeta,
+  onRole,
+  onDelete,
+}: {
+  user: AdminUser;
+  onAccess: (id: Id<"users">, tipo: "client" | "internal") => Promise<void>;
+  onBeta: (u: AdminUser) => void;
+  onRole: (id: Id<"users">, role: "admin" | "user") => Promise<void>;
+  onDelete: (id: Id<"users">) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-9 w-9 p-0 cursor-pointer"
+          aria-label={`Ações para ${user.name ?? user.email ?? "usuário"}`}
+        >
+          <ChevronDown className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuItem onClick={() => void onAccess(user._id, "internal")} className="cursor-pointer gap-2">
+          <ShieldCheck className="size-4 text-primary" /> Marcar como interna
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onBeta(user)} className="cursor-pointer gap-2">
+          <FlaskConical className="size-4 text-violet-500" /> Definir acesso beta…
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => void onAccess(user._id, "client")} className="cursor-pointer gap-2">
+          <UserCheck className="size-4 text-muted-foreground" /> Voltar a cliente normal
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {user.role !== "admin" ? (
+          <DropdownMenuItem onClick={() => void onRole(user._id, "admin")} className="cursor-pointer gap-2">
+            <Shield className="size-4 text-primary" /> Tornar admin
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem onClick={() => void onRole(user._id, "user")} className="cursor-pointer gap-2">
+            <ShieldOff className="size-4 text-muted-foreground" /> Remover admin
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => onDelete(user._id)}
+          className="cursor-pointer gap-2 text-destructive focus:text-destructive"
+        >
+          <Trash2 className="size-4" /> Excluir usuário
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/**
+ * Cartão do usuário — a visão do celular.
+ *
+ * Mostra TODOS os campos que a tabela mostra no desktop, em duas colunas de
+ * rótulo/valor. Nada é escondido por tamanho de tela.
+ */
+function UserCard({ user, actions }: { user: AdminUser; actions: React.ReactNode }) {
+  const isInternal = user.access.type === "internal";
+  return (
+    <div className={`p-4 space-y-3 ${isInternal ? "bg-primary/5" : ""}`}>
+      <div className="flex items-start justify-between gap-2">
+        <UserIdentity user={user} />
+        <div className="flex-shrink-0">{actions}</div>
+      </div>
+
+      <div className="flex flex-wrap items-start gap-2">
+        <SubscriptionCell user={user} />
+        <AccessCell user={user} />
+        <RoleBadge role={user.role} />
+      </div>
+
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs border-t border-border pt-3">
+        <div>
+          <dt className="text-muted-foreground">Cadastro</dt>
+          <dd className="font-medium mt-0.5">
+            {format(new Date(user._creationTime), "dd/MM/yyyy", { locale: ptBR })}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Último acesso</dt>
+          <dd className="font-medium mt-0.5">
+            <LastSeen lastSeenAt={user.lastSeenAt} />
+          </dd>
+        </div>
+        <div className="col-span-2">
+          <dt className="text-muted-foreground">Eventos</dt>
+          <dd className="mt-0.5">
+            <EventsSummary user={user} />
+          </dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
+
 function AccessCell({ user }: { user: AdminUser }) {
   const cfg = ACCESS_CONFIG[user.access.type];
   const expiresAt = user.accessExpiresAt;

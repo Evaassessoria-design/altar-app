@@ -64,7 +64,30 @@ const BLOCKING_STATUSES: Record<string, AccessDecision["reason"]> = {
 type AccessInput = Pick<
   Doc<"users">,
   "subscriptionStatus" | "accessType" | "accessExpiresAt" | "overdueSince"
->;
+> &
+  Partial<Pick<Doc<"users">, "trialEndDate">>;
+
+/**
+ * Status de cobrança REAL neste instante.
+ *
+ * O fim do trial não é gravado no banco: a conta continua com
+ * `subscriptionStatus: "trial"` para sempre e a expiração é calculada na
+ * leitura. Quem não fizer essa conta enxerga um trial vencido como trial ativo
+ * — era o que acontecia nas métricas do painel, que contavam trials já mortos
+ * na coluna "em trial".
+ *
+ * Centralizado aqui para que TODO mundo (paywall, guarda do backend, métricas)
+ * enxergue exatamente o mesmo estado.
+ */
+export function effectiveSubscriptionStatus(
+  user: AccessInput,
+  now: number = Date.now(),
+): string {
+  if (user.subscriptionStatus !== "trial") return user.subscriptionStatus;
+  // Sem data de fim não há como expirar — o trial segue valendo.
+  if (!user.trialEndDate) return "trial";
+  return Date.parse(user.trialEndDate) < now ? "expired" : "trial";
+}
 
 /**
  * Decisão de cobrança de uma conta `client` (ou `beta` já vencida).
@@ -79,7 +102,10 @@ function resolveBillingBlock(
   user: AccessInput,
   now: number,
 ): Pick<AccessDecision, "blocked" | "reason" | "overdueDaysLeft"> {
-  if (user.subscriptionStatus === "overdue") {
+  // Trial vencido vale como expirado mesmo sem nada ter sido gravado no banco.
+  const status = effectiveSubscriptionStatus(user, now);
+
+  if (status === "overdue") {
     if (user.overdueSince === undefined) {
       return { blocked: false };
     }
@@ -93,7 +119,7 @@ function resolveBillingBlock(
     };
   }
 
-  const reason = BLOCKING_STATUSES[user.subscriptionStatus];
+  const reason = BLOCKING_STATUSES[status];
   return { blocked: reason !== undefined, reason };
 }
 

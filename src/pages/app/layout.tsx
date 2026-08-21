@@ -19,6 +19,7 @@ import {
 import { useAuth } from "@/hooks/use-auth.ts";
 import { cn } from "@/lib/utils.ts";
 import { NotificationCenter } from "@/components/notification-center.tsx";
+import { useLastSeen } from "@/hooks/use-last-seen.ts";
 import { OnboardingModal } from "@/components/onboarding-modal.tsx";
 import { ErrorBoundary } from "@/components/error-boundary.tsx";
 import { useState } from "react";
@@ -118,6 +119,10 @@ function AppLayoutInner() {
   const location = useLocation();
   const isAdmin = useQuery(api.admin.isAdmin);
   const currentUser = useQuery(api.users.getCurrentUser);
+
+  // Marca presença (no máximo uma gravação a cada 30 min por usuário — a regra
+  // de verdade fica no servidor, em convex/lib/presence.ts).
+  useLastSeen();
 
   // Show onboarding modal for users who haven't completed it
   const [showOnboarding, setShowOnboarding] = useState(false);

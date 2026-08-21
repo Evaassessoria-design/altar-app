@@ -150,6 +150,10 @@ export default defineSchema({
     // entra. Ausente = tolerância não começou a correr (cadastros anteriores a
     // esta regra continuam liberados até o próximo aviso de atraso).
     overdueSince: v.optional(v.number()),
+    // Epoch ms do último acesso ao app. Gravado no MÁXIMO uma vez a cada
+    // LAST_SEEN_THROTTLE_MS (lib/presence.ts) — não é um contador de cliques.
+    // Ausente = nunca acessou desde que a medição existe (cadastros antigos).
+    lastSeenAt: v.optional(v.number()),
     // ── Tipo de acesso (independente do estado de cobrança) ──────────────────
     // AUSENTE = "client" — é o que todos os usuários atuais são, sem migração.
     //   client   → comportamento normal (trial → paywall → Asaas)

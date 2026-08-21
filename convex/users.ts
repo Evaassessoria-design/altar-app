@@ -1,7 +1,8 @@
 import { mutation, query, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
-import { resolveAccess } from "./lib/access";
+import { effectiveSubscriptionStatus, resolveAccess } from "./lib/access";
+import { shouldRecordLastSeen } from "./lib/presence";
 import {
   getOptionalUser,
   requireIdentity,
@@ -32,21 +33,21 @@ export const getSubscriptionStatus = query({
     const user = await getOptionalUser(ctx);
     if (!user) return null;
 
-    // Expiração do trial é calculada na leitura (não é persistida).
-    let effective = user;
+    // Expiração do trial é calculada na leitura (não é persistida). A conta em
+    // si vive em lib/access.ts, para que paywall, métricas e a guarda do
+    // backend enxerguem exatamente o mesmo estado.
+    const now = Date.now();
+    const status = effectiveSubscriptionStatus(user, now);
+    const effective = { ...user, subscriptionStatus: status };
+
     let daysLeft: number | undefined;
-    if (user.subscriptionStatus === "trial" && user.trialEndDate) {
-      const trialEnd = new Date(user.trialEndDate);
-      if (trialEnd < new Date()) {
-        effective = { ...user, subscriptionStatus: "expired" };
-      } else {
-        daysLeft = Math.ceil((trialEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-      }
+    if (status === "trial" && user.trialEndDate) {
+      daysLeft = Math.ceil((Date.parse(user.trialEndDate) - now) / (1000 * 60 * 60 * 24));
     }
 
     // A decisão de bloquear nasce no backend (lib/access.ts). O frontend só lê
     // `access.blocked` — não mantém mais a própria lista de status proibidos.
-    return { ...effective, daysLeft, access: resolveAccess(effective) };
+    return { ...effective, daysLeft, access: resolveAccess(user, now) };
   },
 });
 
@@ -54,6 +55,33 @@ export const getSubscriptionStatus = query({
 // motivo de `admin.updateUserSubscription`: simulava assinatura paga sem nada
 // no Asaas. Não tinha nenhum caller na UI. Ativação real chega por
 // `activateSubscriptionByCustomer`, abaixo, disparada pelo webhook.
+
+/**
+ * Registra que o usuário está usando o app agora.
+ *
+ * Chamada pelo aplicativo ao abrir e ao trocar de tela. A gravação em si é
+ * limitada no SERVIDOR: só acontece quando o carimbo anterior já passou de
+ * LAST_SEEN_THROTTLE_MS (30 min). Chamar com frequência é inofensivo — o
+ * excesso vira leitura barata, não escrita.
+ *
+ * Silenciosa por natureza: sem sessão, não faz nada e não lança. Ela roda em
+ * segundo plano na interface e nunca deve gerar erro visível para quem usa.
+ *
+ * Devolve `true` quando gravou — usado nos testes.
+ */
+export const touchLastSeen = mutation({
+  args: {},
+  handler: async (ctx): Promise<boolean> => {
+    const user = await getOptionalUser(ctx);
+    if (!user) return false;
+
+    const now = Date.now();
+    if (!shouldRecordLastSeen(user.lastSeenAt, now)) return false;
+
+    await ctx.db.patch(user._id, { lastSeenAt: now });
+    return true;
+  },
+});
 
 // Mark onboarding as complete
 export const completeOnboarding = mutation({

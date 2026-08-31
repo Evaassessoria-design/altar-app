@@ -4,6 +4,7 @@ import schema from "../schema";
 import { modules } from "../test.setup";
 import { deleteEventCascade, deleteUserDataCascade } from "./cascade";
 import type { Id } from "../_generated/dataModel";
+import type { MutationCtx } from "../_generated/server";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TRAVA DE REGRESSÃO — exclusão em cascata.
@@ -40,12 +41,18 @@ const NOW_ISO = "2026-08-21T12:00:00.000Z";
  * Cria um usuário e um evento com UMA linha em cada tabela dependente,
  * incluindo arquivos no storage. Devolve os ids para as asserções.
  */
-async function seedFullEvent(ctx: {
-  db: {
-    insert: (table: string, doc: Record<string, unknown>) => Promise<string>;
-  };
+/**
+ * Contexto do convex-test: é o `MutationCtx` real MAIS `storage.store`, que
+ * só existe no ambiente de teste (no app real, arquivos entram por
+ * `generateUploadUrl`). Tipar com precisão evita o erro que o typecheck do
+ * Convex acusou — uma assinatura estrutural frouxa (`table: string`) não é
+ * compatível com `db.insert`, que exige um nome de tabela conhecido.
+ */
+type TestMutationCtx = MutationCtx & {
   storage: { store: (blob: Blob) => Promise<Id<"_storage">> };
-}) {
+};
+
+async function seedFullEvent(ctx: TestMutationCtx) {
   const userId = (await ctx.db.insert("users", {
     name: "Decoradora Teste",
     email: "decoradora@exemplo.com",

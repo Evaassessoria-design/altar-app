@@ -4,6 +4,7 @@ import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Button } from "@/components/ui/button.tsx";
+import { AgendaSection } from "./_components/agenda-section.tsx";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -105,6 +106,8 @@ export default function EventDetailsPage() {
   const generateChecklist = useAction(api.ai.generateChecklistFromBriefing);
   const briefing = useQuery(api.briefing.getBriefing, { eventId: id as Id<"events"> });
   const purchases = useQuery(api.purchases.listPurchases, { eventId: id as Id<"events"> });
+  // Alimenta a Agenda com os alinhamentos já registrados nos fornecedores.
+  const eventSuppliers = useQuery(api.suppliers.listByEvent, { eventId: id as Id<"events"> });
 
   const [contractUploading, setContractUploading] = useState(false);
   const [layoutAnalysing, setLayoutAnalysing] = useState(false);
@@ -727,6 +730,17 @@ export default function EventDetailsPage() {
           </div>
         )}
       </div>
+
+      {/* Agenda do Evento — prévia da futura integração com Google Agenda.
+          Consolida horários que já existem (briefing + escala + alinhamentos).
+          NÃO há integração real: sem OAuth, API, credencial ou sincronização. */}
+      <AgendaSection
+        eventId={id as Id<"events">}
+        eventDate={event.date}
+        briefing={briefing}
+        team={eventTeam}
+        suppliers={eventSuppliers}
+      />
 
       {/* Add team member dialog */}
       <Dialog open={addingTeamMember} onOpenChange={(o) => { if (!o) { setAddingTeamMember(false); setAddTeamMemberId(""); setAddTeamTime(""); } }}>

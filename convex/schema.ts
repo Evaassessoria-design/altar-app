@@ -362,6 +362,55 @@ export default defineSchema({
     intent: v.union(v.literal("demo"), v.literal("beta")),
   }).index("by_email", ["email"]),
 
+  // ── CATÁLOGO CENTRAL DE FORNECEDORES ──────────────────────────────────────
+  // "Este fornecedor pertence ao catálogo desta empresa."
+  //
+  // Distinto de `eventSuppliers`, que significa "este fornecedor NESTE evento".
+  // A relação é: suppliers → eventSuppliers → events.
+  //
+  // O catálogo é POR EMPRESA (userId). Não há catálogo compartilhado entre
+  // assinantes — decisão de produto.
+  //
+  // Guarda só o que é do FORNECEDOR e se repete entre eventos. O que é da
+  // relação com um evento específico (status, valor, alinhamentos, observações
+  // operacionais) continua em `eventSuppliers` e nunca sobe para cá.
+  suppliers: defineTable({
+    userId: v.id("users"),
+
+    companyName: v.string(),
+    // Nome normalizado (minúsculo, sem acento) — busca e deduplicação.
+    // Ver lib/supplierIdentity.ts.
+    searchName: v.string(),
+    category: v.string(),
+
+    contactName: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    // Só dígitos, sem código do país — a outra metade da chave de dedup.
+    phoneDigits: v.optional(v.string()),
+    email: v.optional(v.string()),
+
+    // Perfil reutilizável — os mesmos campos que já existiam em eventSuppliers.
+    logoStorageId: v.optional(v.id("_storage")),
+    instagram: v.optional(v.string()),
+    website: v.optional(v.string()),
+    address: v.optional(v.string()),
+    city: v.optional(v.string()),
+    state: v.optional(v.string()),
+    differentials: v.optional(v.string()),
+    commercialInfo: v.optional(v.string()),
+    bankInfo: v.optional(v.string()),
+    notes: v.optional(v.string()),
+
+    favorite: v.optional(v.boolean()),
+    // Arquivar em vez de excluir preserva o histórico dos eventos passados.
+    archivedAt: v.optional(v.number()),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_category", ["userId", "category"])
+    .index("by_user_search", ["userId", "searchName"]),
+
   // Dossiê operacional de fornecedores por evento. Base para o "Dossiê do Evento"
   // futuro. Tudo opcional exceto category/companyName — não impacta eventos antigos.
   // `operational` é uma lista flexível rótulo→valor (com grupo opcional para a UI,
@@ -420,9 +469,18 @@ export default defineSchema({
       ),
     ),
     order: v.optional(v.number()),
+    // ── Vínculo com o CATÁLOGO CENTRAL (tabela `suppliers`) ──────────────────
+    // Ausente = registro anterior ao catálogo, ainda não vinculado. Continua
+    // funcionando: as telas leem daqui e só consultam o catálogo quando há
+    // vínculo. Nenhum campo acima foi removido — os dados de perfil seguem
+    // gravados neste registro como fallback e como histórico do evento.
+    supplierId: v.optional(v.id("suppliers")),
   })
     .index("by_event", ["eventId"])
-    .index("by_event_category", ["eventId", "category"]),
+    .index("by_event_category", ["eventId", "category"])
+    // Responde "em quais eventos já usei este fornecedor?" — a pergunta que
+    // não tinha resposta antes do catálogo.
+    .index("by_supplier", ["supplierId"]),
 
   // ── Itens operacionais de montagem (Caderno de Montagem) ───────────────────
   // Genérica de propósito: serve para cadeiras, mesas, sofás, poltronas,

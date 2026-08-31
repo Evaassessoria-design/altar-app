@@ -128,13 +128,25 @@ export async function deleteEventCascade(
   }
 
   // ── 3. Linhas com arquivo OPCIONAL ───────────────────────────────────────
-  const suppliers = await ctx.db
+  // ── FORNECEDORES: apaga o VÍNCULO, JAMAIS o catálogo ─────────────────────
+  //
+  // `eventSuppliers` é "este fornecedor NESTE evento" — morre com o evento.
+  // `suppliers` é o catálogo da empresa, usado por vários eventos: apagá-lo
+  // aqui destruiria dado de todos os outros eventos. Esta é a regra mais
+  // importante do catálogo central, e existe um teste dedicado a ela em
+  // cascade.test.ts. NÃO acrescente `suppliers` a esta função.
+  const supplierLinks = await ctx.db
     .query("eventSuppliers")
     .withIndex("by_event", (q) => q.eq("eventId", eventId))
     .collect();
-  for (const supplier of suppliers) {
-    if (await safeDeleteFile(ctx, supplier.logoStorageId)) files += 1;
-    await ctx.db.delete(supplier._id);
+  for (const link of supplierLinks) {
+    // A logo copiada no vínculo pode ser a MESMA do catálogo. Só apagamos o
+    // arquivo quando o vínculo não aponta para o catálogo — ou seja, quando o
+    // registro é anterior à migração e o arquivo é exclusivo dele.
+    if (link.supplierId === undefined) {
+      if (await safeDeleteFile(ctx, link.logoStorageId)) files += 1;
+    }
+    await ctx.db.delete(link._id);
     documents += 1;
   }
 
@@ -228,6 +240,18 @@ export async function deleteUserDataCascade(
   // Tabelas do usuário que não dependem de evento. `transactions` e
   // `notifications` já perderam as linhas ligadas a eventos na cascata acima;
   // o que sobra aqui são as avulsas.
+  // Catálogo de fornecedores: pertence à EMPRESA, então sai com ela — ao
+  // contrário da exclusão de evento, onde ele nunca é tocado.
+  const catalogo = await ctx.db
+    .query("suppliers")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .collect();
+  for (const supplier of catalogo) {
+    if (await safeDeleteFile(ctx, supplier.logoStorageId)) files += 1;
+    await ctx.db.delete(supplier._id);
+    documents += 1;
+  }
+
   const teamMembers = await ctx.db
     .query("teamMembers")
     .withIndex("by_user", (q) => q.eq("userId", userId))

@@ -321,3 +321,217 @@ describe("deleteUserDataCascade — limpa tudo do usuário", () => {
     });
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REGRA FUNDAMENTAL DO CATÁLOGO CENTRAL
+//
+// Excluir um evento apaga o VÍNCULO (`eventSuppliers`), NUNCA o fornecedor do
+// catálogo (`suppliers`). Um fornecedor serve vários eventos: apagá-lo junto
+// com um deles destruiria dado de todos os outros — o único caminho para perda
+// irreversível nesta migração.
+//
+// Este é o teste que o requisito exigiu existir antes de a implementação ser
+// considerada concluída.
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function seedCatalogo(t: ReturnType<typeof convexTest>) {
+  return t.run(async (ctx) => {
+    const userId = await ctx.db.insert("users", {
+      name: "Decoradora", email: "d@exemplo.com",
+      role: "user", subscriptionStatus: "active",
+    });
+
+    const supplierId = await ctx.db.insert("suppliers", {
+      userId,
+      companyName: "Buffet Silva",
+      searchName: "buffet silva",
+      category: "buffet",
+      phone: "(14) 99624-7868",
+      phoneDigits: "14996247868",
+      createdAt: NOW_ISO,
+      updatedAt: NOW_ISO,
+    });
+
+    // Dois eventos usando o MESMO fornecedor do catálogo.
+    const eventoA = await ctx.db.insert("events", {
+      userId, name: "Casamento A", type: "wedding", date: "2026-12-12",
+      location: "Salão A", clientName: "Cliente A", status: "confirmed",
+    });
+    const eventoB = await ctx.db.insert("events", {
+      userId, name: "Casamento B", type: "wedding", date: "2027-01-20",
+      location: "Salão B", clientName: "Cliente B", status: "planning",
+    });
+
+    const vinculoA = await ctx.db.insert("eventSuppliers", {
+      userId, eventId: eventoA, supplierId,
+      category: "buffet", companyName: "Buffet Silva", status: "contratado",
+    });
+    const vinculoB = await ctx.db.insert("eventSuppliers", {
+      userId, eventId: eventoB, supplierId,
+      category: "buffet", companyName: "Buffet Silva", status: "cotacao",
+    });
+
+    return { userId, supplierId, eventoA, eventoB, vinculoA, vinculoB };
+  });
+}
+
+describe("catálogo central: excluir evento NUNCA apaga o fornecedor", () => {
+  it("apaga o vínculo do evento e PRESERVA o fornecedor do catálogo", async () => {
+    const t = convexTest(schema, modules);
+    const { supplierId, eventoA, vinculoA } = await seedCatalogo(t);
+
+    await t.run(async (ctx) => {
+      await deleteEventCascade(ctx, eventoA);
+    });
+
+    await t.run(async (ctx) => {
+      // O vínculo morreu junto com o evento.
+      expect(await ctx.db.get(vinculoA)).toBeNull();
+      // O fornecedor do catálogo continua vivo e intacto.
+      const supplier = await ctx.db.get(supplierId);
+      expect(supplier, "o fornecedor do catálogo NÃO pode ser apagado").not.toBeNull();
+      expect(supplier?.companyName).toBe("Buffet Silva");
+      expect(supplier?.archivedAt).toBeUndefined();
+    });
+  });
+
+  it("o outro evento que usa o mesmo fornecedor fica intacto", async () => {
+    // O cenário que causaria perda real: apagar um evento e derrubar o
+    // fornecedor de todos os outros.
+    const t = convexTest(schema, modules);
+    const { eventoA, eventoB, vinculoB, supplierId } = await seedCatalogo(t);
+
+    await t.run(async (ctx) => {
+      await deleteEventCascade(ctx, eventoA);
+    });
+
+    await t.run(async (ctx) => {
+      expect(await ctx.db.get(eventoB)).not.toBeNull();
+      const vinculo = await ctx.db.get(vinculoB);
+      expect(vinculo, "o vínculo do outro evento não pode ser tocado").not.toBeNull();
+      expect(vinculo?.supplierId).toBe(supplierId);
+      expect(vinculo?.status).toBe("cotacao");
+    });
+  });
+
+  it("apagar os DOIS eventos ainda deixa o fornecedor no catálogo", async () => {
+    const t = convexTest(schema, modules);
+    const { eventoA, eventoB, supplierId } = await seedCatalogo(t);
+
+    await t.run(async (ctx) => {
+      await deleteEventCascade(ctx, eventoA);
+      await deleteEventCascade(ctx, eventoB);
+    });
+
+    await t.run(async (ctx) => {
+      expect(await ctx.db.query("eventSuppliers").collect()).toHaveLength(0);
+      expect(await ctx.db.get(supplierId)).not.toBeNull();
+    });
+  });
+
+  it("a logo do catálogo sobrevive à exclusão do evento", async () => {
+    // O vínculo copia a logo do catálogo. Apagar o ARQUIVO ao excluir o evento
+    // deixaria o fornecedor do catálogo sem imagem — perda silenciosa.
+    const t = convexTest(schema, modules);
+    const { logo, eventoId, supplierId } = await t.run(async (ctx) => {
+      const userId = await ctx.db.insert("users", {
+        name: "D", email: "d2@exemplo.com", role: "user", subscriptionStatus: "active",
+      });
+      const logo = await ctx.storage.store(new Blob(["logo"]));
+      const supplierId = await ctx.db.insert("suppliers", {
+        userId, companyName: "Flores", searchName: "flores", category: "flores",
+        logoStorageId: logo, createdAt: NOW_ISO, updatedAt: NOW_ISO,
+      });
+      const eventoId = await ctx.db.insert("events", {
+        userId, name: "E", type: "wedding", date: "2026-12-12",
+        location: "L", clientName: "C", status: "planning",
+      });
+      await ctx.db.insert("eventSuppliers", {
+        userId, eventId: eventoId, supplierId,
+        category: "flores", companyName: "Flores", logoStorageId: logo,
+      });
+      return { logo, eventoId, supplierId };
+    });
+
+    await t.run(async (ctx) => {
+      await deleteEventCascade(ctx, eventoId);
+    });
+
+    await t.run(async (ctx) => {
+      expect(await ctx.db.get(supplierId)).not.toBeNull();
+      expect(
+        await ctx.storage.getUrl(logo),
+        "a logo do catálogo não pode ser apagada junto com o evento",
+      ).not.toBeNull();
+    });
+  });
+
+  it("vínculo ANTIGO (sem catálogo) continua tendo a logo apagada", async () => {
+    // Compatibilidade: registros anteriores à migração têm arquivo próprio, e o
+    // comportamento anterior — apagar junto — continua correto para eles.
+    const t = convexTest(schema, modules);
+    const { logo, eventoId } = await t.run(async (ctx) => {
+      const userId = await ctx.db.insert("users", {
+        name: "D", email: "d3@exemplo.com", role: "user", subscriptionStatus: "active",
+      });
+      const logo = await ctx.storage.store(new Blob(["logo antiga"]));
+      const eventoId = await ctx.db.insert("events", {
+        userId, name: "E", type: "wedding", date: "2026-12-12",
+        location: "L", clientName: "C", status: "planning",
+      });
+      await ctx.db.insert("eventSuppliers", {
+        userId, eventId: eventoId, category: "som",
+        companyName: "Som Antigo", logoStorageId: logo, // sem supplierId
+      });
+      return { logo, eventoId };
+    });
+
+    await t.run(async (ctx) => {
+      await deleteEventCascade(ctx, eventoId);
+    });
+
+    await t.run(async (ctx) => {
+      expect(await ctx.storage.getUrl(logo)).toBeNull();
+    });
+  });
+});
+
+describe("excluir a EMPRESA leva o catálogo junto", () => {
+  it("deleteUserDataCascade apaga o catálogo — ele é dado da empresa", async () => {
+    const t = convexTest(schema, modules);
+    const { userId, supplierId } = await seedCatalogo(t);
+
+    await t.run(async (ctx) => {
+      await deleteUserDataCascade(ctx, userId);
+    });
+
+    await t.run(async (ctx) => {
+      expect(await ctx.db.get(supplierId)).toBeNull();
+      expect(await ctx.db.query("suppliers").collect()).toHaveLength(0);
+    });
+  });
+
+  it("não encosta no catálogo de OUTRA empresa", async () => {
+    const t = convexTest(schema, modules);
+    const { userId } = await seedCatalogo(t);
+
+    const outroSupplierId = await t.run(async (ctx) => {
+      const outroUser = await ctx.db.insert("users", {
+        name: "Outra", email: "outra@exemplo.com", role: "user", subscriptionStatus: "trial",
+      });
+      return ctx.db.insert("suppliers", {
+        userId: outroUser, companyName: "Buffet Silva", searchName: "buffet silva",
+        category: "buffet", createdAt: NOW_ISO, updatedAt: NOW_ISO,
+      });
+    });
+
+    await t.run(async (ctx) => {
+      await deleteUserDataCascade(ctx, userId);
+    });
+
+    await t.run(async (ctx) => {
+      // Mesmo nome, empresa diferente: intocado.
+      expect(await ctx.db.get(outroSupplierId)).not.toBeNull();
+    });
+  });
+});

@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
+import { SupplierCatalogPicker } from "../_components/supplier-catalog-picker.tsx";
 import type { Doc, Id } from "@/convex/_generated/dataModel.d.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
@@ -878,6 +879,10 @@ export default function FornecedoresPage() {
   const createSupplier = useMutation(api.suppliers.create);
   const updateSupplier = useMutation(api.suppliers.update);
   const removeSupplier = useMutation(api.suppliers.remove);
+  // Vincula um fornecedor JÁ existente no catálogo da empresa a este evento.
+  const createFromCatalog = useMutation(api.suppliers.createFromCatalog);
+  // Seletor do catálogo — primeiro passo ao adicionar um fornecedor.
+  const [picking, setPicking] = useState<{ category?: string } | null>(null);
 
   const [form, setForm] = useState<
     { mode: "create"; category?: string } | { mode: "edit"; supplier: SupplierRow } | null
@@ -1105,7 +1110,7 @@ export default function FornecedoresPage() {
           ) : (
             filtered.map(renderCard)
           )}
-          <Button variant="secondary" onClick={() => setForm({ mode: "create" })} className="w-full cursor-pointer gap-2 mt-2">
+          <Button variant="secondary" onClick={() => setPicking({})} className="w-full cursor-pointer gap-2 mt-2">
             <Plus className="size-4" /> Adicionar fornecedor
           </Button>
         </div>
@@ -1152,10 +1157,30 @@ export default function FornecedoresPage() {
             </div>
           ))}
 
-          <Button variant="secondary" onClick={() => setForm({ mode: "create" })} className="w-full cursor-pointer gap-2">
+          <Button variant="secondary" onClick={() => setPicking({})} className="w-full cursor-pointer gap-2">
             <Plus className="size-4" /> Adicionar fornecedor
           </Button>
         </div>
+      )}
+
+      {picking && (
+        <SupplierCatalogPicker
+          open
+          onClose={() => setPicking(null)}
+          presetCategory={picking.category}
+          alreadyLinked={(suppliers ?? [])
+            .map((s) => s.supplierId)
+            .filter((id): id is NonNullable<typeof id> => id !== undefined)}
+          onPick={async (supplierId) => {
+            await createFromCatalog({ eventId, supplierId, category: picking.category });
+          }}
+          onCreateNew={() => {
+            // Segue exatamente para o formulário de sempre.
+            const category = picking.category;
+            setPicking(null);
+            setForm({ mode: "create", category });
+          }}
+        />
       )}
 
       {form && (

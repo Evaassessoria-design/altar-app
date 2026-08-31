@@ -1,10 +1,11 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "./schema";
 import { modules } from "./test.setup";
 import { api } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import {
   effectiveSubscriptionStatus,
   OVERDUE_TOLERANCE_DAYS,
@@ -147,6 +148,54 @@ describe("recurso pago exige autorização NO SERVIDOR", () => {
     expect(block, "requireUser sozinho não barra conta bloqueada").not.toMatch(
       /await requireUser\(ctx\)/,
     );
+  });
+
+  it("converter um lead também passa pela guarda", async () => {
+    const t = convexTest(schema, modules);
+    await expect(
+      t.mutation(api.funil.convertToEvent, {
+        leadId: "x" as Id<"leads">,
+        eventName: "Casamento", eventDate: "2026-12-12",
+        location: "Salão", clientName: "Cliente", type: "wedding",
+      }),
+    ).rejects.toThrow();
+  });
+
+  // TRAVA GENÉRICA — vale para qualquer caminho novo.
+  //
+  // O bug original: fechamos `events.create` e esquecemos que `convertToEvent`
+  // também insere em `events`. Em vez de listar as duas funções à mão, este
+  // teste VARRE o backend atrás de qualquer inserção em `events` e exige que a
+  // função que a contém verifique o acesso. Um terceiro caminho criado no futuro
+  // quebra este teste sozinho, sem ninguém precisar lembrar de atualizá-lo.
+  it("TODA função que cria evento verifica o acesso", () => {
+    const arquivos = readdirSync(__dirname).filter(
+      (f) => f.endsWith(".ts") && !f.includes(".test."),
+    );
+
+    const infratores: string[] = [];
+
+    for (const arquivo of arquivos) {
+      const source = readFileSync(join(__dirname, arquivo), "utf8");
+      if (!source.includes('insert("events"')) continue;
+
+      // Cada bloco `export const <nome> = ...` até o próximo export.
+      const exports = [...source.matchAll(/export const (\w+)\s*=/g)];
+      for (let i = 0; i < exports.length; i++) {
+        const inicio = exports[i].index!;
+        const fim = i + 1 < exports.length ? exports[i + 1].index! : source.length;
+        const bloco = source.slice(inicio, fim);
+        if (!bloco.includes('insert("events"')) continue;
+        if (!bloco.includes("requireActiveAccess")) {
+          infratores.push(`${arquivo} → ${exports[i][1]}`);
+        }
+      }
+    }
+
+    expect(
+      infratores,
+      `Estas funções criam eventos sem verificar assinatura: ${infratores.join(", ")}`,
+    ).toEqual([]);
   });
 
   it.each(["ai.ts", "aiVisual.ts"])("as ações de IA em %s exigem acesso ativo", (arquivo) => {

@@ -2,6 +2,7 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { requireUser } from "./lib/identity";
+import { requireActiveAccess } from "./lib/accessGuard";
 
 export const listLeads = query({
   args: {},
@@ -100,7 +101,17 @@ export const convertToEvent = mutation({
     ),
   },
   handler: async (ctx, args): Promise<string> => {
-    const user = await requireUser(ctx);
+    // MESMA guarda de `events.create`: converter um lead CRIA UM EVENTO, que é o
+    // recurso pago central do ALTAR. Antes esta mutation exigia apenas sessão
+    // (`requireUser`), então era um caminho paralelo que escapava do paywall —
+    // uma conta com trial vencido, cancelada ou bloqueada por inadimplência
+    // continuava criando eventos pelo funil.
+    //
+    // A ordem importa: o acesso é verificado ANTES de ler o lead, para que uma
+    // conta bloqueada receba SUBSCRIPTION_REQUIRED em vez de NOT_FOUND — a
+    // mensagem certa leva ao paywall; a errada faria a pessoa achar que perdeu
+    // o lead.
+    const user = await requireActiveAccess(ctx);
     const lead = await ctx.db.get(args.leadId);
     if (!lead || lead.userId !== user._id)
       throw new ConvexError({ message: "Lead não encontrado", code: "NOT_FOUND" });

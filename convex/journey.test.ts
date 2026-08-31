@@ -186,6 +186,19 @@ describe("recurso pago exige autorização NO SERVIDOR", () => {
         const fim = i + 1 < exports.length ? exports[i + 1].index! : source.length;
         const bloco = source.slice(inicio, fim);
         if (!bloco.includes('insert("events"')) continue;
+
+        // Funções INTERNAS não entram: `internalMutation`/`internalAction` são
+        // inalcançáveis pelo cliente por construção — não há como um usuário
+        // bloqueado chamá-las do navegador. É o caso do seed de demonstração,
+        // que ainda por cima exige ALTAR_DEMO=1 (convex/lib/demoGuard.ts).
+        //
+        // A trava continua valendo integralmente para tudo que é PÚBLICO, que é
+        // onde o paywall pode ser furado. Isto é uma correção de precisão, não
+        // uma folga: uma `mutation` ou `action` pública que insira eventos sem
+        // verificar acesso continua quebrando este teste.
+        const ehInterna = /=\s*internal(Mutation|Action)\(/.test(bloco);
+        if (ehInterna) continue;
+
         if (!bloco.includes("requireActiveAccess")) {
           infratores.push(`${arquivo} → ${exports[i][1]}`);
         }
@@ -203,6 +216,34 @@ describe("recurso pago exige autorização NO SERVIDOR", () => {
     const start = source.indexOf("async function requireEventOwnerAction");
     const block = source.slice(start, source.indexOf("\n}", start));
     expect(block).toContain("requireActiveAccessAction");
+  });
+});
+
+describe("o seed de demonstração não é um furo no paywall", () => {
+  // Ele cria eventos, então precisa ser inalcançável de duas formas
+  // independentes: ser interno E exigir o ambiente demo.
+  const demoSource = readFileSync(join(__dirname, "demo.ts"), "utf8");
+
+  it("seed é internalMutation, não alcançável pelo aplicativo", () => {
+    const start = demoSource.indexOf("export const seed");
+    const bloco = demoSource.slice(start, start + 200);
+    expect(bloco).toContain("internalMutation");
+  });
+
+  it("seed valida o ambiente ANTES de qualquer escrita", () => {
+    const start = demoSource.indexOf("export const seed");
+    const bloco = demoSource.slice(start);
+    const guarda = bloco.indexOf("assertDemoEnvironment");
+    const primeiraEscrita = bloco.indexOf("ctx.db.insert");
+    expect(guarda).toBeGreaterThan(-1);
+    expect(guarda).toBeLessThan(primeiraEscrita);
+  });
+
+  it("seed nunca apaga nem sobrescreve dado alheio", () => {
+    const start = demoSource.indexOf("export const seed");
+    const bloco = demoSource.slice(start);
+    expect(bloco).not.toContain("ctx.db.delete");
+    expect(bloco).not.toContain("ctx.db.replace");
   });
 });
 

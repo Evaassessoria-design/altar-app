@@ -30,6 +30,7 @@ import type * as landingLeads from "../landingLeads.js";
 import type * as layoutRenders from "../layoutRenders.js";
 import type * as demo from "../demo.js";
 import type * as lib_access from "../lib/access.js";
+import type * as lib_demoData from "../lib/demoData.js";
 import type * as lib_demoGuard from "../lib/demoGuard.js";
 import type * as lib_supplierIdentity from "../lib/supplierIdentity.js";
 import type * as lib_aiConfig from "../lib/aiConfig.js";
@@ -74,6 +75,7 @@ declare const fullApi: ApiFromModules<{
   layoutRenders: typeof layoutRenders;
   demo: typeof demo;
   "lib/access": typeof lib_access;
+  "lib/demoData": typeof lib_demoData;
   "lib/demoGuard": typeof lib_demoGuard;
   "lib/supplierIdentity": typeof lib_supplierIdentity;
   "lib/aiConfig": typeof lib_aiConfig;

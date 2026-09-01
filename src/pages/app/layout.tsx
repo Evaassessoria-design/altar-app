@@ -16,11 +16,20 @@ import {
   Settings,
   Sparkles,
   Home,
+  Building2,
+  Menu,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth.ts";
 import { cn } from "@/lib/utils.ts";
-import { BOTTOM_NAV_ITEMS, NAV_ITEMS } from "@/lib/navigation.ts";
+import { BOTTOM_NAV_ITEMS, MORE_MENU_ITEMS, NAV_ITEMS } from "@/lib/navigation.ts";
+import type { RotaDeMenu } from "@/lib/navigation.ts";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet.tsx";
 import { NotificationCenter } from "@/components/notification-center.tsx";
 import { useLastSeen } from "@/hooks/use-last-seen.ts";
 import { OnboardingModal } from "@/components/onboarding-modal.tsx";
@@ -32,15 +41,21 @@ import { ConvexError } from "convex/values";
 // Rotas e rótulos vivem em src/lib/navigation.ts, conferidos por teste contra
 // as rotas de App.tsx — foi assim que `/dashboard` apareceu como tela órfã.
 // Aqui só amarramos cada rota ao seu ícone.
-const ICONES: Record<string, LucideIcon> = {
+// `Record<RotaDeMenu, ...>` e nao `Record<string, ...>`: rota de menu sem
+// icone passa a ser erro de compilacao, em vez de `undefined` derrubando o
+// menu em tempo de execucao.
+const ICONES: Record<RotaDeMenu, LucideIcon> = {
   "/dashboard": Home,
   "/eventos": CalendarDays,
+  "/fornecedores": Building2,
   "/equipe": Users,
   "/compras": ShoppingCart,
   "/financeiro": DollarSign,
   "/funil": BarChart3,
   "/configuracoes": Settings,
 };
+
+const moreMenuItems = MORE_MENU_ITEMS.map((i) => ({ ...i, icon: ICONES[i.to] }));
 
 const navItems = NAV_ITEMS.map((i) => ({ ...i, icon: ICONES[i.to] }));
 const bottomNavItems = BOTTOM_NAV_ITEMS.map((i) => ({ ...i, icon: ICONES[i.to] }));
@@ -137,6 +152,12 @@ function AppLayoutInner() {
 
   // Show onboarding modal for users who haven't completed it
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  // O "Mais" fica destacado quando a tela aberta mora dentro dele — senão
+  // nenhum item da barra apareceria ativo em /equipe, /fornecedores ou /funil.
+  const maisEstaAtivo =
+    MORE_MENU_ITEMS.some((i) => location.pathname.startsWith(i.to)) ||
+    location.pathname.startsWith("/admin");
   // Trigger modal once we know user hasn't completed onboarding
   const [checkedOnboarding, setCheckedOnboarding] = useState(false);
   if (currentUser !== undefined && !checkedOnboarding) {
@@ -235,7 +256,9 @@ function AppLayoutInner() {
           </ErrorBoundary>
         </main>
 
-        {/* Bottom nav — mobile */}
+        {/* Bottom nav — mobile.
+            Quatro destinos + "Mais". O menu lateral é `hidden md:flex`, então
+            tudo que só estivesse nele ficaria inalcançável no celular. */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border flex justify-around py-2 z-40">
           {bottomNavItems.map((item) => (
             <NavLink
@@ -243,16 +266,79 @@ function AppLayoutInner() {
               to={item.to}
               className={({ isActive }) =>
                 cn(
-                  "flex flex-col items-center gap-0.5 px-2 py-1 text-xs font-medium transition-colors cursor-pointer",
+                  "flex flex-col items-center gap-0.5 px-2 py-1 text-xs font-medium transition-colors cursor-pointer min-w-0",
                   isActive ? "text-primary" : "text-muted-foreground",
                 )
               }
             >
-              <item.icon className="size-5" />
-              {item.label}
+              <item.icon className="size-5 flex-shrink-0" />
+              <span className="truncate max-w-[4.5rem]">{item.label}</span>
             </NavLink>
           ))}
+          <button
+            onClick={() => setShowMoreMenu(true)}
+            aria-label="Mais seções"
+            className={cn(
+              "flex flex-col items-center gap-0.5 px-2 py-1 text-xs font-medium transition-colors cursor-pointer min-w-0",
+              maisEstaAtivo ? "text-primary" : "text-muted-foreground",
+            )}
+          >
+            <Menu className="size-5 flex-shrink-0" />
+            <span>Mais</span>
+          </button>
         </nav>
+
+        {/* "Mais" — o resto das seções, no celular. */}
+        <Sheet open={showMoreMenu} onOpenChange={setShowMoreMenu}>
+          <SheetContent side="bottom" className="md:hidden">
+            <SheetHeader>
+              <SheetTitle>Mais seções</SheetTitle>
+            </SheetHeader>
+            <div className="grid grid-cols-2 gap-2 px-4 pb-6">
+              {moreMenuItems.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onClick={() => setShowMoreMenu(false)}
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center gap-2.5 px-3 py-3 rounded-xl border border-border text-sm font-medium transition-colors cursor-pointer",
+                      isActive ? "text-primary border-primary/40 bg-primary/5" : "text-foreground hover:bg-accent",
+                    )
+                  }
+                >
+                  <item.icon className="size-4 flex-shrink-0" />
+                  <span className="truncate">{item.label}</span>
+                </NavLink>
+              ))}
+              {isAdmin && (
+                <NavLink
+                  to="/admin"
+                  onClick={() => setShowMoreMenu(false)}
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center gap-2.5 px-3 py-3 rounded-xl border border-border text-sm font-medium transition-colors cursor-pointer",
+                      isActive ? "text-primary border-primary/40 bg-primary/5" : "text-foreground hover:bg-accent",
+                    )
+                  }
+                >
+                  <Shield className="size-4 flex-shrink-0" />
+                  <span className="truncate">Admin</span>
+                </NavLink>
+              )}
+              <button
+                onClick={() => {
+                  setShowMoreMenu(false);
+                  void handleSignout();
+                }}
+                className="flex items-center gap-2.5 px-3 py-3 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-accent transition-colors cursor-pointer"
+              >
+                <LogOut className="size-4 flex-shrink-0" />
+                <span>Sair</span>
+              </button>
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
 
       {/* Onboarding modal */}

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { BOTTOM_NAV_ITEMS, NAV_ITEMS, ROTAS_SEM_MENU } from "./navigation";
+import { BOTTOM_NAV_ITEMS, MORE_MENU_ITEMS, NAV_ITEMS, ROTAS_SEM_MENU } from "./navigation";
 
 // TRAVA CONTRA TELA ÓRFÃ.
 //
@@ -19,7 +19,9 @@ function rotasDoApp(): string[] {
 }
 
 describe("toda rota do app tem caminho de navegação", () => {
-  const noMenu = new Set([...NAV_ITEMS, ...BOTTOM_NAV_ITEMS].map((i) => i.to));
+  const noMenu = new Set<string>(
+    [...NAV_ITEMS, ...BOTTOM_NAV_ITEMS, ...MORE_MENU_ITEMS].map((i) => i.to),
+  );
 
   it.each(rotasDoApp())("rota %s está no menu ou é exceção declarada", (rota) => {
     const alcancavel = noMenu.has(rota) || rota in ROTAS_SEM_MENU;
@@ -38,7 +40,7 @@ describe("toda rota do app tem caminho de navegação", () => {
     }
   });
 
-  it.each([...NAV_ITEMS, ...BOTTOM_NAV_ITEMS])(
+  it.each([...NAV_ITEMS, ...BOTTOM_NAV_ITEMS, ...MORE_MENU_ITEMS])(
     "o item de menu $to aponta para uma rota que existe",
     ({ to }) => {
       // O outro lado da trava: um link para uma tela que não foi criada vira
@@ -56,7 +58,30 @@ describe("toda rota do app tem caminho de navegação", () => {
   });
 
   it("a barra inferior cabe na tela do celular", () => {
-    // Acima de 6 itens a barra fica ilegível em telas estreitas.
-    expect(BOTTOM_NAV_ITEMS.length).toBeLessThanOrEqual(6);
+    // Com 6 itens o rótulo "Financeiro" sozinho ocupa ~62px em text-xs e a
+    // barra estoura num aparelho de 320px. Quatro + "Mais" é o limite.
+    expect(BOTTOM_NAV_ITEMS.length).toBeLessThanOrEqual(4);
+  });
+
+  // ── TRAVA DE ALCANCE NO CELULAR ───────────────────────────────────────────
+  // O menu lateral é `hidden md:flex`: só existe no desktop. Estar em
+  // NAV_ITEMS, portanto, NÃO garante que a tela seja alcançável num telefone.
+  // Foi assim que /equipe sumiu do celular ao ganharmos /dashboard, e que
+  // /funil já estava inalcançável antes disso.
+  it.each(NAV_ITEMS)("a tela $label é alcançável no celular", ({ to }) => {
+    const noCelular = new Set<string>(
+      [...BOTTOM_NAV_ITEMS, ...MORE_MENU_ITEMS].map((i) => i.to),
+    );
+    expect(
+      noCelular.has(to),
+      `"${to}" está no menu lateral (desktop) mas em nenhum menu do celular`,
+    ).toBe(true);
+  });
+
+  it("nenhum destino repetido entre a barra inferior e o Mais", () => {
+    const barra = new Set<string>(BOTTOM_NAV_ITEMS.map((i) => i.to));
+    for (const item of MORE_MENU_ITEMS) {
+      expect(barra.has(item.to), `"${item.to}" aparece nos dois menus`).toBe(false);
+    }
   });
 });

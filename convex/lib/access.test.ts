@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isBillingExempt, OVERDUE_TOLERANCE_DAYS, resolveAccess } from "./access";
+import {
+  effectiveSubscriptionStatus,
+  isBillingExempt,
+  OVERDUE_TOLERANCE_DAYS,
+  resolveAccess,
+} from "./access";
 
 // Regras que o Painel Admin exibe e das quais dependem a guarda de checkout
 // (convex/asaas.ts) e as métricas de MRR/conversão (convex/admin.ts getStats).
@@ -43,6 +48,9 @@ describe("resolveAccess — internal", () => {
         type: "internal",
         blocked: false,
         billingExempt: true,
+        // Isento por ser conta INTERNA, não por ser administrador — os dois
+        // motivos de isenção continuam separados.
+        adminExempt: false,
         betaExpired: false,
       });
     },
@@ -205,6 +213,134 @@ describe("resolveAccess — inadimplência (overdue) com tolerância", () => {
       expect(
         resolveAccess({ subscriptionStatus: status, overdueSince: NOW }, NOW).overdueDaysLeft,
       ).toBeUndefined();
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMINISTRADOR DO ALTAR × PAYWALL
+//
+// A matriz que estes testes travam é a definição do comportamento esperado:
+//
+//   ADMIN, sem assinatura e com trial vencido ......... ACESSA
+//   Cliente com assinatura ativa ...................... ACESSA
+//   Cliente em trial válido ........................... ACESSA
+//   Cliente com trial vencido e sem assinatura ........ BLOQUEADO
+//   Cliente cancelado / inadimplente .................. comportamento inalterado
+//
+// O par importa: o primeiro grupo prova que a conta que opera o produto entra;
+// o segundo prova que liberar o admin NÃO abriu a porta para ninguém mais.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ADMIN = { role: "admin" } as const;
+
+describe("resolveAccess — administrador do ALTAR", () => {
+  it("acessa com trial VENCIDO e sem nenhuma assinatura", () => {
+    const d = resolveAccess(
+      { ...ADMIN, subscriptionStatus: "trial", trialEndDate: "2026-01-01T00:00:00Z" },
+      NOW,
+    );
+    expect(effectiveSubscriptionStatus(
+      { subscriptionStatus: "trial", trialEndDate: "2026-01-01T00:00:00Z" },
+      NOW,
+    )).toBe("expired"); // o trial realmente venceu — não é um falso negativo
+    expect(d.blocked).toBe(false);
+    expect(d.adminExempt).toBe(true);
+    expect(d.billingExempt).toBe(true);
+  });
+
+  it.each(["trial", "active", "overdue", "expired", "cancelled"] as const)(
+    "acessa qualquer que seja o estado de cobrança (%s)",
+    (status) => {
+      // Inclusive inadimplência com a tolerância JÁ estourada, que bloqueia
+      // qualquer cliente.
+      const d = resolveAccess(
+        { ...ADMIN, subscriptionStatus: status, overdueSince: NOW - 90 * DAY },
+        NOW,
+      );
+      expect(d.blocked).toBe(false);
+      expect(d.adminExempt).toBe(true);
+    },
+  );
+
+  it("fica fora da receita — não é cliente pagante", () => {
+    expect(isBillingExempt({ ...ADMIN, subscriptionStatus: "expired" }, NOW)).toBe(true);
+  });
+
+  it("preserva o accessType real, sem forjar cortesia", () => {
+    // Admin continua sendo reportado como `client` se nunca recebeu cortesia.
+    // Se os dois conceitos fossem misturados, o painel passaria a contar a
+    // conta da equipe junto com as contas de cortesia comercial.
+    const d = resolveAccess({ ...ADMIN, subscriptionStatus: "expired" }, NOW);
+    expect(d.type).toBe("client");
+    expect(d.adminExempt).toBe(true);
+  });
+
+  it("`internal` continua isento SEM ser admin — os conceitos não se fundiram", () => {
+    const d = resolveAccess(
+      { subscriptionStatus: "expired", accessType: "internal" },
+      NOW,
+    );
+    expect(d.blocked).toBe(false);
+    expect(d.billingExempt).toBe(true);
+    expect(d.adminExempt).toBe(false);
+  });
+});
+
+describe("liberar o admin NÃO afrouxou o paywall de cliente", () => {
+  // `role` de cliente comum. Vale tanto o valor "user" gravado no cadastro
+  // quanto a ausência do campo.
+  it.each([{ role: "user" }, {}])("cliente com trial vencido é BLOQUEADO (%o)", (quem) => {
+    const d = resolveAccess(
+      { ...quem, subscriptionStatus: "trial", trialEndDate: "2026-01-01T00:00:00Z" },
+      NOW,
+    );
+    expect(d.blocked).toBe(true);
+    expect(d.reason).toBe("trial_expired");
+    expect(d.adminExempt).toBe(false);
+  });
+
+  it("cliente com assinatura ativa ACESSA e continua cobrável", () => {
+    const d = resolveAccess({ role: "user", subscriptionStatus: "active" }, NOW);
+    expect(d.blocked).toBe(false);
+    expect(d.billingExempt).toBe(false); // segue contando no MRR
+  });
+
+  it("cliente em trial VÁLIDO acessa", () => {
+    const d = resolveAccess(
+      { role: "user", subscriptionStatus: "trial", trialEndDate: "2026-12-31T00:00:00Z" },
+      NOW,
+    );
+    expect(d.blocked).toBe(false);
+  });
+
+  it("cliente cancelado segue BLOQUEADO", () => {
+    expect(resolveAccess({ role: "user", subscriptionStatus: "cancelled" }, NOW)).toMatchObject({
+      blocked: true,
+      reason: "subscription_cancelled",
+    });
+  });
+
+  it("inadimplência de cliente mantém EXATAMENTE a regra de tolerância", () => {
+    const dentro = resolveAccess(
+      { role: "user", subscriptionStatus: "overdue", overdueSince: NOW - 2 * DAY },
+      NOW,
+    );
+    expect(dentro.blocked).toBe(false);
+    expect(dentro.overdueDaysLeft).toBe(OVERDUE_TOLERANCE_DAYS - 2);
+
+    const fora = resolveAccess(
+      { role: "user", subscriptionStatus: "overdue", overdueSince: NOW - (OVERDUE_TOLERANCE_DAYS + 1) * DAY },
+      NOW,
+    );
+    expect(fora).toMatchObject({ blocked: true, reason: "payment_overdue" });
+  });
+
+  it("um `role` qualquer NÃO isenta — só o valor exato de administrador", () => {
+    // Trava contra o campo virar porta dos fundos por digitação livre:
+    // `role` é v.string() no schema.
+    for (const role of ["Admin", "ADMIN", "administrador", "owner", "superadmin", ""]) {
+      expect(resolveAccess({ role, subscriptionStatus: "expired" }, NOW).blocked).toBe(true);
     }
   });
 });

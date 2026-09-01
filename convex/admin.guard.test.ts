@@ -182,3 +182,47 @@ describe("o painel não esconde informação no celular", () => {
     expect(card).toContain("RoleBadge");
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRAVA DE REGRESSÃO — `role` não pode virar porta dos fundos do paywall.
+//
+// A partir do momento em que `role: "admin"` dispensa a assinatura
+// (convex/lib/access.ts), quem consegue ESCREVER esse campo consegue liberar o
+// próprio acesso. Estes testes travam as duas condições que sustentam a regra:
+//
+//   1. a única mutation pública que grava `role` exige administrador;
+//   2. a edição de perfil — aberta a qualquer usuário logado — não encosta nele.
+//
+// Se alguém acrescentar `role` ao `updateProfile` ou tirar o `requireAdmin` do
+// `updateUserRole`, o paywall vira opcional e este arquivo quebra dizendo por quê.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("`role` só é gravado por caminho administrativo", () => {
+  const fonte = (arquivo: string) =>
+    readFileSync(join(__dirname, arquivo), "utf-8");
+
+  /** Extrai o corpo de `export const <nome> = ...` até o próximo export. */
+  function corpoDe(codigo: string, nome: string): string {
+    const inicio = codigo.indexOf(`export const ${nome} =`);
+    expect(inicio).toBeGreaterThan(-1);
+    const proximo = codigo.indexOf("\nexport ", inicio + 1);
+    return codigo.slice(inicio, proximo === -1 ? undefined : proximo);
+  }
+
+  it("updateUserRole exige requireAdmin", () => {
+    expect(corpoDe(fonte("admin.ts"), "updateUserRole")).toContain("requireAdmin");
+  });
+
+  it("updateProfile (aberta a qualquer usuário logado) não menciona role", () => {
+    // `updateProfile` monta um patch com lista explícita de campos. Se `role`
+    // aparecer ali, qualquer conta se promove a admin e pula a assinatura.
+    expect(corpoDe(fonte("users.ts"), "updateProfile")).not.toMatch(/\brole\b/);
+  });
+
+  it("o bootstrap que concede admin continua sendo internalMutation", () => {
+    // Alcançável só pelo painel do Convex/CLI — nunca pelo app.
+    expect(corpoDe(fonte("admin.ts"), "grantInternalAccessByEmail")).toContain(
+      "internalMutation",
+    );
+  });
+});

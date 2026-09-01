@@ -24,8 +24,22 @@ export type AccessDecision = {
   blocked: boolean;
   /** Motivo do bloqueio — só preenchido quando `blocked`. */
   reason?: "trial_expired" | "subscription_cancelled" | "payment_overdue";
-  /** Conta com cobrança dispensada (internal, ou beta ainda vigente). */
+  /**
+   * Conta com cobrança dispensada: administrador do ALTAR, `internal`, ou
+   * `beta` ainda vigente. É o que mantém a conta fora do MRR.
+   */
   billingExempt: boolean;
+  /**
+   * Isenta por ser ADMINISTRADOR DO ALTAR (`role: "admin"`).
+   *
+   * Existe separado de `billingExempt` justamente para NÃO confundir dois
+   * conceitos que a arquitetura mantém distintos:
+   *   · admin      → quem OPERA o produto. Nunca foi cliente, nunca paga.
+   *   · internal/beta → CLIENTE com acesso de cortesia (`accessType`).
+   * Um relatório que precise separar "equipe" de "cortesia comercial" lê este
+   * campo em vez de deduzir pelo tipo de acesso.
+   */
+  adminExempt: boolean;
   /** `beta` cuja data de acesso já passou — voltou a valer a regra de client. */
   betaExpired: boolean;
   /**
@@ -61,11 +75,28 @@ const BLOCKING_STATUSES: Record<string, AccessDecision["reason"]> = {
   cancelled: "subscription_cancelled",
 };
 
+/**
+ * ── ADMINISTRADOR DO ALTAR ──────────────────────────────────────────────────
+ * O valor de `role` que identifica quem OPERA o produto (abre o Painel Admin).
+ *
+ * É o mesmo campo que `convex/admin.ts` já usa em `requireAdmin` — não existe
+ * papel novo aqui, nem lista de e-mails, nem variável de ambiente. `role` só é
+ * gravado por `admin.updateUserRole` (protegida por `requireAdmin`), pela
+ * `internalMutation` de bootstrap e no primeiro cadastro de um banco vazio.
+ * Nenhum caminho aberto ao usuário escreve nesse campo.
+ */
+export const ALTAR_ADMIN_ROLE = "admin";
+
+/** Quem opera o ALTAR. Não confundir com cliente de cortesia (`accessType`). */
+export function isAltarAdmin(user: { role?: string }): boolean {
+  return user.role === ALTAR_ADMIN_ROLE;
+}
+
 type AccessInput = Pick<
   Doc<"users">,
   "subscriptionStatus" | "accessType" | "accessExpiresAt" | "overdueSince"
 > &
-  Partial<Pick<Doc<"users">, "trialEndDate">>;
+  Partial<Pick<Doc<"users">, "trialEndDate" | "role">>;
 
 /**
  * Status de cobrança REAL neste instante.
@@ -133,22 +164,48 @@ function resolveBillingBlock(
 export function resolveAccess(user: AccessInput, now: number = Date.now()): AccessDecision {
   const type: AccessType = user.accessType ?? "client";
 
+  // ── Administrador do ALTAR: nunca passa pelo paywall ──────────────────────
+  // Cobrar assinatura de quem opera o produto é um contrassenso: a conta que
+  // administra o ALTAR precisa entrar para atender cliente, conferir cobrança
+  // e promover outra conta — inclusive (e principalmente) quando o próprio
+  // faturamento está com problema.
+  //
+  // Antes desta regra o `role` não participava da decisão de acesso: uma conta
+  // `role: "admin"` com trial vencido e sem `accessType` caía no paywall e era
+  // convidada a comprar o próprio sistema.
+  //
+  // Isto NÃO é um bypass genérico. É a mesma condição que já governa o Painel
+  // Admin (`requireAdmin`), avaliada no backend, sobre um campo que nenhum
+  // caminho aberto ao usuário consegue escrever. O paywall de cliente segue
+  // exatamente como estava — este ramo só se aplica a `role === "admin"`.
+  if (isAltarAdmin(user)) {
+    return {
+      type,
+      blocked: false,
+      billingExempt: true,
+      adminExempt: true,
+      betaExpired:
+        type === "beta" && user.accessExpiresAt !== undefined && user.accessExpiresAt <= now,
+    };
+  }
+
   // Interno: acesso permanente, sem cobrança. Nada mais é avaliado.
   if (type === "internal") {
-    return { type, blocked: false, billingExempt: true, betaExpired: false };
+    return { type, blocked: false, billingExempt: true, adminExempt: false, betaExpired: false };
   }
 
   // Beta: liberado enquanto a data não passar. Sem data = beta sem prazo.
   if (type === "beta") {
     const expired = user.accessExpiresAt !== undefined && user.accessExpiresAt <= now;
     if (!expired) {
-      return { type, blocked: false, billingExempt: true, betaExpired: false };
+      return { type, blocked: false, billingExempt: true, adminExempt: false, betaExpired: false };
     }
     // Beta vencido cai exatamente na regra de client, sem exceção.
     return {
       type,
       ...resolveBillingBlock(user, now),
       billingExempt: false,
+      adminExempt: false,
       betaExpired: true,
     };
   }
@@ -159,6 +216,7 @@ export function resolveAccess(user: AccessInput, now: number = Date.now()): Acce
     type: "client",
     ...resolveBillingBlock(user, now),
     billingExempt: false,
+    adminExempt: false,
     betaExpired: false,
   };
 }

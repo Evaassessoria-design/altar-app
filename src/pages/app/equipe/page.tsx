@@ -37,20 +37,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ConvexError } from "convex/values";
-
-const ROLES = [
-  "Montador(a)",
-  "Auxiliar",
-  "Florista",
-  "Motorista",
-  "Coordenador(a)",
-  "Fotógrafo(a)",
-  "Cozinheiro(a)",
-  "Garçom/Garçonete",
-  "Segurança",
-  "DJ",
-  "Outros",
-];
+import { opcoesDePapel } from "@/lib/team-roles.ts";
 
 const memberSchema = z.object({
   name: z.string().min(2, "Nome obrigatório"),
@@ -111,7 +98,10 @@ function MemberDialog({
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="">Selecione...</option>
-              {ROLES.map((r) => (
+              {/* `opcoesDePapel` inclui o papel JÁ GRAVADO quando ele saiu da
+                  lista — sem isso, editar alguém salvo como "DJ" abriria o
+                  seletor vazio e salvar trocaria o papel dele em silêncio. */}
+              {opcoesDePapel(defaultValues?.role).map((r) => (
                 <option key={r} value={r}>{r}</option>
               ))}
             </select>

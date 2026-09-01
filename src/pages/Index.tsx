@@ -301,11 +301,12 @@ export default function Index() {
             </h2>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
               O ALTAR não nasceu em uma software house. Nasceu da experiência
-              prática da Casando no Interior — empresa especializada em
-              assessoria e gestão de casamentos no interior de São Paulo. Cada
-              funcionalidade veio de uma necessidade real da operação e, depois
-              de amadurecer nos casamentos, evoluiu para atender empresas de
-              eventos em geral.
+              prática da Casando no Interior, no interior de São Paulo, onde
+              cada funcionalidade veio de uma necessidade real da operação. O
+              que amadureceu ali virou um sistema de gestão para empresas de
+              decoração de eventos — casamento, aniversário, 15 anos, formatura,
+              corporativo. Do primeiro contato ao último item que volta da
+              montagem.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

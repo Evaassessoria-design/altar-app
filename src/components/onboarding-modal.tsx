@@ -24,21 +24,13 @@ import {
   PLACEHOLDER_TIPO_DE_EVENTO,
   type TipoDeEvento,
 } from "@/lib/event-types.ts";
+import { PAPEIS_DA_EQUIPE } from "@/lib/team-roles.ts";
 
 const STEPS = [
   { id: 1, icon: Building2, label: "Seu Estúdio" },
   { id: 2, icon: CalendarDays, label: "Primeiro Evento" },
   { id: 3, icon: Users, label: "Sua Equipe" },
 ] as const;
-
-const TEAM_ROLES = [
-  "Assistente",
-  "Florista",
-  "Auxiliar de Montagem",
-  "Fotógrafo",
-  "Cerimonialista",
-  "Outro",
-];
 
 interface OnboardingModalProps {
   onComplete: () => void;
@@ -385,7 +377,7 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
                   <div className="space-y-1.5">
                     <Label>Função</Label>
                     <div className="flex flex-wrap gap-2">
-                      {TEAM_ROLES.map((r) => (
+                      {PAPEIS_DA_EQUIPE.map((r) => (
                         <button
                           key={r}
                           onClick={() => setMemberRole(r)}

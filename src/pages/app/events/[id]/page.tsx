@@ -5,6 +5,7 @@ import type { Id } from "@/convex/_generated/dataModel.d.ts";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { AgendaSection } from "./_components/agenda-section.tsx";
+import { OperationalSummary } from "./_components/operational-summary.tsx";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -672,6 +673,11 @@ export default function EventDetailsPage() {
           </div>
         </div>
       </div>
+
+      {/* Resumo operacional — contagens reais de checklist, compras,
+          fornecedores, equipe, montagem e financeiro, mais as próximas
+          ações derivadas do que já está cadastrado. */}
+      <OperationalSummary eventId={id as Id<"events">} />
 
       {/* Equipe do Evento */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">

@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import type { QueryCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { getOwnedEvent, requireUser } from "./lib/identity";
+import { montarResumoOperacional } from "./lib/eventSummary";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SAÚDE DO EVENTO (CORE). Calculada SOMENTE a partir de dados reais já existentes
@@ -139,5 +140,65 @@ export const getEventHealth = query({
     const event = await getOwnedEvent(ctx, args.eventId);
     if (!event) return null;
     return computeHealth(ctx, event);
+  },
+});
+
+/**
+ * RESUMO OPERACIONAL — "está tudo bem com este evento?" em contagens reais.
+ *
+ * Complementa (não substitui) `getEventHealth`, que mede se o CADASTRO está
+ * completo. Aqui a pergunta é outra: quantas compras faltam, quantos
+ * fornecedores ainda não confirmaram, quem já tem horário de chegada.
+ *
+ * Toda a aritmética vive em lib/eventSummary.ts, pura e testada. Esta query só
+ * lê e repassa — nenhum número nasce aqui.
+ *
+ * Degrada para `null` quando o evento não é do usuário, seguindo o mesmo
+ * padrão de `getEventHealth`.
+ */
+export const getEventSummary = query({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    const event = await getOwnedEvent(ctx, args.eventId);
+    if (!event) return null;
+    const eventId = event._id;
+
+    const [checklist, compras, fornecedores, equipe, carregamento, transacoes] =
+      await Promise.all([
+        ctx.db
+          .query("checklistItems")
+          .withIndex("by_event", (q) => q.eq("eventId", eventId))
+          .collect(),
+        ctx.db
+          .query("purchaseItems")
+          .withIndex("by_event", (q) => q.eq("eventId", eventId))
+          .collect(),
+        ctx.db
+          .query("eventSuppliers")
+          .withIndex("by_event", (q) => q.eq("eventId", eventId))
+          .collect(),
+        ctx.db
+          .query("eventTeam")
+          .withIndex("by_event", (q) => q.eq("eventId", eventId))
+          .collect(),
+        ctx.db
+          .query("assemblyItems")
+          .withIndex("by_event", (q) => q.eq("eventId", eventId))
+          .collect(),
+        ctx.db
+          .query("transactions")
+          .withIndex("by_event", (q) => q.eq("eventId", eventId))
+          .collect(),
+      ]);
+
+    return montarResumoOperacional({
+      checklistPre: checklist.filter((i) => i.phase === "pre"),
+      checklistPos: checklist.filter((i) => i.phase === "post"),
+      compras,
+      fornecedores,
+      equipe,
+      carregamento,
+      transacoes,
+    });
   },
 });

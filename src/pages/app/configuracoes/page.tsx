@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils.ts";
+import { resolveSubscriptionView } from "@/lib/subscription-view.ts";
 import { authClient } from "@/lib/auth-client.ts";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
@@ -191,15 +192,10 @@ export default function ConfiguracoesPage() {
     cancelled: { label: "Cancelado", color: "text-muted-foreground", bg: "bg-muted", icon: AlertTriangle },
   } as const;
 
-  // Acesso especial (internal / beta vigente) tem precedência visual sobre o
-  // estado de cobrança: essas contas não pagam e não expiram.
-  const access = subStatus?.access;
-  const specialAccess =
-    access?.type === "internal"
-      ? { label: "Conta interna", detail: "Acesso permanente, sem cobrança." }
-      : access?.type === "beta" && !access.betaExpired
-        ? { label: "Acesso beta", detail: "Acesso liberado durante o período de testes." }
-        : null;
+  // O que esta tela mostra sobre assinatura vem de src/lib/subscription-view.
+  // Conta isenta de cobrança NÃO vê estado comercial: nada de "Trial expirado",
+  // preço, dias restantes ou "Assinar agora" — só o cartão de acesso.
+  const subscriptionView = resolveSubscriptionView(subStatus?.access, status);
 
   const sc = statusConfig[status as keyof typeof statusConfig] ?? statusConfig.trial;
   const StatusIcon = sc.icon;
@@ -368,19 +364,29 @@ export default function ConfiguracoesPage() {
       </div>
 
       {/* ── Assinatura ── */}
-      {specialAccess && (
+      {subscriptionView.exemptCard && (
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 flex items-start gap-3">
           <ShieldCheck className="size-5 text-primary flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-semibold text-primary">{specialAccess.label}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{specialAccess.detail}</p>
+            <p className="text-sm font-semibold text-primary">
+              {subscriptionView.exemptCard.label}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {subscriptionView.exemptCard.detail}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {subscriptionView.exemptCard.note}
+            </p>
           </div>
         </div>
       )}
 
       <SectionCard icon={CreditCard} title="Assinatura" description="Seu plano atual no Altar" delay={0.2}>
         <div className="space-y-4">
-          {/* Status badge */}
+          {/* Status badge — só para conta cobrável. Uma conta isenta já tem o
+              cartão de acesso acima; repetir "Trial expirado" aqui a
+              contradizia. */}
+          {subscriptionView.showBillingStatus && (
           <div className={cn("flex items-center gap-3 rounded-lg p-4", sc.bg)}>
             <StatusIcon className={cn("size-5 flex-shrink-0", sc.color)} />
             <div className="flex-1">
@@ -399,6 +405,7 @@ export default function ConfiguracoesPage() {
               )}
             </div>
           </div>
+          )}
 
           {/* Plan features */}
           <div className="space-y-2">
@@ -418,8 +425,8 @@ export default function ConfiguracoesPage() {
             ))}
           </div>
 
-          {/* CTA */}
-          {(status === "trial" || status === "expired") && (
+          {/* CTA — nunca para conta isenta de cobrança. */}
+          {subscriptionView.showCommercialCta && (
             <div className="pt-2 border-t border-border">
               <div className="flex items-center justify-between">
                 <div>

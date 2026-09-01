@@ -2,6 +2,7 @@ import { ConvexError, v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel.d.ts";
 import { getOptionalUser, requireIdentity, requireUser } from "./lib/identity";
+import { trialAlertBody, trialAlertDaysLeft } from "./lib/trialAlerts";
 
 // List latest 50 notifications for the current user
 export const list = query({
@@ -177,29 +178,26 @@ export const generateMyAlerts = mutation({
       }
     }
 
-    if (user.subscriptionStatus === "trial" && user.trialEndDate) {
-      const trialEnd = new Date(user.trialEndDate);
-      const daysLeft = Math.ceil((trialEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
-      if (daysLeft <= 3 && daysLeft >= 0) {
-        const todayStr = now.toISOString().slice(0, 10);
-        const recentAlert = await ctx.db
-          .query("notifications")
-          .withIndex("by_user", (q) => q.eq("userId", user._id))
-          .filter((q) => q.eq(q.field("type"), "trial_expiring"))
-          .order("desc")
-          .first();
-        if (!recentAlert || recentAlert.createdAt.slice(0, 10) !== todayStr) {
-          await ctx.db.insert("notifications", {
-            userId: user._id,
-            type: "trial_expiring",
-            title: "Trial expirando em breve",
-            body: daysLeft <= 0
-              ? "Seu período de teste expirou. Assine agora para continuar usando o Altar."
-              : `Seu período de teste termina em ${daysLeft} dia${daysLeft === 1 ? "" : "s"}. Assine para não perder acesso.`,
-            isRead: false,
-            createdAt: now.toISOString(),
-          });
-        }
+    // Aviso de trial: quem decide é lib/trialAlerts. Contas isentas de cobrança
+    // (internal, admin, beta vigente) recebem `null` e não são notificadas.
+    const daysLeft = trialAlertDaysLeft(user, now.getTime());
+    if (daysLeft !== null) {
+      const todayStr = now.toISOString().slice(0, 10);
+      const recentAlert = await ctx.db
+        .query("notifications")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .filter((q) => q.eq(q.field("type"), "trial_expiring"))
+        .order("desc")
+        .first();
+      if (!recentAlert || recentAlert.createdAt.slice(0, 10) !== todayStr) {
+        await ctx.db.insert("notifications", {
+          userId: user._id,
+          type: "trial_expiring",
+          title: "Trial expirando em breve",
+          body: trialAlertBody(daysLeft),
+          isRead: false,
+          createdAt: now.toISOString(),
+        });
       }
     }
   },
@@ -287,30 +285,27 @@ export const generateDailyAlerts = internalMutation({
         }
       }
 
-      // 2. Trial expiring in 3 days
-      if (user.subscriptionStatus === "trial" && user.trialEndDate) {
-        const trialEnd = new Date(user.trialEndDate);
-        const daysLeft = Math.ceil((trialEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
-        if (daysLeft <= 3 && daysLeft >= 0) {
-          const recentAlert = await ctx.db
-            .query("notifications")
-            .withIndex("by_user", (q) => q.eq("userId", user._id))
-            .filter((q) => q.eq(q.field("type"), "trial_expiring"))
-            .order("desc")
-            .first();
-          // Only re-notify once per day
-          if (!recentAlert || recentAlert.createdAt.slice(0, 10) !== todayISO) {
-            await ctx.db.insert("notifications", {
-              userId: user._id,
-              type: "trial_expiring",
-              title: "Trial expirando em breve",
-              body: daysLeft <= 0
-                ? "Seu período de teste expirou. Assine agora para continuar usando o Altar."
-                : `Seu período de teste termina em ${daysLeft} dia${daysLeft === 1 ? "" : "s"}. Assine para não perder acesso.`,
-              isRead: false,
-              createdAt: now.toISOString(),
-            });
-          }
+      // 2. Trial expiring — MESMA regra de `generateMyAlerts`, importada de
+      // lib/trialAlerts para as duas não voltarem a divergir. Contas isentas
+      // de cobrança (internal, admin, beta vigente) recebem `null` aqui.
+      const daysLeft = trialAlertDaysLeft(user, now.getTime());
+      if (daysLeft !== null) {
+        const recentAlert = await ctx.db
+          .query("notifications")
+          .withIndex("by_user", (q) => q.eq("userId", user._id))
+          .filter((q) => q.eq(q.field("type"), "trial_expiring"))
+          .order("desc")
+          .first();
+        // Only re-notify once per day
+        if (!recentAlert || recentAlert.createdAt.slice(0, 10) !== todayISO) {
+          await ctx.db.insert("notifications", {
+            userId: user._id,
+            type: "trial_expiring",
+            title: "Trial expirando em breve",
+            body: trialAlertBody(daysLeft),
+            isRead: false,
+            createdAt: now.toISOString(),
+          });
         }
       }
 

@@ -58,6 +58,13 @@ function TrialBanner() {
   //
   // `overdueDaysLeft` vem pronto do backend (convex/lib/access.ts); a tela não
   // recalcula prazo nenhum.
+  //
+  // Nenhum dos dois avisos vale para conta ISENTA DE COBRANÇA (internal, admin
+  // do ALTAR, beta vigente): não há trial para acabar nem fatura para atrasar.
+  // Mesma fonte da regra do sino e da tela de Configurações — `billingExempt`,
+  // decidido em convex/lib/access.ts.
+  const billingExempt = status?.access?.billingExempt === true;
+
   const overdueDaysLeft = status?.access?.overdueDaysLeft;
   const isOverdue =
     status?.subscriptionStatus === "overdue" && overdueDaysLeft !== undefined;
@@ -68,6 +75,7 @@ function TrialBanner() {
     trialDaysLeft !== undefined &&
     trialDaysLeft <= 7;
 
+  if (billingExempt) return null;
   if (!status || (!isTrialEnding && !isOverdue)) return null;
 
   const message = isOverdue

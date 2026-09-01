@@ -348,10 +348,28 @@ export default defineSchema({
     eventId: v.id("events"),
     storageId: v.id("_storage"),
     filename: v.string(),
+    // FASE do evento em que a foto foi tirada (antes/montagem/evento/
+    // desmontagem). Eixo diferente de `projectScope`, abaixo.
     category: photoCategory,
     caption: v.optional(v.string()),
     order: v.number(),
     uploadedAt: v.string(),
+    // ── O que esta imagem SIGNIFICA no projeto (opcional, aditivo) ──────────
+    // A distincao existe para inspiracao nunca ser confundida com contratacao:
+    //   incluso     - esta no projeto aprovado
+    //   referencia  - imagem conceitual, NAO contratada
+    //   nao_incluso - foi mostrado e ficou de fora
+    // AUSENTE = nao classificada. Nenhum backfill: a tela mostra sem selo, e
+    // nao inventa que a foto e um item contratado.
+    projectScope: v.optional(
+      v.union(
+        v.literal("incluso"),
+        v.literal("referencia"),
+        v.literal("nao_incluso"),
+      ),
+    ),
+    /** Ambiente a que a imagem se refere (cerimonia, mesa do bolo, bar...). */
+    ambiente: v.optional(v.string()),
   })
     .index("by_event", ["eventId"])
     .index("by_event_category", ["eventId", "category"]),

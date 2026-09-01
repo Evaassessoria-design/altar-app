@@ -23,6 +23,12 @@ import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils.ts";
 import {
+  AVISO_REFERENCIA,
+  PROJECT_SCOPES,
+  scopeMeta,
+  type ProjectScope,
+} from "@/lib/photo-scope.ts";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -74,6 +80,7 @@ export default function GaleriaPage() {
   const [deletingId, setDeletingId] = useState<Id<"eventPhotos"> | null>(null);
   const [editingCaption, setEditingCaption] = useState<Id<"eventPhotos"> | null>(null);
   const [captionText, setCaptionText] = useState("");
+  const [scopeValue, setScopeValue] = useState<ProjectScope | null>(null);
   const [draggingOver, setDraggingOver] = useState(false);
 
   const handleFiles = useCallback(
@@ -133,7 +140,11 @@ export default function GaleriaPage() {
 
   const handleSaveCaption = async (photoId: Id<"eventPhotos">) => {
     try {
-      await updatePhoto({ id: photoId, caption: captionText || undefined });
+      await updatePhoto({
+        id: photoId,
+        caption: captionText || undefined,
+        projectScope: scopeValue ?? undefined,
+      });
       toast.success("Legenda salva!");
     } catch {
       toast.error("Erro ao salvar legenda");
@@ -308,10 +319,22 @@ export default function GaleriaPage() {
                     className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                     loading="lazy"
                   />
-                  {/* Category badge */}
+                  {/* Category badge — a FASE em que a foto foi tirada. */}
                   <div className={cn("absolute top-2 left-2 px-1.5 py-0.5 rounded text-[10px] font-semibold", cat.color)}>
                     {cat.label}
                   </div>
+                  {/* O que a imagem significa no projeto. Eixo separado da
+                      fase: inspiração nunca pode passar por contratação. */}
+                  {scopeMeta(photo.projectScope) && (
+                    <div
+                      className={cn(
+                        "absolute top-2 right-2 px-1.5 py-0.5 rounded text-[10px] font-semibold",
+                        scopeMeta(photo.projectScope)!.classe,
+                      )}
+                    >
+                      {scopeMeta(photo.projectScope)!.label}
+                    </div>
+                  )}
                   {/* Overlay actions */}
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2 gap-1">
                     {photo.caption && (
@@ -319,7 +342,7 @@ export default function GaleriaPage() {
                     )}
                     <div className="flex gap-1 ml-auto">
                       <button
-                        onClick={(e) => { e.stopPropagation(); setEditingCaption(photo._id); setCaptionText(photo.caption ?? ""); }}
+                        onClick={(e) => { e.stopPropagation(); setEditingCaption(photo._id); setCaptionText(photo.caption ?? ""); setScopeValue((photo.projectScope as ProjectScope | undefined) ?? null); }}
                         className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors cursor-pointer"
                         title="Editar legenda"
                       >
@@ -442,7 +465,7 @@ export default function GaleriaPage() {
               onClick={(e) => e.stopPropagation()}
               className="bg-card rounded-xl border border-border p-5 w-full max-w-sm space-y-4"
             >
-              <h3 className="font-semibold">Editar Legenda</h3>
+              <h3 className="font-semibold">Legenda e classificação</h3>
               <input
                 type="text"
                 value={captionText}
@@ -452,6 +475,48 @@ export default function GaleriaPage() {
                 onKeyDown={(e) => { if (e.key === "Enter") void handleSaveCaption(editingCaption); }}
                 autoFocus
               />
+
+              {/* O que esta imagem significa no projeto. Fica junto da legenda
+                  porque é a hora em que a decoradora está descrevendo a foto. */}
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium">Classificação</p>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setScopeValue(null)}
+                    className={cn(
+                      "text-xs px-2.5 py-1 rounded-full border transition-colors cursor-pointer",
+                      scopeValue === null
+                        ? "border-primary bg-primary/10 text-primary font-medium"
+                        : "border-border text-muted-foreground hover:bg-accent",
+                    )}
+                  >
+                    Sem classificação
+                  </button>
+                  {PROJECT_SCOPES.map((sc) => (
+                    <button
+                      key={sc.value}
+                      type="button"
+                      onClick={() => setScopeValue(sc.value)}
+                      title={sc.detalhe}
+                      className={cn(
+                        "text-xs px-2.5 py-1 rounded-full border transition-colors cursor-pointer",
+                        scopeValue === sc.value
+                          ? "border-primary bg-primary/10 text-primary font-medium"
+                          : "border-border text-muted-foreground hover:bg-accent",
+                      )}
+                    >
+                      {sc.label}
+                    </button>
+                  ))}
+                </div>
+                {scopeValue === "referencia" && (
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    {AVISO_REFERENCIA}. Aparecerá marcada assim para não ser confundida com
+                    item contratado.
+                  </p>
+                )}
+              </div>
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" size="sm" onClick={() => setEditingCaption(null)} className="cursor-pointer">
                   <X className="size-4" />

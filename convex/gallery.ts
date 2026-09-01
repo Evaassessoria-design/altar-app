@@ -98,6 +98,11 @@ export const updatePhoto = mutation({
       v.literal("evento"),
       v.literal("desmontagem"),
     )),
+    // O que a imagem significa no projeto — eixo separado da fase.
+    projectScope: v.optional(
+      v.union(v.literal("incluso"), v.literal("referencia"), v.literal("nao_incluso")),
+    ),
+    ambiente: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);

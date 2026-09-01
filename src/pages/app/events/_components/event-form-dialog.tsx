@@ -20,10 +20,16 @@ import {
   SelectValue,
 } from "@/components/ui/select.tsx";
 import type { Doc } from "@/convex/_generated/dataModel.d.ts";
+import {
+  ERRO_TIPO_OBRIGATORIO,
+  EVENT_TYPES,
+  PLACEHOLDER_TIPO_DE_EVENTO,
+  tipoDeEventoSchema,
+} from "@/lib/event-types.ts";
 
 const eventSchema = z.object({
   name: z.string().min(2, "Nome obrigatório"),
-  type: z.enum(["wedding", "corporate", "birthday", "debutante", "baptism", "other"]),
+  type: tipoDeEventoSchema,
   date: z.string().min(1, "Data obrigatória"),
   location: z.string().min(2, "Local obrigatório"),
   clientName: z.string().min(2, "Nome do cliente obrigatório"),
@@ -45,15 +51,6 @@ type Props = {
   title: string;
 };
 
-const EVENT_TYPES = [
-  { value: "wedding", label: "Casamento" },
-  { value: "corporate", label: "Corporativo" },
-  { value: "birthday", label: "Aniversário" },
-  { value: "debutante", label: "Debutante" },
-  { value: "baptism", label: "Batizado" },
-  { value: "other", label: "Outro" },
-];
-
 const EVENT_STATUSES = [
   { value: "planning", label: "Planejamento" },
   { value: "confirmed", label: "Confirmado" },
@@ -74,7 +71,10 @@ export default function EventFormDialog({ open, onClose, onSubmit, defaultValues
     resolver: zodResolver(eventSchema),
     defaultValues: {
       name: defaultValues?.name ?? "",
-      type: defaultValues?.type ?? "wedding",
+      // SEM padrão, de propósito: um evento novo nascia como "Casamento" e
+      // quem não reparava no campo salvava o tipo errado em silêncio.
+      // Evento existente continua abrindo com o tipo que já tem.
+      type: defaultValues?.type,
       date: defaultValues?.date ? defaultValues.date.slice(0, 16) : "",
       location: defaultValues?.location ?? "",
       clientName: defaultValues?.clientName ?? "",
@@ -114,13 +114,23 @@ export default function EventFormDialog({ open, onClose, onSubmit, defaultValues
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Tipo *</Label>
+              <Label htmlFor="event-type">Tipo *</Label>
               <Select
-                value={watch("type")}
-                onValueChange={(v) => setValue("type", v as EventFormValues["type"])}
+                // `?? ""` mantém o Select controlado enquanto ninguém escolheu:
+                // com `undefined` o Radix o trataria como não controlado e o
+                // placeholder não apareceria.
+                value={watch("type") ?? ""}
+                onValueChange={(v) =>
+                  setValue("type", v as EventFormValues["type"], { shouldValidate: true })
+                }
               >
-                <SelectTrigger>
-                  <SelectValue />
+                <SelectTrigger
+                  id="event-type"
+                  aria-invalid={!!errors.type}
+                  aria-describedby={errors.type ? "event-type-erro" : undefined}
+                  className={errors.type ? "border-destructive" : undefined}
+                >
+                  <SelectValue placeholder={PLACEHOLDER_TIPO_DE_EVENTO} />
                 </SelectTrigger>
                 <SelectContent>
                   {EVENT_TYPES.map((t) => (
@@ -130,6 +140,13 @@ export default function EventFormDialog({ open, onClose, onSubmit, defaultValues
                   ))}
                 </SelectContent>
               </Select>
+              {/* O erro aparece NO CAMPO. Recusar o envio sem dizer o motivo
+                  seria a falha silenciosa que esta mudança existe para evitar. */}
+              {errors.type && (
+                <p id="event-type-erro" className="text-xs text-destructive">
+                  {errors.type.message ?? ERRO_TIPO_OBRIGATORIO}
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>Status *</Label>

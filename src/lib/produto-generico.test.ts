@@ -75,12 +75,20 @@ describe("o produto fala de CLIENTE, não de casal", () => {
 
 describe("os tipos de evento cobrem a rotina de um decorador", () => {
   it("o seletor não é só casamento", () => {
-    const fonte = readFileSync(
-      "src/pages/app/events/_components/event-form-dialog.tsx",
-      "utf-8",
-    );
-    for (const tipo of ["corporate", "birthday", "debutante", "other"]) {
+    // Os literais saíram dos formulários para a fonte única em
+    // src/lib/event-types.ts — a regra é a mesma, o lugar mudou.
+    const fonte = readFileSync("src/lib/event-types.ts", "utf-8");
+    for (const tipo of ["corporate", "birthday", "debutante", "baptism", "other"]) {
       expect(fonte).toContain(`"${tipo}"`);
+    }
+  });
+
+  it("os formulários consomem a lista, em vez de manter cópia própria", () => {
+    for (const tela of [
+      "src/pages/app/events/_components/event-form-dialog.tsx",
+      "src/components/onboarding-modal.tsx",
+    ]) {
+      expect(readFileSync(tela, "utf-8"), tela).toContain('from "@/lib/event-types.ts"');
     }
   });
 });

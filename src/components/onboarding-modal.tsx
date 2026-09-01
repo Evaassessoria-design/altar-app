@@ -18,20 +18,17 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils.ts";
+import {
+  ERRO_TIPO_OBRIGATORIO,
+  EVENT_TYPES,
+  PLACEHOLDER_TIPO_DE_EVENTO,
+  type TipoDeEvento,
+} from "@/lib/event-types.ts";
 
 const STEPS = [
   { id: 1, icon: Building2, label: "Seu Estúdio" },
   { id: 2, icon: CalendarDays, label: "Primeiro Evento" },
   { id: 3, icon: Users, label: "Sua Equipe" },
-] as const;
-
-const EVENT_TYPES = [
-  { value: "wedding", label: "Casamento" },
-  { value: "birthday", label: "Aniversário" },
-  { value: "debutante", label: "Debutante" },
-  { value: "corporate", label: "Corporativo" },
-  { value: "baptism", label: "Batizado" },
-  { value: "other", label: "Outro" },
 ] as const;
 
 const TEAM_ROLES = [
@@ -42,8 +39,6 @@ const TEAM_ROLES = [
   "Cerimonialista",
   "Outro",
 ];
-
-type EventType = (typeof EVENT_TYPES)[number]["value"];
 
 interface OnboardingModalProps {
   onComplete: () => void;
@@ -58,7 +53,10 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
 
   // Step 2
   const [eventName, setEventName] = useState("");
-  const [eventType, setEventType] = useState<EventType>("wedding");
+  // `null` = ninguém escolheu ainda. Nascia como "wedding", e quem não
+  // reparava no campo criava o primeiro evento com o tipo errado.
+  const [eventType, setEventType] = useState<TipoDeEvento | null>(null);
+  const [erroTipo, setErroTipo] = useState(false);
   const [eventDate, setEventDate] = useState("");
   const [eventLocation, setEventLocation] = useState("");
   const [clientName, setClientName] = useState("");
@@ -95,6 +93,14 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
   };
 
   const handleStep2 = async () => {
+    // O tipo é conferido separado para o erro poder aparecer NO CAMPO. Um
+    // aviso genérico não diria qual campo faltou, e o tipo é justamente o que
+    // não tem mais valor presumido.
+    if (!eventType) {
+      setErroTipo(true);
+      toast.error(ERRO_TIPO_OBRIGATORIO);
+      return;
+    }
     if (!eventName.trim() || !eventDate || !eventLocation.trim() || !clientName.trim()) {
       toast.error("Preencha todos os campos obrigatórios");
       return;
@@ -272,12 +278,26 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Tipo de evento *</Label>
-                    <div className="flex flex-wrap gap-2">
+                    <Label id="onb-tipo-label">Tipo de evento *</Label>
+                    <div
+                      role="group"
+                      aria-labelledby="onb-tipo-label"
+                      aria-invalid={erroTipo}
+                      aria-describedby={erroTipo ? "onb-tipo-erro" : undefined}
+                      className={cn(
+                        "flex flex-wrap gap-2",
+                        erroTipo && "rounded-lg border border-destructive p-2",
+                      )}
+                    >
                       {EVENT_TYPES.map((t) => (
                         <button
                           key={t.value}
-                          onClick={() => setEventType(t.value)}
+                          type="button"
+                          aria-pressed={eventType === t.value}
+                          onClick={() => {
+                            setEventType(t.value);
+                            setErroTipo(false);
+                          }}
                           className={cn(
                             "px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer",
                             eventType === t.value
@@ -289,6 +309,15 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
                         </button>
                       ))}
                     </div>
+                    {erroTipo ? (
+                      <p id="onb-tipo-erro" className="text-xs text-destructive">
+                        {ERRO_TIPO_OBRIGATORIO}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        {PLACEHOLDER_TIPO_DE_EVENTO}
+                      </p>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">

@@ -295,7 +295,7 @@ function EventSection({
                     <div
                       key={item._id}
                       className={cn(
-                        "flex items-center gap-3 px-5 py-3 transition-colors",
+                        "flex items-start gap-3 px-5 py-3 transition-colors",
                         item.isPurchased && "opacity-60",
                       )}
                     >
@@ -314,7 +314,15 @@ function EventSection({
                         <p className={cn("text-sm font-medium", item.isPurchased && "line-through text-muted-foreground")}>
                           {item.name}
                         </p>
-                        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                        {/* A situação fica JUNTO da meta e acompanha a quebra
+                            de linha. Antes vinha depois do nome com
+                            `hidden sm:block`: sumia por completo no celular —
+                            justo onde a decoradora opera, no galpão. */}
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mt-1">
+                          <StatusPill
+                            item={item}
+                            onChange={(status) => onSetStatus(item._id, status)}
+                          />
                           {item.quantity && (
                             <span>{item.quantity}{item.unit ? ` ${item.unit}` : ""}</span>
                           )}
@@ -339,12 +347,6 @@ function EventSection({
                             </span>
                           )}
                         </div>
-                      </div>
-                      <div className="hidden sm:block flex-shrink-0">
-                        <StatusPill
-                          item={item}
-                          onChange={(status) => onSetStatus(item._id, status)}
-                        />
                       </div>
                       <div className="flex gap-1 flex-shrink-0">
                         {/* Botões só de ícone precisam de nome acessível —

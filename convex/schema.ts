@@ -154,6 +154,17 @@ export default defineSchema({
     currency: v.optional(v.string()),
     timezone: v.optional(v.string()),
     logoStorageId: v.optional(v.id("_storage")),
+    // ── Identidade da empresa nos DOCUMENTOS ────────────────────────────────
+    // `studioName`, `logoStorageId`, `phone`, `email` e `cpfCnpj` ja existiam e
+    // NAO foram duplicados. So o que faltava entra aqui, tudo opcional.
+    // Alimenta os PDFs gerados; a INTERFACE do ALTAR continua com a identidade
+    // do ALTAR — nao ha white-label de tela.
+    instagram: v.optional(v.string()),
+    website: v.optional(v.string()),
+    /** Cor principal dos documentos, "#RRGGBB". Invalida cai no padrao ALTAR. */
+    brandColor: v.optional(v.string()),
+    /** Cor de apoio, usada com moderacao. */
+    brandAccentColor: v.optional(v.string()),
     // Integração Asaas (assinatura)
     asaasCustomerId: v.optional(v.string()),
     asaasSubscriptionId: v.optional(v.string()),

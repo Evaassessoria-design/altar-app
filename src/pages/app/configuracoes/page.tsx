@@ -28,6 +28,14 @@ import {
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils.ts";
 import { resolveSubscriptionView } from "@/lib/subscription-view.ts";
+import { COR_PADRAO_ALTAR, parseHexColor, resolveIdentidade } from "@/lib/brand.ts";
+
+/** Valor para o seletor nativo de cor, que só aceita #RRGGBB. */
+function hexDe(valor: string): string | null {
+  const rgb = parseHexColor(valor);
+  if (!rgb) return null;
+  return "#" + rgb.map((c) => c.toString(16).padStart(2, "0")).join("").toUpperCase();
+}
 import { authClient } from "@/lib/auth-client.ts";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
@@ -104,6 +112,12 @@ export default function ConfiguracoesPage() {
   const [phone, setPhone] = useState("");
   const [studioName, setStudioName] = useState("");
   const [cpfCnpj, setCpfCnpj] = useState("");
+  // Identidade dos DOCUMENTOS. A interface do ALTAR continua sendo o ALTAR —
+  // estes campos alimentam só os PDFs que a empresa entrega.
+  const [instagram, setInstagram] = useState("");
+  const [website, setWebsite] = useState("");
+  const [brandColor, setBrandColor] = useState("");
+  const [brandAccentColor, setBrandAccentColor] = useState("");
   const [currency, setCurrency] = useState("BRL");
   const [timezone, setTimezone] = useState("America/Sao_Paulo");
   const [initialized, setInitialized] = useState(false);
@@ -118,6 +132,10 @@ export default function ConfiguracoesPage() {
     setPhone(user.phone ?? "");
     setStudioName(user.studioName ?? "");
     setCpfCnpj(user.cpfCnpj ?? "");
+    setInstagram(user.instagram ?? "");
+    setWebsite(user.website ?? "");
+    setBrandColor(user.brandColor ?? "");
+    setBrandAccentColor(user.brandAccentColor ?? "");
     setCurrency(user.currency ?? "BRL");
     setTimezone(user.timezone ?? "America/Sao_Paulo");
     setInitialized(true);
@@ -131,6 +149,10 @@ export default function ConfiguracoesPage() {
         phone: phone.trim() || undefined,
         studioName: studioName.trim() || undefined,
         cpfCnpj: cpfCnpj.trim() || undefined,
+        instagram: instagram.trim() || undefined,
+        website: website.trim() || undefined,
+        brandColor: brandColor.trim() || undefined,
+        brandAccentColor: brandAccentColor.trim() || undefined,
         currency,
         timezone,
       });
@@ -196,6 +218,22 @@ export default function ConfiguracoesPage() {
   // Conta isenta de cobrança NÃO vê estado comercial: nada de "Trial expirado",
   // preço, dias restantes ou "Assinar agora" — só o cartão de acesso.
   const subscriptionView = resolveSubscriptionView(subStatus?.access, status);
+
+  // Prévia da identidade com a MESMA regra do PDF: cor inválida cai no padrão
+  // e a cor do texto é medida pelo contraste, nunca fixada.
+  const identidade = resolveIdentidade({
+    studioName,
+    name,
+    phone,
+    email: user?.email,
+    instagram,
+    website,
+    brandColor,
+    brandAccentColor,
+  });
+  const rgbCss = ([r, g, b]: readonly [number, number, number]) => `rgb(${r},${g},${b})`;
+  const corPrincipalHex = hexDe(brandColor) ?? COR_PADRAO_ALTAR;
+  const corApoioHex = hexDe(brandAccentColor) ?? corPrincipalHex;
 
   const sc = statusConfig[status as keyof typeof statusConfig] ?? statusConfig.trial;
   const StatusIcon = sc.icon;
@@ -313,6 +351,91 @@ export default function ConfiguracoesPage() {
             <p className="text-xs text-muted-foreground">
               Necessário para gerar a assinatura. Seus dados de contato (telefone e e-mail) ficam no bloco acima.
             </p>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label>Instagram</Label>
+              <Input
+                placeholder="@auroradecoracoes"
+                value={instagram}
+                onChange={(e) => setInstagram(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Site</Label>
+              <Input
+                placeholder="auroradecoracoes.com.br"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* ── Cores dos documentos ── */}
+          <div className="pt-2 border-t border-border space-y-3">
+            <div>
+              <p className="text-sm font-medium">Cores dos documentos</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Usadas no Caderno de Montagem e nas fichas que você entrega. A tela do ALTAR
+                continua igual.
+              </p>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Cor principal</Label>
+                <div className="flex gap-2">
+                  <input
+                    type="color"
+                    aria-label="Escolher cor principal"
+                    value={corPrincipalHex}
+                    onChange={(e) => setBrandColor(e.target.value.toUpperCase())}
+                    className="h-10 w-12 rounded-md border border-input bg-background cursor-pointer p-1"
+                  />
+                  <Input
+                    placeholder={COR_PADRAO_ALTAR}
+                    value={brandColor}
+                    onChange={(e) => setBrandColor(e.target.value)}
+                    className="flex-1"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Cor de apoio</Label>
+                <div className="flex gap-2">
+                  <input
+                    type="color"
+                    aria-label="Escolher cor de apoio"
+                    value={corApoioHex}
+                    onChange={(e) => setBrandAccentColor(e.target.value.toUpperCase())}
+                    className="h-10 w-12 rounded-md border border-input bg-background cursor-pointer p-1"
+                  />
+                  <Input
+                    placeholder="opcional"
+                    value={brandAccentColor}
+                    onChange={(e) => setBrandAccentColor(e.target.value)}
+                    className="flex-1"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Prévia com a MESMA regra de contraste do PDF: a cor do texto é
+                medida, não escolhida à mão. */}
+            <div
+              className="rounded-lg px-4 py-3"
+              style={{ backgroundColor: rgbCss(identidade.cor), color: rgbCss(identidade.textoSobreCor) }}
+            >
+              <p className="text-sm font-semibold">CADERNO DE MONTAGEM</p>
+              <p className="text-xs opacity-90">{identidade.nome}</p>
+            </div>
+            {brandColor.trim() !== "" && !identidade.usaCorPropria && (
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                Não reconhecemos essa cor. Use o formato #RRGGBB — por enquanto o documento sai
+                com a cor padrão.
+              </p>
+            )}
           </div>
         </div>
       </SectionCard>

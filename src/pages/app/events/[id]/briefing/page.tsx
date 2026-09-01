@@ -14,6 +14,29 @@ import { ArrowLeft, Save, ChevronRight, Sparkles, FileDown, Loader2 } from "luci
 import { cn } from "@/lib/utils.ts";
 import { BRIEFING_AREAS, type BriefingFields } from "@/lib/briefing-areas.ts";
 import { generateAssemblyPDF } from "@/lib/generate-assembly-pdf.ts";
+
+/**
+ * Converte a logo em data URL para o jsPDF.
+ *
+ * Falha de rede ou imagem inválida NÃO pode impedir a geração do caderno:
+ * devolve null e o cabeçalho sai sem logo.
+ */
+async function carregarLogo(url: string | null | undefined): Promise<string | null> {
+  if (!url) return null;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await new Promise<string | null>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(typeof reader.result === "string" ? reader.result : null);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
 import { AssemblyItemsSection } from "../_components/assembly-items-section.tsx";
 import { SuggestItemsDialog } from "../_components/suggest-items-dialog.tsx";
 
@@ -33,6 +56,21 @@ export default function EventBriefingPage() {
   const checklist = useQuery(api.briefing.getChecklist, { eventId, phase: "pre" });
   const health = useQuery(api.health.getEventHealth, { eventId });
   const renders = useQuery(api.layoutRenders.listByEvent, { eventId });
+  // Identidade da empresa para o documento. Ambas degradam para null e o
+  // caderno sai igualmente completo, só com o padrão do ALTAR.
+  const empresa = useQuery(api.users.getCurrentUser);
+  const logoUrl = useQuery(api.users.getLogoUrl);
+  const eventTeam = useQuery(api.team.listEventTeam, { eventId });
+
+  // LACUNA CONHECIDA: o evento não tem um campo "responsável operacional".
+  // `health.getEventHealth` já usava a PRIMEIRA pessoa escalada como
+  // responsável; aqui buscamos o telefone DELA, casando pelo nome, para que o
+  // documento nunca mostre o nome de uma pessoa com o telefone de outra.
+  // Um campo explícito de responsável é a próxima etapa — não inventamos um
+  // contato paralelo agora.
+  const responsavelTelefone = eventTeam?.find(
+    (a) => a.member?.name === health?.responsible,
+  )?.member?.phone;
   const upsertBriefing = useMutation(api.briefing.upsertBriefing);
 
   const {
@@ -82,6 +120,9 @@ export default function EventBriefingPage() {
         responsible: health?.responsible,
         mapUrl,
         audience: "equipe",
+        empresa: empresa ?? null,
+        logoDataUrl: await carregarLogo(logoUrl),
+        responsiblePhone: responsavelTelefone,
       });
       toast.success("Caderno de montagem gerado!");
     } catch {

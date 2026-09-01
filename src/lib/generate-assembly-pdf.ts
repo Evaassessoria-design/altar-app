@@ -3,6 +3,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { Doc } from "@/convex/_generated/dataModel.d.ts";
 import { formatEventDayOnly } from "./event-date";
+import { ASSINATURA_ALTAR, resolveIdentidade, type EmpresaLike, type RGB } from "./brand";
 import {
   resolveAreasForAudience,
   itemVisibleTo,
@@ -61,6 +62,16 @@ export interface AssemblyReportData {
   mapUrl?: string | null;
   audience?: Audience;
   generatedBy?: string;
+  /**
+   * Identidade da EMPRESA DE DECORAÇÃO. O documento é entregue por ela à
+   * equipe dela — o protagonismo é seu; o ALTAR assina no rodapé.
+   * Ausente = cai no padrão do ALTAR, e o documento sai igualmente completo.
+   */
+  empresa?: EmpresaLike | null;
+  /** Logo já convertida em data URL pela tela. Ausente = cabeçalho sem logo. */
+  logoDataUrl?: string | null;
+  /** Contato de quem resolve problema durante a montagem. */
+  responsiblePhone?: string;
 }
 
 // ── Imagens: miniatura comprimida ────────────────────────────────────────────
@@ -109,7 +120,7 @@ function addPageIfNeeded(doc: jsPDF, y: number, needed = 30): number {
   return y;
 }
 
-function sectionHeader(doc: jsPDF, title: string, y: number): number {
+function sectionHeader(doc: jsPDF, title: string, y: number, cor: RGB): number {
   y = addPageIfNeeded(doc, y, 18);
   doc.setFillColor(...LIGHT_BG);
   doc.rect(MARGIN, y - 1, CONTENT_W, 10, "F");
@@ -118,7 +129,7 @@ function sectionHeader(doc: jsPDF, title: string, y: number): number {
   doc.line(MARGIN, y + 9, MARGIN + CONTENT_W, y + 9);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
-  doc.setTextColor(...PRIMARY_DARK);
+  doc.setTextColor(...cor);
   doc.text(title.toUpperCase(), MARGIN + 3, y + 6.5);
   return y + 14;
 }
@@ -141,8 +152,8 @@ function fieldRow(doc: jsPDF, label: string, value: string, y: number): number {
 }
 
 /** Quadrado vazio ☐ desenhado como vetor (fonte padrão do jsPDF não tem o glifo). */
-function checkbox(doc: jsPDF, x: number, y: number, size = 4): void {
-  doc.setDrawColor(...PRIMARY_DARK);
+function checkbox(doc: jsPDF, x: number, y: number, cor: RGB, size = 4): void {
+  doc.setDrawColor(...cor);
   doc.setLineWidth(0.4);
   doc.rect(x, y, size, size);
 }
@@ -163,24 +174,46 @@ export async function generateAssemblyPDF(data: AssemblyReportData): Promise<voi
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
   // ── Cabeçalho ─────────────────────────────────────────────────────────────
-  doc.setFillColor(...PRIMARY);
-  doc.rect(0, 0, PAGE_W, 26, "F");
+  // Protagonismo da empresa: logo, nome e contato dela. A cor é a que ela
+  // cadastrou, e a cor do TEXTO é medida pelo contraste real (src/lib/brand.ts)
+  // — uma marca clara com texto branco fixo produziria um cabeçalho ilegível.
+  const identidade = resolveIdentidade(data.empresa);
+  const HEADER_H = 30;
+  doc.setFillColor(...identidade.cor);
+  doc.rect(0, 0, PAGE_W, HEADER_H, "F");
+
+  let textoX = MARGIN;
+  if (data.logoDataUrl) {
+    try {
+      // Quadrado fixo: a logo é encaixada sem distorcer a proporção original.
+      doc.addImage(data.logoDataUrl, MARGIN, 6, 18, 18, undefined, "FAST");
+      textoX = MARGIN + 23;
+    } catch {
+      // Logo ilegível não pode impedir a geração do documento.
+      textoX = MARGIN;
+    }
+  }
+
+  doc.setTextColor(...identidade.textoSobreCor);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(15);
-  doc.setTextColor(255, 255, 255);
-  doc.text("CADERNO DE MONTAGEM", MARGIN, 13);
+  doc.setFontSize(14);
+  doc.text("CADERNO DE MONTAGEM", textoX, 13);
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.text("ALTAR · Documento operacional da equipe", MARGIN, 19.5);
+  doc.setFontSize(9);
+  doc.text(identidade.nome, textoX, 19);
+  if (identidade.contato) {
+    doc.setFontSize(7);
+    doc.text(doc.splitTextToSize(identidade.contato, CONTENT_W - (textoX - MARGIN)) as string[], textoX, 24.5);
+  }
   doc.setFontSize(7);
   doc.text(
-    `Gerado em ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`,
+    format(new Date(), "dd/MM/yyyy", { locale: ptBR }),
     PAGE_W - MARGIN,
-    19.5,
+    13,
     { align: "right" },
   );
 
-  let y = 36;
+  let y = HEADER_H + 10;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(17);
   doc.setTextColor(...DARK);
@@ -194,11 +227,18 @@ export async function generateAssemblyPDF(data: AssemblyReportData): Promise<voi
     ["Local", event.location?.trim() || undefined],
     ["Convidados", data.guestCount?.trim() || undefined],
     ["Assessoria", data.assessoria?.trim() || undefined],
-    ["Responsável", data.responsible?.trim() || undefined],
+    [
+      "Responsável",
+      // Quem resolve problema durante a montagem — nome e telefone juntos,
+      // para a equipe não precisar procurar em outro lugar.
+      data.responsible?.trim()
+        ? [data.responsible.trim(), data.responsiblePhone?.trim()].filter(Boolean).join(" · ")
+        : undefined,
+    ],
   ];
   const headerRows = header.filter((h): h is [string, string] => !!h[1]);
   if (headerRows.length > 0) {
-    y = sectionHeader(doc, "Evento", y);
+    y = sectionHeader(doc, "Evento", y, identidade.cor);
     for (const [label, value] of headerRows) y = fieldRow(doc, label, value, y);
     y += 3;
   }
@@ -211,7 +251,7 @@ export async function generateAssemblyPDF(data: AssemblyReportData): Promise<voi
       const w = Math.min(CONTENT_W, MAP_MAX_MM / Math.max(ratio, 0.01));
       const drawW = Math.min(CONTENT_W, w);
       const drawH = drawW * ratio;
-      y = sectionHeader(doc, "Planta do evento", y);
+      y = sectionHeader(doc, "Planta do evento", y, identidade.cor);
       y = addPageIfNeeded(doc, y, drawH + 6);
       doc.addImage(map.dataUrl, "JPEG", MARGIN, y, drawW, drawH);
       y += drawH + 6;
@@ -232,7 +272,7 @@ export async function generateAssemblyPDF(data: AssemblyReportData): Promise<voi
       const list = byArea.get(area.key);
       if (!list || list.length === 0) continue;
 
-      y = sectionHeader(doc, `Montagem · ${area.label}`, y);
+      y = sectionHeader(doc, `Montagem · ${area.label}`, y, identidade.cor);
 
       for (const item of list) {
         const thumbUrl = item.referencePhotoUrl ?? item.contractedPhotoUrl ?? null;
@@ -254,7 +294,7 @@ export async function generateAssemblyPDF(data: AssemblyReportData): Promise<voi
         let ty = y + 4;
 
         // ☐ de conferência (regra 6).
-        if (item.checkOnAssembly) checkbox(doc, MARGIN + (thumb ? THUMB_MM + 5 : 2), y + 0.5, 4);
+        if (item.checkOnAssembly) checkbox(doc, MARGIN + (thumb ? THUMB_MM + 5 : 2), y + 0.5, identidade.cor, 4);
 
         // Título: "180 Cadeiras Tiffany"
         const qty = item.quantity ? `${item.quantity}${item.unit ? ` ${item.unit}` : ""} ` : "";
@@ -300,13 +340,13 @@ export async function generateAssemblyPDF(data: AssemblyReportData): Promise<voi
   // ── Briefing por área (condicional) ───────────────────────────────────────
   for (const area of areas) {
     const meta = areaByKey(area.key);
-    y = sectionHeader(doc, `${meta?.label ?? area.label}`, y);
+    y = sectionHeader(doc, `${meta?.label ?? area.label}`, y, identidade.cor);
     for (const group of area.groups) {
       if (group.label) {
         y = addPageIfNeeded(doc, y, 10);
         doc.setFont("helvetica", "bold");
         doc.setFontSize(8);
-        doc.setTextColor(...PRIMARY_DARK);
+        doc.setTextColor(...identidade.cor);
         doc.text(group.label, MARGIN + 2, y + 3);
         y += 7;
       }
@@ -317,10 +357,10 @@ export async function generateAssemblyPDF(data: AssemblyReportData): Promise<voi
 
   // ── Checklist de montagem ─────────────────────────────────────────────────
   if (checklist.length > 0) {
-    y = sectionHeader(doc, "Checklist de montagem", y);
+    y = sectionHeader(doc, "Checklist de montagem", y, identidade.cor);
     for (const item of checklist) {
       y = addPageIfNeeded(doc, y, 8);
-      checkbox(doc, MARGIN + 2, y + 0.5, 4);
+      checkbox(doc, MARGIN + 2, y + 0.5, identidade.cor, 4);
       const qty = item.quantity ? `${item.quantity}${item.unit ? ` ${item.unit}` : ""} · ` : "";
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
@@ -351,8 +391,10 @@ export async function generateAssemblyPDF(data: AssemblyReportData): Promise<voi
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     doc.setTextColor(...MUTED);
-    doc.text(`Altar · Caderno de Montagem: ${event.name}`, MARGIN, PAGE_H - 4);
-    doc.text(`Página ${i} de ${total}`, PAGE_W - MARGIN, PAGE_H - 4, { align: "right" });
+    doc.text(`${identidade.nome} · ${event.name}`, MARGIN, PAGE_H - 4);
+    doc.text(`Página ${i} de ${total}`, PAGE_W / 2, PAGE_H - 4, { align: "center" });
+    // Assinatura discreta: o documento é da decoradora, não do ALTAR.
+    doc.text(ASSINATURA_ALTAR, PAGE_W - MARGIN, PAGE_H - 4, { align: "right" });
   }
 
   const safeName = event.name.replace(/[^\p{L}\p{N}]+/gu, "-").toLowerCase();

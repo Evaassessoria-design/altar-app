@@ -102,6 +102,10 @@ export const updateProfile = mutation({
     currency: v.optional(v.string()),
     timezone: v.optional(v.string()),
     logoStorageId: v.optional(v.id("_storage")),
+    instagram: v.optional(v.string()),
+    website: v.optional(v.string()),
+    brandColor: v.optional(v.string()),
+    brandAccentColor: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
@@ -114,6 +118,10 @@ export const updateProfile = mutation({
       currency?: string;
       timezone?: string;
       logoStorageId?: typeof args.logoStorageId;
+      instagram?: string;
+      website?: string;
+      brandColor?: string;
+      brandAccentColor?: string;
     } = {};
     if (args.name !== undefined) patch.name = args.name;
     if (args.phone !== undefined) patch.phone = args.phone;
@@ -122,6 +130,12 @@ export const updateProfile = mutation({
     if (args.currency !== undefined) patch.currency = args.currency;
     if (args.timezone !== undefined) patch.timezone = args.timezone;
     if (args.logoStorageId !== undefined) patch.logoStorageId = args.logoStorageId;
+    if (args.instagram !== undefined) patch.instagram = args.instagram;
+    if (args.website !== undefined) patch.website = args.website;
+    // Cor é normalizada na LEITURA (src/lib/brand.ts), não aqui: assim um valor
+    // antigo ou digitado à mão nunca quebra um documento já gerado.
+    if (args.brandColor !== undefined) patch.brandColor = args.brandColor;
+    if (args.brandAccentColor !== undefined) patch.brandAccentColor = args.brandAccentColor;
 
     await ctx.db.patch(user._id, patch);
   },

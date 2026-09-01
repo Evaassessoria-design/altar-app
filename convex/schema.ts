@@ -360,6 +360,18 @@ export default defineSchema({
     email: v.string(),
     whatsapp: v.optional(v.string()),
     intent: v.union(v.literal("demo"), v.literal("beta")),
+    // Acompanhamento comercial do interessado no ALTAR (SaaS) — NÃO confundir
+    // com o funil de leads da decoradora (tabela `leads`), que é de clientes
+    // dela. AUSENTE = "novo": todos os registros anteriores a este campo
+    // continuam válidos, sem backfill.
+    status: v.optional(
+      v.union(
+        v.literal("novo"),
+        v.literal("contatado"),
+        v.literal("convertido"),
+        v.literal("descartado"),
+      ),
+    ),
   }).index("by_email", ["email"]),
 
   // ── CATÁLOGO CENTRAL DE FORNECEDORES ──────────────────────────────────────

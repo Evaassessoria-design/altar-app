@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils.ts";
 import { ConvexError } from "convex/values";
 import {
   Users,
@@ -24,6 +25,7 @@ import {
   UserCheck,
   Lock,
   Activity,
+  Sparkles,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -530,6 +532,9 @@ export default function AdminPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Interessados no ALTAR — vinham da landing page e ninguém via. */}
+      <InteressadosNoAltar />
+
       {/* Delete confirmation */}
       <AlertDialog open={!!deletingId} onOpenChange={(o) => { if (!o) setDeletingId(null); }}>
         <AlertDialogContent>
@@ -822,6 +827,129 @@ function AccessCell({ user }: { user: AdminUser }) {
       )}
       {user.access.type !== "beta" && (
         <p className="text-xs text-muted-foreground">{cfg.note}</p>
+      )}
+    </div>
+  );
+}
+
+// ─── Interessados no ALTAR ────────────────────────────────────────────────
+
+const INTERESSADO_STATUS = [
+  { valor: "novo", rotulo: "Novo" },
+  { valor: "contatado", rotulo: "Contatado" },
+  { valor: "convertido", rotulo: "Convertido" },
+  { valor: "descartado", rotulo: "Descartado" },
+] as const;
+
+/**
+ * Quem pediu demonstração ou entrou na lista beta pela landing page.
+ *
+ * São potenciais clientes do SaaS ALTAR — público diferente do funil da
+ * decoradora (/funil), que reúne os clientes DELA. As duas telas ficam
+ * separadas de propósito.
+ */
+function InteressadosNoAltar() {
+  const leads = useQuery(api.admin.listLandingLeads);
+  const setStatus = useMutation(api.admin.setLandingLeadStatus);
+
+  if (leads === undefined) {
+    return (
+      <div className="bg-card rounded-xl border border-border p-5 space-y-2">
+        <Skeleton className="h-5 w-56" />
+        <Skeleton className="h-16 w-full" />
+      </div>
+    );
+  }
+
+  const novos = leads.filter((l) => l.status === "novo").length;
+
+  return (
+    <div className="bg-card rounded-xl border border-border overflow-hidden">
+      <div className="px-5 py-4 border-b border-border">
+        <h2 className="font-semibold flex items-center gap-2">
+          <Sparkles className="size-4 text-primary" /> Interessados no ALTAR
+        </h2>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Pedidos de demonstração e lista beta vindos da landing page
+          {leads.length > 0 && novos > 0 && ` · ${novos} ainda sem contato`}
+        </p>
+      </div>
+
+      {leads.length === 0 ? (
+        <div className="px-5 py-8 text-center">
+          <p className="text-sm font-medium">Nenhum interessado ainda</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Quem pedir demonstração ou entrar na lista beta pelo site aparece aqui.
+          </p>
+        </div>
+      ) : (
+        <div className="divide-y divide-border">
+          {leads.map((lead) => (
+            <div
+              key={lead._id}
+              className="px-5 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-medium truncate">{lead.name}</p>
+                  <span
+                    className={cn(
+                      "text-xs px-2 py-0.5 rounded-full font-medium",
+                      lead.intent === "demo"
+                        ? "bg-primary/10 text-primary"
+                        : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+                    )}
+                  >
+                    {lead.intent === "demo" ? "Demonstração" : "Lista beta"}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-3 mt-0.5">
+                  <a
+                    href={`mailto:${lead.email}`}
+                    className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                  >
+                    {lead.email}
+                  </a>
+                  {lead.whatsapp && (
+                    <a
+                      href={`https://wa.me/${lead.whatsapp.replace(/\D/g, "")}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      {lead.whatsapp}
+                    </a>
+                  )}
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(lead.createdAt).toLocaleDateString("pt-BR")}
+                  </span>
+                </div>
+              </div>
+
+              <select
+                value={lead.status}
+                onChange={async (e) => {
+                  try {
+                    await setStatus({
+                      leadId: lead._id,
+                      status: e.target.value as (typeof INTERESSADO_STATUS)[number]["valor"],
+                    });
+                    toast.success("Situação atualizada.");
+                  } catch {
+                    toast.error("Não foi possível atualizar a situação.");
+                  }
+                }}
+                className="h-9 rounded-md border border-input bg-background px-2 text-xs cursor-pointer flex-shrink-0 sm:w-36"
+              >
+                {INTERESSADO_STATUS.map((s) => (
+                  <option key={s.valor} value={s.valor}>
+                    {s.rotulo}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

@@ -382,3 +382,63 @@ export const deleteUser = mutation({
     return { ...summary, authRemoval };
   },
 });
+
+// ─── Interessados no ALTAR (landing page) ──────────────────────────────────
+
+/**
+ * Quem pediu demonstração ou entrou na lista beta pela landing page.
+ *
+ * Estes são potenciais CLIENTES DO SAAS ALTAR — não confundir com a tabela
+ * `leads`, que é o funil comercial da decoradora (os clientes DELA). São
+ * públicos diferentes, telas diferentes, e continuam separados de propósito.
+ *
+ * Existia só o caminho de ESCRITA (`landingLeads.submit`, chamada pela landing
+ * para visitante não autenticado). Nenhuma query lia a tabela: as pessoas
+ * pediam demonstração e caíam num banco que ninguém abria.
+ *
+ * `status` ausente significa "novo" — registros anteriores ao campo continuam
+ * válidos, sem backfill.
+ */
+export const listLandingLeads = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
+    const leads = await ctx.db.query("landingLeads").order("desc").collect();
+    return leads.map((l) => ({
+      _id: l._id,
+      name: l.name,
+      email: l.email,
+      whatsapp: l.whatsapp,
+      intent: l.intent,
+      status: l.status ?? ("novo" as const),
+      createdAt: new Date(l._creationTime).toISOString(),
+    }));
+  },
+});
+
+/**
+ * Marca em que ponto está a conversa com o interessado.
+ *
+ * É acompanhamento comercial, não cobrança: não cria conta, não concede
+ * acesso, não toca em assinatura. Converter alguém de verdade continua sendo
+ * cadastro + Asaas, pelos caminhos normais.
+ */
+export const setLandingLeadStatus = mutation({
+  args: {
+    leadId: v.id("landingLeads"),
+    status: v.union(
+      v.literal("novo"),
+      v.literal("contatado"),
+      v.literal("convertido"),
+      v.literal("descartado"),
+    ),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const lead = await ctx.db.get(args.leadId);
+    if (!lead) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Interessado não encontrado" });
+    }
+    await ctx.db.patch(args.leadId, { status: args.status });
+  },
+});

@@ -6,6 +6,9 @@ import { assertDemoEnvironment, inspectDemoEnvironment } from "./lib/demoGuard";
 import { DEMO_WEDDING, DEMO_MARKER } from "./lib/demoData";
 import { normalizeName, normalizePhone } from "./lib/supplierIdentity";
 
+/** O demo tem uma conta. O teto existe só para nunca varrer um banco grande. */
+const MAX_CONTAS_LISTADAS = 5;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SEED DE DEMONSTRAÇÃO — conteúdo fictício para prints e vídeos.
 //
@@ -67,6 +70,30 @@ async function encontrarEventoDemo(
  * O conteúdo é ligado a UM usuário — normalmente o único cadastrado no projeto
  * demo. Com mais de um, informe o e-mail para não haver ambiguidade.
  */
+/**
+ * Quem é a conta deste ambiente de demonstração.
+ *
+ * Somente leitura. Existe para CONFERIR o e-mail antes de redefinir a senha —
+ * redefinir a senha da conta errada seria pior do que não redefinir nenhuma.
+ * Devolve o e-mail de todas as contas (o demo tem uma só, por definição).
+ */
+export const contaDoDemo = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    await assertDemoEnvironment(ctx);
+    const usuarios = await ctx.db.query("users").take(MAX_CONTAS_LISTADAS);
+    return {
+      total: usuarios.length,
+      contas: usuarios.map((u) => ({
+        email: u.email,
+        nome: u.name,
+        criadaEm: new Date(u._creationTime).toISOString(),
+        temLoginBetterAuth: u.betterAuthId !== undefined,
+      })),
+    };
+  },
+});
+
 export const seed = internalMutation({
   args: { email: v.optional(v.string()) },
   handler: async (ctx, args) => {

@@ -50,7 +50,15 @@ export function isDemoEnvFlagSet(): boolean {
  * Chame no PRIMEIRO passo de qualquer função de demonstração, antes de ler ou
  * escrever qualquer coisa.
  */
-export async function assertDemoEnvironment(ctx: QueryCtx | MutationCtx): Promise<void> {
+/**
+ * Camada 1 sozinha, SEM banco.
+ *
+ * Existe separada porque uma `action` não tem `ctx.db` e mesmo assim precisa
+ * barrar antes de qualquer outra coisa. Quem tem banco continua usando
+ * `assertDemoEnvironment`, que aplica esta camada e mais a de sinais de
+ * produção.
+ */
+export function assertDemoFlag(): void {
   if (!isDemoEnvFlagSet()) {
     throw new ConvexError({
       code: "DEMO_ONLY",
@@ -59,6 +67,10 @@ export async function assertDemoEnvironment(ctx: QueryCtx | MutationCtx): Promis
         "no projeto altar-demo do Convex. NUNCA defina essa variável em produção.",
     });
   }
+}
+
+export async function assertDemoEnvironment(ctx: QueryCtx | MutationCtx): Promise<void> {
+  assertDemoFlag();
 
   // Só olhamos uma amostra: o suficiente para reconhecer produção, sem varrer
   // um banco grande.

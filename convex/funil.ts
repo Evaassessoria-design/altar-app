@@ -24,11 +24,22 @@ export const createLead = mutation({
     budget: v.optional(v.number()),
     stage: v.union(
       v.literal("contact"),
+      v.literal("contacted"),
+      v.literal("meeting"),
       v.literal("quote_sent"),
+      v.literal("negotiating"),
       v.literal("contracted"),
       v.literal("discarded"),
     ),
     notes: v.optional(v.string()),
+    partnerName: v.optional(v.string()),
+    venue: v.optional(v.string()),
+    city: v.optional(v.string()),
+    guestCount: v.optional(v.number()),
+    source: v.optional(v.string()),
+    responsible: v.optional(v.string()),
+    lastInteraction: v.optional(v.string()),
+    nextAction: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
@@ -53,12 +64,23 @@ export const updateLead = mutation({
     stage: v.optional(
       v.union(
         v.literal("contact"),
+        v.literal("contacted"),
+        v.literal("meeting"),
         v.literal("quote_sent"),
+        v.literal("negotiating"),
         v.literal("contracted"),
         v.literal("discarded"),
       ),
     ),
     notes: v.optional(v.string()),
+    partnerName: v.optional(v.string()),
+    venue: v.optional(v.string()),
+    city: v.optional(v.string()),
+    guestCount: v.optional(v.number()),
+    source: v.optional(v.string()),
+    responsible: v.optional(v.string()),
+    lastInteraction: v.optional(v.string()),
+    nextAction: v.optional(v.string()),
     order: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -117,11 +139,18 @@ export const convertToEvent = mutation({
       throw new ConvexError({ message: "Lead não encontrado", code: "NOT_FOUND" });
 
     const { leadId, eventName, eventDate, ...rest } = args;
+    // Reaproveita o que a decoradora já anotou durante a negociação, em vez de
+    // exigir que ela redigite. O que veio no formulário tem precedência — ela
+    // pode estar corrigindo justamente na hora de fechar.
     const eventId = await ctx.db.insert("events", {
       userId: user._id,
       name: eventName,
       date: eventDate,
       ...rest,
+      location: rest.location || lead.venue || "",
+      clientPhone: rest.clientPhone ?? lead.clientPhone,
+      budget: rest.budget ?? lead.budget,
+      notes: lead.notes,
       status: "planning",
     });
 

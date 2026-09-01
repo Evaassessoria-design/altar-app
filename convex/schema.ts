@@ -19,9 +19,22 @@ const eventStatus = v.union(
   v.literal("cancelled"),
 );
 
+// Estagios do funil. Os quatro originais NAO mudaram de nome nem de
+// significado — os tres do meio foram ACRESCENTADOS, entao todo lead ja
+// gravado continua valido sem backfill.
+//   contact    = Novo contato        (original)
+//   contacted  = Contato realizado   (novo)
+//   meeting    = Reuniao agendada    (novo)
+//   quote_sent = Orcamento enviado   (original)
+//   negotiating= Negociacao          (novo)
+//   contracted = Fechado             (original)
+//   discarded  = Perdido             (original)
 const leadStage = v.union(
   v.literal("contact"),
+  v.literal("contacted"),
+  v.literal("meeting"),
   v.literal("quote_sent"),
+  v.literal("negotiating"),
   v.literal("contracted"),
   v.literal("discarded"),
 );
@@ -200,6 +213,19 @@ export default defineSchema({
     notes: v.optional(v.string()),
     order: v.number(),
     convertedEventId: v.optional(v.id("events")),
+    // ── Comercial (tudo OPCIONAL e aditivo) ─────────────────────────────────
+    // Reaproveitados na conversao em evento, para nao redigitar o que a
+    // decoradora ja anotou durante a negociacao.
+    partnerName: v.optional(v.string()),
+    venue: v.optional(v.string()),
+    city: v.optional(v.string()),
+    guestCount: v.optional(v.number()),
+    /** Como chegou: indicacao, Instagram, site, feira... texto livre. */
+    source: v.optional(v.string()),
+    responsible: v.optional(v.string()),
+    /** "AAAA-MM-DD" da ultima conversa. Sem ela nao se afirma abandono. */
+    lastInteraction: v.optional(v.string()),
+    nextAction: v.optional(v.string()),
   })
     .index("by_user", ["userId"])
     .index("by_user_stage", ["userId", "stage"]),

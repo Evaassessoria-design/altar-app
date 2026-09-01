@@ -34,13 +34,25 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
 
-type Stage = "contact" | "quote_sent" | "contracted" | "discarded";
+// Os quatro estágios originais mantêm o mesmo id — lead já gravado continua
+// caindo na coluna certa. Os três do meio foram acrescentados.
+type Stage =
+  | "contact"
+  | "contacted"
+  | "meeting"
+  | "quote_sent"
+  | "negotiating"
+  | "contracted"
+  | "discarded";
 
 const STAGES: { id: Stage; label: string; color: string; bg: string }[] = [
-  { id: "contact", label: "Contato Inicial", color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-900/20" },
-  { id: "quote_sent", label: "Orçamento Enviado", color: "text-yellow-700 dark:text-yellow-400", bg: "bg-yellow-50 dark:bg-yellow-900/20" },
-  { id: "contracted", label: "Contratado", color: "text-green-700 dark:text-green-400", bg: "bg-green-50 dark:bg-green-900/20" },
-  { id: "discarded", label: "Descartado", color: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-900/20" },
+  { id: "contact", label: "Novo contato", color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-900/20" },
+  { id: "contacted", label: "Contato realizado", color: "text-sky-700 dark:text-sky-400", bg: "bg-sky-50 dark:bg-sky-900/20" },
+  { id: "meeting", label: "Reunião agendada", color: "text-indigo-700 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-900/20" },
+  { id: "quote_sent", label: "Orçamento enviado", color: "text-yellow-700 dark:text-yellow-400", bg: "bg-yellow-50 dark:bg-yellow-900/20" },
+  { id: "negotiating", label: "Negociação", color: "text-orange-700 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-900/20" },
+  { id: "contracted", label: "Fechado", color: "text-green-700 dark:text-green-400", bg: "bg-green-50 dark:bg-green-900/20" },
+  { id: "discarded", label: "Perdido", color: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-900/20" },
 ];
 
 const EVENT_TYPES = [
@@ -58,7 +70,15 @@ const leadSchema = z.object({
   eventType: z.string().optional(),
   eventDate: z.string().optional(),
   budget: z.string().optional(),
-  stage: z.enum(["contact", "quote_sent", "contracted", "discarded"]),
+  stage: z.enum([
+    "contact",
+    "contacted",
+    "meeting",
+    "quote_sent",
+    "negotiating",
+    "contracted",
+    "discarded",
+  ]),
   notes: z.string().optional(),
 });
 
@@ -557,7 +577,12 @@ export default function FunilPage() {
       acc[s.id] = (leads ?? []).filter((l) => l.stage === s.id).sort((a, b) => a.order - b.order);
       return acc;
     },
-    { contact: [], quote_sent: [], contracted: [], discarded: [] },
+    // Derivado de STAGES: acrescentar um estágio novo não exige lembrar de
+    // inicializar a coluna aqui.
+    Object.fromEntries(STAGES.map((s) => [s.id, [] as Doc<"leads">[]])) as unknown as Record<
+      Stage,
+      Doc<"leads">[]
+    >,
   );
 
   // Ordem fracionária: insere entre vizinhos sem reindexar toda a coluna.

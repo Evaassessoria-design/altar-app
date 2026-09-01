@@ -19,6 +19,7 @@ const TELAS_OPERACIONAIS = [
   "src/pages/app/events/[id]/_components/assembly-items-section.tsx",
   "src/pages/app/events/[id]/checklist/page.tsx",
   "src/components/attention-board.tsx",
+  "src/pages/app/events/[id]/projeto/page.tsx",
 ];
 
 /** Blocos `hidden sm:*` / `hidden md:*` e o que vem logo dentro deles. */

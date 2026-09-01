@@ -133,6 +133,9 @@ export const update = mutation({
     notes: v.optional(v.string()),
     includeInAssemblyReport: v.optional(v.boolean()),
     checkOnAssembly: v.optional(v.boolean()),
+    projectScope: v.optional(
+      v.union(v.literal("incluso"), v.literal("referencia"), v.literal("nao_incluso")),
+    ),
     operationalStatus: v.optional(
       v.union(
         v.literal("pendente"),

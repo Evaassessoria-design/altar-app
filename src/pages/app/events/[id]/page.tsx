@@ -32,6 +32,7 @@ import {
   Download,
   Building2,
   Wand2,
+  Layers,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -419,6 +420,22 @@ export default function EventDetailsPage() {
               <div>
                 <p className="font-medium text-sm">Fornecedores</p>
                 <p className="text-xs text-muted-foreground">Dossiê operacional: assessoria, local, buffet, bar, doces, som & iluminação</p>
+              </div>
+            </div>
+            <ChevronRight className="size-4 text-muted-foreground" />
+          </Link>
+          <Link
+            to={`/eventos/${id}/projeto`}
+            className="flex items-center justify-between px-5 py-3.5 hover:bg-accent/50 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-3">
+              <Layers className="size-5 text-primary" />
+              <div>
+                <p className="font-medium text-sm">Projeto de decoração</p>
+                <p className="text-xs text-muted-foreground">
+                  Ambientes, composições e referências visuais — o que está contratado e o que é
+                  inspiração
+                </p>
               </div>
             </div>
             <ChevronRight className="size-4 text-muted-foreground" />

@@ -602,6 +602,22 @@ export default defineSchema({
     // marca quais itens ganham caixinha na ficha de montagem em PDF. O ponto
     // do trajeto vive em `operationalStatus`, abaixo. Sao eixos diferentes.
     checkOnAssembly: v.boolean(),
+    // ── O QUE ESTE ITEM E NO PROJETO (opcional, aditivo) ────────────────────
+    // Mesmo vocabulario de `eventPhotos.projectScope`, de proposito: item e
+    // foto respondem a MESMA pergunta ("isto foi contratado ou e inspiracao?")
+    // e precisam usar as mesmas palavras nos documentos.
+    //   incluso     - faz parte do projeto contratado
+    //   referencia  - direcao estetica, NAO contratada
+    //   nao_incluso - foi mostrado e ficou de fora
+    // AUSENTE = nao classificado. Item antigo continua valido e NAO vira
+    // obrigacao de montagem por omissao.
+    projectScope: v.optional(
+      v.union(
+        v.literal("incluso"),
+        v.literal("referencia"),
+        v.literal("nao_incluso"),
+      ),
+    ),
     // Ponto do trajeto fisico do item. AUSENTE = "pendente": todo item
     // cadastrado antes deste campo continua correto, sem backfill.
     // Nao ha contagem de quantidade retornada — isso seria inventario.

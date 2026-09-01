@@ -1,4 +1,6 @@
-import { mutation, query, internalMutation } from "./_generated/server";
+import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { effectiveSubscriptionStatus, resolveAccess } from "./lib/access";
@@ -162,6 +164,21 @@ export const getLogoUrl = query({
 
 // ── Internal mutations called by Asaas webhook ──────────────────────────────
 
+/** Vínculo de cobrança de uma conta — usado pela conferência com o Asaas. */
+export const getBillingRef = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) return null;
+    return {
+      userId: user._id as string,
+      asaasCustomerId: user.asaasCustomerId,
+      asaasSubscriptionId: user.asaasSubscriptionId,
+      subscriptionStatus: user.subscriptionStatus,
+    };
+  },
+});
+
 export const setAsaasCustomer = internalMutation({
   args: { userId: v.id("users"), asaasCustomerId: v.string() },
   handler: async (ctx, args) => {
@@ -176,30 +193,200 @@ export const setAsaasSubscription = internalMutation({
   },
 });
 
-export const activateSubscriptionByCustomer = internalMutation({
-  args: {
-    asaasCustomerId: v.string(),
-    asaasSubscriptionId: v.optional(v.string()),
-    expiresAt: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const user = await ctx.db
+// ─────────────────────────────────────────────────────────────────────────────
+// ENCONTRAR O DONO DE UM AVISO DO ASAAS
+//
+// ── O QUE DEU ERRADO EM PRODUÇÃO ────────────────────────────────────────────
+// A ativação procurava o usuário SÓ pelo `asaasCustomerId` e, ao não achar,
+// saía em silêncio (`if (!user) return`). Uma cliente pagou no cartão, o Asaas
+// confirmou, e a conta continuou em "trial" — sem erro em lugar nenhum.
+//
+// O cancelamento já tinha a cascata de chaves. Quem TIRAVA acesso era robusto;
+// quem DAVA acesso era frágil. Esta função acaba com a assimetria.
+//
+// ── A ORDEM DAS CHAVES ──────────────────────────────────────────────────────
+// 1. `externalReference` — o `_id` do usuário, gravado por NÓS no Asaas. É a
+//    única chave que não depende de um id do Asaas ter voltado corretamente
+//    para o nosso banco, que foi justamente o que falhou.
+// 2. `asaasSubscriptionId` — preciso, mas pode apontar para a assinatura errada
+//    quando houve duplicata.
+// 3. `asaasCustomerId` — o comportamento antigo, mantido como último recurso.
+//
+// ── POR QUE NÃO `.unique()` ─────────────────────────────────────────────────
+// `.unique()` LANÇA EXCEÇÃO se dois cadastros compartilharem o mesmo id do
+// Asaas. Isso derrubaria o webhook com erro 500, e o Asaas pausa a fila depois
+// de algumas falhas — um dado inconsistente viraria uma parada geral de
+// ativações. Aqui pegamos o cadastro MAIS ANTIGO, de forma determinística, e o
+// conflito fica registrado no log de avisos em vez de derrubar o recebimento.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type ChaveDeBusca = "externalReference" | "subscription" | "customer";
+
+export type BuscaDeUsuario = {
+  user: Doc<"users"> | null;
+  matchedBy?: ChaveDeBusca;
+  /** Mais de um cadastro com o mesmo id do Asaas — precisa de atenção humana. */
+  conflito?: boolean;
+};
+
+export type RefDoAsaas = {
+  externalReference?: string;
+  asaasSubscriptionId?: string;
+  asaasCustomerId?: string;
+};
+
+/** O mais antigo, sempre. Determinístico entre execuções. */
+function maisAntigo(candidatos: Doc<"users">[]): Doc<"users"> | null {
+  if (candidatos.length === 0) return null;
+  return [...candidatos].sort((a, b) => a._creationTime - b._creationTime)[0];
+}
+
+export async function encontrarUsuarioPorRefAsaas(
+  ctx: MutationCtx,
+  ref: RefDoAsaas,
+): Promise<BuscaDeUsuario> {
+  // 1. A referência que nós mesmos gravamos.
+  if (ref.externalReference) {
+    // `normalizeId` devolve null para texto que não é um id de usuário —
+    // `ctx.db.get` lançaria exceção. O Asaas pode devolver qualquer texto aqui.
+    const id = ctx.db.normalizeId("users", ref.externalReference);
+    if (id) {
+      const user = await ctx.db.get(id);
+      if (user) return { user, matchedBy: "externalReference" };
+    }
+  }
+
+  // 2. A assinatura.
+  if (ref.asaasSubscriptionId) {
+    const achados = await ctx.db
       .query("users")
-      .withIndex("by_asaas_customer", (q) =>
-        q.eq("asaasCustomerId", args.asaasCustomerId),
+      .withIndex("by_asaas_subscription", (q) =>
+        q.eq("asaasSubscriptionId", ref.asaasSubscriptionId),
       )
-      .unique();
-    if (!user) return;
+      .collect();
+    const user = maisAntigo(achados);
+    if (user) return { user, matchedBy: "subscription", conflito: achados.length > 1 };
+  }
+
+  // 3. O cliente — o caminho antigo.
+  if (ref.asaasCustomerId) {
+    const achados = await ctx.db
+      .query("users")
+      .withIndex("by_asaas_customer", (q) => q.eq("asaasCustomerId", ref.asaasCustomerId))
+      .collect();
+    const user = maisAntigo(achados);
+    if (user) return { user, matchedBy: "customer", conflito: achados.length > 1 };
+  }
+
+  return { user: null };
+}
+
+/**
+ * Ativa a assinatura a partir de QUALQUER chave que o aviso trouxer.
+ *
+ * Além de ativar, RECOSTURA o vínculo: se o usuário foi encontrado pela nossa
+ * referência mas o `asaasCustomerId` gravado estava errado (ou faltando), ele é
+ * corrigido com o do evento. Sem isso, o próximo aviso falharia de novo pelo
+ * mesmo motivo e o problema voltaria sozinho.
+ *
+ * A assinatura que acabou de ser PAGA passa a ser a assinatura de referência da
+ * conta — quando houve duplicata, é ela a verdadeira, não a que ficou gravada.
+ *
+ * Idempotente: reprocessar o mesmo aviso apenas reafirma o mesmo estado.
+ */
+export type ResultadoDoAviso = {
+  matchedBy: ChaveDeBusca | "not_found";
+  conflito: boolean;
+  userId?: Id<"users">;
+};
+
+async function aplicarAtivacao(
+  ctx: MutationCtx,
+  args: RefDoAsaas & { expiresAt?: string },
+): Promise<ResultadoDoAviso> {
+  {
+    const { user, matchedBy, conflito } = await encontrarUsuarioPorRefAsaas(ctx, args);
+    if (!user) return { matchedBy: "not_found" as const, conflito: false };
+
     await ctx.db.patch(user._id, {
       subscriptionStatus: "active",
+      // O id que veio no aviso do pagamento é o que vale: é a assinatura viva.
       asaasSubscriptionId: args.asaasSubscriptionId ?? user.asaasSubscriptionId,
+      asaasCustomerId: args.asaasCustomerId ?? user.asaasCustomerId,
       subscriptionExpiresAt: args.expiresAt ?? user.subscriptionExpiresAt,
       // O pagamento entrou: a contagem de tolerância da inadimplência zera.
       // Sem isso, um cliente que atrasa, paga e atrasa de novo seria bloqueado
       // pela data do atraso ANTIGO.
       overdueSince: undefined,
     });
+
+    return { matchedBy: matchedBy!, conflito: conflito ?? false, userId: user._id };
+  }
+}
+
+async function aplicarAtraso(ctx: MutationCtx, args: RefDoAsaas): Promise<ResultadoDoAviso> {
+  {
+    const { user, matchedBy, conflito } = await encontrarUsuarioPorRefAsaas(ctx, args);
+    if (!user) return { matchedBy: "not_found" as const, conflito: false };
+
+    const resultado = { matchedBy: matchedBy!, conflito: conflito ?? false, userId: user._id };
+
+    // Já está em atraso: preserva a data original (o Asaas reenvia
+    // PAYMENT_OVERDUE mais de uma vez, e reiniciar a contagem a cada aviso
+    // faria a tolerância nunca terminar). Só preenche se estiver faltando.
+    if (user.subscriptionStatus === "overdue") {
+      if (user.overdueSince === undefined) {
+        await ctx.db.patch(user._id, { overdueSince: Date.now() });
+      }
+      return resultado;
+    }
+
+    // Só rebaixa quem está ativo. Não sobrescreve cancelled/expired/trial.
+    if (user.subscriptionStatus !== "active") return resultado;
+    await ctx.db.patch(user._id, {
+      subscriptionStatus: "overdue",
+      overdueSince: Date.now(),
+    });
+    return resultado;
+  }
+}
+
+/**
+ * Ativa a assinatura a partir de QUALQUER chave que o aviso trouxer.
+ * Ver `encontrarUsuarioPorRefAsaas` para a ordem das chaves e o porquê.
+ */
+export const activateSubscriptionByAsaasRef = internalMutation({
+  args: {
+    externalReference: v.optional(v.string()),
+    asaasSubscriptionId: v.optional(v.string()),
+    asaasCustomerId: v.optional(v.string()),
+    expiresAt: v.optional(v.string()),
   },
+  handler: async (ctx, args): Promise<ResultadoDoAviso> => aplicarAtivacao(ctx, args),
+});
+
+/** Atraso a partir de qualquer chave do aviso. Mesma cascata da ativação. */
+export const markSubscriptionOverdueByRef = internalMutation({
+  args: {
+    externalReference: v.optional(v.string()),
+    asaasSubscriptionId: v.optional(v.string()),
+    asaasCustomerId: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<ResultadoDoAviso> => aplicarAtraso(ctx, args),
+});
+
+/**
+ * Compatibilidade: continua existindo com o nome e a assinatura antigos, mas
+ * agora é a MESMA implementação de `activateSubscriptionByAsaasRef`. Duas
+ * implementações do "o que fazer quando o pagamento entra" divergiriam.
+ */
+export const activateSubscriptionByCustomer = internalMutation({
+  args: {
+    asaasCustomerId: v.string(),
+    asaasSubscriptionId: v.optional(v.string()),
+    expiresAt: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<ResultadoDoAviso> => aplicarAtivacao(ctx, args),
 });
 
 /**
@@ -219,33 +406,7 @@ export const activateSubscriptionByCustomer = internalMutation({
  */
 export const markSubscriptionOverdue = internalMutation({
   args: { asaasCustomerId: v.string() },
-  handler: async (ctx, args) => {
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_asaas_customer", (q) =>
-        q.eq("asaasCustomerId", args.asaasCustomerId),
-      )
-      .unique();
-    if (!user) return;
-
-    // Já está em atraso: preserva a data original (o Asaas reenvia
-    // PAYMENT_OVERDUE mais de uma vez, e reiniciar a contagem a cada aviso
-    // faria a tolerância nunca terminar). Só preenche se estiver faltando —
-    // é assim que um cadastro marcado antes desta regra entra na contagem.
-    if (user.subscriptionStatus === "overdue") {
-      if (user.overdueSince === undefined) {
-        await ctx.db.patch(user._id, { overdueSince: Date.now() });
-      }
-      return;
-    }
-
-    // Só rebaixa quem está ativo. Não sobrescreve cancelled/expired/trial.
-    if (user.subscriptionStatus !== "active") return;
-    await ctx.db.patch(user._id, {
-      subscriptionStatus: "overdue",
-      overdueSince: Date.now(),
-    });
-  },
+  handler: async (ctx, args): Promise<ResultadoDoAviso> => aplicarAtraso(ctx, args),
 });
 
 export const cancelSubscriptionByCustomer = internalMutation({
@@ -295,36 +456,18 @@ export const cancelSubscriptionBySubscriptionId = internalMutation({
  */
 export const cancelSubscriptionByAsaasRef = internalMutation({
   args: {
+    externalReference: v.optional(v.string()),
     asaasSubscriptionId: v.optional(v.string()),
     asaasCustomerId: v.optional(v.string()),
   },
-  handler: async (ctx, args): Promise<"subscription" | "customer" | "not_found"> => {
-    const bySubscription = args.asaasSubscriptionId
-      ? await ctx.db
-          .query("users")
-          .withIndex("by_asaas_subscription", (q) =>
-            q.eq("asaasSubscriptionId", args.asaasSubscriptionId),
-          )
-          .unique()
-      : null;
-
-    const user =
-      bySubscription ??
-      (args.asaasCustomerId
-        ? await ctx.db
-            .query("users")
-            .withIndex("by_asaas_customer", (q) =>
-              q.eq("asaasCustomerId", args.asaasCustomerId),
-            )
-            .unique()
-        : null);
-
-    if (!user) return "not_found";
+  handler: async (ctx, args): Promise<ResultadoDoAviso> => {
+    const { user, matchedBy, conflito } = await encontrarUsuarioPorRefAsaas(ctx, args);
+    if (!user) return { matchedBy: "not_found" as const, conflito: false };
 
     await ctx.db.patch(user._id, {
       subscriptionStatus: "cancelled",
       overdueSince: undefined,
     });
-    return bySubscription ? "subscription" : "customer";
+    return { matchedBy: matchedBy!, conflito: conflito ?? false, userId: user._id };
   },
 });

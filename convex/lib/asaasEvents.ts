@@ -23,18 +23,25 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type AsaasWebhookBody = {
+  /** Id do EVENTO no Asaas (`evt_...`), quando enviado. Chave de deduplicação. */
+  id?: string;
   event?: string;
   payment?: {
     id?: string;
     customer?: string;
     subscription?: string;
     value?: number;
+    status?: string;
+    /** O `_id` do usuário no ALTAR — gravado por nós na criação da cobrança. */
+    externalReference?: string;
   };
   subscription?: {
     id?: string;
     customer?: string;
     status?: string;
     value?: number;
+    /** O `_id` do usuário no ALTAR — gravado por nós na criação da assinatura. */
+    externalReference?: string;
   };
 };
 
@@ -45,6 +52,8 @@ export type AsaasIntent = {
   action: AsaasAction;
   customerId?: string;
   subscriptionId?: string;
+  /** Referência que NÓS gravamos no Asaas: o `_id` do usuário no ALTAR. */
+  externalReference?: string;
 };
 
 const ACTIVATING_EVENTS = new Set(["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"]);
@@ -56,6 +65,35 @@ const CANCELLING_EVENTS = new Set([
   "SUBSCRIPTION_DELETED",
   "SUBSCRIPTION_INACTIVATED",
 ]);
+
+/**
+ * A referência que o ALTAR gravou no Asaas ao criar o cliente e a assinatura:
+ * o `_id` do usuário.
+ *
+ * É a chave MAIS CONFIÁVEL que existe neste fluxo, porque não depende de
+ * nenhum identificador do Asaas ter sido gravado de volta corretamente — e foi
+ * exatamente isso que falhou em produção. O código anterior a ignorava.
+ */
+export function resolveExternalReference(body: AsaasWebhookBody): string | undefined {
+  const ref = body.payment?.externalReference ?? body.subscription?.externalReference;
+  return ref?.trim() ? ref.trim() : undefined;
+}
+
+/**
+ * Chave que identifica UM aviso, para não processá-lo duas vezes.
+ *
+ * O Asaas reenvia o mesmo evento quando não recebe 200 — e reenviava também
+ * quando recebia, se a fila tivesse sido reprocessada. Usa o id do evento
+ * quando ele vem; senão, monta uma chave estável com o que identifica o fato.
+ */
+export function eventDedupKey(body: AsaasWebhookBody): string {
+  if (body.id?.trim()) return body.id.trim();
+  return [
+    body.event ?? "SEM_EVENTO",
+    body.payment?.id ?? body.subscription?.id ?? "SEM_ID",
+    body.payment?.status ?? body.subscription?.status ?? "SEM_STATUS",
+  ].join(":");
+}
 
 /** Cliente do evento, venha ele de `payment` ou de `subscription`. */
 export function resolveCustomerId(body: AsaasWebhookBody): string | undefined {
@@ -81,22 +119,22 @@ export function interpretAsaasWebhook(body: AsaasWebhookBody): AsaasIntent {
   const event = body.event;
   const customerId = resolveCustomerId(body);
   const subscriptionId = resolveSubscriptionId(body);
+  const externalReference = resolveExternalReference(body);
 
   if (!event) return { action: "ignore" };
-  if (!customerId && !subscriptionId) return { action: "ignore" };
+  // Sem NENHUMA das três chaves não há como saber de quem é o aviso.
+  if (!customerId && !subscriptionId && !externalReference) return { action: "ignore" };
 
-  if (ACTIVATING_EVENTS.has(event) && customerId) {
-    return { action: "activate", customerId, subscriptionId };
-  }
+  const chaves = { customerId, subscriptionId, externalReference };
 
-  // Atraso é localizado pelo cliente: `markSubscriptionOverdue` indexa por ele.
-  if (event === "PAYMENT_OVERDUE" && customerId) {
-    return { action: "overdue", customerId, subscriptionId };
-  }
+  // Ativar não exige mais o `customer`. Era esse "e customerId" que fazia um
+  // pagamento confirmado virar nada quando o cliente do Asaas não batia com o
+  // gravado — o caso real de produção.
+  if (ACTIVATING_EVENTS.has(event)) return { action: "activate", ...chaves };
 
-  if (CANCELLING_EVENTS.has(event)) {
-    return { action: "cancel", customerId, subscriptionId };
-  }
+  if (event === "PAYMENT_OVERDUE") return { action: "overdue", ...chaves };
+
+  if (CANCELLING_EVENTS.has(event)) return { action: "cancel", ...chaves };
 
   return { action: "ignore" };
 }

@@ -147,7 +147,7 @@ describe("cancelSubscriptionByAsaasRef — o cancelamento chega ao usuário cert
       asaasSubscriptionId: "sub_TESTE",
     });
 
-    expect(via).toBe("subscription");
+    expect(via.matchedBy).toBe("subscription");
     const user = await t.run((ctx) => ctx.db.get(userId));
     expect(user?.subscriptionStatus).toBe("cancelled");
   });
@@ -161,7 +161,7 @@ describe("cancelSubscriptionByAsaasRef — o cancelamento chega ao usuário cert
       asaasCustomerId: "cus_TESTE",
     });
 
-    expect(via).toBe("customer");
+    expect(via.matchedBy).toBe("customer");
     const user = await t.run((ctx) => ctx.db.get(userId));
     expect(user?.subscriptionStatus).toBe("cancelled");
   });
@@ -175,7 +175,7 @@ describe("cancelSubscriptionByAsaasRef — o cancelamento chega ao usuário cert
       asaasCustomerId: "cus_DESCONHECIDO",
     });
 
-    expect(via).toBe("not_found");
+    expect(via.matchedBy).toBe("not_found");
   });
 
   it("o cancelamento deixa a conta bloqueada de verdade", async () => {

@@ -28,6 +28,44 @@ export const isAdmin = query({
   },
 });
 
+/**
+ * Avisos do Asaas recebidos — e, principalmente, os que NÃO acharam dono.
+ *
+ * Existe por causa de um caso real: um pagamento confirmado no cartão não
+ * ativou a assinatura, e não havia como saber se o aviso tinha chegado. Um
+ * `no_match` aqui significa que dinheiro entrou no Asaas sem casar com nenhuma
+ * conta do ALTAR. Lista vazia significa que NENHUM aviso chegou — o que aponta
+ * para a configuração do webhook no Asaas, não para o código.
+ */
+export const getAsaasWebhookLog = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+
+    const eventos = await ctx.db
+      .query("asaasWebhookEvents")
+      .withIndex("by_received_at")
+      .order("desc")
+      .take(args.limit ?? 25);
+
+    const contar = async (outcome: string) =>
+      (
+        await ctx.db
+          .query("asaasWebhookEvents")
+          .withIndex("by_outcome", (q) => q.eq("outcome", outcome))
+          .collect()
+      ).length;
+
+    return {
+      eventos,
+      semDono: await contar("no_match"),
+      comErro: await contar("error"),
+      /** Nada registrado: ou o Asaas nunca enviou, ou o webhook não está configurado. */
+      vazio: eventos.length === 0,
+    };
+  },
+});
+
 export const getStats = query({
   args: {},
   handler: async (ctx) => {

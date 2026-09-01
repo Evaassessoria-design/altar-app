@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
 import { useEffect, useState } from "react";
@@ -26,6 +26,9 @@ import {
   Lock,
   Activity,
   Sparkles,
+  Radio,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -126,6 +129,27 @@ export default function AdminPage() {
   const updateRole = useMutation(api.admin.updateUserRole);
   const deleteUser = useMutation(api.admin.deleteUser);
   const setUserAccess = useMutation(api.admin.setUserAccess);
+  const reconcileSubscription = useAction(api.asaas.reconcileSubscription);
+
+  // Confere a conta contra o Asaas em vez de esperar o aviso de pagamento.
+  // Só lê no Asaas; só o ALTAR é atualizado, e só para ATIVAR.
+  const reconciliar = async (userId: Id<"users">) => {
+    const t = toast.loading("Conferindo no Asaas…");
+    try {
+      const r = await reconcileSubscription({ userId });
+      toast.dismiss(t);
+      if (r.status === "ativada") toast.success(`Assinatura ativada. ${r.detalhe}`);
+      else if (r.status === "ja_ativa") toast.info(r.detalhe);
+      else toast.warning(r.detalhe);
+    } catch (err) {
+      toast.dismiss(t);
+      toast.error(
+        err instanceof ConvexError
+          ? (err.data as { message: string }).message
+          : "Não foi possível conferir no Asaas.",
+      );
+    }
+  };
 
   const [deletingId, setDeletingId] = useState<Id<"users"> | null>(null);
   const [searchQ, setSearchQ] = useState("");
@@ -413,6 +437,7 @@ export default function AdminPage() {
                       onBeta={openBetaDialog}
                       onRole={handleRole}
                       onDelete={setDeletingId}
+                      onReconciliar={reconciliar}
                     />
                   }
                 />
@@ -479,6 +504,7 @@ export default function AdminPage() {
                             onBeta={openBetaDialog}
                             onRole={handleRole}
                             onDelete={setDeletingId}
+                            onReconciliar={reconciliar}
                           />
                         </td>
                       </tr>
@@ -531,6 +557,9 @@ export default function AdminPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Avisos do Asaas — a caixa-preta que faltava. */}
+      <AvisosDoAsaas />
 
       {/* Interessados no ALTAR — vinham da landing page e ninguém via. */}
       <InteressadosNoAltar />
@@ -705,12 +734,14 @@ function UserActions({
   onBeta,
   onRole,
   onDelete,
+  onReconciliar,
 }: {
   user: AdminUser;
   onAccess: (id: Id<"users">, tipo: "client" | "internal") => Promise<void>;
   onBeta: (u: AdminUser) => void;
   onRole: (id: Id<"users">, role: "admin" | "user") => Promise<void>;
   onDelete: (id: Id<"users">) => void;
+  onReconciliar: (id: Id<"users">) => Promise<void>;
 }) {
   return (
     <DropdownMenu>
@@ -733,6 +764,12 @@ function UserActions({
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => void onAccess(user._id, "client")} className="cursor-pointer gap-2">
           <UserCheck className="size-4 text-muted-foreground" /> Voltar a cliente normal
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {/* Confere o Asaas em vez de esperar o aviso. É a saída para o caso em
+            que o pagamento entrou e a conta ficou presa no paywall. */}
+        <DropdownMenuItem onClick={() => void onReconciliar(user._id)} className="cursor-pointer gap-2">
+          <RefreshCw className="size-4 text-primary" /> Conferir no Asaas
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         {user.role !== "admin" ? (
@@ -976,6 +1013,109 @@ function StatCard({
       </div>
       <p className="text-2xl font-bold">{value}</p>
       <p className="text-xs text-muted-foreground">{sub}</p>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AVISOS DO ASAAS
+//
+// Existe por causa de um caso real: uma cliente pagou no cartão, o Asaas
+// confirmou, e a conta continuou em "Trial". Na investigação, a pergunta mais
+// básica — "o aviso chegou?" — não tinha resposta, porque nada era guardado.
+//
+// Duas leituras importam aqui:
+//   · lista VAZIA  → nenhum aviso chegou. O problema está na configuração do
+//                    webhook no Asaas, não no ALTAR.
+//   · SEM DONO     → dinheiro se moveu no Asaas e não casou com nenhuma conta.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ROTULO_DESFECHO: Record<string, { texto: string; classe: string }> = {
+  applied: { texto: "Aplicado", classe: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400" },
+  duplicate: { texto: "Repetido", classe: "bg-muted text-muted-foreground" },
+  ignored: { texto: "Sem efeito", classe: "bg-muted text-muted-foreground" },
+  no_match: { texto: "Sem dono", classe: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400" },
+  error: { texto: "Erro", classe: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400" },
+  received: { texto: "Não concluído", classe: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300" },
+};
+
+function AvisosDoAsaas() {
+  const log = useQuery(api.admin.getAsaasWebhookLog, {});
+
+  return (
+    <div className="bg-card rounded-xl border border-border overflow-hidden">
+      <div className="px-5 py-4 border-b border-border">
+        <h2 className="font-semibold flex items-center gap-2">
+          <Radio className="size-4 text-primary" /> Avisos do Asaas
+        </h2>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Cada pagamento, atraso ou cancelamento que o Asaas comunicou — e o que o ALTAR
+          fez com ele.
+        </p>
+      </div>
+
+      {log === undefined ? (
+        <div className="px-5 py-4 space-y-2">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-8 w-full" />
+        </div>
+      ) : log.vazio ? (
+        <div className="px-5 py-6 text-sm text-muted-foreground">
+          <p className="flex items-center gap-2 font-medium text-foreground">
+            <AlertTriangle className="size-4 text-amber-600" /> Nenhum aviso registrado.
+          </p>
+          <p className="mt-1">
+            Se já houve pagamento no Asaas, o webhook não está entregando. Confira no
+            Asaas, em Integrações → Webhooks, se a fila está ativa e se os eventos de
+            cobrança estão habilitados.
+          </p>
+        </div>
+      ) : (
+        <>
+          {(log.semDono > 0 || log.comErro > 0) && (
+            <div className="px-5 py-3 bg-red-50 dark:bg-red-950/30 border-b border-border text-sm">
+              <p className="flex items-center gap-2 font-medium text-red-700 dark:text-red-400">
+                <AlertTriangle className="size-4" />
+                {log.semDono > 0 && `${log.semDono} aviso(s) sem dono`}
+                {log.semDono > 0 && log.comErro > 0 && " · "}
+                {log.comErro > 0 && `${log.comErro} com erro`}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Um aviso sem dono significa pagamento no Asaas que não encontrou conta no
+                ALTAR. Use "Conferir no Asaas" no usuário correspondente.
+              </p>
+            </div>
+          )}
+
+          <div className="divide-y divide-border max-h-96 overflow-y-auto">
+            {log.eventos.map((e) => {
+              const rotulo = ROTULO_DESFECHO[e.outcome] ?? {
+                texto: e.outcome,
+                classe: "bg-muted text-muted-foreground",
+              };
+              return (
+                <div key={e._id} className="px-5 py-3 text-sm">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="font-medium">{e.event}</span>
+                    <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", rotulo.classe)}>
+                      {rotulo.texto}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {format(new Date(e.receivedAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                    {e.value !== undefined &&
+                      ` · ${e.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`}
+                    {e.matchedBy && ` · casou por ${e.matchedBy}`}
+                  </p>
+                  {e.detail && (
+                    <p className="text-xs text-muted-foreground mt-0.5">{e.detail}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }

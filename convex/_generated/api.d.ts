@@ -13,6 +13,7 @@ import type * as ai from "../ai.js";
 import type * as aiVisual from "../aiVisual.js";
 import type * as asaas from "../asaas.js";
 import type * as asaasWebhook from "../asaasWebhook.js";
+import type * as asaasWebhookLog from "../asaasWebhookLog.js";
 import type * as assemblyItems from "../assemblyItems.js";
 import type * as auth from "../auth.js";
 import type * as briefing from "../briefing.js";
@@ -58,6 +59,7 @@ declare const fullApi: ApiFromModules<{
   aiVisual: typeof aiVisual;
   asaas: typeof asaas;
   asaasWebhook: typeof asaasWebhook;
+  asaasWebhookLog: typeof asaasWebhookLog;
   assemblyItems: typeof assemblyItems;
   auth: typeof auth;
   briefing: typeof briefing;

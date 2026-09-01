@@ -195,6 +195,35 @@ export default defineSchema({
     .index("by_asaas_customer", ["asaasCustomerId"])
     .index("by_asaas_subscription", ["asaasSubscriptionId"]),
 
+  // ── REGISTRO DOS AVISOS DO ASAAS ─────────────────────────────────────────
+  //
+  // Existe por causa de um caso real: um pagamento confirmado não ativou a
+  // assinatura, e não havia COMO saber se o aviso tinha chegado. A pergunta
+  // "o webhook chegou?" era impossível de responder.
+  //
+  // Guarda só o necessário para auditar e para não processar o mesmo aviso
+  // duas vezes. NÃO guarda o payload completo nem nada de cartão.
+  asaasWebhookEvents: defineTable({
+    /** Identifica UM aviso. Segunda chegada da mesma chave não reprocessa. */
+    dedupKey: v.string(),
+    event: v.string(),
+    receivedAt: v.number(),
+    /** "applied" | "duplicate" | "no_match" | "ignored" | "error" */
+    outcome: v.string(),
+    /** Por qual chave o usuário foi encontrado: externalReference/subscription/customer. */
+    matchedBy: v.optional(v.string()),
+    userId: v.optional(v.id("users")),
+    asaasCustomerId: v.optional(v.string()),
+    asaasSubscriptionId: v.optional(v.string()),
+    asaasPaymentId: v.optional(v.string()),
+    value: v.optional(v.number()),
+    /** Detalhe curto para diagnóstico. Nunca dado sensível. */
+    detail: v.optional(v.string()),
+  })
+    .index("by_dedup_key", ["dedupKey"])
+    .index("by_received_at", ["receivedAt"])
+    .index("by_outcome", ["outcome"]),
+
   events: defineTable({
     userId: v.id("users"),
     name: v.string(),

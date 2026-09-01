@@ -93,9 +93,13 @@ describe("checkout não cria uma segunda assinatura para quem já tem uma", () =
   });
 
   it("considera os status de cobrança realmente pagáveis", () => {
+    // Os literais saíram do corpo do checkout para constantes do módulo, ao
+    // lado de STATUS_PAGO — que é o que faltava e causou a duplicação.
+    // asaas.checkout.test.ts cobre a regra nova em detalhe.
     for (const status of ["PENDING", "OVERDUE", "AWAITING_RISK_ANALYSIS"]) {
-      expect(block).toContain(status);
+      expect(source).toContain(status);
     }
+    expect(block).toContain("STATUS_EM_ABERTO.includes");
   });
 });
 
@@ -109,7 +113,12 @@ describe("o receptor do webhook usa a leitura testada e a mutation certa", () =>
   it("não volta a ler o cliente direto de body.payment", () => {
     // A raiz do bug: `body.payment?.customer` fixo, que ignorava os eventos de
     // assinatura. Hoje isso vive só no módulo puro, com teste próprio.
-    expect(webhook).not.toMatch(/body\.payment/);
+    //
+    // A regra é sobre QUEM É O DONO do aviso — é esse campo que não pode voltar
+    // a ser lido aqui. O receptor lê `body.payment?.id` e `?.value` para o
+    // REGISTRO do aviso, o que é outro assunto e não decide nada.
+    expect(webhook).not.toMatch(/body\.payment\?\.customer/);
+    expect(webhook).not.toMatch(/body\.payment\?\.subscription/);
   });
 
   it("cancela pela mutation que casa assinatura E cliente", () => {

@@ -1,6 +1,25 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { resolveIdentidade } from "./brand";
+
+/** Arquivos de código (sem testes) sob src/ que mencionam um termo. */
+function arquivosQueLeem(termo: string): string[] {
+  const achados: string[] = [];
+  const percorrer = (dir: string) => {
+    for (const nome of readdirSync(dir)) {
+      const caminho = join(dir, nome);
+      if (statSync(caminho).isDirectory()) {
+        percorrer(caminho);
+      } else if (/\.(ts|tsx)$/.test(nome) && !nome.endsWith(".test.ts")) {
+        if (readFileSync(caminho, "utf-8").includes(termo)) achados.push(caminho);
+      }
+    }
+  };
+  percorrer("src");
+  return achados.sort();
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // O DOCUMENTO É DA DECORADORA — e precisa sair mesmo com cadastro vazio.
@@ -77,15 +96,7 @@ describe("responsável operacional", () => {
 describe("a interface do ALTAR não é personalizada por empresa", () => {
   it("a cor da marca só é lida por geradores de documento e pela prévia", () => {
     // White-label de tela não está no escopo: a cor alimenta o PDF, não o app.
-    const { execSync } = require("node:child_process") as typeof import("node:child_process");
-    const saida = execSync(
-      "grep -rl 'brandColor' src --include=*.tsx --include=*.ts || true",
-    ).toString();
-    const arquivos = saida
-      .split("\n")
-      .filter(Boolean)
-      .filter((f) => !f.endsWith(".test.ts"))
-      .sort();
+    const arquivos = arquivosQueLeem("brandColor");
     // Só o módulo de identidade e a tela de Configurações (que mostra a
     // prévia). Nenhuma tela do app pinta a si mesma com a cor da empresa.
     expect(arquivos).toEqual([

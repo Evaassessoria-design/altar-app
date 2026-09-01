@@ -4,6 +4,7 @@ import { ptBR } from "date-fns/locale";
 import type { Doc } from "@/convex/_generated/dataModel.d.ts";
 import { formatEventDayOnly } from "./event-date";
 import { ASSINATURA_ALTAR, resolveIdentidade, type EmpresaLike, type RGB } from "./brand";
+import { ehObrigacaoDeMontagem } from "./decoration-project";
 import {
   resolveAreasForAudience,
   itemVisibleTo,
@@ -165,9 +166,20 @@ export async function generateAssemblyPDF(data: AssemblyReportData): Promise<voi
   const { event, briefing, items = [], checklist = [] } = data;
 
   // Regras 3 e 5 aplicadas antes de qualquer desenho.
-  const reportItems = items.filter(
+  // Regras 3 e 5 + ESCOPO DO PROJETO.
+  //
+  // O Caderno é a lista do que a equipe MONTA. Item classificado como
+  // "Referência visual" (direção estética) ou "Não incluso" (mostrado e
+  // deixado de fora) NÃO é obrigação de montagem — mandá-lo para o galpão faz
+  // a equipe montar o que não foi contratado.
+  //
+  // Item SEM classificação continua entrando: sair exige escolha explícita,
+  // senão todo item já cadastrado sumiria da ficha.
+  const visiveis = items.filter(
     (i) => i.includeInAssemblyReport && itemVisibleTo(i.visibility, audience),
   );
+  const reportItems = visiveis.filter(ehObrigacaoDeMontagem);
+  const foraDoEscopo = visiveis.length - reportItems.length;
   // Regras 1, 2 e 4.
   const areas = resolveAreasForAudience(briefing, audience);
 
@@ -362,6 +374,23 @@ export async function generateAssemblyPDF(data: AssemblyReportData): Promise<voi
       }
       y += 2;
     }
+  }
+
+  // Se algum item ficou de fora por escopo, o caderno DIZ — senão a equipe
+  // acha que o dado sumiu e vai procurar no lugar errado.
+  if (foraDoEscopo > 0) {
+    y = addPageIfNeeded(doc, y, 10);
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(7);
+    doc.setTextColor(...MUTED);
+    doc.text(
+      foraDoEscopo === 1
+        ? "1 item não entra na montagem por ser referência visual ou estar fora do projeto."
+        : `${foraDoEscopo} itens não entram na montagem por serem referência visual ou estarem fora do projeto.`,
+      MARGIN,
+      y,
+    );
+    y += 6;
   }
 
   // ── Briefing por área (condicional) ───────────────────────────────────────

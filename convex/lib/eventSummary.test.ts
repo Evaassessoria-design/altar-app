@@ -126,6 +126,9 @@ describe("resumirFinanceiro", () => {
       despesaPrevista: 500,
       despesaPaga: 300,
       lancamentos: 4,
+      // Receita 1500 − custo 500 = 1000, ou 67%.
+      margemPrevista: 1000,
+      margemPercentual: 67,
     });
   });
 
@@ -138,14 +141,24 @@ describe("resumirFinanceiro", () => {
       despesaPrevista: 0,
       despesaPaga: 0,
       lancamentos: 0,
+      // Sem base, margem é null — nunca 0% nem 100%.
+      margemPrevista: null,
+      margemPercentual: null,
     });
   });
 
-  it("não calcula margem — despesa incompleta produziria número enganoso", () => {
+  it("margem só existe com receita E custo lançados", () => {
+    // Margem sobre custo inexistente daria 100% — a mentira mais fácil de um
+    // painel financeiro. Ver convex/lib/financeScope.ts.
+    expect(resumirFinanceiro([{ type: "income", amount: 1000, isPaid: true }]).margemPrevista).toBeNull();
+    expect(resumirFinanceiro([{ type: "expense", amount: 400, isPaid: true }]).margemPrevista).toBeNull();
+    expect(resumirFinanceiro(txs).margemPrevista).toBe(1000);
+  });
+
+  it("não existe nota de saúde financeira sintética", () => {
     const r = resumirFinanceiro(txs) as Record<string, unknown>;
-    expect(r.margem).toBeUndefined();
-    expect(r.lucro).toBeUndefined();
     expect(r.percentualSaude).toBeUndefined();
+    expect(r.score).toBeUndefined();
   });
 });
 

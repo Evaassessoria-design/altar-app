@@ -18,6 +18,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { effectivePurchaseStatus, isPendingStatus } from "./purchaseStatus";
+import { resultadoDoProjeto } from "./financeScope";
 
 export type ContagemFeita = { total: number; feitos: number; pendentes: number };
 
@@ -87,6 +88,16 @@ export type ResumoFinanceiro = {
   despesaPaga: number;
   /** Quantos lançamentos existem. Zero = não há base para conclusão nenhuma. */
   lancamentos: number;
+  /**
+   * Receita menos custo planejado, em reais. `null` quando falta base —
+   * sem receita ou sem custo lançado. Ver convex/lib/financeScope.ts.
+   *
+   * Estes números são da OPERAÇÃO DA DECORADORA neste projeto, não do
+   * orçamento do casamento: buffet, espaço, bar e assessoria são fornecedores
+   * do casal e não passam pelo caixa da empresa.
+   */
+  margemPrevista: number | null;
+  margemPercentual: number | null;
 };
 
 export function resumirFinanceiro(txs: readonly TransacaoLike[]): ResumoFinanceiro {
@@ -94,12 +105,15 @@ export function resumirFinanceiro(txs: readonly TransacaoLike[]): ResumoFinancei
     txs
       .filter((t) => t.type === tipo && (!apenasPagos || t.isPaid))
       .reduce((s, t) => s + t.amount, 0);
+  const resultado = resultadoDoProjeto(txs);
   return {
     receitaPrevista: soma("income", false),
     receitaRecebida: soma("income", true),
     despesaPrevista: soma("expense", false),
     despesaPaga: soma("expense", true),
     lancamentos: txs.length,
+    margemPrevista: resultado.margemPrevista,
+    margemPercentual: resultado.margemPercentual,
   };
 }
 

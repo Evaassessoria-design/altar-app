@@ -224,7 +224,7 @@ export function OperationalSummary({ eventId }: { eventId: Id<"events"> }) {
           <div className="px-5 pb-5">
             <div className="rounded-lg border border-border p-3">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Wallet className="size-3.5" /> Financeiro deste evento
+                <Wallet className="size-3.5" /> Resultado da sua empresa neste projeto
               </div>
               {financeiro.lancamentos === 0 ? (
                 <p className="text-sm mt-1.5">
@@ -247,7 +247,7 @@ export function OperationalSummary({ eventId }: { eventId: Id<"events"> }) {
                     <p className="text-[11px] text-muted-foreground">recebido / lançado</p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">Custo</p>
+                    <p className="text-xs text-muted-foreground">Custo da execução</p>
                     <p className="text-sm font-semibold">
                       {brl.format(financeiro.despesaPaga)}
                       <span className="text-xs font-normal text-muted-foreground">
@@ -255,10 +255,35 @@ export function OperationalSummary({ eventId }: { eventId: Id<"events"> }) {
                         de {brl.format(financeiro.despesaPrevista)}
                       </span>
                     </p>
-                    <p className="text-[11px] text-muted-foreground">pago / lançado</p>
+                    <p className="text-[11px] text-muted-foreground">real / planejado</p>
                   </div>
                 </div>
               )}
+
+              {/* Margem só aparece quando existe base: receita E custo
+                  lançados. Sobre custo inexistente daria 100%. */}
+              {financeiro.margemPrevista !== null && (
+                <div className="mt-2 pt-2 border-t border-border">
+                  <p className="text-xs text-muted-foreground">Margem prevista</p>
+                  <p className="text-sm font-semibold">
+                    {brl.format(financeiro.margemPrevista)}
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {" "}
+                      · {financeiro.margemPercentual}%
+                    </span>
+                  </p>
+                </div>
+              )}
+              {financeiro.lancamentos > 0 && financeiro.margemPrevista === null && (
+                <p className="text-[11px] text-muted-foreground mt-2">
+                  Margem aparece quando houver receita e custo lançados.
+                </p>
+              )}
+
+              <p className="text-[11px] text-muted-foreground mt-2">
+                Só a operação da sua empresa. Buffet, espaço, bar e assessoria são
+                fornecedores do casal e não entram aqui.
+              </p>
             </div>
           </div>
 

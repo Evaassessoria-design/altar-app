@@ -276,32 +276,43 @@ export const DEMO_WEDDING = {
   ],
 
   // ── Orçamento do evento ──────────────────────────────────────────────────
+  // ── CUSTO PLANEJADO DA DECORADORA ────────────────────────────────────────
+  // Só o que a EMPRESA DE DECORAÇÃO vende e paga. Buffet, locação do espaço,
+  // bar e som são fornecedores do CASAL: a decoradora não os paga, e lançá-los
+  // aqui produziria margem inventada sobre dinheiro que nunca passou pela
+  // empresa. Ver convex/lib/financeScope.ts.
+  //
+  // Receita 186.500 · custo 107.500 · margem prevista 79.000 (42%).
   budget: [
     { description: "Projeto de decoração — contrato", category: "Decoração", quantity: 1, unitPrice: 186_500, type: "income" as const },
-    { description: "Buffet Terra Nova (180 convidados)", category: "Buffet", quantity: 180, unitPrice: 320, type: "expense" as const },
-    { description: "Locação Fazenda Aurora", category: "Local", quantity: 1, unitPrice: 32_000, type: "expense" as const },
-    { description: "Flores e arranjos", category: "Flores", quantity: 1, unitPrice: 24_000, type: "expense" as const },
-    { description: "Bar Alquimia — open bar 6h", category: "Bar", quantity: 1, unitPrice: 14_200, type: "expense" as const },
-    { description: "Bolo e mesa de doces", category: "Doces", quantity: 1, unitPrice: 9_800, type: "expense" as const },
-    { description: "Som e iluminação (em negociação)", category: "Som e Luz", quantity: 1, unitPrice: 18_500, type: "expense" as const },
-    { description: "Mobiliário e locações", category: "Mobiliário", quantity: 1, unitPrice: 21_400, type: "expense" as const },
-    { description: "Equipe de montagem e produção", category: "Equipe", quantity: 1, unitPrice: 8_600, type: "expense" as const },
+    { description: "Flores e folhagens", category: "Flores", quantity: 1, unitPrice: 34_000, type: "expense" as const },
+    { description: "Mobiliário e locação de peças", category: "Móveis", quantity: 1, unitPrice: 21_400, type: "expense" as const },
+    { description: "Equipe de montagem e produção", category: "Equipe", quantity: 1, unitPrice: 14_200, type: "expense" as const },
+    { description: "Estruturas e marcenaria (arco e painéis)", category: "Materiais", quantity: 1, unitPrice: 12_800, type: "expense" as const },
+    { description: "Tecidos, toalhas e mesa posta", category: "Tecidos", quantity: 1, unitPrice: 9_600, type: "expense" as const },
+    { description: "Iluminação decorativa", category: "Iluminação", quantity: 1, unitPrice: 7_400, type: "expense" as const },
+    { description: "Frete e transporte da montagem", category: "Transporte", quantity: 1, unitPrice: 3_800, type: "expense" as const },
+    { description: "Materiais de consumo", category: "Materiais", quantity: 1, unitPrice: 2_400, type: "expense" as const },
+    { description: "Impressos e personalizados (menus e marcadores)", category: "Materiais", quantity: 1, unitPrice: 1_900, type: "expense" as const },
   ],
 
   // ── Financeiro — entradas e saídas, pagas e a pagar ──────────────────────
+  // ── MOVIMENTO REAL DA DECORADORA ─────────────────────────────────────────
+  // Entradas do contrato de decoração e saídas da execução do projeto.
+  // Nenhum fornecedor do casal aparece aqui — ver financeScope.ts.
   transactions: [
-    { type: "income" as const, category: "Contrato", description: "Sinal do contrato (30%)", amount: 55_950, date: "2026-06-28", isPaid: true },
-    { type: "income" as const, category: "Contrato", description: "2ª parcela", amount: 43_550, date: "2026-08-10", isPaid: true },
-    { type: "income" as const, category: "Contrato", description: "3ª parcela", amount: 43_500, date: "2026-09-10", isPaid: true },
-    { type: "income" as const, category: "Contrato", description: "Parcela final", amount: 43_500, date: "2026-10-05", isPaid: false },
-    { type: "expense" as const, category: "Local", description: "Locação Fazenda Aurora", amount: 32_000, date: "2026-07-01", isPaid: true },
-    { type: "expense" as const, category: "Buffet", description: "Buffet Terra Nova — 40%", amount: 23_040, date: "2026-07-20", isPaid: true },
-    { type: "expense" as const, category: "Flores", description: "Flores de Aurora — 50%", amount: 12_000, date: "2026-08-05", isPaid: true },
-    { type: "expense" as const, category: "Bar", description: "Bar Alquimia — entrada", amount: 7_100, date: "2026-08-18", isPaid: true },
-    { type: "expense" as const, category: "Buffet", description: "Buffet Terra Nova — saldo", amount: 34_560, date: "2026-10-03", isPaid: false },
-    { type: "expense" as const, category: "Flores", description: "Flores de Aurora — saldo", amount: 12_000, date: "2026-10-03", isPaid: false },
-    { type: "expense" as const, category: "Doces", description: "Doces da Vila", amount: 9_800, date: "2026-10-05", isPaid: false },
-    { type: "expense" as const, category: "Compras", description: "Compras de decoração", amount: 4_180, date: "2026-09-12", isPaid: true },
+    { type: "income" as const, category: "Sinal", description: "Sinal do contrato (30%)", amount: 55_950, date: "2026-06-28", isPaid: true },
+    { type: "income" as const, category: "Saldo", description: "2ª parcela", amount: 43_550, date: "2026-08-10", isPaid: true },
+    { type: "income" as const, category: "Saldo", description: "3ª parcela", amount: 43_500, date: "2026-09-10", isPaid: true },
+    { type: "income" as const, category: "Saldo", description: "Parcela final", amount: 43_500, date: "2026-10-05", isPaid: false },
+    { type: "expense" as const, category: "Flores", description: "Flores de Aurora — 50% do pedido", amount: 17_000, date: "2026-08-05", isPaid: true },
+    { type: "expense" as const, category: "Móveis", description: "Mobiliário Bela Casa — locação", amount: 21_400, date: "2026-08-18", isPaid: true },
+    { type: "expense" as const, category: "Materiais", description: "Estrutura do arco e painéis", amount: 12_800, date: "2026-08-22", isPaid: true },
+    { type: "expense" as const, category: "Tecidos", description: "Toalhas, trilhos e guardanapos", amount: 9_600, date: "2026-09-02", isPaid: true },
+    { type: "expense" as const, category: "Transporte", description: "Frete da montagem (ida e volta)", amount: 3_800, date: "2026-09-12", isPaid: true },
+    { type: "expense" as const, category: "Materiais", description: "Materiais de consumo e insumos", amount: 2_400, date: "2026-09-12", isPaid: true },
+    { type: "expense" as const, category: "Flores", description: "Flores de Aurora — saldo", amount: 17_000, date: "2026-10-03", isPaid: false },
+    { type: "expense" as const, category: "Equipe", description: "Equipe de montagem e produção", amount: 14_200, date: "2026-10-09", isPaid: false },
   ],
 
   // ── Carregamento / Caderno de Montagem ───────────────────────────────────

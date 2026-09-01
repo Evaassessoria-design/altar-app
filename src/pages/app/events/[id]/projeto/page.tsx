@@ -59,7 +59,9 @@ export default function ProjetoDecoracaoPage() {
 
   const mudarEscopo = async (itemId: Id<"assemblyItems">, scope: ProjectScope | "") => {
     try {
-      await atualizar({ id: itemId, projectScope: scope === "" ? undefined : scope });
+      // `null`, e não `undefined`: `undefined` é descartado no transporte e o
+      // pedido de limpar nunca chegaria ao servidor.
+      await atualizar({ id: itemId, projectScope: scope === "" ? null : scope });
       toast.success("Classificação atualizada.");
     } catch {
       toast.error("Não foi possível salvar a classificação.");

@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { requireUser } from "./lib/identity";
 import { requireActiveAccess } from "./lib/accessGuard";
+import { limparCampos } from "./lib/limparCampos";
 
 export const listLeads = query({
   args: {},
@@ -57,10 +58,11 @@ export const updateLead = mutation({
   args: {
     id: v.id("leads"),
     clientName: v.optional(v.string()),
-    clientPhone: v.optional(v.string()),
-    eventType: v.optional(v.string()),
-    eventDate: v.optional(v.string()),
-    budget: v.optional(v.number()),
+    // `null` = limpar. Ver convex/lib/limparCampos.ts.
+    clientPhone: v.optional(v.union(v.string(), v.null())),
+    eventType: v.optional(v.union(v.string(), v.null())),
+    eventDate: v.optional(v.union(v.string(), v.null())),
+    budget: v.optional(v.union(v.number(), v.null())),
     stage: v.optional(
       v.union(
         v.literal("contact"),
@@ -72,15 +74,15 @@ export const updateLead = mutation({
         v.literal("discarded"),
       ),
     ),
-    notes: v.optional(v.string()),
-    partnerName: v.optional(v.string()),
-    venue: v.optional(v.string()),
-    city: v.optional(v.string()),
-    guestCount: v.optional(v.number()),
-    source: v.optional(v.string()),
-    responsible: v.optional(v.string()),
-    lastInteraction: v.optional(v.string()),
-    nextAction: v.optional(v.string()),
+    notes: v.optional(v.union(v.string(), v.null())),
+    partnerName: v.optional(v.union(v.string(), v.null())),
+    venue: v.optional(v.union(v.string(), v.null())),
+    city: v.optional(v.union(v.string(), v.null())),
+    guestCount: v.optional(v.union(v.number(), v.null())),
+    source: v.optional(v.union(v.string(), v.null())),
+    responsible: v.optional(v.union(v.string(), v.null())),
+    lastInteraction: v.optional(v.union(v.string(), v.null())),
+    nextAction: v.optional(v.union(v.string(), v.null())),
     order: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -89,7 +91,7 @@ export const updateLead = mutation({
     if (!lead || lead.userId !== user._id)
       throw new ConvexError({ message: "Lead não encontrado", code: "NOT_FOUND" });
     const { id, ...fields } = args;
-    await ctx.db.patch(id, fields);
+    await ctx.db.patch(id, limparCampos(fields));
   },
 });
 

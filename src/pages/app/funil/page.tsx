@@ -537,15 +537,17 @@ export default function FunilPage() {
   const handleEdit = async (values: LeadFormValues) => {
     if (!editing) return;
     try {
+      // Edição é substituição: `null` limpa o campo. Com `undefined`, o pedido
+      // era descartado no transporte e o valor antigo permanecia.
       await updateLead({
         id: editing._id,
         ...values,
-        budget: values.budget ? parseFloat(values.budget) : undefined,
+        budget: values.budget ? parseFloat(values.budget) : null,
         stage: values.stage as Stage,
-        eventType: values.eventType || undefined,
-        eventDate: values.eventDate || undefined,
-        clientPhone: values.clientPhone || undefined,
-        notes: values.notes || undefined,
+        eventType: values.eventType || null,
+        eventDate: values.eventDate || null,
+        clientPhone: values.clientPhone || null,
+        notes: values.notes || null,
       });
       toast.success("Lead atualizado!");
       setEditing(null);

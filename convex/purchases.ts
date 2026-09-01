@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { getOwnedEvent, requireEventOwner, requireUser } from "./lib/identity";
 import { isPurchasedForStatus, type PurchaseStatus } from "./lib/purchaseStatus";
+import { limparCampos } from "./lib/limparCampos";
 
 /** Validador reutilizado por `addPurchase`, `updatePurchase` e `setStatus`. */
 const purchaseStatus = v.union(
@@ -75,17 +76,19 @@ export const updatePurchase = mutation({
   args: {
     id: v.id("purchaseItems"),
     name: v.optional(v.string()),
-    category: v.optional(v.string()),
-    quantity: v.optional(v.number()),
-    unit: v.optional(v.string()),
-    supplier: v.optional(v.string()),
-    unitPrice: v.optional(v.number()),
+    // O formulário de edição é um formulário COMPLETO: o que a decoradora
+    // apagou lá precisa sumir aqui. `null` = limpar (convex/lib/limparCampos.ts).
+    category: v.optional(v.union(v.string(), v.null())),
+    quantity: v.optional(v.union(v.number(), v.null())),
+    unit: v.optional(v.union(v.string(), v.null())),
+    supplier: v.optional(v.union(v.string(), v.null())),
+    unitPrice: v.optional(v.union(v.number(), v.null())),
     isPurchased: v.optional(v.boolean()),
-    notes: v.optional(v.string()),
+    notes: v.optional(v.union(v.string(), v.null())),
     status: v.optional(purchaseStatus),
-    responsible: v.optional(v.string()),
-    supplierId: v.optional(v.id("suppliers")),
-    dueDate: v.optional(v.string()),
+    responsible: v.optional(v.union(v.string(), v.null())),
+    supplierId: v.optional(v.union(v.id("suppliers"), v.null())),
+    dueDate: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
@@ -99,12 +102,13 @@ export const updatePurchase = mutation({
       }
     }
     const { id, ...fields } = args;
+    const limpos = limparCampos(fields);
     // Mudar a situação reajusta `isPurchased` junto. Sem isso, um item
     // "recebido" poderia continuar contando como pendente no Resumo
     // Operacional, e as duas telas se contradiriam.
     const patch = args.status
-      ? { ...fields, isPurchased: isPurchasedForStatus(args.status) }
-      : fields;
+      ? { ...limpos, isPurchased: isPurchasedForStatus(args.status) }
+      : limpos;
     await ctx.db.patch(id, patch);
   },
 });

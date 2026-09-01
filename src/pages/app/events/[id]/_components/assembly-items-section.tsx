@@ -307,7 +307,7 @@ function ItemCard({
               label="Quantidade"
               value={item.quantity?.toString() ?? ""}
               type="number"
-              onSave={(v) => void patch({ quantity: v ? Number(v) : undefined })}
+              onSave={(v) => void patch({ quantity: v ? Number(v) : null })}
             />
             <Field label="Unidade" value={item.unit ?? ""} onSave={(v) => void patch({ unit: v })} />
             <Field

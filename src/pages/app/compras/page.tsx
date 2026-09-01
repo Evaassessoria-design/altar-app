@@ -432,17 +432,19 @@ function ComprasContent() {
   const handleEdit = async (values: PurchaseFormValues) => {
     if (!editing) return;
     try {
+      // Edição é substituição: campo esvaziado no formulário precisa sumir do
+      // item. `null` é o pedido de limpar — `undefined` não chegaria ao servidor.
       await updatePurchase({
         id: editing._id,
         name: values.name,
-        category: values.category || undefined,
-        quantity: values.quantity ? parseFloat(values.quantity) : undefined,
-        unit: values.unit || undefined,
-        supplier: values.supplier || undefined,
-        unitPrice: values.unitPrice ? parseFloat(values.unitPrice) : undefined,
-        notes: values.notes || undefined,
-        responsible: values.responsible || undefined,
-        dueDate: values.dueDate || undefined,
+        category: values.category || null,
+        quantity: values.quantity ? parseFloat(values.quantity) : null,
+        unit: values.unit || null,
+        supplier: values.supplier || null,
+        unitPrice: values.unitPrice ? parseFloat(values.unitPrice) : null,
+        notes: values.notes || null,
+        responsible: values.responsible || null,
+        dueDate: values.dueDate || null,
       });
       toast.success("Item atualizado!");
       setEditing(null);

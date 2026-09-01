@@ -2,6 +2,7 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { getOwnedEvent, requireEventOwner, requireIdentity, requireUser } from "./lib/identity";
+import { limparCampos } from "./lib/limparCampos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Itens operacionais de montagem. Camada de dados do Caderno de Montagem.
@@ -125,7 +126,8 @@ export const update = mutation({
     area: v.optional(v.string()),
     name: v.optional(v.string()),
     model: v.optional(v.string()),
-    quantity: v.optional(v.number()),
+    // `null` = limpar. Ver convex/lib/limparCampos.ts.
+    quantity: v.optional(v.union(v.number(), v.null())),
     unit: v.optional(v.string()),
     supplierId: v.optional(v.id("eventSuppliers")),
     supplierName: v.optional(v.string()),
@@ -134,7 +136,14 @@ export const update = mutation({
     includeInAssemblyReport: v.optional(v.boolean()),
     checkOnAssembly: v.optional(v.boolean()),
     projectScope: v.optional(
-      v.union(v.literal("incluso"), v.literal("referencia"), v.literal("nao_incluso")),
+      v.union(
+        v.literal("incluso"),
+        v.literal("referencia"),
+        v.literal("nao_incluso"),
+        // `null` = "Sem classificação". Sem isso, tirar a classificação de um
+        // item era impossível: o pedido não chegava ao servidor.
+        v.null(),
+      ),
     ),
     operationalStatus: v.optional(
       v.union(
@@ -154,7 +163,10 @@ export const update = mutation({
       throw new ConvexError({ message: "Item não encontrado", code: "NOT_FOUND" });
     }
     const { id, ...fields } = args;
-    await ctx.db.patch(id, { ...fields, updatedAt: new Date().toISOString() });
+    await ctx.db.patch(id, {
+      ...limparCampos(fields),
+      updatedAt: new Date().toISOString(),
+    });
   },
 });
 

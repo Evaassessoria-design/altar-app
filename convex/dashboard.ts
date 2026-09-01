@@ -1,5 +1,8 @@
 import { query } from "./_generated/server";
 import { requireUser } from "./lib/identity";
+import { diasEntre, montarAtencao } from "./lib/attention";
+import { effectivePurchaseStatus, isOverdue, isPendingStatus } from "./lib/purchaseStatus";
+import { resumirFornecedores } from "./lib/eventSummary";
 
 // ─── Dashboard summary data ───────────────────────────────────────────────────
 
@@ -107,5 +110,62 @@ export const getDashboardStats = query({
       pendingPurchasesCount,
       urgentTasks: urgentTasks.slice(0, 8),
     };
+  },
+});
+
+/**
+ * "Precisam da sua atenção" — os eventos que exigem alguma coisa hoje.
+ *
+ * As REGRAS vivem em lib/attention.ts, puras e testadas. Esta query só lê o
+ * banco e entrega os números; nenhum julgamento nasce aqui.
+ *
+ * Só olha eventos ainda por vir e não cancelados, dentro de uma janela de
+ * leitura generosa — o corte fino de "isto merece atenção?" é da regra, não da
+ * consulta.
+ */
+export const getAttentionBoard = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+
+    const hoje = new Date();
+    const hojeISO = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
+
+    const eventos = (
+      await ctx.db
+        .query("events")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .collect()
+    ).filter(
+      (e) => e.status !== "cancelled" && e.status !== "completed" && e.date >= hojeISO,
+    );
+
+    const entradas = await Promise.all(
+      eventos.map(async (e) => {
+        const [checklist, compras, fornecedores, equipe] = await Promise.all([
+          ctx.db.query("checklistItems").withIndex("by_event", (q) => q.eq("eventId", e._id)).collect(),
+          ctx.db.query("purchaseItems").withIndex("by_event", (q) => q.eq("eventId", e._id)).collect(),
+          ctx.db.query("eventSuppliers").withIndex("by_event", (q) => q.eq("eventId", e._id)).collect(),
+          ctx.db.query("eventTeam").withIndex("by_event", (q) => q.eq("eventId", e._id)).collect(),
+        ]);
+
+        return {
+          eventId: e._id as string,
+          nome: e.name,
+          data: e.date,
+          diasAte: diasEntre(hojeISO, e.date),
+          checklistPendentes: checklist.filter((i) => i.phase === "pre" && !i.isChecked).length,
+          comprasPendentes: compras.filter((i) => isPendingStatus(effectivePurchaseStatus(i))).length,
+          comprasAtrasadas: compras.filter((i) => isOverdue(i, hojeISO)).length,
+          fornecedoresAguardando: resumirFornecedores(fornecedores).aguardando,
+          equipeEscalada: equipe.length,
+          acoesDeFornecedor: fornecedores
+            .filter((f) => f.nextAction?.trim())
+            .map((f) => ({ fornecedor: f.companyName, texto: f.nextAction!.trim() })),
+        };
+      }),
+    );
+
+    return montarAtencao(entradas);
   },
 });

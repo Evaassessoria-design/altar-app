@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "convex/react";
+import { AttentionBoard } from "@/components/attention-board.tsx";
 import { api } from "@/convex/_generated/api.js";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -163,6 +164,11 @@ export default function Dashboard() {
           <Plus className="size-4" /> Novo Evento
         </Button>
       </motion.div>
+
+      {/* Precisam da sua atenção — entra ANTES dos números do mês porque
+          responde a primeira pergunta da manhã: "o que exige algo de mim
+          hoje?". As regras vivem em convex/lib/attention.ts. */}
+      <AttentionBoard />
 
       {/* Stat cards */}
       {stats === undefined ? (

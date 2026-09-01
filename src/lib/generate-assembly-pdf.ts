@@ -2,6 +2,7 @@ import jsPDF from "jspdf";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { Doc } from "@/convex/_generated/dataModel.d.ts";
+import { formatEventDayOnly } from "./event-date";
 import {
   resolveAreasForAudience,
   itemVisibleTo,
@@ -189,7 +190,7 @@ export async function generateAssemblyPDF(data: AssemblyReportData): Promise<voi
   // Só entram os dados que existem — nada de "—" ocupando espaço.
   // `eventCode` ainda não existe no ALTAR: quando existir, entra aqui.
   const header: [string, string | undefined][] = [
-    ["Data", event.date ? format(new Date(event.date), "dd/MM/yyyy", { locale: ptBR }) : undefined],
+    ["Data", event.date ? formatEventDayOnly(event.date) : undefined],
     ["Local", event.location?.trim() || undefined],
     ["Convidados", data.guestCount?.trim() || undefined],
     ["Assessoria", data.assessoria?.trim() || undefined],

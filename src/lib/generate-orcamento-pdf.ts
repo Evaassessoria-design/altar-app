@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { Doc } from "@/convex/_generated/dataModel.d.ts";
 
+import { formatEventDateShort } from "./event-date";
 const PRIMARY: [number, number, number] = [178, 142, 96];
 const LIGHT_BG: [number, number, number] = [252, 249, 244];
 const BORDER: [number, number, number] = [220, 205, 180];
@@ -79,7 +80,7 @@ export function generateOrcamentoPDF(data: OrcamentoPDFData): void {
   doc.setFontSize(8);
   doc.setTextColor(...MUTED);
   doc.text(
-    `${format(new Date(event.date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}  ·  ${event.location}  ·  Cliente: ${event.clientName}${event.clientPhone ? ` (${event.clientPhone})` : ""}`,
+    `${formatEventDateShort(event.date)}  ·  ${event.location}  ·  Cliente: ${event.clientName}${event.clientPhone ? ` (${event.clientPhone})` : ""}`,
     MARGIN, y,
   );
   y += 8;

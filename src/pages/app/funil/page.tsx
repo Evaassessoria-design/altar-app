@@ -34,6 +34,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
 
+import { formatEventDayOnly } from "@/lib/event-date.ts";
 // Os quatro estágios originais mantêm o mesmo id — lead já gravado continua
 // caindo na coluna certa. Os três do meio foram acrescentados.
 type Stage =
@@ -367,7 +368,7 @@ function LeadCard({
         {lead.eventDate && (
           <span className="flex items-center gap-1 text-muted-foreground">
             <CalendarDays className="size-3" />
-            {format(new Date(lead.eventDate), "dd/MM/yyyy", { locale: ptBR })}
+            {formatEventDayOnly(lead.eventDate)}
           </span>
         )}
         {lead.budget && (

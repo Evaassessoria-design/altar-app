@@ -64,6 +64,7 @@ import type { Doc } from "@/convex/_generated/dataModel.d.ts";
 import { ConvexError } from "convex/values";
 import { generateEventPDF } from "@/lib/generate-event-pdf.ts";
 
+import { formatEventDateLong } from "@/lib/event-date.ts";
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   planning: { label: "Planejamento", className: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" },
   confirmed: { label: "Confirmado", className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
@@ -310,7 +311,7 @@ export default function EventDetailsPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
           <div className="flex items-center gap-2 text-muted-foreground">
             <CalendarDays className="size-4 text-primary flex-shrink-0" />
-            <span>{format(new Date(event.date), "dd 'de' MMMM 'de' yyyy, HH:mm", { locale: ptBR })}</span>
+            <span>{formatEventDateLong(event.date)}</span>
           </div>
           <div className="flex items-center gap-2 text-muted-foreground">
             <MapPin className="size-4 text-primary flex-shrink-0" />

@@ -5,6 +5,7 @@ import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { buildAgenda } from "@/lib/agenda.ts";
+import { parseEventDate } from "@/lib/event-date.ts";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -30,7 +31,10 @@ type Props = {
 
 /** Data de um alinhamento, tolerante ao formato (ISO completo ou AAAA-MM-DD). */
 function formatarData(bruto: string): string {
-  const data = new Date(bruto.length <= 10 ? `${bruto}T12:00:00` : bruto);
+  // Mesma convenção do resto do app (src/lib/event-date.ts): data sem hora é
+  // ancorada ao meio-dia local. Antes esta correção vivia só aqui — por isso a
+  // Agenda acertava o dia e as outras telas erravam.
+  const data = parseEventDate(bruto) ?? new Date(bruto);
   if (Number.isNaN(data.getTime())) return bruto;
   return format(data, "dd/MM/yyyy", { locale: ptBR });
 }
@@ -41,7 +45,7 @@ export function AgendaSection({ eventId, eventDate, briefing, team, suppliers }:
   const agenda = buildAgenda({ briefing, team, suppliers });
 
   const dataDoEvento = (() => {
-    const d = new Date(eventDate.length <= 10 ? `${eventDate}T12:00:00` : eventDate);
+    const d = parseEventDate(eventDate) ?? new Date(eventDate);
     if (Number.isNaN(d.getTime())) return null;
     return format(d, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR });
   })();

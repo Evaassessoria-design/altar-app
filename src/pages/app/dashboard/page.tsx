@@ -35,6 +35,7 @@ import EventFormDialog from "../events/_components/event-form-dialog.tsx";
 import { toast } from "sonner";
 import type { Doc } from "@/convex/_generated/dataModel.d.ts";
 
+import { formatEventDateShort, parseEventDate } from "@/lib/event-date.ts";
 const STATUS_COLORS: Record<string, string> = {
   planning: "bg-yellow-400",
   confirmed: "bg-blue-400",
@@ -57,7 +58,9 @@ const PHASE_LABELS: Record<string, string> = {
 // ─── Countdown helper ─────────────────────────────────────────────────────────
 
 function useCountdown(isoDate: string) {
-  const target = new Date(isoDate);
+  // Data do evento pode vir só com dia; parseEventDate ancora ao meio-dia
+  // local para a contagem não pular um dia.
+  const target = parseEventDate(isoDate) ?? new Date(isoDate);
   const now = new Date();
   const diffMs = target.getTime() - now.getTime();
   if (diffMs <= 0) return { days: 0, hours: 0, minutes: 0, past: true };
@@ -232,7 +235,7 @@ export default function Dashboard() {
             <Link to={`/eventos/${stats.nextEvent._id}`} className="block p-5 hover:bg-accent/30 transition-colors cursor-pointer">
               <p className="font-semibold text-base mb-1">{stats.nextEvent.name}</p>
               <p className="text-sm text-muted-foreground mb-4">
-                {format(new Date(stats.nextEvent.date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })} · {stats.nextEvent.location}
+                {formatEventDateShort(stats.nextEvent.date)} · {stats.nextEvent.location}
               </p>
               {countdown && !countdown.past && (
                 <div className="flex gap-3">
@@ -384,7 +387,7 @@ export default function Dashboard() {
                     <p className="text-sm font-medium truncate">{task.itemName}</p>
                     <p className="text-xs text-muted-foreground">
                       {task.eventName} · {PHASE_LABELS[task.phase]} ·{" "}
-                      {formatDistanceToNow(new Date(task.eventDate), { locale: ptBR, addSuffix: true })}
+                      {formatDistanceToNow(parseEventDate(task.eventDate) ?? new Date(), { locale: ptBR, addSuffix: true })}
                     </p>
                   </div>
                 </div>
@@ -452,7 +455,7 @@ export default function Dashboard() {
                     >
                       <p className="text-sm font-medium truncate">{stats.nextEvent.name}</p>
                       <p className="text-xs text-muted-foreground flex-shrink-0 ml-2">
-                        {format(new Date(stats.nextEvent.date), "dd/MM", { locale: ptBR })}
+                        {format(parseEventDate(stats.nextEvent.date) ?? new Date(), "dd/MM", { locale: ptBR })}
                       </p>
                     </Link>
                   )

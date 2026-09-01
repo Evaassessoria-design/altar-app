@@ -5,6 +5,7 @@ import { ptBR } from "date-fns/locale";
 import type { Doc } from "@/convex/_generated/dataModel.d.ts";
 import { resolveAreasForAudience } from "./briefing-areas.ts";
 
+import { formatEventDateShort } from "./event-date";
 // ─── Brand colors (bege/dourado) ─────────────────────────────────────────────
 const PRIMARY: [number, number, number] = [178, 142, 96];      // #B28E60
 const PRIMARY_DARK: [number, number, number] = [120, 90, 50];  // header text
@@ -149,7 +150,7 @@ export function generateEventPDF(data: EventReportData): void {
   doc.roundedRect(MARGIN, y, CONTENT_W, 30, 2, 2, "FD");
 
   const boxRows = [
-    ["Data", format(new Date(event.date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })],
+    ["Data", formatEventDateShort(event.date)],
     ["Local", event.location],
     ["Cliente", `${event.clientName}${event.clientPhone ? `  ·  ${event.clientPhone}` : ""}`],
     ["Orçamento", event.budget

@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/empty.tsx";
 import type { Doc, Id } from "@/convex/_generated/dataModel.d.ts";
 
+import { formatEventDayOnly } from "@/lib/event-date.ts";
 type FilterType = "all" | "upcoming" | "completed" | "cancelled";
 
 const FILTERS: { value: FilterType; label: string }[] = [
@@ -227,7 +228,7 @@ export default function EventsPage() {
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-muted-foreground">
                       <span className="inline-flex items-center gap-1">
                         <CalendarDays className="size-3.5 flex-shrink-0" />
-                        {format(new Date(event.date), "dd/MM/yyyy", { locale: ptBR })}
+                        {formatEventDayOnly(event.date)}
                       </span>
                       <span className="inline-flex items-center gap-1 min-w-0 max-w-[60%]">
                         <MapPin className="size-3.5 flex-shrink-0" />

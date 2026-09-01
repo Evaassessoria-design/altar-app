@@ -17,11 +17,14 @@
 // sem consulta, para poder ser testado exaustivamente.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { effectivePurchaseStatus, isPendingStatus } from "./purchaseStatus";
+
 export type ContagemFeita = { total: number; feitos: number; pendentes: number };
 
 type ChecklistLike = { isChecked: boolean };
 type CompraLike = {
   isPurchased: boolean;
+  status?: string;
   quantity?: number;
   unitPrice?: number;
   supplier?: string;
@@ -105,24 +108,51 @@ export function resumirFinanceiro(txs: readonly TransacaoLike[]): ResumoFinancei
  *
  * `semPreco` existe para a tela poder dizer "4 itens ainda sem preço" em vez
  * de apresentar um total que parece completo e não é.
+ *
+ * ── CANCELADO NÃO É PENDENTE ────────────────────────────────────────────────
+ * Antes esta função contava pendência como `!isPurchased`. Um item CANCELADO
+ * tem `isPurchased: false`, então aparecia como "falta comprar" no Resumo
+ * Operacional e virava uma próxima ação falsa — enquanto o painel do Dashboard,
+ * que já usava `isPendingStatus`, dizia o contrário. As duas telas se
+ * contradiziam sobre o mesmo item.
+ *
+ * Agora as três situações são contadas separadamente, e por isso
+ * `total !== feitos + pendentes` quando há cancelados. É a verdade: um item
+ * cancelado não foi comprado nem está esperando compra.
+ *
+ * Cancelado também sai do `valorComPreco`: compra cancelada não é dinheiro
+ * comprometido.
  */
 export type ResumoCompras = ContagemFeita & {
   valorComPreco: number;
   semPreco: number;
+  cancelados: number;
 };
 
 export function resumirCompras(compras: readonly CompraLike[]): ResumoCompras {
-  const base = contar(compras.map((c) => ({ feito: c.isPurchased })));
+  let feitos = 0;
+  let pendentes = 0;
+  let cancelados = 0;
   let valorComPreco = 0;
   let semPreco = 0;
+
   for (const c of compras) {
+    const status = effectivePurchaseStatus(c);
+    if (status === "cancelado") {
+      cancelados += 1;
+      continue; // não conta como feito, nem pendente, nem custo.
+    }
+    if (isPendingStatus(status)) pendentes += 1;
+    else feitos += 1;
+
     if (typeof c.unitPrice === "number" && Number.isFinite(c.unitPrice)) {
       valorComPreco += c.unitPrice * (c.quantity ?? 1);
     } else {
       semPreco += 1;
     }
   }
-  return { ...base, valorComPreco, semPreco };
+
+  return { total: compras.length, feitos, pendentes, cancelados, valorComPreco, semPreco };
 }
 
 /** Uma coisa que precisa acontecer, com a origem preservada. */

@@ -165,9 +165,15 @@ export function OperationalSummary({ eventId }: { eventId: Id<"events"> }) {
               detalhe={
                 compras.total === 0
                   ? "nada listado"
-                  : compras.semPreco > 0
-                    ? `${brl.format(compras.valorComPreco)} · ${compras.semPreco} sem preço`
-                    : brl.format(compras.valorComPreco)
+                  : [
+                      brl.format(compras.valorComPreco),
+                      compras.semPreco > 0 ? `${compras.semPreco} sem preço` : null,
+                      // Sem isto, "1 de 3" com um item cancelado fica
+                      // inexplicável na tela.
+                      compras.cancelados > 0 ? `${compras.cancelados} cancelado${compras.cancelados === 1 ? "" : "s"}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
               }
               alerta={compras.pendentes > 0}
               to="/compras"

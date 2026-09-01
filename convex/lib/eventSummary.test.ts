@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { isPendingStatus, isPurchasedForStatus } from "./purchaseStatus";
 import {
   montarProximasAcoes,
   montarResumoOperacional,
@@ -49,6 +50,7 @@ describe("resumirCompras", () => {
       { isPurchased: false, quantity: 3, unitPrice: 10 },
       { isPurchased: false },
     ]);
+    expect(r.cancelados).toBe(0);
     expect(r.total).toBe(3);
     expect(r.feitos).toBe(1);
     expect(r.pendentes).toBe(2);
@@ -58,6 +60,44 @@ describe("resumirCompras", () => {
 
   it("item com preço e SEM quantidade conta como 1 unidade — não some da soma", () => {
     expect(resumirCompras([{ isPurchased: false, unitPrice: 80 }]).valorComPreco).toBe(80);
+  });
+
+  it("item CANCELADO não conta como pendente nem como feito", () => {
+    // O bug: cancelado tem `isPurchased: false`, então a contagem antiga o
+    // exibia como "falta comprar" — e o painel do Dashboard, que já usava
+    // `isPendingStatus`, dizia o contrário. As duas telas se contradiziam.
+    const r = resumirCompras([
+      { isPurchased: false, status: "cancelado" },
+      { isPurchased: false, status: "cotacao" },
+      { isPurchased: true, status: "recebido" },
+    ]);
+    expect(r.total).toBe(3);
+    expect(r.pendentes).toBe(1);
+    expect(r.feitos).toBe(1);
+    expect(r.cancelados).toBe(1);
+    // Com cancelados, total deixa de ser feitos + pendentes. É a verdade.
+    expect(r.feitos + r.pendentes).not.toBe(r.total);
+  });
+
+  it("compra CANCELADA não conta como dinheiro comprometido", () => {
+    const r = resumirCompras([
+      { isPurchased: false, status: "cancelado", unitPrice: 5000, quantity: 1 },
+      { isPurchased: false, status: "aprovado", unitPrice: 100, quantity: 2 },
+    ]);
+    expect(r.valorComPreco).toBe(200);
+  });
+
+  it("RECEBIDO conta como feito, não como pendente", () => {
+    const r = resumirCompras([{ isPurchased: true, status: "recebido" }]);
+    expect(r.feitos).toBe(1);
+    expect(r.pendentes).toBe(0);
+  });
+
+  it("item ANTIGO sem status continua contado pelo booleano", () => {
+    const r = resumirCompras([{ isPurchased: false }, { isPurchased: true }]);
+    expect(r.pendentes).toBe(1);
+    expect(r.feitos).toBe(1);
+    expect(r.cancelados).toBe(0);
   });
 
   it("NUNCA estima preço de item sem preço", () => {
@@ -241,5 +281,36 @@ describe("montarResumoOperacional", () => {
     expect(r.financeiro.receitaRecebida).toBe(0);
     expect(r.vazio).toBe(false);
     expect(r.proximasAcoes[0].referencia).toBe("Bolo");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRAVA DE CONCORDÂNCIA ENTRE AS TRÊS SUPERFÍCIES
+//
+// A mesma compra é contada em três lugares: o painel "Precisam da sua atenção"
+// (via `isPendingStatus`), o Resumo Operacional (via `resumirCompras`) e as
+// Próximas Ações (derivadas do resumo). Se discordarem, a decoradora vê o
+// Dashboard dizendo que está tudo certo e a tela do evento dizendo que falta
+// comprar — e para de confiar nos dois.
+//
+// Foi exatamente o que acontecia com CANCELADO.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("as três superfícies concordam sobre cada situação", () => {
+  const SITUACOES = [
+    "necessidade", "cotacao", "aprovado", "comprado", "recebido", "cancelado",
+  ] as const;
+
+  it.each(SITUACOES)("situação %s é contada igual nos três lugares", (status) => {
+    const item = { status, isPurchased: isPurchasedForStatus(status) };
+
+    const noDashboard = isPendingStatus(status);
+    const noResumo = resumirCompras([item]).pendentes > 0;
+    const naProximaAcao = montarResumoOperacional({
+      checklistPre: [], checklistPos: [], compras: [item],
+      fornecedores: [], equipe: [], carregamento: [], transacoes: [],
+    }).proximasAcoes.some((a) => a.origem === "compras");
+
+    expect(noResumo, `resumo discorda do dashboard em "${status}"`).toBe(noDashboard);
+    expect(naProximaAcao, `próxima ação discorda do dashboard em "${status}"`).toBe(noDashboard);
   });
 });

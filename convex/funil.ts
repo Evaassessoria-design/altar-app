@@ -138,6 +138,25 @@ export const convertToEvent = mutation({
     if (!lead || lead.userId !== user._id)
       throw new ConvexError({ message: "Lead não encontrado", code: "NOT_FOUND" });
 
+    // ── IDEMPOTÊNCIA ─────────────────────────────────────────────────────────
+    // Converter DUAS VEZES o mesmo lead criava DOIS eventos, e o lead ficava
+    // apontando só para o último — o primeiro virava um evento órfão que a
+    // decoradora teria de encontrar e apagar à mão.
+    //
+    // A tela desabilita o botão enquanto envia e o esconde depois, mas isso é
+    // decoração: a mutation é chamável direto do navegador, e um Enter repetido
+    // com a rede lenta bastava. A garantia tem que ser do servidor.
+    //
+    // Se o evento apontado ainda existe, devolvemos ELE em vez de criar outro.
+    // Se foi apagado, o ponteiro está velho e a conversão pode acontecer de
+    // novo — é o caso legítimo de "converti, apaguei o evento, quero refazer".
+    if (lead.convertedEventId) {
+      const jaConvertido = await ctx.db.get(lead.convertedEventId);
+      if (jaConvertido && jaConvertido.userId === user._id) {
+        return jaConvertido._id;
+      }
+    }
+
     const { leadId, eventName, eventDate, ...rest } = args;
     // Reaproveita o que a decoradora já anotou durante a negociação, em vez de
     // exigir que ela redigite. O que veio no formulário tem precedência — ela

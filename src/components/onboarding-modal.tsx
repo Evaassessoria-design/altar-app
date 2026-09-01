@@ -266,7 +266,7 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
                     <Label>Nome do evento *</Label>
                     <Input
                       autoFocus
-                      placeholder="Ex: Casamento da Ana e Carlos"
+                      placeholder="Ex: 15 anos da Helena, Casamento da Ana, Confra da Acme"
                       value={eventName}
                       onChange={(e) => setEventName(e.target.value)}
                     />

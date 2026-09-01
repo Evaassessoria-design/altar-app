@@ -23,7 +23,7 @@ import { Plus, Search, Store } from "lucide-react";
 // fica preservada, e ganha um atalho na frente.
 //
 // Fornecedores já usados NESTE evento aparecem desabilitados: adicionar duas
-// vezes o mesmo buffet ao mesmo casamento não faz sentido.
+// vezes o mesmo fornecedor ao mesmo evento não faz sentido.
 // ─────────────────────────────────────────────────────────────────────────────
 
 type Props = {

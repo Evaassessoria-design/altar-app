@@ -108,7 +108,7 @@ export default function EventFormDialog({ open, onClose, onSubmit, defaultValues
         <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="name">Nome do Evento *</Label>
-            <Input id="name" placeholder="Ex: Casamento Ana & Pedro" {...register("name")} />
+            <Input id="name" placeholder="Ex: 15 anos da Helena · Casamento Ana e Pedro · Confra Acme" {...register("name")} />
             {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
           </div>
 

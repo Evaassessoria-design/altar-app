@@ -3,6 +3,7 @@ import { requireUser } from "./lib/identity";
 import { diasEntre, montarAtencao } from "./lib/attention";
 import { effectivePurchaseStatus, isOverdue, isPendingStatus } from "./lib/purchaseStatus";
 import { resumirFornecedores } from "./lib/eventSummary";
+import { fornecedoresDaDecoradora } from "./lib/escopoDecoradora";
 
 // ─── Dashboard summary data ───────────────────────────────────────────────────
 
@@ -157,11 +158,21 @@ export const getAttentionBoard = query({
           checklistPendentes: checklist.filter((i) => i.phase === "pre" && !i.isChecked).length,
           comprasPendentes: compras.filter((i) => isPendingStatus(effectivePurchaseStatus(i))).length,
           comprasAtrasadas: compras.filter((i) => isOverdue(i, hojeISO)).length,
-          fornecedoresAguardando: resumirFornecedores(fornecedores).aguardando,
+          // "Fornecedor sem confirmação" também é sobre a operação dela: o
+          // buffet não ter confirmado é uma pendência do cliente, não da
+          // decoradora. A regra é a mesma de `acoesDeFornecedor`.
+          fornecedoresAguardando: resumirFornecedores(fornecedoresDaDecoradora(fornecedores))
+            .aguardando,
           equipeEscalada: equipe.length,
+          // A categoria vai junto: quem decide se a ação é da decoradora é a
+          // regra em lib/attention.ts, não esta consulta.
           acoesDeFornecedor: fornecedores
             .filter((f) => f.nextAction?.trim())
-            .map((f) => ({ fornecedor: f.companyName, texto: f.nextAction!.trim() })),
+            .map((f) => ({
+              fornecedor: f.companyName,
+              texto: f.nextAction!.trim(),
+              categoria: f.category,
+            })),
         };
       }),
     );

@@ -470,7 +470,7 @@ export default function GaleriaPage() {
                 type="text"
                 value={captionText}
                 onChange={(e) => setCaptionText(e.target.value)}
-                placeholder="Ex: Mesa dos noivos, detalhe das flores..."
+                placeholder="Ex: Mesa principal, detalhe do arranjo, lounge montado..."
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 onKeyDown={(e) => { if (e.key === "Enter") void handleSaveCaption(editingCaption); }}
                 autoFocus

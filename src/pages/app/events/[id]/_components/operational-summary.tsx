@@ -282,7 +282,7 @@ export function OperationalSummary({ eventId }: { eventId: Id<"events"> }) {
 
               <p className="text-[11px] text-muted-foreground mt-2">
                 Só a operação da sua empresa. Buffet, espaço, bar e assessoria são
-                fornecedores do casal e não entram aqui.
+                fornecedores do cliente e não entram aqui.
               </p>
             </div>
           </div>

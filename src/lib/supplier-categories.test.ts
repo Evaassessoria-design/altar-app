@@ -7,7 +7,12 @@ const f = (over: Partial<Parameters<typeof filtrarFornecedores>[0][number]> & { 
 
 describe("labelDaCategoria", () => {
   it("traduz os slugs conhecidos", () => {
-    expect(labelDaCategoria("som_ilum")).toBe("Som & Iluminação");
+    // "(evento)" no rótulo separa o som/luz que o CLIENTE contrata da
+    // "Iluminação decorativa", que é da operação da decoradora. Sem essa
+    // distinção as duas viravam a mesma coisa no seletor.
+    expect(labelDaCategoria("som_ilum")).toBe("Som & Iluminação (evento)");
+    expect(labelDaCategoria("iluminacao_decorativa")).toBe("Iluminação decorativa");
+    expect(labelDaCategoria("flores")).toBe("Flores");
   });
 
   it("categoria digitada à mão volta como veio — nunca 'inválido'", () => {

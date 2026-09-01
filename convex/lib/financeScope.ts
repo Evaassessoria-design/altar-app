@@ -24,42 +24,26 @@
 // orçamento do casamento inteiro, que foi o que aconteceu.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { CATEGORIAS_DO_EVENTO, ehContextoDoEvento } from "./escopoDecoradora";
+
 /**
- * Categorias que descrevem fornecedores do CASAL, não custos da decoradora.
+ * A categoria descreve um fornecedor do CLIENTE em vez de custo da decoradora?
  *
- * Comparadas sem acento e sem caixa. Usadas pelo teste do seed — nunca para
- * barrar o que a decoradora digita.
+ * ── UMA LISTA SÓ ────────────────────────────────────────────────────────────
+ * Esta regra era uma lista própria aqui dentro. O Dashboard tinha o mesmo
+ * problema conceitual — mostrava a degustação do buffet como pendência da
+ * decoradora — e teria ganhado uma SEGUNDA lista. Duas listas do mesmo conceito
+ * divergem na primeira semana: uma ganha "doces", a outra não, e ninguém
+ * entende por que o financeiro e o painel discordam.
+ *
+ * A definição de escopo vive em `lib/escopoDecoradora.ts` e é usada pelos dois.
  */
-export const CATEGORIAS_FORA_DO_ESCOPO = [
-  "buffet",
-  "local",
-  "locacao do espaco",
-  "espaco",
-  "bar",
-  "fotografia",
-  "foto",
-  "video",
-  "dj",
-  "banda",
-  "musica",
-  "assessoria",
-  "celebrante",
-  "convites",
-] as const;
-
-function normalizar(v: string): string {
-  return v
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
-    .trim();
-}
-
-/** A categoria descreve um fornecedor do casal em vez de custo da decoradora? */
 export function foraDoEscopoDaDecoradora(categoria: string | undefined): boolean {
-  if (!categoria) return false;
-  return (CATEGORIAS_FORA_DO_ESCOPO as readonly string[]).includes(normalizar(categoria));
+  return ehContextoDoEvento(categoria);
 }
+
+/** Mantido para os testes do seed, que listam o que não pode ser semeado. */
+export const CATEGORIAS_FORA_DO_ESCOPO = CATEGORIAS_DO_EVENTO.map((c) => c.slug);
 
 export type ResultadoDoProjeto = {
   /** Vendido pela empresa de decoração. */

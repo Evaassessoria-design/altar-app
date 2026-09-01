@@ -180,7 +180,7 @@ function TxDialog({
 
           <div className="space-y-1.5">
             <Label>Descrição *</Label>
-            <Input placeholder="Ex: Honorários - Casamento Silva" {...register("description")} />
+            <Input placeholder="Ex: Contrato de decoração — Aniversário Helena" {...register("description")} />
             {errors.description && <p className="text-xs text-destructive">{errors.description.message}</p>}
           </div>
 

@@ -1,33 +1,39 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // CATEGORIAS DE FORNECEDOR
 //
-// Os mesmos slugs que a tela de fornecedores do evento já grava em
-// `eventSuppliers.category`. Extraído para um módulo próprio para que o
-// Catálogo Central e a tela do evento falem exatamente a mesma língua — se
-// cada uma tivesse a sua lista, um fornecedor cadastrado no catálogo apareceria
-// como "categoria desconhecida" dentro do evento.
+// ── O QUE MUDOU E POR QUÊ ───────────────────────────────────────────────────
+// A lista original era de assessoria: assessoria, local, buffet, bar, doces,
+// som & iluminação. NENHUMA categoria de decoração — a decoradora não tinha
+// onde cadastrar o fornecedor de flores, de mobiliário ou de marcenaria, que é
+// justamente a operação dela.
 //
-// A categoria é TEXTO LIVRE no schema (`v.string()`), de propósito: a tela do
-// evento já permite digitar uma categoria fora da lista. Por isso a função de
-// rótulo devolve o próprio valor quando não reconhece — nunca "inválido".
+// Agora a lista vem de `convex/lib/escopoDecoradora.ts`, dividida em dois
+// grupos: a OPERAÇÃO DELA e os fornecedores do EVENTO (contexto). Os do evento
+// continuam cadastráveis — a decoradora alinha montagem, energia e layout com o
+// buffet e o espaço. Só não viram pendência dela no Dashboard nem custo dela no
+// financeiro.
+//
+// A categoria continua TEXTO LIVRE no schema, de propósito: quem digita
+// "Cenografia" ou "Neon" está falando da própria operação, e a função de
+// rótulo devolve o valor como veio — nunca "inválido".
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type SupplierCategory = { slug: string; label: string };
+export {
+  CATEGORIAS_DA_DECORACAO,
+  CATEGORIAS_DO_EVENTO,
+  ehEscopoDaDecoradora,
+  labelDaCategoria,
+  type CategoriaFornecedor,
+} from "@/convex/lib/escopoDecoradora.ts";
 
-export const SUPPLIER_CATEGORIES: readonly SupplierCategory[] = [
-  { slug: "assessoria", label: "Assessoria" },
-  { slug: "local", label: "Local" },
-  { slug: "buffet", label: "Buffet" },
-  { slug: "bar", label: "Bar / Drinks" },
-  { slug: "doces", label: "Doces" },
-  { slug: "som_ilum", label: "Som & Iluminação" },
-] as const;
+import {
+  TODAS_AS_CATEGORIAS,
+  labelDaCategoria as rotulo,
+} from "@/convex/lib/escopoDecoradora.ts";
 
-/** Rótulo legível. Categoria digitada à mão volta como veio. */
-export function labelDaCategoria(slug: string | undefined): string {
-  if (!slug) return "Sem categoria";
-  return SUPPLIER_CATEGORIES.find((c) => c.slug === slug)?.label ?? slug;
-}
+/** Compatibilidade: a lista completa, na ordem em que aparece no seletor. */
+export const SUPPLIER_CATEGORIES = TODAS_AS_CATEGORIAS;
+export type SupplierCategory = (typeof TODAS_AS_CATEGORIAS)[number];
 
 /**
  * Busca por nome, contato, telefone, cidade ou categoria.
@@ -48,7 +54,7 @@ export function filtrarFornecedores<
   const alvo = normalizar(termo);
   if (!alvo) return [...lista];
   return lista.filter((f) =>
-    [f.companyName, f.contactName, f.phone, f.city, labelDaCategoria(f.category)]
+    [f.companyName, f.contactName, f.phone, f.city, rotulo(f.category)]
       .filter((v): v is string => typeof v === "string" && v.length > 0)
       .some((campo) => normalizar(campo).includes(alvo)),
   );

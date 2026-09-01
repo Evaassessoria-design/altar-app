@@ -94,7 +94,7 @@ export type ResumoFinanceiro = {
    *
    * Estes números são da OPERAÇÃO DA DECORADORA neste projeto, não do
    * orçamento do casamento: buffet, espaço, bar e assessoria são fornecedores
-   * do casal e não passam pelo caixa da empresa.
+   * do cliente e não passam pelo caixa da empresa.
    */
   margemPrevista: number | null;
   margemPercentual: number | null;

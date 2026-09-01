@@ -37,7 +37,8 @@ import { toast } from "sonner";
 import { ConvexError } from "convex/values";
 import { Link } from "react-router-dom";
 import {
-  SUPPLIER_CATEGORIES,
+  CATEGORIAS_DA_DECORACAO,
+  CATEGORIAS_DO_EVENTO,
   filtrarFornecedores,
   labelDaCategoria,
 } from "@/lib/supplier-categories.ts";
@@ -132,11 +133,24 @@ function SupplierDialog({
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="">Selecione...</option>
-              {SUPPLIER_CATEGORIES.map((c) => (
-                <option key={c.slug} value={c.slug}>
-                  {c.label}
-                </option>
-              ))}
+              {/* Dois grupos, de propósito: o que a decoradora contrata e paga
+                  vem primeiro; os fornecedores do cliente ficam separados, como
+                  contexto. É a mesma distinção que o Dashboard e o financeiro
+                  usam (convex/lib/escopoDecoradora.ts). */}
+              <optgroup label="Da sua operação">
+                {CATEGORIAS_DA_DECORACAO.map((c) => (
+                  <option key={c.slug} value={c.slug}>
+                    {c.label}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Do evento (contexto)">
+                {CATEGORIAS_DO_EVENTO.map((c) => (
+                  <option key={c.slug} value={c.slug}>
+                    {c.label}
+                  </option>
+                ))}
+              </optgroup>
             </select>
           </div>
 
@@ -325,11 +339,20 @@ export default function CatalogoFornecedoresPage() {
           className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
         >
           <option value="">Todas as categorias</option>
-          {SUPPLIER_CATEGORIES.map((c) => (
-            <option key={c.slug} value={c.slug}>
-              {c.label}
-            </option>
-          ))}
+          <optgroup label="Da sua operação">
+            {CATEGORIAS_DA_DECORACAO.map((c) => (
+              <option key={c.slug} value={c.slug}>
+                {c.label}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="Do evento (contexto)">
+            {CATEGORIAS_DO_EVENTO.map((c) => (
+              <option key={c.slug} value={c.slug}>
+                {c.label}
+              </option>
+            ))}
+          </optgroup>
         </select>
       </div>
 

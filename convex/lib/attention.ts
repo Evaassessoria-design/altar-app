@@ -13,6 +13,17 @@
 // a uma tela onde resolver. Se a decoradora discordar de um motivo, ela
 // consegue apontar exatamente qual dado o gerou.
 //
+// ── O QUE É PENDÊNCIA DA DECORADORA ─────────────────────────────────────────
+// O ALTAR é o sistema da EMPRESA DE DECORAÇÃO. "Confirmar menu final após
+// degustação · Buffet Terra Nova" chegou a aparecer aqui como pendência dela —
+// e não é: é assunto do cliente com o buffet. A decoradora cadastra esses
+// fornecedores para alinhar horário de montagem, energia e layout, mas as
+// tarefas internas deles nunca foram trabalho dela.
+//
+// O filtro é `ehEscopoDaDecoradora` (lib/escopoDecoradora.ts), a MESMA regra
+// que o financeiro usa. Uma lista só, dois consumidores — duas listas
+// divergiriam na primeira semana.
+//
 // ── A REGRA DE OURO DO PRAZO ────────────────────────────────────────────────
 // Pendência só vira ATENÇÃO quando o evento está próximo. Uma compra pendente
 // para um casamento daqui a oito meses não é problema — é o estado normal do
@@ -43,6 +54,8 @@ export type EventoComAtencao = {
   motivos: MotivoAtencao[];
 };
 
+import { ehEscopoDaDecoradora } from "./escopoDecoradora";
+
 export type EntradaAtencao = {
   eventId: string;
   nome: string;
@@ -54,8 +67,14 @@ export type EntradaAtencao = {
   comprasAtrasadas: number;
   fornecedoresAguardando: number;
   equipeEscalada: number;
-  /** Ações escritas à mão pela decoradora, com o fornecedor de origem. */
-  acoesDeFornecedor: { fornecedor: string; texto: string }[];
+  /**
+   * Ações escritas à mão, com o fornecedor de origem e a CATEGORIA dele.
+   *
+   * A categoria não é enfeite: é ela que decide se a ação é da decoradora ou
+   * do fornecedor do cliente. Sem esse campo, o filtro teria de acontecer na
+   * consulta — e a próxima consulta a esquecer dele traria o buffet de volta.
+   */
+  acoesDeFornecedor: { fornecedor: string; texto: string; categoria?: string }[];
 };
 
 /** Dias inteiros entre duas datas "AAAA-MM-DD". */
@@ -90,7 +109,10 @@ export function motivosDeAtencao(e: EntradaAtencao): MotivoAtencao[] {
   }
 
   // Ação escrita à mão também vale sempre: alguém registrou que precisa fazer.
+  // Mas só a da OPERAÇÃO DELA. A degustação do buffet e a carta de drinks do
+  // bar são tarefas de quem o cliente contratou, não da decoradora.
   for (const a of e.acoesDeFornecedor) {
+    if (!ehEscopoDaDecoradora(a.categoria)) continue;
     motivos.push({ texto: `${a.texto} · ${a.fornecedor}`, destino: `${base}/fornecedores` });
   }
 

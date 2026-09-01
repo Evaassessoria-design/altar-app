@@ -28,6 +28,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ConvexError } from "convex/values";
 import { cn } from "@/lib/utils.ts";
+import {
+  PURCHASE_STATUSES,
+  PURCHASE_STATUS_LABEL,
+  effectivePurchaseStatus,
+  isOverdue,
+  type PurchaseStatus,
+} from "@/convex/lib/purchaseStatus.ts";
 
 const CATEGORIES = [
   "Flores",
@@ -49,7 +56,58 @@ const purchaseSchema = z.object({
   supplier: z.string().optional(),
   unitPrice: z.string().optional(),
   notes: z.string().optional(),
+  // Operacional. `status` fica de fora do formulário de propósito: mudar a
+  // situação é o gesto mais frequente e acontece direto na linha do item.
+  responsible: z.string().optional(),
+  dueDate: z.string().optional(),
 });
+
+/** Data "AAAA-MM-DD" de hoje, para decidir atraso sem fuso atrapalhar. */
+function hojeISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Situação do item, alterável em um clique.
+ *
+ * Fica na própria linha porque avançar a situação ("cotação" → "aprovado") é o
+ * que a decoradora faz o dia inteiro; abrir um diálogo para isso seria atrito.
+ */
+function StatusSelect({
+  item,
+  onChange,
+}: {
+  item: Doc<"purchaseItems">;
+  onChange: (status: PurchaseStatus) => void;
+}) {
+  const atual = effectivePurchaseStatus(item);
+  const cor: Record<PurchaseStatus, string> = {
+    necessidade: "bg-muted text-muted-foreground",
+    cotacao: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
+    aprovado: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+    comprado: "bg-primary/10 text-primary",
+    recebido: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+    cancelado: "bg-muted text-muted-foreground line-through",
+  };
+  return (
+    <select
+      value={atual}
+      onChange={(e) => onChange(e.target.value as PurchaseStatus)}
+      aria-label={`Situação de ${item.name}`}
+      className={cn(
+        "h-7 rounded-full border-0 px-2 text-xs font-medium cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring",
+        cor[atual],
+      )}
+    >
+      {PURCHASE_STATUSES.map((s) => (
+        <option key={s} value={s}>
+          {PURCHASE_STATUS_LABEL[s]}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 type PurchaseFormValues = z.infer<typeof purchaseSchema>;
 
@@ -129,6 +187,17 @@ function PurchaseDialog({
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Responsável</Label>
+              <Input placeholder="Quem está tocando" {...register("responsible")} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Precisa até</Label>
+              <Input type="date" {...register("dueDate")} />
+            </div>
+          </div>
+
           <div className="space-y-1.5">
             <Label>Observações</Label>
             <Input placeholder="Notas..." {...register("notes")} />
@@ -153,6 +222,7 @@ function EventSection({
   onEdit,
   onToggle,
   onDelete,
+  onSetStatus,
 }: {
   event: Doc<"events">;
   items: Doc<"purchaseItems">[];
@@ -160,8 +230,10 @@ function EventSection({
   onEdit: (item: Doc<"purchaseItems">) => void;
   onToggle: (id: Id<"purchaseItems">) => void;
   onDelete: (id: Id<"purchaseItems">) => void;
+  onSetStatus: (id: Id<"purchaseItems">, status: PurchaseStatus) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
+  const hoje = hojeISO();
   const purchased = items.filter((i) => i.isPurchased).length;
   const total = items.length;
   const totalValue = items.reduce((sum, i) => {
@@ -254,12 +326,32 @@ function EventSection({
                             <span>{item.quantity}{item.unit ? ` ${item.unit}` : ""}</span>
                           )}
                           {item.supplier && <span>· {item.supplier}</span>}
+                          {item.responsible && <span>· {item.responsible}</span>}
                           {item.unitPrice && item.quantity && (
                             <span className="text-primary font-medium">
                               · {(item.unitPrice * item.quantity).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                             </span>
                           )}
+                          {/* Atraso só é afirmado quando existe data limite
+                              gravada E o item ainda exige ação. */}
+                          {item.dueDate && (
+                            <span
+                              className={cn(
+                                isOverdue(item, hoje) &&
+                                  "text-destructive font-medium",
+                              )}
+                            >
+                              · {isOverdue(item, hoje) ? "atrasado desde" : "até"}{" "}
+                              {new Date(`${item.dueDate}T12:00:00`).toLocaleDateString("pt-BR")}
+                            </span>
+                          )}
                         </div>
+                      </div>
+                      <div className="hidden sm:block flex-shrink-0">
+                        <StatusSelect
+                          item={item}
+                          onChange={(status) => onSetStatus(item._id, status)}
+                        />
                       </div>
                       <div className="flex gap-1 flex-shrink-0">
                         <button
@@ -301,6 +393,7 @@ function ComprasContent() {
   const deletePurchase = useMutation(api.purchases.deletePurchase);
   const addPurchase = useMutation(api.purchases.addPurchase);
   const updatePurchase = useMutation(api.purchases.updatePurchase);
+  const setPurchaseStatus = useMutation(api.purchases.setPurchaseStatus);
 
   const [addingToEvent, setAddingToEvent] = useState<Id<"events"> | null>(null);
   const [editing, setEditing] = useState<Doc<"purchaseItems"> | null>(null);
@@ -327,6 +420,8 @@ function ComprasContent() {
         supplier: values.supplier || undefined,
         unitPrice: values.unitPrice ? parseFloat(values.unitPrice) : undefined,
         notes: values.notes || undefined,
+        responsible: values.responsible || undefined,
+        dueDate: values.dueDate || undefined,
       });
       toast.success("Item adicionado!");
     } catch (e) {
@@ -347,12 +442,25 @@ function ComprasContent() {
         supplier: values.supplier || undefined,
         unitPrice: values.unitPrice ? parseFloat(values.unitPrice) : undefined,
         notes: values.notes || undefined,
+        responsible: values.responsible || undefined,
+        dueDate: values.dueDate || undefined,
       });
       toast.success("Item atualizado!");
       setEditing(null);
     } catch (e) {
       if (e instanceof ConvexError) toast.error((e.data as { message: string }).message);
       else toast.error("Erro ao atualizar item");
+    }
+  };
+
+  // Mudar a situação é o gesto mais frequente da lista — mutation própria, um
+  // clique, sem abrir diálogo. Ela mantém `isPurchased` coerente no servidor.
+  const handleSetStatus = async (id: Id<"purchaseItems">, status: PurchaseStatus) => {
+    try {
+      await setPurchaseStatus({ id, status });
+      toast.success(`Item marcado como ${PURCHASE_STATUS_LABEL[status].toLowerCase()}.`);
+    } catch {
+      toast.error("Não foi possível mudar a situação do item.");
     }
   };
 
@@ -425,6 +533,7 @@ function ComprasContent() {
               }
               onToggle={handleToggle}
               onDelete={handleDelete}
+              onSetStatus={handleSetStatus}
             />
           ))}
         </div>
@@ -450,6 +559,8 @@ function ComprasContent() {
             supplier: editing.supplier,
             unitPrice: editing.unitPrice?.toString(),
             notes: editing.notes,
+            responsible: editing.responsible,
+            dueDate: editing.dueDate,
           }}
           onSubmit={handleEdit}
         />
@@ -464,12 +575,14 @@ function EventSectionWithData({
   onEdit,
   onToggle,
   onDelete,
+  onSetStatus,
 }: {
   event: Doc<"events">;
   onAdd: (eventId: Id<"events">) => void;
   onEdit: (item: Doc<"purchaseItems">) => void;
   onToggle: (id: Id<"purchaseItems">) => void;
   onDelete: (id: Id<"purchaseItems">) => void;
+  onSetStatus: (id: Id<"purchaseItems">, status: PurchaseStatus) => void;
 }) {
   const items = useQuery(api.purchases.listPurchases, { eventId: event._id });
 
@@ -485,6 +598,7 @@ function EventSectionWithData({
       onEdit={onEdit}
       onToggle={onToggle}
       onDelete={onDelete}
+      onSetStatus={onSetStatus}
     />
   );
 }

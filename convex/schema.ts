@@ -277,7 +277,33 @@ export default defineSchema({
     notes: v.optional(v.string()),
     isPurchased: v.boolean(),
     order: v.number(),
-  }).index("by_event", ["eventId"]),
+    // ── Operacional (tudo OPCIONAL e aditivo) ───────────────────────────────
+    // `isPurchased` continua sendo a verdade sobre "ja foi comprado?" — lido
+    // pelo Resumo Operacional, Dashboard e notificacoes. `status` e a leitura
+    // fina por cima dele, e as duas sao mantidas coerentes na gravacao
+    // (lib/purchaseStatus.ts). AUSENTE = derivado de `isPurchased`.
+    status: v.optional(
+      v.union(
+        v.literal("necessidade"),
+        v.literal("cotacao"),
+        v.literal("aprovado"),
+        v.literal("comprado"),
+        v.literal("recebido"),
+        v.literal("cancelado"),
+      ),
+    ),
+    // Quem esta tocando este item. Texto livre: pode ser alguem de fora da
+    // tabela `teamMembers` (a propria decoradora, um socio).
+    responsible: v.optional(v.string()),
+    // Vinculo com o catalogo central. `supplier` (texto) continua existindo
+    // como historico do que valia quando o item foi cadastrado.
+    supplierId: v.optional(v.id("suppliers")),
+    // "AAAA-MM-DD". So com ela o sistema pode afirmar atraso.
+    dueDate: v.optional(v.string()),
+  })
+    .index("by_event", ["eventId"])
+    // Aditivo: a tela /compras precisa das pendencias de TODOS os eventos.
+    .index("by_user", ["userId"]),
 
   budgetItems: defineTable({
     userId: v.id("users"),

@@ -326,10 +326,7 @@ export default defineSchema({
     supplierId: v.optional(v.id("suppliers")),
     // "AAAA-MM-DD". So com ela o sistema pode afirmar atraso.
     dueDate: v.optional(v.string()),
-  })
-    .index("by_event", ["eventId"])
-    // Aditivo: a tela /compras precisa das pendencias de TODOS os eventos.
-    .index("by_user", ["userId"]),
+  }).index("by_event", ["eventId"]),
 
   budgetItems: defineTable({
     userId: v.id("users"),

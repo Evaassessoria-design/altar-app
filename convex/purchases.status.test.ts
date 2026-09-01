@@ -114,11 +114,13 @@ describe("isolamento entre empresas", () => {
     expect(eventId).toBeDefined();
   });
 
-  it("listAllPurchases usa indice por usuario — nunca varre a tabela", async () => {
+  it("toda leitura de compras passa pelo dono do evento ou do item", () => {
+    // `listPurchases` degrada para vazio quando o evento nao e do usuario;
+    // as mutations comparam `item.userId`. Nao existe listagem global.
     const fonte = readFileSync("convex/purchases.ts", "utf-8");
-    const i = fonte.indexOf("export const listAllPurchases =");
-    const corpo = fonte.slice(i);
-    expect(corpo).toContain('withIndex("by_user"');
-    expect(corpo).toContain("requireUser");
+    const i = fonte.indexOf("export const listPurchases =");
+    const corpo = fonte.slice(i, fonte.indexOf("\nexport ", i + 1));
+    expect(corpo).toContain("getOwnedEvent");
+    expect(corpo).toContain("i.userId === event.userId");
   });
 });

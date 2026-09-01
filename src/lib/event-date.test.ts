@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   diasAte,
@@ -136,31 +137,53 @@ describe("contagem de dias", () => {
 // dia anterior enquanto as outras acertam, e a incoerência reaparece.
 // ─────────────────────────────────────────────────────────────────────────────
 describe("a convenção é usada em todas as superfícies", () => {
-  const SUPERFICIES = [
-    "src/pages/app/events/page.tsx",
-    "src/pages/app/events/[id]/page.tsx",
-    "src/pages/app/dashboard/page.tsx",
-    "src/pages/app/funil/page.tsx",
-    "src/pages/app/events/[id]/_components/agenda-section.tsx",
-    "src/lib/generate-assembly-pdf.ts",
-    "src/lib/generate-event-pdf.ts",
-    "src/lib/generate-orcamento-pdf.ts",
-  ];
+  // A lista de telas era escrita à mão — e por isso ficou incompleta: o
+  // Financeiro e os Fornecedores do evento nunca entraram nela e continuaram
+  // exibindo o dia anterior. Agora a varredura percorre `src/` inteiro: uma
+  // tela nova não tem como ser esquecida.
+  const arquivosDeTela = (): string[] => {
+    const encontrados: string[] = [];
+    const andar = (pasta: string) => {
+      for (const entrada of readdirSync(pasta, { withFileTypes: true })) {
+        const caminho = `${pasta}/${entrada.name}`;
+        if (entrada.isDirectory()) andar(caminho);
+        else if (/\.(ts|tsx)$/.test(entrada.name) && !entrada.name.includes(".test."))
+          encontrados.push(caminho);
+      }
+    };
+    andar("src");
+    return encontrados;
+  };
 
-  it.each(SUPERFICIES)("%s não usa new Date() cru sobre data de evento", async (arquivo) => {
-    const { readFileSync } = await import("node:fs");
-    const fonte = readFileSync(arquivo, "utf-8");
-    // Procura `new Date(algo.date)` / `.eventDate` — o padrão que desliza o dia.
-    const cru = fonte.match(/new Date\(\s*\w+\.(date|eventDate)\b/g);
+  /** `new Date(algo.date)` — o padrão que desliza o dia em fuso negativo. */
+  const PADRAO_CRU = /new Date\(\s*\w+\.(date|eventDate|dueDate)\b/g;
+
+  it("nenhuma tela de src/ usa new Date() cru sobre data pura", () => {
+    const culpados: string[] = [];
+    for (const arquivo of arquivosDeTela()) {
+      // A própria convenção cita o padrão errado nos comentários, para explicar
+      // o que ela substitui.
+      if (arquivo === "src/lib/event-date.ts") continue;
+      const achados = readFileSync(arquivo, "utf-8").match(PADRAO_CRU);
+      if (achados) culpados.push(`${arquivo}: ${achados.join(", ")}`);
+    }
     expect(
-      cru,
-      `${arquivo}: use parseEventDate/formatEvent* de src/lib/event-date.ts`,
-    ).toBeNull();
+      culpados,
+      `Use formatDateInput/formatEvent* de src/lib/event-date.ts:\n${culpados.join("\n")}`,
+    ).toEqual([]);
+  });
+
+  it("a varredura enxerga o projeto inteiro", () => {
+    // Uma varredura que não acha arquivo nenhum passaria em silêncio.
+    const arquivos = arquivosDeTela();
+    expect(arquivos.length).toBeGreaterThan(50);
+    expect(arquivos).toContain("src/pages/app/financeiro/page.tsx");
+    expect(arquivos).toContain("src/pages/app/events/[id]/fornecedores/page.tsx");
   });
 
   it("o teste detecta o padrão que procura", () => {
     // Contraprova: um regex quebrado passaria em tudo silenciosamente.
-    const exemploRuim = 'format(new Date(event.date), "dd/MM")';
-    expect(exemploRuim.match(/new Date\(\s*\w+\.(date|eventDate)\b/g)).toHaveLength(1);
+    const exemploRuim = 'format(new Date(event.date), "dd/MM") + new Date(tx.date)';
+    expect(exemploRuim.match(PADRAO_CRU)).toHaveLength(2);
   });
 });

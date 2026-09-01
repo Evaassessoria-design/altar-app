@@ -58,6 +58,7 @@ import {
   Legend,
 } from "recharts";
 import { format } from "date-fns";
+import { formatDateInput } from "@/lib/event-date.ts";
 import { ptBR } from "date-fns/locale";
 
 const INCOME_CATEGORIES = [
@@ -460,7 +461,7 @@ export default function FinanceiroPage() {
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <span>{tx.category}</span>
                     <span>·</span>
-                    <span>{format(new Date(tx.date), "dd/MM/yyyy", { locale: ptBR })}</span>
+                    <span>{formatDateInput(tx.date)}</span>
                   </div>
                 </div>
                 <div className="text-right flex-shrink-0">

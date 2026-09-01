@@ -125,6 +125,16 @@ export function formatEventDayOnly(valor: string | undefined | null): string {
   return d ? format(d, "dd/MM/yyyy", { locale: ptBR }) : "—";
 }
 
+/**
+ * Data pura vinda de um `<input type="date">`, em dd/MM/yyyy.
+ *
+ * A armadilha não é exclusiva da data do evento: lançamento financeiro,
+ * vencimento de compra e alinhamento de fornecedor gravam "YYYY-MM-DD" do
+ * mesmo jeito, e `new Date("2026-03-14")` continua sendo meia-noite UTC —
+ * 13/03 no Brasil. Mesma convenção, nome honesto.
+ */
+export const formatDateInput = formatEventDayOnly;
+
 /** "sábado, 10 de outubro de 2026" — cabeçalho da Agenda do dia. */
 export function formatEventWeekday(valor: string | undefined | null): string {
   const d = parseEventDate(valor);

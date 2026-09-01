@@ -52,6 +52,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { formatDateInput, formatEventDayOnly } from "@/lib/event-date.ts";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils.ts";
 
@@ -751,7 +752,7 @@ function SupplierDetail({
             {last ? (
               <div className="rounded-lg bg-muted/50 px-3 py-2 text-sm">
                 <p className="text-xs text-muted-foreground">
-                  Último alinhamento · {format(new Date(last.date), "dd/MM/yyyy", { locale: ptBR })}
+                  Último alinhamento · {formatDateInput(last.date)}
                   {last.by ? ` · ${last.by}` : ""}
                 </p>
                 <p>{last.note}</p>
@@ -766,7 +767,7 @@ function SupplierDetail({
                   {alignments.slice(1).map((a, i) => (
                     <div key={i} className="rounded-lg border border-border px-3 py-2 text-sm">
                       <p className="text-xs text-muted-foreground">
-                        {format(new Date(a.date), "dd/MM/yyyy", { locale: ptBR })}{a.by ? ` · ${a.by}` : ""}
+                        {formatDateInput(a.date)}{a.by ? ` · ${a.by}` : ""}
                       </p>
                       <p>{a.note}</p>
                       {a.nextAction && <p className="text-xs text-primary mt-1">→ {a.nextAction}</p>}
@@ -1017,7 +1018,7 @@ export default function FornecedoresPage() {
             </p>
             {lastAlign && (
               <p className="text-xs text-muted-foreground truncate">
-                Última interação: {format(new Date(lastAlign.date), "dd/MM/yyyy", { locale: ptBR })}
+                Última interação: {formatDateInput(lastAlign.date)}
               </p>
             )}
             {s.nextAction && (
@@ -1065,7 +1066,7 @@ export default function FornecedoresPage() {
             {event.date && (
               <span className="inline-flex items-center gap-1">
                 <CalendarDays className="size-3.5" />
-                {format(new Date(event.date), "dd/MM/yyyy", { locale: ptBR })}
+                {formatEventDayOnly(event.date)}
               </span>
             )}
             {event.location && <span>· {event.location}</span>}

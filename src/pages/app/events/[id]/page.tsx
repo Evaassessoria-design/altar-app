@@ -34,6 +34,7 @@ import {
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils.ts";
+import { sortEventTeam } from "@/lib/event-team.ts";
 import { useRef, useState } from "react";
 import EventFormDialog from "../_components/event-form-dialog.tsx";
 import { ContractImportDialog } from "./_components/contract-import-dialog.tsx";
@@ -94,9 +95,17 @@ export default function EventDetailsPage() {
   const allMembers = useQuery(api.team.listMembers);
   const addToEventTeam = useMutation(api.team.addToEventTeam);
   const removeFromEventTeam = useMutation(api.team.removeFromEventTeam);
+  const updateEventTeamMember = useMutation(api.team.updateEventTeamMember);
   const [addingTeamMember, setAddingTeamMember] = useState(false);
   const [addTeamMemberId, setAddTeamMemberId] = useState("");
   const [addTeamTime, setAddTeamTime] = useState("");
+  // Escala já criada: corrigir horário/observação sem precisar remover e
+  // recadastrar a pessoa (o que perdia a observação junto).
+  type EventTeamRow = NonNullable<typeof eventTeam>[number];
+  const [editingAssignment, setEditingAssignment] = useState<EventTeamRow | null>(null);
+  const [removingAssignment, setRemovingAssignment] = useState<EventTeamRow | null>(null);
+  const [editTeamTime, setEditTeamTime] = useState("");
+  const [editTeamNotes, setEditTeamNotes] = useState("");
 
   // AI / Contract state
   const contract = useQuery(api.contracts.getContract, { eventId: id as Id<"events"> });
@@ -684,47 +693,63 @@ export default function EventDetailsPage() {
           </div>
         ) : eventTeam.length === 0 ? (
           <div className="px-5 py-4 text-sm text-muted-foreground text-center">
-            Nenhum membro atribuído.{" "}
+            Você ainda não escalou ninguém para este evento.{" "}
             <button
               onClick={() => setAddingTeamMember(true)}
               className="text-primary hover:underline cursor-pointer"
             >
-              Adicionar
+              Escalar alguém
             </button>
           </div>
         ) : (
           <div className="divide-y divide-border">
-            {eventTeam.map((assignment) => (
-              <div key={assignment._id} className="flex items-center justify-between px-5 py-3">
-                <div className="flex items-center gap-3">
+            {/* Ordenada por horário de chegada — a mesma leitura de horário que
+                a Agenda do Evento usa (src/lib/event-team.ts). */}
+            {sortEventTeam(eventTeam).map((assignment) => (
+              <div key={assignment._id} className="flex items-center justify-between px-5 py-3 gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                   <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                     <span className="text-xs font-bold text-primary">
                       {assignment.member?.name.slice(0, 2).toUpperCase()}
                     </span>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium">{assignment.member?.name}</p>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{assignment.member?.name}</p>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{assignment.member?.role}</span>
-                      {assignment.scheduledTime && (
-                        <span>· {assignment.scheduledTime}</span>
+                      <span className="truncate">{assignment.member?.role}</span>
+                      {assignment.scheduledTime ? (
+                        <span className="flex-shrink-0">· chega {assignment.scheduledTime}</span>
+                      ) : (
+                        <span className="flex-shrink-0 italic">· sem horário</span>
                       )}
                     </div>
+                    {assignment.notes && (
+                      <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                        {assignment.notes}
+                      </p>
+                    )}
                   </div>
                 </div>
-                <button
-                  onClick={async () => {
-                    try {
-                      await removeFromEventTeam({ id: assignment._id });
-                      toast.success("Membro removido do evento.");
-                    } catch (e) {
-                      toast.error("Erro ao remover membro");
-                    }
-                  }}
-                  className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer text-muted-foreground hover:text-destructive"
-                >
-                  <X className="size-3.5" />
-                </button>
+                <div className="flex gap-1 flex-shrink-0">
+                  <button
+                    onClick={() => {
+                      setEditTeamTime(assignment.scheduledTime ?? "");
+                      setEditTeamNotes(assignment.notes ?? "");
+                      setEditingAssignment(assignment);
+                    }}
+                    aria-label={`Editar escala de ${assignment.member?.name}`}
+                    className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer text-muted-foreground"
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setRemovingAssignment(assignment)}
+                    aria-label={`Remover ${assignment.member?.name} do evento`}
+                    className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer text-muted-foreground hover:text-destructive"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -811,6 +836,105 @@ export default function EventDetailsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Editar escala — chama `team.updateEventTeamMember`, que existia no
+          backend sem nenhuma tela usando. */}
+      <Dialog
+        open={!!editingAssignment}
+        onOpenChange={(o) => { if (!o) setEditingAssignment(null); }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Escala de {editingAssignment?.member?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label>Horário de chegada</Label>
+              <Input
+                placeholder="Ex: 07:00"
+                value={editTeamTime}
+                onChange={(e) => setEditTeamTime(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Aparece na Agenda do Evento, agrupado com quem chega no mesmo horário.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Observação</Label>
+              <Input
+                placeholder="Ex.: chega com a equipe de montagem"
+                value={editTeamNotes}
+                onChange={(e) => setEditTeamNotes(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setEditingAssignment(null)}
+              className="cursor-pointer"
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="cursor-pointer"
+              onClick={async () => {
+                if (!editingAssignment) return;
+                try {
+                  await updateEventTeamMember({
+                    id: editingAssignment._id,
+                    scheduledTime: editTeamTime.trim() || undefined,
+                    notes: editTeamNotes.trim() || undefined,
+                  });
+                  toast.success("Escala atualizada.");
+                  setEditingAssignment(null);
+                } catch (e) {
+                  if (e instanceof ConvexError) toast.error((e.data as { message: string }).message);
+                  else toast.error("Não foi possível salvar a escala.");
+                }
+              }}
+            >
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Remover da escala passou a pedir confirmação: antes era um clique
+          único e sem volta, num item que carrega horário e observação. */}
+      <AlertDialog
+        open={!!removingAssignment}
+        onOpenChange={(o) => { if (!o) setRemovingAssignment(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Tirar da escala deste evento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {removingAssignment?.member?.name} sai da equipe deste evento, junto com o horário
+              e a observação. A pessoa continua cadastrada em Equipe.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90 cursor-pointer"
+              onClick={async () => {
+                if (!removingAssignment) return;
+                try {
+                  await removeFromEventTeam({ id: removingAssignment._id });
+                  toast.success("Pessoa retirada da escala.");
+                  setRemovingAssignment(null);
+                } catch (e) {
+                  if (e instanceof ConvexError) toast.error((e.data as { message: string }).message);
+                  else toast.error("Não foi possível retirar da escala.");
+                }
+              }}
+            >
+              Retirar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Edit dialog */}
       {editing && (

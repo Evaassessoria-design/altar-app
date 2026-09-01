@@ -8,6 +8,14 @@ import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { Textarea } from "@/components/ui/textarea.tsx";
+import {
+  ASSEMBLY_STATUSES,
+  ASSEMBLY_STATUS_LABEL,
+  effectiveAssemblyStatus,
+  resumirCarregamento,
+  type AssemblyStatus,
+} from "@/convex/lib/assemblyStatus.ts";
+import { cn } from "@/lib/utils.ts";
 import { Checkbox } from "@/components/ui/checkbox.tsx";
 import {
   Plus,
@@ -36,6 +44,7 @@ type Item = {
   notes?: string;
   includeInAssemblyReport: boolean;
   checkOnAssembly: boolean;
+  operationalStatus?: string;
   referencePhotoUrl?: string | null;
   contractedPhotoUrl?: string | null;
 };
@@ -59,6 +68,11 @@ export function AssemblyItemsSection({
   const [draftName, setDraftName] = useState("");
 
   const items = (all ?? []).filter((i) => i.area === area) as Item[];
+  const [filtroStatus, setFiltroStatus] = useState<AssemblyStatus | null>(null);
+  const resumo = resumirCarregamento(items);
+  const visiveis = filtroStatus
+    ? items.filter((i) => effectiveAssemblyStatus(i) === filtroStatus)
+    : items;
 
   const handleAdd = async () => {
     const name = draftName.trim();
@@ -95,13 +109,54 @@ export function AssemblyItemsSection({
           <span className="text-xs text-muted-foreground">({items.length})</span>
         )}
       </div>
-      <p className="text-xs text-muted-foreground mb-4">
+      <p className="text-xs text-muted-foreground mb-3">
         Itens físicos que vão para o Caderno de Montagem. O briefing acima segue sendo o
         combinado; aqui é o operacional.
       </p>
 
+      {/* Contagem por situação — números reais, sem percentual sintético.
+          No dia da montagem é o que a equipe olha primeiro. */}
+      {items.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          <button
+            onClick={() => setFiltroStatus(null)}
+            className={cn(
+              "text-xs px-2.5 py-1 rounded-full border transition-colors cursor-pointer",
+              filtroStatus === null
+                ? "border-primary bg-primary/10 text-primary font-medium"
+                : "border-border text-muted-foreground hover:bg-accent",
+            )}
+          >
+            Todos ({resumo.total})
+          </button>
+          {ASSEMBLY_STATUSES.map((st) => {
+            const n = resumo.porStatus[st];
+            if (n === 0) return null;
+            return (
+              <button
+                key={st}
+                onClick={() => setFiltroStatus(filtroStatus === st ? null : st)}
+                className={cn(
+                  "text-xs px-2.5 py-1 rounded-full border transition-colors cursor-pointer",
+                  filtroStatus === st
+                    ? "border-primary bg-primary/10 text-primary font-medium"
+                    : "border-border text-muted-foreground hover:bg-accent",
+                )}
+              >
+                {ASSEMBLY_STATUS_LABEL[st]} ({n})
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <div className="space-y-2">
-        {items.map((item) => (
+        {visiveis.length === 0 && items.length > 0 && (
+          <p className="text-xs text-muted-foreground py-3 text-center">
+            Nenhum item nesta situação.
+          </p>
+        )}
+        {visiveis.map((item) => (
           <ItemCard
             key={item._id}
             item={item}
@@ -158,6 +213,8 @@ function ItemCard({
   const refInput = useRef<HTMLInputElement>(null);
   const contractedInput = useRef<HTMLInputElement>(null);
 
+  const statusAtual = effectiveAssemblyStatus(item);
+
   const patch = async (fields: Record<string, unknown>) => {
     try {
       await onUpdate({ id: item._id, ...fields });
@@ -211,6 +268,28 @@ function ItemCard({
               "Sem detalhes"}
           </p>
         </button>
+
+        {/* Situação do item, alterável sem abrir o detalhe. No dia da montagem
+            a equipe precisa marcar dezenas de itens rapidamente. */}
+        <select
+          value={statusAtual}
+          onChange={(e) => void patch({ operationalStatus: e.target.value })}
+          aria-label={`Situação de ${item.name}`}
+          className={cn(
+            "h-7 rounded-full border-0 px-2 text-xs font-medium cursor-pointer flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-ring",
+            statusAtual === "pendente" && "bg-muted text-muted-foreground",
+            statusAtual === "separado" && "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
+            statusAtual === "carregado" && "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+            statusAtual === "conferido" && "bg-primary/10 text-primary",
+            statusAtual === "retornou" && "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+          )}
+        >
+          {ASSEMBLY_STATUSES.map((st) => (
+            <option key={st} value={st}>
+              {ASSEMBLY_STATUS_LABEL[st]}
+            </option>
+          ))}
+        </select>
 
         <Button variant="ghost" size="sm" onClick={onToggle} className="cursor-pointer h-8 w-8 p-0">
           {expanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}

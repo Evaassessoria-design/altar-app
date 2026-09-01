@@ -546,7 +546,22 @@ export default defineSchema({
     referencePhotoStorageId: v.optional(v.id("_storage")),
     contractedPhotoStorageId: v.optional(v.id("_storage")),
     includeInAssemblyReport: v.boolean(),
+    // ATENCAO: `checkOnAssembly` NAO e estado. E preferencia de IMPRESSAO —
+    // marca quais itens ganham caixinha na ficha de montagem em PDF. O ponto
+    // do trajeto vive em `operationalStatus`, abaixo. Sao eixos diferentes.
     checkOnAssembly: v.boolean(),
+    // Ponto do trajeto fisico do item. AUSENTE = "pendente": todo item
+    // cadastrado antes deste campo continua correto, sem backfill.
+    // Nao ha contagem de quantidade retornada — isso seria inventario.
+    operationalStatus: v.optional(
+      v.union(
+        v.literal("pendente"),
+        v.literal("separado"),
+        v.literal("carregado"),
+        v.literal("conferido"),
+        v.literal("retornou"),
+      ),
+    ),
     // Audiência do item — permite os relatórios de cliente/interno no futuro
     // sem mexer no schema.
     visibility: v.union(

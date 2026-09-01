@@ -133,6 +133,15 @@ export const update = mutation({
     notes: v.optional(v.string()),
     includeInAssemblyReport: v.optional(v.boolean()),
     checkOnAssembly: v.optional(v.boolean()),
+    operationalStatus: v.optional(
+      v.union(
+        v.literal("pendente"),
+        v.literal("separado"),
+        v.literal("carregado"),
+        v.literal("conferido"),
+        v.literal("retornou"),
+      ),
+    ),
     visibility: v.optional(visibility),
   },
   handler: async (ctx, args) => {

@@ -55,6 +55,18 @@ import { format } from "date-fns";
 import { formatDateInput, formatEventDayOnly } from "@/lib/event-date.ts";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils.ts";
+import {
+  CATEGORIAS_DA_DECORACAO,
+  CATEGORIAS_DO_EVENTO,
+  labelDaCategoria,
+} from "@/convex/lib/escopoDecoradora.ts";
+import {
+  CATEGORIAS_COM_META,
+  ERRO_CATEGORIA_OBRIGATORIA,
+  iconeDaCategoria,
+  PLACEHOLDER_CATEGORIA,
+  templateDaCategoria,
+} from "@/lib/supplier-metadata.ts";
 
 type SupplierRow = Doc<"eventSuppliers"> & { logoUrl: string | null };
 type OpItem = { label: string; value: string; group?: string };
@@ -68,13 +80,6 @@ type SupplierStatus =
 
 // ── Categorias + templates de campos operacionais (só UI) ─────────────────────
 
-type CategoryConfig = {
-  slug: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  template: { label: string; group: string }[];
-};
-
 const GROUP_LABELS: Record<string, string> = {
   operacional: "Informações operacionais",
   operacao: "Operação / Montagem",
@@ -82,110 +87,6 @@ const GROUP_LABELS: Record<string, string> = {
   extra: "Informações adicionais",
 };
 const GROUP_ORDER = ["operacional", "operacao", "mesa_posta", "extra"];
-
-const CATEGORIES: CategoryConfig[] = [
-  {
-    slug: "assessoria",
-    label: "Assessoria",
-    icon: Handshake,
-    template: [
-      { label: "Reuniões importantes", group: "operacional" },
-      { label: "Horários de alinhamento", group: "operacional" },
-    ],
-  },
-  {
-    slug: "local",
-    label: "Local",
-    icon: MapPin,
-    template: [
-      { label: "Endereço", group: "operacional" },
-      { label: "Horário de acesso / montagem", group: "operacional" },
-      { label: "Horário de desmontagem", group: "operacional" },
-      { label: "Restrições do local", group: "operacional" },
-      { label: "Acesso carga / descarga", group: "operacional" },
-      { label: "Obs. para a decoração", group: "operacional" },
-    ],
-  },
-  {
-    slug: "buffet",
-    label: "Buffet",
-    icon: UtensilsCrossed,
-    template: [
-      { label: "Qtd. de convidados", group: "operacao" },
-      { label: "Metragem da ilha de frios", group: "operacao" },
-      { label: "Metragem da mesa de jantar", group: "operacao" },
-      { label: "Outras mesas (metragem)", group: "operacao" },
-      { label: "Qtd. de mesas", group: "operacao" },
-      { label: "Aparadores / estruturas", group: "operacao" },
-      { label: "Pontos de energia", group: "operacao" },
-      { label: "Pontos de água", group: "operacao" },
-      { label: "Obs. de montagem", group: "operacao" },
-      { label: "Quantidade de lugares", group: "mesa_posta" },
-      { label: "Pratos (qtd + modelos)", group: "mesa_posta" },
-      { label: "Talheres (qtd + modelos)", group: "mesa_posta" },
-      { label: "Taças (qtd + modelos)", group: "mesa_posta" },
-      { label: "Guardanapos (qtd | cor | tecido | modelo)", group: "mesa_posta" },
-      { label: "Porta-guardanapos (qtd + modelo)", group: "mesa_posta" },
-      { label: "Sousplats (qtd + modelo/material)", group: "mesa_posta" },
-      { label: "Obs. da composição da mesa", group: "mesa_posta" },
-    ],
-  },
-  {
-    slug: "bar",
-    label: "Bar / Drinks",
-    icon: Wine,
-    template: [
-      { label: "Qtd. de convidados", group: "operacional" },
-      { label: "Tipo de bar", group: "operacional" },
-      { label: "Metragem do balcão", group: "operacional" },
-      { label: "Qtd. de módulos", group: "operacional" },
-      { label: "Estrutura necessária", group: "operacional" },
-      { label: "Pontos de energia", group: "operacional" },
-      { label: "Pontos de água", group: "operacional" },
-      { label: "Localização prevista", group: "operacional" },
-      { label: "Obs. de montagem", group: "operacional" },
-    ],
-  },
-  {
-    slug: "doces",
-    label: "Doces",
-    icon: Cake,
-    template: [
-      { label: "Qtd. total de doces", group: "operacional" },
-      { label: "Tipos de doces", group: "operacional" },
-      { label: "Qtd. por tipo", group: "operacional" },
-      { label: "Doces com forminha", group: "operacional" },
-      { label: "Modelos de forminha", group: "operacional" },
-      { label: "Qtd. por modelo de forminha", group: "operacional" },
-      { label: "Doces expostos na mesa", group: "operacional" },
-      { label: "Doces lembrança", group: "operacional" },
-      { label: "Bandejas / suportes", group: "operacional" },
-      { label: "Refrigeração", group: "operacional" },
-      { label: "Obs. de montagem e exposição", group: "operacional" },
-    ],
-  },
-  {
-    slug: "som_ilum",
-    label: "Som & Iluminação",
-    icon: Lightbulb,
-    template: [
-      { label: "Tipo de serviço", group: "operacional" },
-      { label: "Metragem da estrutura", group: "operacional" },
-      { label: "Treliça (necessidade)", group: "operacional" },
-      { label: "Treliça (qtd / metragem)", group: "operacional" },
-      { label: "Estruturas utilizadas", group: "operacional" },
-      { label: "Pórticos / estruturas especiais", group: "operacional" },
-      { label: "Posição das estruturas", group: "operacional" },
-      { label: "Pontos de energia", group: "operacional" },
-      { label: "Qtd. de pontos de energia", group: "operacional" },
-      { label: "Gerador", group: "operacional" },
-      { label: "Equipamentos c/ ocupação física", group: "operacional" },
-      { label: "Área técnica", group: "operacional" },
-      { label: "Obs. de montagem", group: "operacional" },
-      { label: "Obs. de desmontagem", group: "operacional" },
-    ],
-  },
-];
 
 const STATUSES: { value: SupplierStatus; label: string; cls: string }[] = [
   { value: "cotacao", label: "Cotação", cls: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300" },
@@ -195,15 +96,18 @@ const STATUSES: { value: SupplierStatus; label: string; cls: string }[] = [
   { value: "finalizado", label: "Finalizado", cls: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400" },
 ];
 
+// A lista conceitual vive em convex/lib/escopoDecoradora.ts; os enfeites
+// (ícone e roteiro) em src/lib/supplier-metadata.ts. Esta tela não mantém mais
+// lista própria — era a terceira cópia do mesmo conceito, e a única que não
+// oferecia nenhuma categoria da operação da decoradora.
+const CATEGORIES = CATEGORIAS_COM_META;
 const categoryConfig = (slug: string) => CATEGORIES.find((c) => c.slug === slug);
-const categoryLabel = (slug: string) => categoryConfig(slug)?.label ?? slug;
-const categoryIcon = (slug: string) => categoryConfig(slug)?.icon ?? Building2;
+const categoryLabel = (slug: string) => labelDaCategoria(slug);
+const categoryIcon = (slug: string) => iconeDaCategoria(slug);
 const statusConfig = (s?: string) => STATUSES.find((x) => x.value === s);
 
 function templateFor(slug: string): OpItem[] {
-  const cfg = categoryConfig(slug);
-  if (!cfg) return [];
-  return cfg.template.map((t) => ({ label: t.label, value: "", group: t.group }));
+  return templateDaCategoria(slug).map((t) => ({ label: t.label, value: "", group: t.group }));
 }
 
 // ── Links clicáveis ───────────────────────────────────────────────────────────
@@ -388,13 +292,19 @@ function SupplierForm({
   onSubmit: (values: SupplierValues) => Promise<void>;
 }) {
   const isEdit = !!initial;
-  const initialCategory = initial?.category ?? presetCategory ?? "assessoria";
-  const isKnown = !!categoryConfig(initialCategory);
+  // SEM padrão: a categoria nascia "assessoria", então cadastrar o fornecedor
+  // de flores já vinha marcado como o fornecedor do cliente. Fornecedor que já
+  // existe continua abrindo com a categoria salva; um novo começa vazio.
+  const initialCategory = initial?.category ?? presetCategory ?? "";
+  const isKnown = !!initialCategory && !!categoryConfig(initialCategory);
 
   const generateUpload = useMutation(api.suppliers.generateUploadUrl);
 
-  const [category, setCategory] = useState(isKnown ? initialCategory : "outro");
+  const [category, setCategory] = useState(
+    initialCategory ? (isKnown ? initialCategory : "outro") : "",
+  );
   const [customCategory, setCustomCategory] = useState(isKnown ? "" : initialCategory);
+  const [erroCategoria, setErroCategoria] = useState(false);
   const [companyName, setCompanyName] = useState(initial?.companyName ?? "");
   const [contactName, setContactName] = useState(initial?.contactName ?? "");
   const [phone, setPhone] = useState(initial?.phone ?? "");
@@ -455,7 +365,13 @@ function SupplierForm({
 
   const submit = async () => {
     const finalCategory = category === "outro" ? customCategory.trim() : category;
-    if (!finalCategory) return toast.error("Escolha ou informe a categoria");
+    if (!finalCategory) {
+      // O erro aparece NO CAMPO. Só o aviso flutuante deixaria a pessoa sem
+      // saber qual campo faltou — a falha silenciosa que evitamos no tipo de
+      // evento e que valeria igual aqui.
+      setErroCategoria(true);
+      return toast.error(ERRO_CATEGORIA_OBRIGATORIA);
+    }
     if (!companyName.trim()) return toast.error("Informe o nome do fornecedor");
     setSaving(true);
     try {
@@ -524,15 +440,41 @@ function SupplierForm({
 
           {/* Principais */}
           <div className="space-y-1.5">
-            <Label>Categoria *</Label>
+            <Label htmlFor="fornecedor-categoria">Categoria *</Label>
             <select
+              id="fornecedor-categoria"
               value={category}
-              onChange={(e) => handleCategoryChange(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              onChange={(e) => {
+                setErroCategoria(false);
+                handleCategoryChange(e.target.value);
+              }}
+              aria-invalid={erroCategoria}
+              aria-describedby={erroCategoria ? "fornecedor-categoria-erro" : undefined}
+              className={cn(
+                "flex h-10 w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring",
+                erroCategoria ? "border-destructive" : "border-input",
+              )}
             >
-              {CATEGORIES.map((c) => (<option key={c.slug} value={c.slug}>{c.label}</option>))}
+              <option value="">{PLACEHOLDER_CATEGORIA}</option>
+              {/* Dois grupos: o que a decoradora contrata e paga vem primeiro;
+                  os fornecedores do cliente ficam como contexto. */}
+              <optgroup label="Da sua operação">
+                {CATEGORIAS_DA_DECORACAO.map((c) => (
+                  <option key={c.slug} value={c.slug}>{c.label}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Do evento (contexto)">
+                {CATEGORIAS_DO_EVENTO.map((c) => (
+                  <option key={c.slug} value={c.slug}>{c.label}</option>
+                ))}
+              </optgroup>
               <option value="outro">Personalizado…</option>
             </select>
+            {erroCategoria && (
+              <p id="fornecedor-categoria-erro" className="text-xs text-destructive">
+                {ERRO_CATEGORIA_OBRIGATORIA}
+              </p>
+            )}
             {category === "outro" && (
               <Input placeholder="Nome da categoria" value={customCategory} onChange={(e) => setCustomCategory(e.target.value)} />
             )}
@@ -1119,7 +1061,7 @@ export default function FornecedoresPage() {
         <div className="space-y-4">
           {CATEGORIES.map((cat) => {
             const items = byCategory.get(cat.slug) ?? [];
-            const Icon = cat.icon;
+            const Icon = cat.icone;
             return (
               <div key={cat.slug} className="rounded-xl border border-border bg-card p-4">
                 <div className="flex items-center justify-between mb-3">

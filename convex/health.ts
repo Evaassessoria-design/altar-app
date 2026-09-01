@@ -27,12 +27,13 @@ async function computeHealth(
   event: Doc<"events">,
 ): Promise<EventHealth> {
   const eventId = event._id;
-  const [contractDocs, txs, suppliers, team, briefing] = await Promise.all([
+  const [contractDocs, txs, suppliers, team, briefing, assemblyItems] = await Promise.all([
     ctx.db.query("contracts").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
     ctx.db.query("transactions").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
     ctx.db.query("eventSuppliers").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
     ctx.db.query("eventTeam").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
     ctx.db.query("briefings").withIndex("by_event", (q) => q.eq("eventId", eventId)).unique(),
+    ctx.db.query("assemblyItems").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
   ]);
   // Documentos sem `kind` são contratos legados (compat. com dados anteriores à multi-documento).
   const contract = contractDocs.find((c) => (c.kind ?? "contract") === "contract");
@@ -43,7 +44,18 @@ async function computeHealth(
     { key: "contrato_ia", label: "Contrato analisado", ok: !!event.contractAnalyzedAt },
     { key: "financeiro", label: "Financeiro", ok: txs.length > 0 },
     { key: "fornecedores", label: "Fornecedores", ok: suppliers.length > 0 },
-    { key: "assessoria", label: "Assessoria definida", ok: suppliers.some((s) => s.category === "assessoria") },
+    // ── POR QUE "ASSESSORIA DEFINIDA" SAIU ──────────────────────────────────
+    // Exigir uma assessoria cadastrada tratava um fornecedor DO CLIENTE como
+    // requisito do evento DELA. Aniversário, corporativo, formatura e festa
+    // infantil costumam não ter assessoria nenhuma — e casamento também pode
+    // não ter. Esses eventos ficavam com uma marca vermelha permanente, por
+    // uma ausência que não é falha.
+    //
+    // No lugar entrou o que É a operação da decoradora: existe projeto de
+    // montagem? Usa `assemblyItems`, que já alimenta o Caderno de Montagem, o
+    // Projeto de Decoração e o Carregamento. Nenhuma regra nova, nenhum
+    // módulo novo — só um dado que já existe.
+    { key: "montagem", label: "Montagem planejada", ok: assemblyItems.length > 0 },
     { key: "responsavel", label: "Responsável definido", ok: team.length > 0 },
     { key: "briefing", label: "Convidados (briefing)", ok: !!briefing?.guestCount?.trim() },
   ];

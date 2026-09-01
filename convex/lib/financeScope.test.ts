@@ -128,3 +128,38 @@ describe("resultado do projeto não inventa margem", () => {
     expect(r.margemPrevista).toBeNull();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A AGENDA DO DEMO REPRESENTA A OPERAÇÃO DA DECORAÇÃO.
+//
+// O seed original trazia "Degustação com os noivos — aprovado o menu 2" e
+// "Degustação de drinks" como compromissos. São atividades de ASSESSORIA: não
+// afetam estética, composição, montagem, logística nem materiais da
+// decoradora, e davam ao ALTAR cara de sistema de assessoria.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("agenda do demo é da operação da decoração", () => {
+  const alinhamentos = DEMO_WEDDING.suppliers.flatMap((f) =>
+    (f.alignments ?? []).map((a) => ({ fornecedor: f.companyName, ...a })),
+  );
+
+  it("existem alinhamentos para demonstrar", () => {
+    expect(alinhamentos.length).toBeGreaterThan(5);
+  });
+
+  it.each(alinhamentos.map((a) => [a.note, a.fornecedor] as const))(
+    "%s (%s) impacta a decoração",
+    (nota) => {
+      // Atividades típicas de assessoria, que não mudam nada na montagem.
+      const assessoria = /degusta[çc][ãa]o|menu \d|drinks autorais|primeira dan[çc]a|valsa|coral|cerimonialista/i;
+      expect(
+        assessoria.test(nota),
+        `"${nota}" é compromisso de assessoria, não da operação da decoração.`,
+      ).toBe(false);
+    },
+  );
+
+  it("o teste detecta o padrão antigo", () => {
+    const antigo = "Degustação com os noivos — aprovado o menu 2";
+    expect(/degusta[çc][ãa]o|menu \d/i.test(antigo)).toBe(true);
+  });
+});

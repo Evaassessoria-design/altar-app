@@ -121,13 +121,13 @@ export const DEMO_WEDDING = {
       nextAction: "Confirmar menu final após degustação",
       notes: "Sem frutos do mar — alergia na família da noiva.",
       alignments: [
-        { date: "2026-07-14", note: "Primeira reunião e proposta", by: "Camila" },
-        { date: "2026-08-22", note: "Degustação com os noivos — aprovado o menu 2", by: "Camila" },
+        { date: "2026-07-14", note: "Visita técnica e levantamento dos espaços", by: "Camila" },
+        { date: "2026-08-22", note: "Alinhamento da mesa posta: sousplat, taças e réchauds visíveis", by: "Camila" },
         {
           date: "2026-09-18",
-          note: "Ajuste de quantidade para 180 convidados",
+          note: "Conferência de quantidades por ambiente — 180 convidados",
           by: "Camila",
-          nextAction: "Enviar mapa de mesas até 25/09",
+          nextAction: "Enviar disposição das mesas e ilhas até 25/09",
         },
       ],
     },
@@ -148,8 +148,8 @@ export const DEMO_WEDDING = {
       status: "confirmado" as const,
       nextAction: "Definir data da prévia do arranjo",
       alignments: [
-        { date: "2026-08-02", note: "Visita ao espaço e definição do arco", by: "Eva" },
-        { date: "2026-09-05", note: "Paleta aprovada pelos noivos", by: "Eva" },
+        { date: "2026-08-02", note: "Definição floral do arco e da cerimônia", by: "Eva" },
+        { date: "2026-09-05", note: "Paleta floral aprovada — branco, verde e tons naturais", by: "Eva" },
       ],
     },
     {
@@ -165,7 +165,7 @@ export const DEMO_WEDDING = {
       status: "em_negociacao" as const,
       nextAction: "Renegociar valor do gerador extra",
       alignments: [
-        { date: "2026-09-10", note: "Proposta recebida — acima do orçado", by: "Eva" },
+        { date: "2026-09-10", note: "Alinhamento da iluminação decorativa do jardim e do salão", by: "Eva" },
       ],
     },
     {
@@ -182,7 +182,7 @@ export const DEMO_WEDDING = {
       status: "confirmado" as const,
       nextAction: "Provar os 8 sabores em 28/09",
       alignments: [
-        { date: "2026-08-30", note: "Escolha do bolo de 3 andares", by: "Camila" },
+        { date: "2026-08-30", note: "Forminhas e composição visual da mesa de doces", by: "Camila" },
       ],
     },
     {
@@ -198,7 +198,7 @@ export const DEMO_WEDDING = {
       status: "contratado" as const,
       nextAction: "Fechar carta de drinks autorais",
       alignments: [
-        { date: "2026-08-15", note: "Degustação de drinks — 3 autorais aprovados", by: "Eva" },
+        { date: "2026-08-15", note: "Alinhamento da estrutura e do decor do balcão do bar", by: "Eva" },
       ],
     },
     {

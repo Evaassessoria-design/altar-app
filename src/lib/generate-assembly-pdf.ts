@@ -275,7 +275,19 @@ export async function generateAssemblyPDF(data: AssemblyReportData): Promise<voi
       y = sectionHeader(doc, `Montagem · ${area.label}`, y, identidade.cor);
 
       for (const item of list) {
-        const thumbUrl = item.referencePhotoUrl ?? item.contractedPhotoUrl ?? null;
+        // ── QUAL FOTO, E COM QUE NOME ────────────────────────────────────
+        // Os dois campos já existiam e guardam coisas DIFERENTES:
+        //   contractedPhoto → o que foi efetivamente aprovado/contratado
+        //   referencePhoto  → inspiração, direção estética
+        //
+        // O caderno preferia a REFERÊNCIA e não dizia qual era qual. Numa ficha
+        // que a equipe leva para o galpão, isso faz montar a inspiração em vez
+        // do contratado. Agora o contratado tem precedência, e quando só há
+        // referência ela vai rotulada como referência.
+        const contratada = item.contractedPhotoUrl ?? null;
+        const referencia = item.referencePhotoUrl ?? null;
+        const thumbUrl = contratada ?? referencia;
+        const thumbEhReferencia = !contratada && !!referencia;
         const thumb = thumbUrl ? await loadThumbnail(thumbUrl, 320) : null;
 
         const detailPairs: [string, string][] = [];
@@ -285,7 +297,8 @@ export async function generateAssemblyPDF(data: AssemblyReportData): Promise<voi
         if (item.notes?.trim()) detailPairs.push(["Obs.", item.notes.trim()]);
 
         const blockH = Math.max(
-          thumb ? THUMB_MM + 4 : 0,
+          // +4 da miniatura, +3.4 do rótulo abaixo dela.
+          thumb ? THUMB_MM + 7.4 : 0,
           10 + detailPairs.length * 4.4,
         );
         y = addPageIfNeeded(doc, y, blockH + 4);
@@ -321,13 +334,27 @@ export async function generateAssemblyPDF(data: AssemblyReportData): Promise<voi
           ty += 4.4 * lines.length;
         }
 
+        let alturaThumb = 0;
         if (thumb) {
           const ratio = thumb.h / thumb.w;
           const h = Math.min(THUMB_MM, THUMB_MM * ratio);
           doc.addImage(thumb.dataUrl, "JPEG", MARGIN, y, THUMB_MM, h);
+          alturaThumb = h;
+
+          // Rótulo honesto embaixo da miniatura. Referência estética nunca
+          // pode ser lida como item aprovado.
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(5.5);
+          doc.setTextColor(...(thumbEhReferencia ? MUTED : identidade.cor));
+          doc.text(
+            thumbEhReferencia ? "REFERÊNCIA VISUAL" : "CONTRATADO",
+            MARGIN,
+            y + h + 2.6,
+          );
+          alturaThumb = h + 3.4;
         }
 
-        y = Math.max(ty, y + (thumb ? THUMB_MM : 0)) + 3;
+        y = Math.max(ty, y + alturaThumb) + 3;
         doc.setDrawColor(...BORDER);
         doc.setLineWidth(0.1);
         doc.line(MARGIN, y, MARGIN + CONTENT_W, y);

@@ -1,15 +1,23 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
 import { resolveIdentidade } from "./brand";
 
-/** Arquivos de código (sem testes) sob src/ que mencionam um termo. */
+/**
+ * Arquivos de código (sem testes) sob src/ que mencionam um termo.
+ *
+ * ── POR QUE NÃO `path.join` ────────────────────────────────────────────────
+ * `join` usa o separador do SISTEMA: no Windows devolve `src\lib\brand.ts`,
+ * no Linux `src/lib/brand.ts`. Como estes caminhos são COMPARADOS como texto
+ * logo abaixo, o teste passava no Linux e falhava no Windows — um teste que só
+ * funcionava na máquina de quem o escreveu. O caminho aqui é um identificador,
+ * não um caminho de sistema de arquivos, então a barra é sempre `/`.
+ */
 function arquivosQueLeem(termo: string): string[] {
   const achados: string[] = [];
   const percorrer = (dir: string) => {
     for (const nome of readdirSync(dir)) {
-      const caminho = join(dir, nome);
+      const caminho = `${dir}/${nome}`;
       if (statSync(caminho).isDirectory()) {
         percorrer(caminho);
       } else if (/\.(ts|tsx)$/.test(nome) && !nome.endsWith(".test.ts")) {
@@ -103,5 +111,14 @@ describe("a interface do ALTAR não é personalizada por empresa", () => {
       "src/lib/brand.ts",
       "src/pages/app/configuracoes/page.tsx",
     ]);
+  });
+
+  it("a varredura devolve caminhos iguais em qualquer sistema", () => {
+    // Trava de portabilidade: com `path.join`, este mesmo teste passava no
+    // Linux e falhava no Windows. Um caminho com `\` aqui é o defeito voltando.
+    for (const caminho of arquivosQueLeem("brandColor")) {
+      expect(caminho, `${caminho} usa separador do Windows`).not.toContain("\\");
+      expect(caminho.startsWith("src/")).toBe(true);
+    }
   });
 });

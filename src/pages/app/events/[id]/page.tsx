@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { AgendaSection } from "./_components/agenda-section.tsx";
 import { OperationalSummary } from "./_components/operational-summary.tsx";
+import { EventDocuments } from "./_components/event-documents.tsx";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -673,6 +674,10 @@ export default function EventDetailsPage() {
           </div>
         </div>
       </div>
+
+      {/* Pasta do evento — todos os documentos anexados, de todos os tipos
+          que o backend já aceitava. */}
+      <EventDocuments eventId={id as Id<"events">} />
 
       {/* Resumo operacional — contagens reais de checklist, compras,
           fornecedores, equipe, montagem e financeiro, mais as próximas

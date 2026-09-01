@@ -16,6 +16,7 @@ export type NavItem = { to: string; label: string };
 export const NAV_ITEMS: readonly NavItem[] = [
   { to: "/dashboard", label: "Início" },
   { to: "/eventos", label: "Eventos" },
+  { to: "/fornecedores", label: "Fornecedores" },
   { to: "/equipe", label: "Equipe" },
   { to: "/compras", label: "Compras" },
   { to: "/financeiro", label: "Financeiro" },

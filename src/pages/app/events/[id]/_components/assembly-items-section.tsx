@@ -16,6 +16,16 @@ import {
   type AssemblyStatus,
 } from "@/convex/lib/assemblyStatus.ts";
 import { cn } from "@/lib/utils.ts";
+import { StatusSelect } from "@/components/status-select.tsx";
+
+/** Cores do trajeto: cinza no galpão, quente ao sair, verde ao voltar. */
+const TOM_CARREGAMENTO: Record<AssemblyStatus, string> = {
+  pendente: "bg-muted text-muted-foreground border-border",
+  separado: "bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-900/25 dark:text-amber-300 dark:border-amber-800",
+  carregado: "bg-blue-50 text-blue-800 border-blue-300 dark:bg-blue-900/25 dark:text-blue-300 dark:border-blue-800",
+  conferido: "bg-primary/10 text-primary border-primary/30",
+  retornou: "bg-green-50 text-green-800 border-green-300 dark:bg-green-900/25 dark:text-green-300 dark:border-green-800",
+};
 import { Checkbox } from "@/components/ui/checkbox.tsx";
 import {
   Plus,
@@ -271,25 +281,16 @@ function ItemCard({
 
         {/* Situação do item, alterável sem abrir o detalhe. No dia da montagem
             a equipe precisa marcar dezenas de itens rapidamente. */}
-        <select
+        <StatusSelect
           value={statusAtual}
-          onChange={(e) => void patch({ operationalStatus: e.target.value })}
-          aria-label={`Situação de ${item.name}`}
-          className={cn(
-            "h-7 rounded-full border-0 px-2 text-xs font-medium cursor-pointer flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-ring",
-            statusAtual === "pendente" && "bg-muted text-muted-foreground",
-            statusAtual === "separado" && "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
-            statusAtual === "carregado" && "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-            statusAtual === "conferido" && "bg-primary/10 text-primary",
-            statusAtual === "retornou" && "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-          )}
-        >
-          {ASSEMBLY_STATUSES.map((st) => (
-            <option key={st} value={st}>
-              {ASSEMBLY_STATUS_LABEL[st]}
-            </option>
-          ))}
-        </select>
+          options={ASSEMBLY_STATUSES.map((st) => ({
+            value: st,
+            label: ASSEMBLY_STATUS_LABEL[st],
+          }))}
+          onChange={(st) => void patch({ operationalStatus: st })}
+          ariaLabel={`Situação de ${item.name}`}
+          tone={TOM_CARREGAMENTO[statusAtual]}
+        />
 
         <Button variant="ghost" size="sm" onClick={onToggle} className="cursor-pointer h-8 w-8 p-0">
           {expanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}

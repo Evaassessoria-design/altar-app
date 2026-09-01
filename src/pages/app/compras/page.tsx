@@ -28,6 +28,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ConvexError } from "convex/values";
 import { cn } from "@/lib/utils.ts";
+import { StatusSelect } from "@/components/status-select.tsx";
 import {
   PURCHASE_STATUSES,
   PURCHASE_STATUS_LABEL,
@@ -74,7 +75,7 @@ function hojeISO(): string {
  * Fica na própria linha porque avançar a situação ("cotação" → "aprovado") é o
  * que a decoradora faz o dia inteiro; abrir um diálogo para isso seria atrito.
  */
-function StatusSelect({
+function StatusPill({
   item,
   onChange,
 }: {
@@ -82,30 +83,22 @@ function StatusSelect({
   onChange: (status: PurchaseStatus) => void;
 }) {
   const atual = effectivePurchaseStatus(item);
-  const cor: Record<PurchaseStatus, string> = {
-    necessidade: "bg-muted text-muted-foreground",
-    cotacao: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
-    aprovado: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-    comprado: "bg-primary/10 text-primary",
-    recebido: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-    cancelado: "bg-muted text-muted-foreground line-through",
+  const tom: Record<PurchaseStatus, string> = {
+    necessidade: "bg-muted text-muted-foreground border-border",
+    cotacao: "bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-900/25 dark:text-amber-300 dark:border-amber-800",
+    aprovado: "bg-blue-50 text-blue-800 border-blue-300 dark:bg-blue-900/25 dark:text-blue-300 dark:border-blue-800",
+    comprado: "bg-primary/10 text-primary border-primary/30",
+    recebido: "bg-green-50 text-green-800 border-green-300 dark:bg-green-900/25 dark:text-green-300 dark:border-green-800",
+    cancelado: "bg-muted text-muted-foreground border-border",
   };
   return (
-    <select
+    <StatusSelect
       value={atual}
-      onChange={(e) => onChange(e.target.value as PurchaseStatus)}
-      aria-label={`Situação de ${item.name}`}
-      className={cn(
-        "h-7 rounded-full border-0 px-2 text-xs font-medium cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring",
-        cor[atual],
-      )}
-    >
-      {PURCHASE_STATUSES.map((s) => (
-        <option key={s} value={s}>
-          {PURCHASE_STATUS_LABEL[s]}
-        </option>
-      ))}
-    </select>
+      options={PURCHASE_STATUSES.map((s) => ({ value: s, label: PURCHASE_STATUS_LABEL[s] }))}
+      onChange={onChange}
+      ariaLabel={`Situação de ${item.name}`}
+      tone={tom[atual]}
+    />
   );
 }
 
@@ -348,20 +341,24 @@ function EventSection({
                         </div>
                       </div>
                       <div className="hidden sm:block flex-shrink-0">
-                        <StatusSelect
+                        <StatusPill
                           item={item}
                           onChange={(status) => onSetStatus(item._id, status)}
                         />
                       </div>
                       <div className="flex gap-1 flex-shrink-0">
+                        {/* Botões só de ícone precisam de nome acessível —
+                            sem isto o leitor de tela anuncia apenas "botão". */}
                         <button
                           onClick={() => onEdit(item)}
+                          aria-label={`Editar ${item.name}`}
                           className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer text-muted-foreground"
                         >
                           <Pencil className="size-3.5" />
                         </button>
                         <button
                           onClick={() => onDelete(item._id)}
+                          aria-label={`Remover ${item.name}`}
                           className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer text-muted-foreground hover:text-destructive"
                         >
                           <Trash2 className="size-3.5" />

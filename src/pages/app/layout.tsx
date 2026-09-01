@@ -15,9 +15,12 @@ import {
   Shield,
   Settings,
   Sparkles,
+  Home,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth.ts";
 import { cn } from "@/lib/utils.ts";
+import { BOTTOM_NAV_ITEMS, NAV_ITEMS } from "@/lib/navigation.ts";
 import { NotificationCenter } from "@/components/notification-center.tsx";
 import { useLastSeen } from "@/hooks/use-last-seen.ts";
 import { OnboardingModal } from "@/components/onboarding-modal.tsx";
@@ -26,21 +29,21 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { ConvexError } from "convex/values";
 
-const navItems = [
-  { to: "/eventos", icon: CalendarDays, label: "Eventos" },
-  { to: "/equipe", icon: Users, label: "Equipe" },
-  { to: "/compras", icon: ShoppingCart, label: "Compras" },
-  { to: "/financeiro", icon: DollarSign, label: "Financeiro" },
-  { to: "/funil", icon: BarChart3, label: "Funil" },
-];
+// Rotas e rótulos vivem em src/lib/navigation.ts, conferidos por teste contra
+// as rotas de App.tsx — foi assim que `/dashboard` apareceu como tela órfã.
+// Aqui só amarramos cada rota ao seu ícone.
+const ICONES: Record<string, LucideIcon> = {
+  "/dashboard": Home,
+  "/eventos": CalendarDays,
+  "/equipe": Users,
+  "/compras": ShoppingCart,
+  "/financeiro": DollarSign,
+  "/funil": BarChart3,
+  "/configuracoes": Settings,
+};
 
-const bottomNavItems = [
-  { to: "/eventos", icon: CalendarDays, label: "Eventos" },
-  { to: "/equipe", icon: Users, label: "Equipe" },
-  { to: "/compras", icon: ShoppingCart, label: "Compras" },
-  { to: "/financeiro", icon: DollarSign, label: "Financeiro" },
-  { to: "/configuracoes", icon: Settings, label: "Config." },
-];
+const navItems = NAV_ITEMS.map((i) => ({ ...i, icon: ICONES[i.to] }));
+const bottomNavItems = BOTTOM_NAV_ITEMS.map((i) => ({ ...i, icon: ICONES[i.to] }));
 
 function TrialBanner() {
   const navigate = useNavigate();
@@ -240,7 +243,7 @@ function AppLayoutInner() {
               to={item.to}
               className={({ isActive }) =>
                 cn(
-                  "flex flex-col items-center gap-0.5 px-3 py-1 text-xs font-medium transition-colors cursor-pointer",
+                  "flex flex-col items-center gap-0.5 px-2 py-1 text-xs font-medium transition-colors cursor-pointer",
                   isActive ? "text-primary" : "text-muted-foreground",
                 )
               }

@@ -160,10 +160,12 @@ export default function GaleriaPage() {
         projectScope: scopeValue ?? undefined,
       });
       toast.success("Legenda salva!");
-    } catch {
-      toast.error("Erro ao salvar legenda");
-    } finally {
+      // Fecha SO no sucesso. Fechando no `finally`, uma falha de rede levava
+      // junto o texto que a pessoa acabou de escrever — e o aviso de erro
+      // aparecia num editor que ja tinha sumido, sem nada para tentar de novo.
       setEditingCaption(null);
+    } catch {
+      toast.error("Erro ao salvar legenda. O texto continua aqui — tente de novo.");
     }
   };
 

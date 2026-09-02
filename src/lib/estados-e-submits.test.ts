@@ -92,3 +92,25 @@ describe("o botão volta quando dá erro", () => {
     expect(codigoDe(arquivo)).toMatch(/finally/);
   });
 });
+
+describe("erro não leva junto o que a pessoa digitou", () => {
+  it("nenhum formulário fecha o editor no `finally`", () => {
+    // Fechar no `finally` fecha TAMBÉM quando deu erro: o texto some e o aviso
+    // aparece num editor que já não existe, sem nada para tentar de novo.
+    const infratores = TELAS.filter((f) => {
+      const c = codigoDe(f);
+      return [...c.matchAll(/finally \{[^}]*\}/gs)].some((m) =>
+        /onClose\(\)|setOpen\(false\)|setEditing\w*\(null\)|setCriando\(false\)/.test(m[0]),
+      );
+    });
+    expect(infratores).toEqual([]);
+  });
+
+  it("a legenda da foto só fecha depois de salvar", () => {
+    const c = codigoDe("src/pages/app/events/[id]/fotos/page.tsx");
+    const i = c.indexOf("const handleSaveCaption");
+    const corpo = c.slice(i, i + 700);
+    // O fechamento vem ANTES do catch, ou seja, dentro do caminho de sucesso.
+    expect(corpo.indexOf("setEditingCaption(null)")).toBeLessThan(corpo.indexOf("} catch"));
+  });
+});

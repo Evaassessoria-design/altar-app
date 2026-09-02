@@ -1,4 +1,5 @@
 import jsPDF from "jspdf";
+import { effectivePurchaseStatus } from "@/convex/lib/purchaseStatus.ts";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -45,7 +46,7 @@ const STATUS_LABELS: Record<string, string> = {
 type BriefingDoc = Partial<Omit<Doc<"briefings">, "_id" | "_creationTime">>;
 type ChecklistItem = Pick<Doc<"checklistItems">, "name" | "category" | "quantity" | "unit" | "isChecked">;
 type TeamAssignment = { member?: { name: string; role: string } | null; scheduledTime?: string };
-type PurchaseItem = Pick<Doc<"purchaseItems">, "name" | "category" | "quantity" | "unit" | "supplier" | "unitPrice" | "isPurchased">;
+type PurchaseItem = Pick<Doc<"purchaseItems">, "name" | "category" | "quantity" | "unit" | "supplier" | "unitPrice" | "isPurchased" | "status">;
 
 export interface EventReportData {
   event: Doc<"events">;
@@ -325,9 +326,13 @@ export function generateEventPDF(data: EventReportData): void {
 
   // ── LISTA DE COMPRAS ──────────────────────────────────────────────────────
   if (purchases.length > 0) {
-    y = sectionHeader(doc, `Lista de Compras  [${purchases.filter((p) => p.isPurchased).length}/${purchases.length} adquiridos]`, y);
+    // Item cancelado não entra na conta impressa: um documento que diz
+    // "7/12 adquiridos" contando peças canceladas manda a equipe procurar
+    // coisa que ninguém comprou de propósito.
+    const naConta = purchases.filter((p) => effectivePurchaseStatus(p) !== "cancelado");
+    y = sectionHeader(doc, `Lista de Compras  [${naConta.filter((p) => p.isPurchased).length}/${naConta.length} adquiridos]`, y);
     const total = purchases.reduce((s, p) => s + (p.unitPrice ?? 0) * (p.quantity ?? 1), 0);
-    const acquired = purchases.filter((p) => p.isPurchased).reduce((s, p) => s + (p.unitPrice ?? 0) * (p.quantity ?? 1), 0);
+    const acquired = naConta.filter((p) => p.isPurchased).reduce((s, p) => s + (p.unitPrice ?? 0) * (p.quantity ?? 1), 0);
 
     autoTable(doc, {
       startY: y,

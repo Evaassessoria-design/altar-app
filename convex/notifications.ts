@@ -1,4 +1,5 @@
 import { ConvexError, v } from "convex/values";
+import { effectivePurchaseStatus, isPendingStatus } from "./lib/purchaseStatus";
 import { mutation, query, internalMutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel.d.ts";
 import { getOptionalUser, requireIdentity, requireUser } from "./lib/identity";
@@ -148,11 +149,16 @@ export const generateMyAlerts = mutation({
         });
       }
 
-      const pending = await ctx.db
-        .query("purchaseItems")
-        .withIndex("by_event", (q) => q.eq("eventId", event._id))
-        .filter((q) => q.eq(q.field("isPurchased"), false))
-        .take(1);
+      // `isPurchased === false` incluía o item CANCELADO: a decoradora tirava
+      // a peça da lista e continuava recebendo "ainda há compras pendentes"
+      // por causa dela. A regra certa é a situação efetiva — a mesma que o
+      // Painel e o Quadro de Atenção usam (lib/purchaseStatus.ts).
+      const pending = (
+        await ctx.db
+          .query("purchaseItems")
+          .withIndex("by_event", (q) => q.eq("eventId", event._id))
+          .collect()
+      ).filter((i) => isPendingStatus(effectivePurchaseStatus(i)));
       if (pending.length > 0) {
         const exists = await ctx.db
           .query("notifications")
@@ -312,11 +318,13 @@ export const generateDailyAlerts = internalMutation({
       // 3. Pending purchases for events in next 7 days
       for (const event of upcomingEvents) {
         if (event.status === "cancelled" || event.status === "completed") continue;
-        const pending = await ctx.db
-          .query("purchaseItems")
-          .withIndex("by_event", (q) => q.eq("eventId", event._id))
-          .filter((q) => q.eq(q.field("isPurchased"), false))
-          .take(1);
+        // Mesma regra do bloco acima: cancelado não é pendência de ninguém.
+        const pending = (
+          await ctx.db
+            .query("purchaseItems")
+            .withIndex("by_event", (q) => q.eq("eventId", event._id))
+            .collect()
+        ).filter((i) => isPendingStatus(effectivePurchaseStatus(i)));
         if (pending.length > 0) {
           const exists = await ctx.db
             .query("notifications")

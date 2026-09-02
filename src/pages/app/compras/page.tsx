@@ -293,8 +293,12 @@ function EventSection({
 }) {
   const [expanded, setExpanded] = useState(true);
   const hoje = hojeDateKey();
-  const purchased = items.filter((i) => i.isPurchased).length;
-  const total = items.length;
+  // Cancelado sai da CONTA, não da tela: "3/10 comprados" contando um item
+  // que ela cancelou faz o cabeçalho discordar do Painel. A peça continua
+  // listada, com o selo de cancelada.
+  const naConta = items.filter((i) => effectivePurchaseStatus(i) !== "cancelado");
+  const purchased = naConta.filter((i) => i.isPurchased).length;
+  const total = naConta.length;
   const totalValue = items.reduce((sum, i) => {
     if (i.unitPrice && i.quantity) return sum + i.unitPrice * i.quantity;
     return sum;

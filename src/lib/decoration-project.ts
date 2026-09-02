@@ -63,24 +63,15 @@ export function labelDoAmbiente(area: string): { label: string; emoji?: string }
   return conhecida ? { label: conhecida.label, emoji: conhecida.emoji } : { label: area };
 }
 
-/**
- * Escopo efetivo de um item.
- *
- * Ausente = `null`, e a tela NÃO exibe selo. Item antigo não pode virar
- * "contratado" por omissão — seria transformar cadastro incompleto em promessa.
- */
-export function escopoDoItem(item: { projectScope?: string }): ProjectScope | null {
-  const meta = scopeMeta(item.projectScope);
-  return meta ? meta.value : null;
-}
-
-/** Uma referência estética nunca é obrigação de montagem. */
-export function ehObrigacaoDeMontagem(item: { projectScope?: string }): boolean {
-  const escopo = escopoDoItem(item);
-  // Sem classificação, o item segue o comportamento antigo: entra na operação.
-  // Só `referencia` e `nao_incluso` saem — e ambos exigem escolha explícita.
-  return escopo !== "referencia" && escopo !== "nao_incluso";
-}
+// ── ESCOPO DO ITEM ──────────────────────────────────────────────────────────
+// A regra desceu para `convex/lib/escopoDoProjeto.ts` no MASTER #6: a Ficha
+// Técnica precisa dela no BACKEND (para consolidar materiais) e o Convex não
+// importa de `src/`. Reexportada aqui para os consumidores existentes — Caderno
+// de Montagem, Folha de Carregamento e PDFs — não mudarem de endereço.
+//
+// Uma segunda cópia faria a tela mostrar um material que o PDF não lista.
+import { escopoDoItem, ehObrigacaoDeMontagem } from "@/convex/lib/escopoDoProjeto.ts";
+export { escopoDoItem, ehObrigacaoDeMontagem };
 
 /**
  * Agrupa os itens por ambiente, na ordem das áreas conhecidas, com os

@@ -48,6 +48,55 @@ const leadDocumentType = v.union(
   v.literal("outro"),
 );
 
+// ── FICHA TÉCNICA ───────────────────────────────────────────────────────────
+// Valores espelhados de lib/materiais.ts. O Convex exige literais estáticos no
+// validador, e um teste estrutural falha se as listas divergirem.
+const unidadeDeMaterial = v.union(
+  v.literal("un"),
+  v.literal("haste"),
+  v.literal("maco"),
+  v.literal("duzia"),
+  v.literal("caixa"),
+  v.literal("pacote"),
+  v.literal("rolo"),
+  v.literal("m"),
+  v.literal("m2"),
+  v.literal("kg"),
+  v.literal("l"),
+);
+
+const tipoDeMaterial = v.union(
+  v.literal("consumivel"),
+  v.literal("reutilizavel"),
+  v.literal("locacao"),
+  v.literal("compra_especifica"),
+);
+
+/**
+ * Uma linha de receita. Usada nos DOIS lados:
+ *
+ *  · na biblioteca (`compositions.receita`) — a receita mestre, editável;
+ *  · no evento (`assemblyItems.receita`)    — o SNAPSHOT, congelado.
+ *
+ * O mesmo formato de propósito: aplicar uma composição da biblioteca é copiar
+ * o array. Mudar a receita mestre depois NÃO mexe no evento (ver MASTER #6,
+ * seção "snapshot"), e é o que protege o histórico de quem já executou.
+ *
+ * `nome`, `unidade` e `tipo` são COPIADOS junto com o `materialId`: o material
+ * pode ser renomeado ou excluído do catálogo, e a ficha de um evento passado
+ * continua legível. Mesmo princípio de `assemblyItems.supplierName`.
+ */
+const componenteDaReceita = v.object({
+  materialId: v.optional(v.id("materials")),
+  nome: v.string(),
+  unidade: unidadeDeMaterial,
+  quantidade: v.number(),
+  tipo: v.optional(tipoDeMaterial),
+  /** Custo de referência por unidade no momento da cópia. SÓ estimativa. */
+  custoReferencia: v.optional(v.number()),
+  notes: v.optional(v.string()),
+});
+
 const txType = v.union(v.literal("income"), v.literal("expense"));
 
 const checklistPhase = v.union(v.literal("pre"), v.literal("post"));
@@ -472,8 +521,24 @@ export default defineSchema({
      */
     updatedAt: v.optional(v.string()),
     transactionId: v.optional(v.id("transactions")),
+    // ── A PONTE COM A FICHA TÉCNICA (MASTER #6) ─────────────────────────────
+    // NECESSIDADE ≠ COMPRA. A ficha diz "preciso de 185 rosas"; a compra diz
+    // "vou comprar 200 da Flora Bela". Os dois números podem e devem divergir.
+    //
+    // `materialId` é o que torna a geração IDEMPOTENTE: gerar de novo encontra
+    // a compra que já existe em vez de criar outra igual.
+    materialId: v.optional(v.id("materials")),
+    /**
+     * Necessidade consolidada NO MOMENTO em que esta compra foi gerada.
+     *
+     * É um carimbo, não uma regra: se a ficha mudar de 185 para 210, a compra
+     * NÃO é reescrita — a tela mostra "a necessidade mudou" e a decoradora
+     * decide. Reescrever sozinho apagaria a negociação que ela já fez.
+     */
+    necessidadeTecnica: v.optional(v.number()),
   })
     .index("by_event", ["eventId"])
+    .index("by_event_material", ["eventId", "materialId"])
     // Apagar um lancamento no Financeiro precisa achar a compra que aponta
     // para ele — sem este indice o vinculo ficaria apontando para o vazio.
     .index("by_transaction", ["transactionId"])
@@ -715,6 +780,60 @@ export default defineSchema({
     // não tinha resposta antes do catálogo.
     .index("by_supplier", ["supplierId"]),
 
+  // ── CATÁLOGO DE MATERIAIS ─────────────────────────────────────────────────
+  // "Do que a decoração é feita": rosa branca, eucalipto, vaso 25cm, vela,
+  // tecido, castiçal, cabo. Por EMPRESA, como o catálogo de fornecedores —
+  // não há catálogo compartilhado entre assinantes.
+  //
+  // NÃO é estoque: aqui não existe saldo, movimentação nem patrimônio. É o
+  // vocabulário que receita, consolidado e compra usam para falar da mesma
+  // coisa. `tipo` responde só "o que acontece com isto depois do evento".
+  materials: defineTable({
+    userId: v.id("users"),
+    nome: v.string(),
+    /** Nome normalizado — busca e deduplicação (lib/materiais.ts). */
+    searchName: v.string(),
+    unidade: unidadeDeMaterial,
+    categoria: v.optional(v.string()),
+    tipo: v.optional(tipoDeMaterial),
+    /**
+     * Custo de referência por unidade. OPCIONAL e SEMPRE estimativa: o custo
+     * real vive em `purchaseItems`, e o livro-caixa em `transactions`. A Ficha
+     * Técnica nunca é fonte de custo realizado (MASTER #5, lib/custoDoEvento).
+     */
+    custoReferencia: v.optional(v.number()),
+    /** Fornecedor preferencial. NUNCA obrigatório: a compra pode ser em outro. */
+    supplierId: v.optional(v.id("suppliers")),
+    notes: v.optional(v.string()),
+    /** Fora do catálogo ativo sem perder as receitas que já o citam. */
+    archived: v.optional(v.boolean()),
+    updatedAt: v.optional(v.string()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_search", ["userId", "searchName"])
+    .index("by_user_categoria", ["userId", "categoria"])
+    .index("by_supplier", ["supplierId"]),
+
+  // ── BIBLIOTECA DE COMPOSIÇÕES (receitas) ──────────────────────────────────
+  // "Arranjo baixo clássico branco" — a receita que a decoradora reaproveita
+  // de evento em evento. Por EMPRESA.
+  //
+  // A receita mora AQUI como array embutido, não em tabela filha: são poucas
+  // linhas por composição, uma leitura traz tudo (nenhum N+1) e aplicar a
+  // composição num evento é copiar o array — que é exatamente o snapshot.
+  compositions: defineTable({
+    userId: v.id("users"),
+    nome: v.string(),
+    searchName: v.string(),
+    categoria: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    receita: v.array(componenteDaReceita),
+    archived: v.optional(v.boolean()),
+    updatedAt: v.optional(v.string()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_search", ["userId", "searchName"]),
+
   // ── Itens operacionais de montagem (Caderno de Montagem) ───────────────────
   // Genérica de propósito: serve para cadeiras, mesas, sofás, poltronas,
   // aparadores, tapetes, lounges, arranjos, peças, iluminação e estruturas —
@@ -780,11 +899,33 @@ export default defineSchema({
       v.literal("cliente"),
       v.literal("equipe"),
     ),
+    // ── FICHA TÉCNICA (MASTER #6) ──────────────────────────────────────────
+    // `assemblyItems` JÁ É a composição dentro do evento: tem ambiente
+    // (`area`/`ambiente`), nome ("Arranjo baixo branco"), quantidade (20) e
+    // escopo. Criar uma tabela `eventCompositions` obrigaria a decoradora a
+    // cadastrar a mesma coisa duas vezes — uma para montar, outra para
+    // calcular — e as duas divergiriam na primeira semana. Mesmo argumento
+    // que src/lib/decoration-project.ts já usa para o Projeto de Decoração.
+    //
+    // O que faltava era só a RECEITA: do que este item é feito.
+    //
+    // SNAPSHOT, não referência: as linhas são COPIADAS da biblioteca. Editar
+    // "Arranjo clássico" amanhã não pode recalcular, em silêncio, um evento
+    // que já foi executado. AUSENTE = item sem ficha técnica, que é o estado
+    // de todo item cadastrado antes desta rodada.
+    receita: v.optional(v.array(componenteDaReceita)),
+    /**
+     * Composição da biblioteca que originou esta receita, quando houve uma.
+     * É só PROCEDÊNCIA ("veio do Arranjo clássico") — nenhuma leitura busca a
+     * receita por aqui, senão o snapshot deixaria de ser snapshot.
+     */
+    compositionId: v.optional(v.id("compositions")),
     createdAt: v.string(),
     updatedAt: v.string(),
   })
     .index("by_event", ["eventId"])
-    .index("by_event_area", ["eventId", "area"]),
+    .index("by_event_area", ["eventId", "area"])
+    .index("by_composition", ["compositionId"]),
 
   // ── IA VISUAL / Planta Premium ─────────────────────────────────────────────
   // Histórico versionado das gerações de planta. Tabela EXCLUSIVA da IA Visual —

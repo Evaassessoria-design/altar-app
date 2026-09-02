@@ -71,6 +71,9 @@ const MODULOS = [
   "funil",
   "events",
   "leadDocuments",
+  "materials",
+  "compositions",
+  "fichaTecnica",
 ];
 
 type Funcao = { id: string; tipo: string; corpo: string };

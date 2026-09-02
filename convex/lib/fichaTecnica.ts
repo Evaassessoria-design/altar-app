@@ -1,5 +1,6 @@
 import {
   abreviarUnidade,
+  ehIndivisivel,
   ehRetornavel,
   normalizeName,
   normalmenteVeraCompra,
@@ -50,9 +51,82 @@ export type ComponenteDaReceita = {
   unidade: string;
   quantidade: number;
   tipo?: string;
+  /** Categoria do material no momento da receita. Agrupa o consolidado. */
+  categoria?: string;
   /** Custo de referência por unidade, copiado do catálogo. Só ESTIMATIVA. */
   custoReferencia?: number;
+  /**
+   * Margem de segurança em PERCENTUAL, copiada do catálogo no momento da
+   * receita. Ver `SUGERIDO` abaixo: é snapshot, exatamente como o resto.
+   */
+  margemPercentual?: number;
 };
+
+// ── MARGEM DE SEGURANÇA ─────────────────────────────────────────────────────
+//
+// Flor quebra no transporte, fita sobra em recorte, vidro trinca. A decoradora
+// compra mais do que a conta pede — e até aqui fazia essa correção de cabeça,
+// toda vez.
+//
+// ── NECESSÁRIO ≠ SUGERIDO ───────────────────────────────────────────────────
+// A margem NÃO entra em `necessario`. São dois números com significados
+// diferentes e ambos precisam estar visíveis:
+//
+//     necessario = a receita, pura      → "o projeto consome 185 hastes"
+//     sugerido   = necessario + margem  → "compre 203,5 para ter folga"
+//
+// Somar a margem dentro de `necessario` destruiria a capacidade de responder
+// "quanto o projeto realmente consome?" — e a conta de custo passaria a
+// incluir sobra como se fosse consumo.
+//
+// ── POR QUE A MARGEM É SNAPSHOT ─────────────────────────────────────────────
+// Ela é copiada para a receita junto com nome, unidade e tipo. Se ficasse só
+// no catálogo, mudar a margem padrão da rosa hoje mudaria a sugestão de um
+// evento executado há seis meses — o papel impresso na época diria uma coisa e
+// a tela outra, sem ninguém ter mexido naquele evento.
+
+/** Teto de sanidade. 100% já é "compre o dobro"; acima disso é erro de digitação. */
+export const MARGEM_MAXIMA = 100;
+
+/** A margem é válida? `0` é válido e diferente de ausente. */
+export function margemValida(valor: number | null | undefined): boolean {
+  if (valor === null || valor === undefined) return false;
+  return Number.isFinite(valor) && valor >= 0 && valor <= MARGEM_MAXIMA;
+}
+
+/**
+ * Quanto providenciar: necessário + margem.
+ *
+ * Sem margem configurada devolve o próprio necessário — nunca `null`, porque
+ * "providencie o que a receita pede" é uma resposta correta, não uma ausência.
+ * Note que `0` é margem CONFIGURADA e vale zero: nada de truthiness aqui, que
+ * transformaria `0` em "sem margem".
+ */
+export function sugeridoParaProvidenciar(
+  necessario: number,
+  margemPercentual: number | null | undefined,
+): number {
+  if (!margemValida(margemPercentual)) return quantidadeLimpa(necessario);
+  return quantidadeLimpa(necessario * (1 + (margemPercentual as number) / 100));
+}
+
+/**
+ * O número que vai para a lista de compras, respeitando a UNIDADE.
+ *
+ * 110,25 hastes não existe: rosa se compra em haste inteira. 110,25 metros de
+ * tecido existe. A distinção já está declarada em `UNIDADES` (`decimal`), e
+ * este módulo NÃO inventa uma engine de conversão — só consulta o que o
+ * vocabulário já diz.
+ *
+ * Arredonda para CIMA quando a unidade é inteira: arredondar para baixo comeria
+ * justamente a margem que a decoradora pediu para ter.
+ *
+ * O valor exato continua disponível em `sugerido` — nada é escondido.
+ */
+export function sugeridoOperacional(sugerido: number, unidade: string): number {
+  if (!ehIndivisivel(unidade)) return quantidadeLimpa(sugerido);
+  return Math.ceil(quantidadeLimpa(sugerido));
+}
 
 /** Uma composição dentro do evento: "20 arranjos baixos, mesa dos convidados". */
 export type ComposicaoNoEvento = {
@@ -158,8 +232,21 @@ export type LinhaConsolidada = {
   nome: string;
   unidade: string;
   tipo: TipoDeMaterial;
-  /** Total que o evento inteiro precisa. */
+  /** Categoria do snapshot, quando existe. Agrupa o consolidado no PDF. */
+  categoria?: string;
+  /** Total que o evento inteiro precisa. A receita pura, sem margem. */
   necessario: number;
+  /**
+   * Margem em percentual, quando TODAS as origens concordam.
+   *
+   * `null` quando não há margem OU quando duas origens discordam — dois
+   * snapshots com margens diferentes não podem virar uma média inventada.
+   */
+  margemPercentual: number | null;
+  /** `necessario` + margem. Igual a `necessario` quando não há margem. */
+  sugerido: number;
+  /** O sugerido arredondado pela unidade — é o que vai para a compra. */
+  sugeridoOperacional: number;
   /** Espera-se de volta depois do evento? */
   retornavel: boolean;
   /** Entra na lista de compras por padrão? */
@@ -221,6 +308,12 @@ export function consolidarMateriais(
         existente.necessario = quantidadeLimpa(existente.necessario + necessario);
         existente.origens.push(origem);
         if (tipoEfetivo(componente) !== existente.tipo) existente.tipoAmbiguo = true;
+        // Margens diferentes entre snapshots não viram média: a resposta
+        // honesta é "não há uma margem para esta linha".
+        const margemDaLinha = margemValida(componente.margemPercentual)
+          ? (componente.margemPercentual as number)
+          : null;
+        if (margemDaLinha !== existente.margemPercentual) existente.margemPercentual = null;
         // O custo só continua sendo afirmável enquanto TODA origem tiver
         // referência. Uma linha sem custo torna a estimativa incompleta — e
         // incompleta a gente não mostra como se fosse total.
@@ -240,7 +333,13 @@ export function consolidarMateriais(
         nome: componente.nome,
         unidade,
         tipo,
+        categoria: componente.categoria,
         necessario,
+        margemPercentual: margemValida(componente.margemPercentual)
+          ? (componente.margemPercentual as number)
+          : null,
+        sugerido: 0, // recalculado no fecho, depois de somar todas as origens
+        sugeridoOperacional: 0,
         retornavel: ehRetornavel(componente),
         normalmenteCompra: normalmenteVeraCompra(componente),
         tipoAmbiguo: false,
@@ -251,6 +350,13 @@ export function consolidarMateriais(
         origens: [origem],
       });
     }
+  }
+
+  // O sugerido só pode ser calculado DEPOIS de somar todas as origens: aplicar
+  // a margem parcela a parcela e somar daria outro número por arredondamento.
+  for (const linha of porChave.values()) {
+    linha.sugerido = sugeridoParaProvidenciar(linha.necessario, linha.margemPercentual);
+    linha.sugeridoOperacional = sugeridoOperacional(linha.sugerido, linha.unidade);
   }
 
   return [...porChave.values()].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
@@ -297,55 +403,99 @@ export function quantidadeTexto(quantidade: number, unidade: string): string {
 
 // ── PONTE COM AS COMPRAS ────────────────────────────────────────────────────
 
-/** O que uma compra já registrada representa para uma linha do consolidado. */
+/**
+ * O que o sistema consegue AFIRMAR sobre a providência de uma linha.
+ *
+ * ── A HONESTIDADE QUE ESTE TIPO EXISTE PARA PROTEGER ────────────────────────
+ * O ALTAR ainda NÃO tem acervo. Ele não sabe quantos vasos existem no galpão.
+ * Então, para um material reutilizável sem compra nenhuma, a resposta correta
+ * NÃO é "faltam 20 vasos" — é "eu não sei se você tem esses vasos".
+ *
+ * Dizer "faltam" mandaria a decoradora comprar vaso que ela já tem. Dizer
+ * "coberto" mandaria contar com vaso que talvez esteja quebrado. As duas são
+ * mentiras; a terceira opção é admitir a ignorância, e é essa que usamos.
+ *
+ *   coberto              o que foi providenciado alcança o sugerido
+ *   parcial              existe compra, mas não chega
+ *   sem_providencia      consumível/compra específica sem compra nenhuma —
+ *                        aí "falta comprar" é verdade
+ *   acervo_nao_informado reutilizável/locação sem compra: o sistema NÃO SABE
+ *   sem_vinculo          existe compra parecida, sem vínculo técnico
+ */
+export type SituacaoDaCobertura =
+  | "coberto"
+  | "parcial"
+  | "sem_providencia"
+  | "acervo_nao_informado"
+  | "sem_vinculo";
+
+export const ROTULO_DA_SITUACAO: Record<SituacaoDaCobertura, string> = {
+  coberto: "Providenciado",
+  parcial: "Falta providenciar",
+  sem_providencia: "Sem compra ainda",
+  acervo_nao_informado: "Disponibilidade do acervo não informada",
+  sem_vinculo: "Compra parecida sem vínculo",
+};
+
+/** Uma compra já registrada, no formato que a regra de cobertura consulta. */
 export type CompraVinculada = {
   materialId?: string;
   unit?: string;
   quantity?: number;
   cancelada: boolean;
-  /** Necessidade no momento em que a compra foi gerada. */
+  /** Necessidade no momento em que a compra foi gerada ou vinculada. */
   necessidadeTecnica?: number;
 };
 
 export type CoberturaDaLinha = {
   necessario: number;
+  /** O alvo da providência: o sugerido, não o necessário puro. */
+  alvo: number;
   /** Somado das compras vinculadas NÃO canceladas. */
   comprado: number;
-  /** Falta comprar. Nunca negativo — sobra não é falta. */
+  /** Falta para alcançar o alvo. Nunca negativo — sobra não é falta. */
   faltam: number;
-  /** `null` quando não há necessidade (divisão por zero não vira 0%). */
+  /** Sobra acima do alvo, quando existe. */
+  excedente: number;
+  /** `null` quando não há alvo (divisão por zero não vira 0%). */
   percentual: number | null;
-  /** Existe compra vinculada a esta linha? */
   temCompra: boolean;
+  situacao: SituacaoDaCobertura;
   /**
-   * A necessidade mudou depois que a compra foi gerada?
+   * A necessidade mudou depois que a compra foi feita?
    *
-   * `null` quando não há como saber (compra sem o carimbo da necessidade).
-   * Nunca reescrevemos a compra: a decoradora decide.
+   * `null` quando não há como saber. Nunca reescrevemos a compra: a decoradora
+   * decide, e pode reconhecer a nova necessidade sem mexer no que comprou.
    */
   necessidadeMudou: boolean | null;
+  /** A necessidade que a compra carimbou, quando existe. Para a tela dizer "185 → 210". */
+  necessidadeNaCompra: number | null;
 };
 
 /**
- * Cobertura de UMA linha do consolidado pelas compras já registradas.
+ * Cobertura de UMA linha do consolidado.
  *
- * NECESSIDADE ≠ COMPRA, e este módulo não força igualdade: precisar de 185 e
- * comprar 200 é perfeitamente correto (o florista vende por maço, sobra é
- * segurança). A cobertura informa, não cobra.
+ * NECESSIDADE ≠ COMPRA, e nada aqui força igualdade: precisar de 185 e comprar
+ * 200 é correto. A cobertura informa; não cobra.
  *
- * Compra CANCELADA não cobre nada — é a mesma regra do resto do sistema
- * (lib/purchaseStatus.ts).
+ * `temSemelhanteSemVinculo` vem de fora porque é uma pergunta sobre o resto da
+ * lista de compras, não sobre esta linha: existe uma compra com o mesmo nome e
+ * a mesma unidade, mas sem `materialId`? Se existe, o sistema NÃO afirma que
+ * falta nada — seria mandar comprar de novo o que ela já comprou à mão.
  */
 export function coberturaDaLinha(
-  linha: { necessario: number },
+  linha: { necessario: number; sugerido?: number; tipo?: TipoDeMaterial },
   compras: readonly CompraVinculada[],
+  opcoes: { temSemelhanteSemVinculo?: boolean } = {},
 ): CoberturaDaLinha {
   const validas = compras.filter((c) => !c.cancelada);
   const comprado = quantidadeLimpa(
     validas.reduce((s, c) => s + (Number.isFinite(c.quantity ?? NaN) ? (c.quantity as number) : 0), 0),
   );
   const necessario = quantidadeLimpa(linha.necessario);
-  const faltam = quantidadeLimpa(Math.max(0, necessario - comprado));
+  const alvo = quantidadeLimpa(linha.sugerido ?? necessario);
+  const faltam = quantidadeLimpa(Math.max(0, alvo - comprado));
+  const excedente = quantidadeLimpa(Math.max(0, comprado - alvo));
 
   const comCarimbo = validas.filter((c) => typeof c.necessidadeTecnica === "number");
   const necessidadeMudou =
@@ -355,12 +505,61 @@ export function coberturaDaLinha(
           (c) => Math.abs((c.necessidadeTecnica as number) - necessario) > 1 / 10 ** CASAS_DECIMAIS,
         );
 
+  const temCompra = validas.length > 0;
+  // O material JÁ É da empresa (acervo) ou volta para o fornecedor (locação).
+  // Sem módulo de acervo, ausência de compra aqui não significa falta.
+  const dependeDoAcervo = linha.tipo === "reutilizavel" || linha.tipo === "locacao";
+
+  const situacao: SituacaoDaCobertura = temCompra
+    ? faltam === 0
+      ? "coberto"
+      : "parcial"
+    : opcoes.temSemelhanteSemVinculo
+      ? "sem_vinculo"
+      : dependeDoAcervo
+        ? "acervo_nao_informado"
+        : "sem_providencia";
+
   return {
     necessario,
+    alvo,
     comprado,
     faltam,
-    percentual: necessario > 0 ? Math.round((comprado / necessario) * 100) : null,
-    temCompra: validas.length > 0,
+    excedente,
+    percentual: alvo > 0 ? Math.round((comprado / alvo) * 100) : null,
+    temCompra,
+    situacao,
     necessidadeMudou,
+    necessidadeNaCompra: comCarimbo.length > 0 ? (comCarimbo[0].necessidadeTecnica as number) : null,
   };
+}
+
+/**
+ * A linha exige atenção da decoradora AGORA?
+ *
+ * Só o que é verdade verificável — nada de métrica decorativa. "Acervo não
+ * informado" NÃO é pendência: é uma informação que o sistema ainda não tem, e
+ * transformá-la em alerta seria cobrar dela uma resposta que o produto ainda
+ * não sabe fazer a pergunta.
+ */
+export function precisaDeAtencao(cobertura: CoberturaDaLinha, tipoAmbiguo: boolean): boolean {
+  if (tipoAmbiguo) return true;
+  if (cobertura.necessidadeMudou === true) return true;
+  if (cobertura.situacao === "sem_vinculo") return true;
+  if (cobertura.situacao === "parcial") return true;
+  return false;
+}
+
+/** Frase curta do que exige atenção, ou `null`. Linguagem humana, sem código. */
+export function motivoDaAtencao(
+  cobertura: CoberturaDaLinha,
+  tipoAmbiguo: boolean,
+): string | null {
+  if (cobertura.necessidadeMudou === true && cobertura.necessidadeNaCompra !== null) {
+    return `Necessidade mudou: ${cobertura.necessidadeNaCompra} → ${cobertura.necessario}`;
+  }
+  if (cobertura.situacao === "sem_vinculo") return "Existe uma compra parecida sem vínculo";
+  if (cobertura.situacao === "parcial") return "Falta providenciar";
+  if (tipoAmbiguo) return "Classificação divergente entre ambientes";
+  return null;
 }

@@ -38,7 +38,9 @@ const componente = v.object({
   unidade,
   quantidade: v.number(),
   tipo: v.optional(tipo),
+  categoria: v.optional(v.string()),
   custoReferencia: v.optional(v.number()),
+  margemPercentual: v.optional(v.number()),
   notes: v.optional(v.string()),
 });
 
@@ -48,7 +50,9 @@ type ComponenteEntrada = {
   unidade: string;
   quantidade: number;
   tipo?: string;
+  categoria?: string;
   custoReferencia?: number;
+  margemPercentual?: number;
   notes?: string;
 };
 
@@ -90,7 +94,11 @@ async function resolverReceita(
       unidade: (material?.unidade ?? linha.unidade) as (typeof UNIDADES_VALIDAS)[number],
       quantidade: linha.quantidade,
       tipo: material?.tipo ?? (linha.tipo as never),
+      categoria: material?.categoria ?? linha.categoria,
       custoReferencia: material?.custoReferencia ?? linha.custoReferencia,
+      // A margem vem do catálogo no momento da cópia — é o snapshot que
+      // impede um evento executado de mudar de sugestão sozinho depois.
+      margemPercentual: material?.margemPercentual ?? linha.margemPercentual,
       notes: linha.notes?.trim() || undefined,
     });
   }

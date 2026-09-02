@@ -51,6 +51,19 @@ export function aceitaDecimal(valor: string | undefined | null): boolean {
   return UNIDADES.find((u) => u.valor === valor)?.decimal ?? false;
 }
 
+/**
+ * A unidade é INDIVISÍVEL de forma conhecida? (não existe meia rosa)
+ *
+ * Diferente de `!aceitaDecimal`: unidade DESCONHECIDA não é "indivisível", é
+ * "não sei". E arredondar o que não se conhece inventa uma regra de negócio
+ * que ninguém validou — melhor mostrar 110,25 do que comprar 111 por conta
+ * própria. Só existe para valor corrompido: o schema aceita só a lista acima.
+ */
+export function ehIndivisivel(valor: string | undefined | null): boolean {
+  const unidade = UNIDADES.find((u) => u.valor === valor);
+  return unidade ? !unidade.decimal : false;
+}
+
 /** Abreviação para a tela: "185 haste", "2,5 m". */
 export function abreviarUnidade(valor: string | undefined | null): string {
   if (!valor) return "";

@@ -92,8 +92,21 @@ const componenteDaReceita = v.object({
   unidade: unidadeDeMaterial,
   quantidade: v.number(),
   tipo: v.optional(tipoDeMaterial),
+  /** Categoria copiada do catalogo — agrupa o consolidado no PDF e na tela. */
+  categoria: v.optional(v.string()),
   /** Custo de referência por unidade no momento da cópia. SÓ estimativa. */
   custoReferencia: v.optional(v.number()),
+  /**
+   * Margem de segurança em PERCENTUAL, copiada do catálogo junto com o resto.
+   *
+   * SNAPSHOT pelo mesmo motivo que o nome e a unidade: se ficasse só no
+   * catálogo, mudar a margem padrão da rosa hoje mudaria a sugestão de um
+   * evento executado ha seis meses — o papel impresso na epoca diria uma coisa
+   * e a tela outra, sem ninguem ter mexido naquele evento.
+   *
+   * AUSENTE = sem margem. `0` e margem CONFIGURADA e vale zero.
+   */
+  margemPercentual: v.optional(v.number()),
   notes: v.optional(v.string()),
 });
 
@@ -802,6 +815,18 @@ export default defineSchema({
      * Técnica nunca é fonte de custo realizado (MASTER #5, lib/custoDoEvento).
      */
     custoReferencia: v.optional(v.number()),
+    /**
+     * Margem de segurança PADRÃO deste material, em percentual.
+     *
+     * Flor quebra no transporte, fita sobra em recorte, vidro trinca — e a
+     * perda e propriedade do INSUMO, nao do arranjo nem do evento. Por isso a
+     * margem mora aqui e nao na composicao: 10% de rosa vale em toda receita
+     * que use rosa, e o vaso nao herda esse 10% so por dividir o arranjo.
+     *
+     * E so o PADRAO: o valor efetivo de cada evento e o que foi copiado para
+     * a receita (`componenteDaReceita.margemPercentual`).
+     */
+    margemPercentual: v.optional(v.number()),
     /** Fornecedor preferencial. NUNCA obrigatório: a compra pode ser em outro. */
     supplierId: v.optional(v.id("suppliers")),
     notes: v.optional(v.string()),

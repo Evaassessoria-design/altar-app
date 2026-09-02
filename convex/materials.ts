@@ -4,6 +4,7 @@ import { requireUser } from "./lib/identity";
 import { limparCampos } from "./lib/limparCampos";
 import { comCarimbo } from "./lib/ultimaAtualizacao";
 import { chaveDoMaterial, normalizeName } from "./lib/materiais";
+import { MARGEM_MAXIMA, margemValida } from "./lib/fichaTecnica";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CATÁLOGO DE MATERIAIS — por empresa.
@@ -22,6 +23,23 @@ const unidade = v.union(
   v.literal("caixa"), v.literal("pacote"), v.literal("rolo"),
   v.literal("m"), v.literal("m2"), v.literal("kg"), v.literal("l"),
 );
+
+/**
+ * A margem precisa ser um percentual sensato.
+ *
+ * `undefined` passa (não foi informada). `0` passa e é diferente de ausente.
+ * Acima de 100% é quase sempre erro de digitação — "compre o dobro" já é o
+ * teto do que faz sentido como folga.
+ */
+function exigirMargemValida(valor: number | undefined) {
+  if (valor === undefined) return;
+  if (!margemValida(valor)) {
+    throw new ConvexError({
+      code: "INVALID",
+      message: `Margem deve ser um percentual entre 0 e ${MARGEM_MAXIMA}`,
+    });
+  }
+}
 
 const tipo = v.union(
   v.literal("consumivel"), v.literal("reutilizavel"),
@@ -58,6 +76,7 @@ export const create = mutation({
     categoria: v.optional(v.string()),
     tipo: v.optional(tipo),
     custoReferencia: v.optional(v.number()),
+    margemPercentual: v.optional(v.number()),
     supplierId: v.optional(v.id("suppliers")),
     notes: v.optional(v.string()),
   },
@@ -75,6 +94,7 @@ export const create = mutation({
     if (typeof args.custoReferencia === "number" && args.custoReferencia < 0) {
       throw new ConvexError({ code: "INVALID", message: "Custo de referência não pode ser negativo" });
     }
+    exigirMargemValida(args.margemPercentual);
 
     const searchName = normalizeName(nome);
     const chave = chaveDoMaterial(nome, args.unidade);
@@ -98,6 +118,7 @@ export const create = mutation({
       categoria: args.categoria?.trim() || undefined,
       tipo: args.tipo,
       custoReferencia: args.custoReferencia,
+      margemPercentual: args.margemPercentual,
       supplierId: args.supplierId,
       notes: args.notes?.trim() || undefined,
       updatedAt: new Date().toISOString(),
@@ -114,6 +135,7 @@ export const update = mutation({
     categoria: v.optional(v.union(v.string(), v.null())),
     tipo: v.optional(v.union(tipo, v.null())),
     custoReferencia: v.optional(v.union(v.number(), v.null())),
+    margemPercentual: v.optional(v.union(v.number(), v.null())),
     supplierId: v.optional(v.union(v.id("suppliers"), v.null())),
     notes: v.optional(v.union(v.string(), v.null())),
   },
@@ -132,6 +154,9 @@ export const update = mutation({
     if (typeof args.custoReferencia === "number" && args.custoReferencia < 0) {
       throw new ConvexError({ code: "INVALID", message: "Custo de referência não pode ser negativo" });
     }
+    // `null` limpa a margem; ausente não mexe; `0` é margem configurada valendo
+    // zero — a diferença entre os três é o ponto todo (lib/limparCampos.ts).
+    if (args.margemPercentual !== null) exigirMargemValida(args.margemPercentual);
 
     const { id, ...fields } = args;
     const limpos = limparCampos(fields);

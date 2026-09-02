@@ -5,6 +5,7 @@ import schema from "./schema";
 import { modules } from "./test.setup";
 import { deleteTeamMemberCascade } from "./lib/cascade";
 import { resolverResponsavel, responsavelDoEvento } from "./lib/responsavel";
+import { limparCampos } from "./lib/limparCampos";
 import type { Id } from "./_generated/dataModel";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -237,6 +238,59 @@ describe("o telefone do responsável vem do vínculo, não do nome", () => {
     const fonte = readFileSync("src/pages/app/events/[id]/briefing/page.tsx", "utf-8");
     expect(fonte).toContain("health?.responsiblePhone");
     expect(fonte).not.toMatch(/member\?\.name === health\?\.responsible/);
+  });
+});
+
+describe("histórico não se disfarça de vínculo ativo", () => {
+  // Achado na auditoria: depois de excluir a Camila da equipe, o nome dela
+  // continuava na compra — o que é certo, é história — mas aparecia IDÊNTICO
+  // a um vínculo vivo. A decoradora lia "Camila" e ia falar com alguém que
+  // não está mais na equipe.
+  it("a origem da resposta é sempre devolvida", async () => {
+    const { t, camila, compraId } = await cenario();
+    const antes = await t.run(async (ctx) => {
+      const compra = (await ctx.db.get(compraId))!;
+      const membros = await ctx.db.query("teamMembers").collect();
+      return resolverResponsavel(compra, membros.map((m) => ({ _id: m._id, name: m.name })));
+    });
+    expect(antes?.origem).toBe("equipe");
+
+    await t.run(async (ctx) => deleteTeamMemberCascade(ctx, camila));
+
+    const depois = await t.run(async (ctx) => {
+      const compra = (await ctx.db.get(compraId))!;
+      const membros = await ctx.db.query("teamMembers").collect();
+      return resolverResponsavel(compra, membros.map((m) => ({ _id: m._id, name: m.name })));
+    });
+    expect(depois?.nome).toBe("Camila"); // a história sobrevive
+    expect(depois?.origem).toBe("anotacao"); // mas dizendo o que é
+  });
+
+  it("a tela usa a origem, não só o nome", () => {
+    const fonte = readFileSync("src/components/responsavel-select.tsx", "utf-8");
+    expect(fonte).toContain("responsavel.origem");
+    expect(fonte).toMatch(/anotacao \? "italic"/);
+    // E não pode voltar a jogar fora a origem lendo apenas o nome.
+    expect(fonte).not.toContain("nomeDoResponsavel(");
+  });
+});
+
+describe("null limpa, ausente preserva — também no vínculo", () => {
+  it("`null` remove o vínculo e mantém a anotação", async () => {
+    const { t, compraComNota } = await cenario();
+    await t.run(async (ctx) =>
+      ctx.db.patch(compraComNota, limparCampos({ responsibleId: null })),
+    );
+    const compra = await t.run(async (ctx) => ctx.db.get(compraComNota));
+    expect(compra!.responsibleId).toBeUndefined();
+    expect(compra!.responsible).toBe("Camila — só a compra, não a montagem");
+  });
+
+  it("campo AUSENTE não encosta no vínculo", async () => {
+    const { t, camila, compraId } = await cenario();
+    await t.run(async (ctx) => ctx.db.patch(compraId, limparCampos({ name: "Rosas brancas" })));
+    const compra = await t.run(async (ctx) => ctx.db.get(compraId));
+    expect(compra!.responsibleId).toBe(camila);
   });
 });
 

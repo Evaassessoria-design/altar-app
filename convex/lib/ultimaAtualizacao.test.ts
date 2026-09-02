@@ -114,6 +114,31 @@ describe("mexer no registro NÃO é falar com o cliente", () => {
   });
 });
 
+describe("editar o lead não mexe em `lastInteraction`", () => {
+  it("o formulário do funil não tem o campo — então nunca o envia", () => {
+    // Nome, observação, responsável, estágio: nada disso é conversa com a
+    // cliente. Se o formulário mandasse `lastInteraction`, editar um acento
+    // zeraria o relógio do follow-up.
+    const tela = readFileSync("src/pages/app/funil/page.tsx", "utf-8");
+    const i = tela.indexOf("const leadSchema = z.object({");
+    expect(i).toBeGreaterThan(-1);
+    expect(tela.slice(i, tela.indexOf("});", i))).not.toContain("lastInteraction");
+  });
+
+  it("nenhuma tela do funil grava `lastInteraction` de carona", () => {
+    const tela = readFileSync("src/pages/app/funil/page.tsx", "utf-8");
+    expect(tela).not.toMatch(/lastInteraction:\s*[^)]/);
+  });
+
+  it("o carimbo e a data da conversa são campos DIFERENTES no schema", () => {
+    const schema = readFileSync("convex/schema.ts", "utf-8");
+    const i = schema.indexOf("leads: defineTable({");
+    const corpo = schema.slice(i, schema.indexOf("briefings: defineTable({", i));
+    expect(corpo).toContain("lastInteraction");
+    expect(corpo).toContain("updatedAt");
+  });
+});
+
 describe("as mutations carimbam de verdade", () => {
   it.each([
     ["convex/events.ts", ["export const update ="]],

@@ -1,7 +1,7 @@
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
-import { nomeDoResponsavel } from "@/convex/lib/responsavel.ts";
+import { resolverResponsavel, type Responsavel } from "@/convex/lib/responsavel.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // QUEM RESPONDE — seletor único.
@@ -76,25 +76,37 @@ export function ResponsavelSelect({
 }
 
 /**
- * Nome do responsável de um registro, já resolvido.
+ * Responsável de um registro, já resolvido — com a ORIGEM.
  *
- * Devolve `null` quando não há resposta honesta — e quem chama simplesmente
- * não desenha nada, em vez de escrever "Sem responsável" como se fosse um
+ * Devolve `null` quando não há resposta honesta, e quem chama simplesmente não
+ * desenha nada, em vez de escrever "Sem responsável" como se fosse um
  * problema (a maior parte das compras não precisa de um).
  *
  * Usa a MESMA query da lista de membros: o Convex compartilha a assinatura
  * entre todos os componentes que a pedem, então repetir isto em cada linha da
  * lista não gera uma consulta por linha.
  */
-function useNomeDoResponsavel(registro: {
+function useResponsavel(registro: {
   responsibleId?: Id<"teamMembers">;
   responsible?: string;
-}): string | null {
+}): Responsavel | null {
   const membros = useQuery(api.team.listMembers, {});
-  return nomeDoResponsavel(registro, membros ?? []);
+  return resolverResponsavel(registro, membros ?? []);
 }
 
-/** O responsável em linha, ou nada. Prefixo opcional ("Resp.: "). */
+/**
+ * O responsável em linha, ou nada.
+ *
+ * ── POR QUE A ORIGEM APARECE ────────────────────────────────────────────────
+ * Quando alguém sai da equipe, o vínculo morre e o NOME é preservado como
+ * anotação (convex/lib/cascade.ts) — a compra continua tendo sido tocada pela
+ * Camila. Mas na tela isso ficava idêntico a um vínculo vivo: a decoradora
+ * lia "Camila" e ia falar com uma pessoa que não está mais na equipe.
+ *
+ * A distinção é a menor possível: vínculo ativo sai normal, anotação sai em
+ * itálico com o motivo no `title`. Sem selo, sem cor, sem ícone — a linha da
+ * lista continua sendo sobre a compra, não sobre o cadastro.
+ */
 export function ResponsavelInline({
   registro,
   prefixo,
@@ -104,12 +116,22 @@ export function ResponsavelInline({
   prefixo?: string;
   className?: string;
 }) {
-  const nome = useNomeDoResponsavel(registro);
-  if (!nome) return null;
+  const responsavel = useResponsavel(registro);
+  if (!responsavel) return null;
+  const anotacao = responsavel.origem === "anotacao";
   return (
     <span className={className}>
       {prefixo}
-      {nome}
+      <span
+        className={anotacao ? "italic" : undefined}
+        title={
+          anotacao
+            ? "Anotação — esta pessoa não está vinculada à equipe cadastrada"
+            : undefined
+        }
+      >
+        {responsavel.nome}
+      </span>
     </span>
   );
 }

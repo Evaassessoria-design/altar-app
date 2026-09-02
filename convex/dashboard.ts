@@ -1,6 +1,7 @@
 import { query } from "./_generated/server";
 import { requireUser } from "./lib/identity";
-import { diasEntre, montarAtencao } from "./lib/attention";
+import { diasEntre, montarAtencao, JANELA_RETORNO_DIAS } from "./lib/attention";
+import { deficitDaReserva, disponibilidadeNaJanela, faltaVoltar } from "./lib/acervo";
 import { effectivePurchaseStatus, isOverdue, isPendingStatus } from "./lib/purchaseStatus";
 import { aguardandoEntrega } from "./lib/panoramaDeCompras";
 import { dataDoDia, dataEmDias, faixaDoMes, primeiroDiaDoMes } from "./lib/dataDoDia";
@@ -147,8 +148,29 @@ export const getAttentionBoard = query({
         .withIndex("by_user", (q) => q.eq("userId", user._id))
         .collect()
     ).filter(
-      (e) => e.status !== "cancelled" && e.status !== "completed" && e.date >= hojeISO,
+      (e) =>
+        e.status !== "cancelled" &&
+        e.status !== "completed" &&
+        // Passado recente entra por UM motivo só: "não voltou" é uma pergunta
+        // que nasce DEPOIS do evento, e um painel que só olha para a frente
+        // nunca a faria. Quem não tiver motivo sai em `montarAtencao`.
+        e.date >= dataEmDias(-JANELA_RETORNO_DIAS),
     );
+
+    // Acervo em DUAS consultas, não uma por evento: o N+1 aqui multiplicaria
+    // por todo evento do painel. As regras continuam em lib/acervo.ts.
+    const [reservas, itensDeAcervo] = await Promise.all([
+      ctx.db.query("collectionReservations").withIndex("by_user", (q) => q.eq("userId", user._id)).collect(),
+      ctx.db.query("collectionItems").withIndex("by_user", (q) => q.eq("userId", user._id)).collect(),
+    ]);
+    const totalDoItem = new Map(itensDeAcervo.map((i) => [i._id as string, i.quantidadeTotal]));
+    const reservasPorItem = new Map<string, typeof reservas>();
+    for (const r of reservas) {
+      const chave = r.collectionItemId as string;
+      const atual = reservasPorItem.get(chave);
+      if (atual) atual.push(r);
+      else reservasPorItem.set(chave, [r]);
+    }
 
     const entradas = await Promise.all(
       eventos.map(async (e) => {
@@ -159,11 +181,38 @@ export const getAttentionBoard = query({
           ctx.db.query("eventTeam").withIndex("by_event", (q) => q.eq("eventId", e._id)).collect(),
         ]);
 
+        const doEvento = reservas.filter((r) => r.eventId === e._id);
+
+        // Déficit: o que a reserva pede menos o que está livre na janela dela.
+        // Número calculado, nunca "não sei" — material reutilizável sem item
+        // de acervo vinculado simplesmente não gera reserva, e por isso não
+        // aparece aqui. Ausência de informação não vira alerta.
+        const acervoDeficit = doEvento.reduce((soma, r) => {
+          const total = totalDoItem.get(r.collectionItemId as string);
+          if (total === undefined) return soma;
+          const estado = disponibilidadeNaJanela(
+            total,
+            reservasPorItem.get(r.collectionItemId as string) ?? [],
+            { inicio: r.inicio, fim: r.fim },
+            e._id as string,
+          );
+          return soma + deficitDaReserva(r.quantidade, estado.disponivel);
+        }, 0);
+
+        // Só conta depois que a janela operacional TERMINOU. Durante ela a
+        // peça está no evento, que é onde ela deve estar.
+        const acervoNaoRetornado = doEvento.reduce(
+          (soma, r) => (r.fim < hojeISO ? soma + faltaVoltar(r) : soma),
+          0,
+        );
+
         return {
           eventId: e._id as string,
           nome: e.name,
           data: e.date,
           diasAte: diasEntre(hojeISO, e.date),
+          acervoDeficit,
+          acervoNaoRetornado,
           checklistPendentes: checklist.filter((i) => i.phase === "pre" && !i.isChecked).length,
           comprasPendentes: compras.filter((i) => isPendingStatus(effectivePurchaseStatus(i))).length,
           comprasAtrasadas: compras.filter((i) => isOverdue(i, hojeISO)).length,

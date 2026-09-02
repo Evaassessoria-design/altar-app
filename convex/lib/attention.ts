@@ -36,6 +36,15 @@ export const JANELA_ATENCAO_DIAS = 30;
 /** Abaixo disso o evento é tratado como iminente: qualquer pendência pesa mais. */
 export const JANELA_URGENTE_DIAS = 7;
 
+/**
+ * Por quantos dias DEPOIS do evento ainda perguntamos por peça que não voltou.
+ *
+ * Existe porque o painel só olha para a frente, e "não voltou" é uma pergunta
+ * que só nasce depois. Sem um limite, um evento de 2024 com uma peça mal
+ * conferida ficaria pendurado no painel para sempre.
+ */
+export const JANELA_RETORNO_DIAS = 30;
+
 export type NivelAtencao = "urgente" | "atencao";
 
 export type MotivoAtencao = {
@@ -82,6 +91,23 @@ export type EntradaAtencao = {
    * consulta — e a próxima consulta a esquecer dele traria o buffet de volta.
    */
   acoesDeFornecedor: { fornecedor: string; texto: string; categoria?: string }[];
+  /**
+   * Peças que a Ficha pediu e o acervo não cobre, somadas.
+   *
+   * É um número CALCULADO a partir de reserva e janela — não é "não sei".
+   * Material reutilizável SEM item de acervo vinculado não entra aqui de
+   * propósito: ausência de informação não é pendência, e pintar de vermelho o
+   * que ninguém cadastrou ensinaria a decoradora a ignorar o painel.
+   */
+  acervoDeficit?: number;
+  /**
+   * Peças que saíram, não voltaram, e cuja janela operacional JÁ TERMINOU.
+   *
+   * Durante a janela não é pendência nenhuma: a peça está no evento, que é
+   * onde ela deve estar. Depois do fim da janela vira pergunta real — e ainda
+   * assim é só uma pergunta: o sistema nunca converte isso em perda sozinho.
+   */
+  acervoNaoRetornado?: number;
 };
 
 /** Dias inteiros entre duas datas "AAAA-MM-DD". */
@@ -112,6 +138,16 @@ export function motivosDeAtencao(e: EntradaAtencao): MotivoAtencao[] {
     motivos.push({
       texto: `${plural(e.comprasAtrasadas, "compra atrasada", "compras atrasadas")}`,
       destino: "/compras",
+    });
+  }
+
+  // Peça que saiu e não voltou DEPOIS do fim da janela vale independente da
+  // proximidade — o evento já passou, e é justamente por isso que a pergunta
+  // existe. Fica acima do corte de janela abaixo, que descarta evento passado.
+  if ((e.acervoNaoRetornado ?? 0) > 0) {
+    motivos.push({
+      texto: `${plural(e.acervoNaoRetornado!, "peça do acervo não voltou", "peças do acervo não voltaram")}`,
+      destino: `${base}/acervo`,
     });
   }
 
@@ -157,6 +193,17 @@ export function motivosDeAtencao(e: EntradaAtencao): MotivoAtencao[] {
     motivos.push({
       texto: `${plural(e.comprasAguardandoEntrega!, "compra ainda não recebida", "compras ainda não recebidas")}`,
       destino: "/compras",
+    });
+  }
+
+  // Déficit de acervo: a Ficha pede mais do que existe livre na janela. Só
+  // aparece com o evento dentro da janela de atenção — faltar peça para daqui
+  // a três meses ainda dá tempo de resolver comprando ou alugando, e avisar
+  // cedo demais é o que transforma painel em ruído.
+  if ((e.acervoDeficit ?? 0) > 0) {
+    motivos.push({
+      texto: `${plural(e.acervoDeficit!, "peça do acervo em falta", "peças do acervo em falta")}`,
+      destino: `${base}/acervo`,
     });
   }
 

@@ -4,6 +4,7 @@ import { ConvexError } from "convex/values";
 import { requireTeamMember, requireUser } from "./lib/identity";
 import { deleteEventCascade } from "./lib/cascade";
 import { limparCampos } from "./lib/limparCampos";
+import { comCarimbo } from "./lib/ultimaAtualizacao";
 import { requireActiveAccess } from "./lib/accessGuard";
 
 const eventType = v.union(
@@ -120,7 +121,7 @@ export const update = mutation({
     await requireTeamMember(ctx, user._id, args.responsibleId);
 
     const { id, ...fields } = args;
-    await ctx.db.patch(id, limparCampos(fields));
+    await ctx.db.patch(id, comCarimbo(limparCampos(fields)));
   },
 });
 
@@ -136,10 +137,10 @@ export const saveContractImport = mutation({
     const event = await ctx.db.get(args.id);
     if (!event || event.userId !== user._id)
       throw new ConvexError({ message: "Evento não encontrado", code: "NOT_FOUND" });
-    await ctx.db.patch(args.id, {
-      contractAnalyzedAt: args.analyzedAt,
-      contractPendings: args.pendings,
-    });
+    await ctx.db.patch(
+      args.id,
+      comCarimbo({ contractAnalyzedAt: args.analyzedAt, contractPendings: args.pendings }),
+    );
   },
 });
 

@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { requireTeamMember, requireUser } from "./lib/identity";
 import { deleteLeadCascade } from "./lib/cascade";
+import { comCarimbo } from "./lib/ultimaAtualizacao";
 import { requireActiveAccess } from "./lib/accessGuard";
 import { limparCampos } from "./lib/limparCampos";
 import { diasSemContato, resumirFollowUp } from "./lib/leadFollowUp";
@@ -98,7 +99,7 @@ export const updateLead = mutation({
       throw new ConvexError({ message: "Lead não encontrado", code: "NOT_FOUND" });
     await requireTeamMember(ctx, user._id, args.responsibleId);
     const { id, ...fields } = args;
-    await ctx.db.patch(id, limparCampos(fields));
+    await ctx.db.patch(id, comCarimbo(limparCampos(fields)));
   },
 });
 
@@ -262,10 +263,7 @@ export const convertToEvent = mutation({
       }
     }
 
-    await ctx.db.patch(leadId, {
-      stage: "contracted",
-      convertedEventId: eventId,
-    });
+    await ctx.db.patch(leadId, comCarimbo({ stage: "contracted", convertedEventId: eventId }));
 
     return eventId;
   },

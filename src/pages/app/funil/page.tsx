@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { LeadDocumentsDialog } from "./_components/lead-documents.tsx";
 import { ResponsavelInline, ResponsavelSelect } from "@/components/responsavel-select.tsx";
+import { descreverUltimaAtualizacao } from "@/convex/lib/ultimaAtualizacao.ts";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -418,6 +419,16 @@ function LeadCard({
         prefixo="Atendendo: "
         className="block text-xs text-muted-foreground"
       />
+
+      {/* "Faz quanto tempo que eu nao olho isto?" — o Convex so da a data de
+          CRIACAO, entao um lead de janeiro revisado ontem parecia de janeiro.
+          Isto NAO e contato com a cliente: quem responde por isso e
+          `lastInteraction` (ver convex/lib/ultimaAtualizacao.ts). */}
+      {descreverUltimaAtualizacao(lead) && (
+        <p className="text-xs text-muted-foreground">
+          Atualizado {descreverUltimaAtualizacao(lead)}
+        </p>
+      )}
 
       {lead.notes && (
         <p className="text-xs text-muted-foreground italic line-clamp-2">{lead.notes}</p>

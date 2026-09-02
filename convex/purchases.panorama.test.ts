@@ -5,6 +5,11 @@ import schema from "./schema";
 import { modules } from "./test.setup";
 import { resumirPanorama } from "./lib/panoramaDeCompras";
 import { effectivePurchaseStatus, isPendingStatus } from "./lib/purchaseStatus";
+import {
+  comCarimbo,
+  descreverUltimaAtualizacao,
+  ultimaAtualizacao,
+} from "./lib/ultimaAtualizacao";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 
@@ -199,5 +204,44 @@ describe("a fonte faz o que o espelho reproduz", () => {
     // divergir — foi assim que painel e quadro de atenção discordaram.
     expect(CORPO_PANORAMA).not.toContain("dueDate <");
     expect(CORPO_PANORAMA).not.toContain("atrasad");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CARIMBO DE ATUALIZAÇÃO sobre banco real.
+// A regra vive em lib/ultimaAtualizacao.ts; aqui prova-se que o valor
+// realmente chega ao registro e que a leitura antiga continua respondendo.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("última atualização", () => {
+  it("registro ANTIGO, sem carimbo, responde pela data de criação", async () => {
+    const { t, donaId } = await cenario();
+    const item = await t.run(async (ctx) =>
+      ctx.db.query("purchaseItems").withIndex("by_user", (q) => q.eq("userId", donaId)).first(),
+    );
+    expect(item!.updatedAt).toBeUndefined();
+    expect(ultimaAtualizacao(item!)).toBe(new Date(item!._creationTime).toISOString());
+    expect(descreverUltimaAtualizacao(item!)).toBe("hoje");
+  });
+
+  it("o carimbo gravado passa a valer, e a criação fica para trás", async () => {
+    const { t, atrasada } = await cenario();
+    const carimbo = "2026-09-02T10:00:00.000Z";
+    await t.run(async (ctx) => ctx.db.patch(atrasada, comCarimbo({}, new Date(carimbo))));
+    const item = await t.run(async (ctx) => ctx.db.get(atrasada));
+    expect(item!.updatedAt).toBe(carimbo);
+    expect(ultimaAtualizacao(item!)).toBe(carimbo);
+  });
+
+  it("carimbar não apaga nada do registro", async () => {
+    const { t, atrasada } = await cenario();
+    const antes = await t.run(async (ctx) => ctx.db.get(atrasada));
+    await t.run(async (ctx) => ctx.db.patch(atrasada, comCarimbo({})));
+    const depois = await t.run(async (ctx) => ctx.db.get(atrasada));
+    expect(depois).toMatchObject({
+      name: antes!.name,
+      dueDate: antes!.dueDate,
+      unitPrice: antes!.unitPrice,
+      quantity: antes!.quantity,
+    });
   });
 });

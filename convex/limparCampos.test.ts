@@ -18,6 +18,7 @@ const HANDLERS = {
   "assemblyItems.ts": readFileSync(new URL("./assemblyItems.ts", import.meta.url), "utf8"),
   "purchases.ts": readFileSync(new URL("./purchases.ts", import.meta.url), "utf8"),
   "funil.ts": readFileSync(new URL("./funil.ts", import.meta.url), "utf8"),
+  "events.ts": readFileSync(new URL("./events.ts", import.meta.url), "utf8"),
 };
 
 describe("a causa raiz: o que sobrevive ao transporte", () => {
@@ -61,15 +62,35 @@ describe("limparCampos", () => {
 });
 
 describe("os handlers aplicam a tradução — não só a declaram", () => {
+  // A checagem é por INTENÇÃO, não pelo texto exato da chamada: o patch pode
+  // ser envolvido por outro helper (o carimbo de `updatedAt`, por exemplo) sem
+  // que isso signifique que a limpeza sumiu. O que não pode é `fields` cru
+  // chegar ao banco — aí um campo esvaziado no formulário nunca seria apagado.
   it.each([
     ["assemblyItems.ts", "...limparCampos(fields),"],
     ["purchases.ts", "const limpos = limparCampos(fields);"],
-    ["funil.ts", "await ctx.db.patch(id, limparCampos(fields));"],
+    ["funil.ts", "limparCampos(fields)"],
+    ["events.ts", "limparCampos(fields)"],
   ])("%s passa o patch por limparCampos", (arquivo, trecho) => {
     const fonte = HANDLERS[arquivo as keyof typeof HANDLERS];
     expect(fonte).toContain('from "./lib/limparCampos"');
     expect(fonte).toContain(trecho);
   });
+
+  it.each(["funil.ts", "events.ts", "purchases.ts", "assemblyItems.ts"])(
+    "%s nunca grava `fields` cru",
+    (arquivo) => {
+      const fonte = HANDLERS[arquivo as keyof typeof HANDLERS];
+      // Cada chamada de `patch` é lida isoladamente (até o `;` daquela
+      // instrução). Se a chamada menciona `fields`, tem de mencionar também
+      // `limparCampos` — senão um campo esvaziado no formulário nunca some.
+      for (const trecho of fonte.split("ctx.db.patch(").slice(1)) {
+        const chamada = trecho.slice(0, trecho.indexOf(";"));
+        if (!/\bfields\b/.test(chamada)) continue;
+        expect(chamada, `${arquivo}: patch com \`fields\` cru`).toContain("limparCampos");
+      }
+    },
+  );
 
   it("purchases não escapa da limpeza no ramo que reajusta isPurchased", () => {
     // Havia dois caminhos de patch. Se um deles usasse `fields` cru, apagar um

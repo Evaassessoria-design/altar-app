@@ -8,6 +8,7 @@ import {
   type PurchaseStatus,
 } from "./lib/purchaseStatus";
 import { limparCampos } from "./lib/limparCampos";
+import { comCarimbo } from "./lib/ultimaAtualizacao";
 import { valorDaCompra } from "./lib/custoDoEvento";
 
 /** Validador reutilizado por `addPurchase`, `updatePurchase` e `setStatus`. */
@@ -276,7 +277,7 @@ export const updatePurchase = mutation({
     const patch = args.status
       ? { ...limpos, isPurchased: isPurchasedForStatus(args.status) }
       : limpos;
-    await ctx.db.patch(id, patch);
+    await ctx.db.patch(id, comCarimbo(patch));
   },
 });
 
@@ -287,7 +288,7 @@ export const togglePurchase = mutation({
     const item = await ctx.db.get(args.id);
     if (!item || item.userId !== user._id)
       throw new ConvexError({ message: "Item não encontrado", code: "NOT_FOUND" });
-    await ctx.db.patch(args.id, { isPurchased: !item.isPurchased });
+    await ctx.db.patch(args.id, comCarimbo({ isPurchased: !item.isPurchased }));
   },
 });
 
@@ -320,9 +321,9 @@ export const setPurchaseStatus = mutation({
     if (!item || item.userId !== user._id) {
       throw new ConvexError({ message: "Item não encontrado", code: "NOT_FOUND" });
     }
-    await ctx.db.patch(args.id, {
-      status: args.status,
-      isPurchased: isPurchasedForStatus(args.status),
-    });
+    await ctx.db.patch(
+      args.id,
+      comCarimbo({ status: args.status, isPurchased: isPurchasedForStatus(args.status) }),
+    );
   },
 });

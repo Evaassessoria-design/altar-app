@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { descreverUltimaAtualizacao } from "@/convex/lib/ultimaAtualizacao.ts";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import { Button } from "@/components/ui/button.tsx";
@@ -241,13 +242,19 @@ export default function EventsPage() {
                         </span>
                       )}
                     </div>
-                    {(event.assessoria || event.responsible) && (
+                    {(event.assessoria || event.responsible || descreverUltimaAtualizacao(event)) && (
                       <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-muted-foreground">
                         {event.assessoria && (
                           <span>Assessoria: <span className="text-foreground">{event.assessoria}</span></span>
                         )}
+                        {/* "Resp." agora e uma escolha explicita da decoradora
+                            (ou a unica pessoa escalada). Antes era quem tivesse
+                            sido adicionado primeiro a equipe. */}
                         {event.responsible && (
                           <span>Resp.: <span className="text-foreground">{event.responsible}</span></span>
+                        )}
+                        {descreverUltimaAtualizacao(event) && (
+                          <span>Atualizado {descreverUltimaAtualizacao(event)}</span>
                         )}
                       </div>
                     )}

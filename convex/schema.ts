@@ -251,6 +251,17 @@ export default defineSchema({
     // dizer (e prefere nao dizer nada a eleger alguem).
     responsibleId: v.optional(v.id("teamMembers")),
     responsible: v.optional(v.string()),
+    /**
+     * Ultima vez que ALGUEM MEXEU neste registro dentro do ALTAR.
+     *
+     * AUSENTE = registro anterior a este campo; a leitura cai em
+     * `_creationTime` (lib/ultimaAtualizacao.ts). Nao houve backfill e
+     * nenhuma data e inventada.
+     *
+     * NAO e contato com o cliente: quem responde por isso continua sendo
+     * `leads.lastInteraction`.
+     */
+    updatedAt: v.optional(v.string()),
     // Importação do contrato por IA (status + pendências identificadas no doc).
     contractAnalyzedAt: v.optional(v.string()),
     contractPendings: v.optional(v.array(v.string())),
@@ -284,6 +295,17 @@ export default defineSchema({
     /** "AAAA-MM-DD" da ultima conversa. Sem ela nao se afirma abandono. */
     lastInteraction: v.optional(v.string()),
     nextAction: v.optional(v.string()),
+    /**
+     * Ultima vez que ALGUEM MEXEU neste registro dentro do ALTAR.
+     *
+     * AUSENTE = registro anterior a este campo; a leitura cai em
+     * `_creationTime` (lib/ultimaAtualizacao.ts). Nao houve backfill e
+     * nenhuma data e inventada.
+     *
+     * NAO e contato com o cliente: quem responde por isso continua sendo
+     * `leads.lastInteraction`.
+     */
+    updatedAt: v.optional(v.string()),
   })
     .index("by_user", ["userId"])
     .index("by_user_stage", ["userId", "stage"]),
@@ -425,6 +447,17 @@ export default defineSchema({
     // Ausente = compra ainda não lançada. É o estado de toda compra que já
     // existe hoje, e continua válido: o custo dela aparece como "fora do
     // livro", não como erro.
+    /**
+     * Ultima vez que ALGUEM MEXEU neste registro dentro do ALTAR.
+     *
+     * AUSENTE = registro anterior a este campo; a leitura cai em
+     * `_creationTime` (lib/ultimaAtualizacao.ts). Nao houve backfill e
+     * nenhuma data e inventada.
+     *
+     * NAO e contato com o cliente: quem responde por isso continua sendo
+     * `leads.lastInteraction`.
+     */
+    updatedAt: v.optional(v.string()),
     transactionId: v.optional(v.id("transactions")),
   })
     .index("by_event", ["eventId"])

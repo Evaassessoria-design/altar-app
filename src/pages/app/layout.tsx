@@ -183,7 +183,7 @@ function AppLayoutInner() {
     );
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-svh bg-background">
       {/* Sidebar — desktop */}
       <aside className="hidden md:flex flex-col w-64 bg-card border-r border-border">
         <div className="px-6 py-5 border-b border-border flex items-center justify-between">

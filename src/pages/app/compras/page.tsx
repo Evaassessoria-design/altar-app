@@ -28,6 +28,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ConvexError } from "convex/values";
 import { cn } from "@/lib/utils.ts";
+import { hojeDateKey } from "@/lib/event-date.ts";
 import { StatusSelect } from "@/components/status-select.tsx";
 import { ResponsavelInline, ResponsavelSelect } from "@/components/responsavel-select.tsx";
 import { PainelDeCompras } from "./_components/painel-de-compras.tsx";
@@ -66,11 +67,6 @@ const purchaseSchema = z.object({
 });
 
 /** Data "AAAA-MM-DD" de hoje, para decidir atraso sem fuso atrapalhar. */
-function hojeISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 /**
  * Situação do item, alterável em um clique.
  *
@@ -296,7 +292,7 @@ function EventSection({
   onLancarCusto: (id: Id<"purchaseItems">) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
-  const hoje = hojeISO();
+  const hoje = hojeDateKey();
   const purchased = items.filter((i) => i.isPurchased).length;
   const total = items.length;
   const totalValue = items.reduce((sum, i) => {

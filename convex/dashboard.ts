@@ -3,6 +3,7 @@ import { requireUser } from "./lib/identity";
 import { diasEntre, montarAtencao } from "./lib/attention";
 import { effectivePurchaseStatus, isOverdue, isPendingStatus } from "./lib/purchaseStatus";
 import { aguardandoEntrega } from "./lib/panoramaDeCompras";
+import { dataDoDia, dataEmDias, faixaDoMes, primeiroDiaDoMes } from "./lib/dataDoDia";
 import { resumirFornecedores } from "./lib/eventSummary";
 import { fornecedoresDaDecoradora } from "./lib/escopoDecoradora";
 
@@ -19,17 +20,22 @@ export const getDashboardStats = query({
       .collect();
 
     const now = new Date();
-    const nowIso = now.toISOString();
+    // Dia, não instante: `e.date` é "AAAA-MM-DD" e comparar com um ISO
+    // completo excluía o evento de HOJE (ver lib/dataDoDia.ts).
+    const hoje = dataDoDia(now);
 
     // Upcoming events (not cancelled/completed, date in the future)
     const upcoming = allEvents
-      .filter((e) => e.date >= nowIso && e.status !== "cancelled" && e.status !== "completed")
+      .filter((e) => e.date >= hoje && e.status !== "cancelled" && e.status !== "completed")
       .sort((a, b) => a.date.localeCompare(b.date));
 
     const nextEvent = upcoming[0] ?? null;
 
     // Revenue this month
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    // O dia 1º ficava DE FORA de "este mês" com o ISO completo, enquanto o
+    // Financeiro (que já cortava em 10 caracteres) o incluía: duas telas
+    // mostrando números diferentes para o mesmo mês.
+    const monthStart = primeiroDiaDoMes(now);
     const monthTransactions = await ctx.db
       .query("transactions")
       .withIndex("by_user_date", (q) =>
@@ -55,10 +61,7 @@ export const getDashboardStats = query({
     // Events per month (last 6 months)
     const months: { label: string; count: number; revenue: number }[] = [];
     for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const start = d.toISOString();
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59).toISOString();
-      const label = d.toLocaleString("pt-BR", { month: "short" });
+      const { inicio: start, fim: end, rotulo: label } = faixaDoMes(-i, now);
       const count = allEvents.filter((e) => e.date >= start && e.date <= end).length;
       const revenue = allEvents
         .filter((e) => e.date >= start && e.date <= end)
@@ -67,7 +70,7 @@ export const getDashboardStats = query({
     }
 
     // Pending checklist items across all upcoming events (next 30 days)
-    const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const in30Days = dataEmDias(30, now);
     const urgentEvents = upcoming.filter((e) => e.date <= in30Days);
     let pendingChecklistCount = 0;
     const urgentTasks: { eventName: string; eventDate: string; itemName: string; phase: string }[] = [];
@@ -136,8 +139,7 @@ export const getAttentionBoard = query({
   handler: async (ctx) => {
     const user = await requireUser(ctx);
 
-    const hoje = new Date();
-    const hojeISO = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
+    const hojeISO = dataDoDia();
 
     const eventos = (
       await ctx.db

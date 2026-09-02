@@ -3,7 +3,7 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { cn } from "@/lib/utils.ts";
-import { formatEventDayOnly } from "@/lib/event-date.ts";
+import { formatEventDayOnly, hojeDateKey } from "@/lib/event-date.ts";
 import {
   ORDEM_DAS_FAIXAS,
   ROTULO_DA_FAIXA,
@@ -38,13 +38,6 @@ import { AlertTriangle, CalendarClock, PackageCheck, Wallet } from "lucide-react
 
 const MOEDA = (v: number) =>
   v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-function hojeISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate(),
-  ).padStart(2, "0")}`;
-}
 
 const FILTROS: readonly FiltroDeSituacao[] = [
   "pendentes",
@@ -93,7 +86,7 @@ function Cartao({
 
 export function PainelDeCompras() {
   const compras = useQuery(api.purchases.listPanorama, {});
-  const hoje = hojeISO();
+  const hoje = hojeDateKey();
 
   const [situacao, setSituacao] = useState<FiltroDeSituacao>("pendentes");
   const [fornecedor, setFornecedor] = useState<string>("");

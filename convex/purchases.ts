@@ -9,6 +9,7 @@ import {
 } from "./lib/purchaseStatus";
 import { limparCampos } from "./lib/limparCampos";
 import { comCarimbo } from "./lib/ultimaAtualizacao";
+import { dataDoDia } from "./lib/dataDoDia";
 import { valorDaCompra } from "./lib/custoDoEvento";
 
 /** Validador reutilizado por `addPurchase`, `updatePurchase` e `setStatus`. */
@@ -176,10 +177,7 @@ export const registerCost = mutation({
 
     // A data do lançamento é o vencimento quando existe — é a data que a
     // decoradora combinou com o fornecedor. Sem ela, hoje.
-    const hoje = new Date();
-    const data =
-      item.dueDate?.trim() ||
-      `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
+    const data = item.dueDate?.trim() || dataDoDia();
 
     const campos = {
       type: "expense" as const,

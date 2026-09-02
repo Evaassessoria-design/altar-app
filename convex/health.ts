@@ -1,5 +1,6 @@
 import { query } from "./_generated/server";
 import { responsavelDoEvento } from "./lib/responsavel";
+import { dataDoDia } from "./lib/dataDoDia";
 import { v } from "convex/values";
 import type { QueryCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
@@ -147,13 +148,14 @@ export const listCards = query({
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .collect();
 
-    const nowIso = new Date().toISOString();
+    // Dia, não instante — ver lib/dataDoDia.ts.
+    const hoje = dataDoDia();
     const filter = args.filter ?? "all";
     const events = all
       .filter((e) => {
         switch (filter) {
           case "upcoming":
-            return e.date >= nowIso && e.status !== "completed" && e.status !== "cancelled";
+            return e.date >= hoje && e.status !== "completed" && e.status !== "cancelled";
           case "completed":
             return e.status === "completed";
           case "cancelled":

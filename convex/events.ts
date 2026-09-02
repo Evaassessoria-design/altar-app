@@ -5,6 +5,7 @@ import { requireTeamMember, requireUser } from "./lib/identity";
 import { deleteEventCascade } from "./lib/cascade";
 import { limparCampos } from "./lib/limparCampos";
 import { comCarimbo } from "./lib/ultimaAtualizacao";
+import { dataDoDia } from "./lib/dataDoDia";
 import { requireActiveAccess } from "./lib/accessGuard";
 
 const eventType = v.union(
@@ -42,13 +43,15 @@ export const list = query({
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .collect();
 
-    const nowIso = new Date().toISOString();
+    // Dia, não instante — ver lib/dataDoDia.ts. Com o ISO completo, o evento
+    // que acontece HOJE não aparecia em "Em andamento".
+    const hoje = dataDoDia();
     const filter = args.filter ?? "all";
 
     const filtered = events.filter((e) => {
       switch (filter) {
         case "upcoming":
-          return e.date >= nowIso && e.status !== "completed" && e.status !== "cancelled";
+          return e.date >= hoje && e.status !== "completed" && e.status !== "cancelled";
         case "completed":
           return e.status === "completed";
         case "cancelled":

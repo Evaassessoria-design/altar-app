@@ -1,7 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
-import { getOwnedEvent, requireEventOwner, requireIdentity, requireUser } from "./lib/identity";
+import { getOwnedEvent, requireEventOwner, requireIdentity, requireUser, getOptionalUser } from "./lib/identity";
 import { limparCampos } from "./lib/limparCampos";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -64,6 +64,18 @@ export const listByEvent = query({
             : null,
         })),
     );
+  },
+});
+
+/** Um item de montagem. Degrada para `null` — a tela decide o que mostrar. */
+export const get = query({
+  args: { id: v.id("assemblyItems") },
+  handler: async (ctx, args) => {
+    const user = await getOptionalUser(ctx);
+    if (!user) return null;
+    const item = await ctx.db.get(args.id);
+    if (!item || item.userId !== user._id) return null;
+    return item;
   },
 });
 

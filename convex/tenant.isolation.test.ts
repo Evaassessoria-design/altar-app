@@ -24,6 +24,9 @@ const GUARDAS = [
   "getOwnedLead", // devolve null se o lead do funil não for do usuário
   "requireActiveAccess", // paywall; resolve o usuário via requireUser
   "requireUser", // resolve o usuário; a função filtra por ele
+  // Mesma semântica de `requireUser` para as queries que degradam para null:
+  // resolve QUEM está chamando, e a função compara o dono logo em seguida.
+  "getOptionalUser",
 ];
 
 // `requireIdentity` NÃO entra nesta lista de propósito: ele confirma que há

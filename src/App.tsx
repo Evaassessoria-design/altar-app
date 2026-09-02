@@ -15,6 +15,7 @@ import GaleriaPage from "./pages/app/events/[id]/fotos/page.tsx";
 import FornecedoresPage from "./pages/app/events/[id]/fornecedores/page.tsx";
 import PlantaPage from "./pages/app/events/[id]/planta/page.tsx";
 import ProjetoDecoracaoPage from "./pages/app/events/[id]/projeto/page.tsx";
+import FichaTecnicaPage from "./pages/app/events/[id]/ficha-tecnica/page.tsx";
 import ConfiguracoesPage from "./pages/app/configuracoes/page.tsx";
 import CatalogoFornecedoresPage from "./pages/app/fornecedores/page.tsx";
 import EquipePage from "./pages/app/equipe/page.tsx";
@@ -87,6 +88,7 @@ function AppRoutes() {
         <Route path="/eventos/:id/fornecedores" element={<FornecedoresPage />} />
         <Route path="/eventos/:id/planta" element={<PlantaPage />} />
         <Route path="/eventos/:id/projeto" element={<ProjetoDecoracaoPage />} />
+        <Route path="/eventos/:id/ficha-tecnica" element={<FichaTecnicaPage />} />
         <Route path="/fornecedores" element={<CatalogoFornecedoresPage />} />
         <Route path="/equipe" element={<EquipePage />} />
         <Route path="/compras" element={<ComprasPage />} />

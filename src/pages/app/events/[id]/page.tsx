@@ -441,6 +441,23 @@ export default function EventDetailsPage() {
             </div>
             <ChevronRight className="size-4 text-muted-foreground" />
           </Link>
+          {/* Ficha Técnica vem logo depois do Projeto de propósito: uma
+              responde "o que vai ter", a outra "do que isso é feito". */}
+          <Link
+            to={`/eventos/${id}/ficha-tecnica`}
+            className="flex items-center justify-between px-5 py-3.5 hover:bg-accent/50 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-3">
+              <ClipboardList className="size-5 text-primary" />
+              <div>
+                <p className="font-medium text-sm">Ficha técnica</p>
+                <p className="text-xs text-muted-foreground">
+                  Do que cada composição é feita e quanto o evento inteiro precisa
+                </p>
+              </div>
+            </div>
+            <ChevronRight className="size-4 text-muted-foreground" />
+          </Link>
           <Link
             to={`/eventos/${id}/planta`}
             className="flex items-center justify-between px-5 py-3.5 hover:bg-accent/50 transition-colors cursor-pointer"

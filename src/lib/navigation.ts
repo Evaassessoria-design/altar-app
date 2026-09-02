@@ -70,6 +70,7 @@ export const ROTAS_SEM_MENU: Readonly<Record<string, string>> = {
   "/eventos/:id/fornecedores": "acessada de dentro do evento",
   "/eventos/:id/planta": "acessada de dentro do evento",
   "/eventos/:id/projeto": "acessada de dentro do evento",
+  "/eventos/:id/ficha-tecnica": "acessada de dentro do evento",
 } as const;
 
 /**

@@ -27,7 +27,6 @@ import {
 } from "@/convex/lib/fichaTecnica.ts";
 import { metaDoTipo, tipoEfetivo } from "@/convex/lib/materiais.ts";
 import { ReceitaDialog } from "./_components/receita-dialog.tsx";
-import { generateFichaTecnicaPDF } from "@/lib/generate-ficha-tecnica-pdf.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FICHA TÉCNICA DO EVENTO
@@ -280,7 +279,7 @@ export default function FichaTecnicaPage() {
   // central. Um evento de seis meses atrás imprime a receita executada.
   const handlePdf = async () => {
     try {
-      await generateFichaTecnicaPDF({
+      await (await import("@/lib/generate-ficha-tecnica-pdf.ts")).generateFichaTecnicaPDF({
         event: {
           name: event!.name, date: event!.date,
           location: event!.location, clientName: event!.clientName,

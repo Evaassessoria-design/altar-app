@@ -1,37 +1,53 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Route, Routes, Navigate, useLocation } from "react-router-dom";
 import { DefaultProviders } from "./components/providers/default.tsx";
 import LoginPage from "./pages/auth/Login.tsx";
-import ResetPasswordPage from "./pages/auth/ResetPassword.tsx";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import AppLayout from "./pages/app/layout.tsx";
-import Dashboard from "./pages/app/dashboard/page.tsx";
-import Events from "./pages/app/events/page.tsx";
-import EventDetails from "./pages/app/events/[id]/page.tsx";
-import EventBriefing from "./pages/app/events/[id]/briefing/page.tsx";
-import EventChecklist from "./pages/app/events/[id]/checklist/page.tsx";
-import OrcamentoPage from "./pages/app/events/[id]/orcamento/page.tsx";
-import GaleriaPage from "./pages/app/events/[id]/fotos/page.tsx";
-import FornecedoresPage from "./pages/app/events/[id]/fornecedores/page.tsx";
-import PlantaPage from "./pages/app/events/[id]/planta/page.tsx";
-import ProjetoDecoracaoPage from "./pages/app/events/[id]/projeto/page.tsx";
-import FichaTecnicaPage from "./pages/app/events/[id]/ficha-tecnica/page.tsx";
-import AcervoPage from "./pages/app/acervo/page.tsx";
-import AcervoDoEventoPage from "./pages/app/events/[id]/acervo/page.tsx";
-import ConfiguracoesPage from "./pages/app/configuracoes/page.tsx";
-import CatalogoFornecedoresPage from "./pages/app/fornecedores/page.tsx";
-import EquipePage from "./pages/app/equipe/page.tsx";
-import ComprasPage from "./pages/app/compras/page.tsx";
-import FinanceiroPage from "./pages/app/financeiro/page.tsx";
-import FunilPage from "./pages/app/funil/page.tsx";
-import AdminPage from "./pages/app/admin/page.tsx";
-import PaywallPage from "./pages/app/paywall/page.tsx";
 import { useServiceWorker } from "@/hooks/use-service-worker.ts";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import { Authenticated, Unauthenticated, AuthLoading } from "convex/react";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import { ErrorBoundary } from "@/components/error-boundary.tsx";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TELAS SOB DEMANDA
+//
+// O pacote inicial trazia TODAS as telas de uma vez — inclusive Admin,
+// Financeiro e o gerador de PDF — antes de mostrar a primeira. Num 4G de
+// galpão isso é a diferença entre abrir e desistir.
+//
+// Ficam de fora, carregadas junto: a página pública (`Index`) e o `Login`, que
+// são a primeira coisa que qualquer pessoa vê. Adiá-las trocaria um problema
+// por outro.
+//
+// Deep link continua funcionando: quem abre /eventos/:id/ficha-tecnica direto
+// carrega aquela tela e só ela.
+// ─────────────────────────────────────────────────────────────────────────────
+const Dashboard = lazy(() => import("./pages/app/dashboard/page.tsx"));
+const Events = lazy(() => import("./pages/app/events/page.tsx"));
+const EventDetails = lazy(() => import("./pages/app/events/[id]/page.tsx"));
+const EventBriefing = lazy(() => import("./pages/app/events/[id]/briefing/page.tsx"));
+const EventChecklist = lazy(() => import("./pages/app/events/[id]/checklist/page.tsx"));
+const OrcamentoPage = lazy(() => import("./pages/app/events/[id]/orcamento/page.tsx"));
+const GaleriaPage = lazy(() => import("./pages/app/events/[id]/fotos/page.tsx"));
+const FornecedoresPage = lazy(() => import("./pages/app/events/[id]/fornecedores/page.tsx"));
+const PlantaPage = lazy(() => import("./pages/app/events/[id]/planta/page.tsx"));
+const ProjetoDecoracaoPage = lazy(() => import("./pages/app/events/[id]/projeto/page.tsx"));
+const FichaTecnicaPage = lazy(() => import("./pages/app/events/[id]/ficha-tecnica/page.tsx"));
+const AcervoPage = lazy(() => import("./pages/app/acervo/page.tsx"));
+const AcervoDoEventoPage = lazy(() => import("./pages/app/events/[id]/acervo/page.tsx"));
+const ConfiguracoesPage = lazy(() => import("./pages/app/configuracoes/page.tsx"));
+const CatalogoFornecedoresPage = lazy(() => import("./pages/app/fornecedores/page.tsx"));
+const EquipePage = lazy(() => import("./pages/app/equipe/page.tsx"));
+const ComprasPage = lazy(() => import("./pages/app/compras/page.tsx"));
+const FinanceiroPage = lazy(() => import("./pages/app/financeiro/page.tsx"));
+const FunilPage = lazy(() => import("./pages/app/funil/page.tsx"));
+const AdminPage = lazy(() => import("./pages/app/admin/page.tsx"));
+const PaywallPage = lazy(() => import("./pages/app/paywall/page.tsx"));
+const ResetPasswordPage = lazy(() => import("./pages/auth/ResetPassword.tsx"));
 
 // Guard: redirect to paywall if subscription expired
 function SubscriptionGuard({ children }: { children: React.ReactNode }) {
@@ -52,13 +68,28 @@ function SubscriptionGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/** Espera de tela cheia — so para as rotas que NAO vivem dentro da casca. */
+function CarregandoPagina() {
+  return (
+    <div className="flex h-svh items-center justify-center">
+      <Spinner className="size-8" />
+    </div>
+  );
+}
+
 function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Index />} />
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
-      <Route path="/paywall" element={<PaywallPage />} />
+      <Route
+        path="/redefinir-senha"
+        element={<Suspense fallback={<CarregandoPagina />}><ResetPasswordPage /></Suspense>}
+      />
+      <Route
+        path="/paywall"
+        element={<Suspense fallback={<CarregandoPagina />}><PaywallPage /></Suspense>}
+      />
 
       {/* App routes — protegidas: exigem autenticação + assinatura ativa.
           Não autenticado → volta pro início (evita tela em branco).

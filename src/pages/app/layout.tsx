@@ -4,6 +4,7 @@ import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import { SignInButton } from "@/components/ui/signin.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { Spinner } from "@/components/ui/spinner.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
   CalendarDays,
@@ -35,7 +36,7 @@ import { NotificationCenter } from "@/components/notification-center.tsx";
 import { useLastSeen } from "@/hooks/use-last-seen.ts";
 import { OnboardingModal } from "@/components/onboarding-modal.tsx";
 import { ErrorBoundary } from "@/components/error-boundary.tsx";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { toast } from "sonner";
 import { ConvexError } from "convex/values";
 
@@ -137,6 +138,15 @@ function TrialBanner() {
         <Sparkles className="size-3" />
         {loading ? "Aguarde..." : isOverdue ? "Regularizar" : "Assinar agora"}
       </Button>
+    </div>
+  );
+}
+
+/** Espera do conteudo, no lugar do conteudo — nunca no lugar do app. */
+function CarregandoTela() {
+  return (
+    <div className="flex items-center justify-center py-24">
+      <Spinner className="size-6" />
     </div>
   );
 }
@@ -254,7 +264,14 @@ function AppLayoutInner() {
 
         <main className="flex-1 overflow-y-auto pb-20 md:pb-6">
           <ErrorBoundary variant="page" resetKeys={[location.pathname]}>
-            <Outlet context={{ onOpenOnboarding: () => setShowOnboarding(true) }} />
+            {/* A tela chega sob demanda (ver App.tsx). O limite de espera fica
+                AQUI DENTRO de proposito: a barra lateral, o topo e a barra
+                inferior continuam na tela enquanto o conteudo carrega. Um
+                fallback de tela cheia apagaria o menu a cada navegacao — a
+                pessoa veria o app inteiro sumir para reaparecer igual. */}
+            <Suspense fallback={<CarregandoTela />}>
+              <Outlet context={{ onOpenOnboarding: () => setShowOnboarding(true) }} />
+            </Suspense>
           </ErrorBoundary>
         </main>
 

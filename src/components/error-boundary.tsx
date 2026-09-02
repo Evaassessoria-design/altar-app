@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button.tsx";
+import { ehFalhaDeCarregamentoDeTela } from "@/lib/falha-de-tela.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ErrorBoundary do ALTAR.
@@ -48,11 +49,23 @@ export class ErrorBoundary extends Component<Props, State> {
 
   private reset = () => this.setState({ error: null });
 
+  /**
+   * Recarrega a pagina inteira.
+   *
+   * E a UNICA saida quando o pedaco da tela nao chegou: `React.lazy` guarda a
+   * promessa rejeitada, entao um reset suave renderiza o mesmo erro na hora.
+   * Recarregar busca o index.html novo, e com ele os nomes de arquivo certos.
+   */
+  private recarregar = () => window.location.reload();
+
   render() {
     const { error } = this.state;
     if (!error) return this.props.children;
 
     const screen = this.props.variant === "screen";
+    // Tela que nao chegou e um problema DIFERENTE de codigo que quebrou, e
+    // pede outra saida — ver lib/falha-de-tela.ts.
+    const naoChegou = ehFalhaDeCarregamentoDeTela(error);
 
     return (
       <div
@@ -66,18 +79,27 @@ export class ErrorBoundary extends Component<Props, State> {
             <AlertTriangle className="size-7 text-destructive" />
           </div>
           <h1 className="mb-2 text-xl font-bold text-foreground">
-            Algo deu errado
+            {naoChegou ? "Esta tela não carregou" : "Algo deu errado"}
           </h1>
           <p className="mb-5 text-sm text-muted-foreground leading-relaxed">
-            Não foi possível carregar esta parte do ALTAR. Isso pode ser
-            temporário — sua sessão continua ativa.
+            {naoChegou
+              ? "Pode ser uma atualização do ALTAR ou uma queda de internet. Recarregar resolve — sua sessão continua ativa."
+              : "Não foi possível carregar esta parte do ALTAR. Isso pode ser temporário — sua sessão continua ativa."}
           </p>
-          <p className="mb-6 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground break-words">
-            {error.message || "Erro desconhecido"}
-          </p>
-          <Button onClick={this.reset} className="cursor-pointer gap-2">
+          {/* A mensagem tecnica so aparece quando pode ajudar. "Failed to fetch
+              dynamically imported module" nao diz nada a quem esta montando um
+              evento — e continua no console para quem for depurar. */}
+          {!naoChegou && (
+            <p className="mb-6 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground break-words">
+              {error.message || "Erro desconhecido"}
+            </p>
+          )}
+          <Button
+            onClick={naoChegou ? this.recarregar : this.reset}
+            className="cursor-pointer gap-2"
+          >
             <RefreshCw className="size-4" />
-            Tentar novamente
+            {naoChegou ? "Recarregar" : "Tentar novamente"}
           </Button>
         </div>
       </div>

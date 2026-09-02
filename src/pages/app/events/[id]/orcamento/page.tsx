@@ -25,7 +25,6 @@ import {
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils.ts";
-import { generateOrcamentoPDF } from "@/lib/generate-orcamento-pdf.ts";
 import {
   Dialog,
   DialogContent,
@@ -210,11 +209,11 @@ export default function OrcamentoPage() {
     }
   };
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     if (!event || !items || !summary) return;
     setPdfGenerating(true);
     try {
-      generateOrcamentoPDF({
+      (await import("@/lib/generate-orcamento-pdf.ts")).generateOrcamentoPDF({
         event,
         items,
         summary,

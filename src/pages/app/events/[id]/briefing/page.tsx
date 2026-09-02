@@ -13,8 +13,6 @@ import { toast } from "sonner";
 import { ArrowLeft, Save, ChevronRight, Sparkles, FileDown, Loader2, Truck } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
 import { BRIEFING_AREAS, type BriefingFields } from "@/lib/briefing-areas.ts";
-import { generateAssemblyPDF } from "@/lib/generate-assembly-pdf.ts";
-import { generateLoadingPDF } from "@/lib/generate-loading-pdf.ts";
 
 /**
  * Converte a logo em data URL para o jsPDF.
@@ -114,7 +112,7 @@ export default function EventBriefingPage() {
     if (!event) return;
     setExportandoCarga(true);
     try {
-      await generateLoadingPDF({
+      await (await import("@/lib/generate-loading-pdf.ts")).generateLoadingPDF({
         event,
         items: (items ?? []) as never,
         empresa: empresa ?? null,
@@ -133,7 +131,7 @@ export default function EventBriefingPage() {
     if (!event) return;
     setExporting(true);
     try {
-      await generateAssemblyPDF({
+      await (await import("@/lib/generate-assembly-pdf.ts")).generateAssemblyPDF({
         event,
         briefing,
         items: items ?? [],

@@ -65,7 +65,6 @@ import { Label } from "@/components/ui/label.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import type { Doc } from "@/convex/_generated/dataModel.d.ts";
 import { ConvexError } from "convex/values";
-import { generateEventPDF } from "@/lib/generate-event-pdf.ts";
 
 import { formatEventDateLong } from "@/lib/event-date.ts";
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
@@ -247,7 +246,7 @@ export default function EventDetailsPage() {
   const handleDownloadPDF = async () => {
     setPdfGenerating(true);
     try {
-      generateEventPDF({
+      (await import("@/lib/generate-event-pdf.ts")).generateEventPDF({
         event,
         briefing: briefing ?? null,
         preChecklist: preChecklist ?? [],

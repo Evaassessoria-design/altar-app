@@ -607,13 +607,18 @@ describe("PERFORMANCE — 50 itens × 15 componentes", () => {
     expect(corpo).toContain("const catalogo = new Map(");
   });
 
-  it("`getFicha` lê o banco um número fixo de vezes", () => {
+  it("`getFicha` lê o banco um número FIXO de vezes, nunca por linha", () => {
     const fonte = readFileSync("convex/fichaTecnica.ts", "utf-8");
     const i = fonte.indexOf("export const getFicha");
     const corpo = fonte.slice(i, fonte.indexOf("\nexport ", i + 1));
-    // Duas coleções (itens e compras) e nada dentro de laço.
-    expect((corpo.match(/ctx\.db\s*\n?\s*\.query/g) ?? []).length).toBeLessThanOrEqual(2);
-    expect(corpo).not.toMatch(/\.map\(async/);
+
+    // O que importa não é o número de consultas (são poucas e fixas: itens,
+    // compras e reservas de acervo) — é que NENHUMA aconteça dentro de um
+    // laço. Uma consulta por linha do consolidado é o N+1 que este teste
+    // existe para impedir; um limite mágico só envelheceria a cada campo novo.
+    const dentroDeLaco = /\.map\(async|for \([^)]*\) \{[\s\S]{0,200}?ctx\.db/;
+    expect(corpo, "consulta dentro de laço em getFicha").not.toMatch(dentroDeLaco);
+    expect((corpo.match(/ctx\.db\s*\n?\s*\.query/g) ?? []).length).toBeLessThanOrEqual(4);
   });
 });
 

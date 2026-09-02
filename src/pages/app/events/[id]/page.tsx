@@ -34,6 +34,7 @@ import {
   Building2,
   Wand2,
   Layers,
+  Boxes,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -100,6 +101,8 @@ export default function EventDetailsPage() {
   const allMembers = useQuery(api.team.listMembers);
   const fichaTecnica = useQuery(api.fichaTecnica.getFicha, { eventId: id as Id<"events"> });
   const resumoDaFicha = fichaTecnica?.resumo;
+  const acervoDoEvento = useQuery(api.acervo.doEvento, { eventId: id as Id<"events"> });
+  const resumoDoAcervo = acervoDoEvento?.resumo;
   const addToEventTeam = useMutation(api.team.addToEventTeam);
   const removeFromEventTeam = useMutation(api.team.removeFromEventTeam);
   const updateEventTeamMember = useMutation(api.team.updateEventTeamMember);
@@ -462,6 +465,27 @@ export default function EventDetailsPage() {
                         ? ` · ${resumoDaFicha.pendencias} ${resumoDaFicha.pendencias === 1 ? "pendência" : "pendências"}`
                         : "")
                     : "Do que cada composição é feita e quanto o evento inteiro precisa"}
+                </p>
+              </div>
+            </div>
+            <ChevronRight className="size-4 text-muted-foreground" />
+          </Link>
+          {/* Acervo vem depois da Ficha: uma diz do que é feito, a outra diz
+              quanto disso já é seu. */}
+          <Link
+            to={`/eventos/${id}/acervo`}
+            className="flex items-center justify-between px-5 py-3.5 hover:bg-accent/50 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-3">
+              <Boxes className="size-5 text-primary" />
+              <div>
+                <p className="font-medium text-sm">Acervo do evento</p>
+                <p className="text-xs text-muted-foreground">
+                  {resumoDoAcervo && resumoDoAcervo.itens > 0
+                    ? `${resumoDoAcervo.itens} ${resumoDoAcervo.itens === 1 ? "item reservado" : "itens reservados"}` +
+                      (resumoDoAcervo.comConflito > 0 ? ` · ${resumoDoAcervo.comConflito} com conflito` : "") +
+                      (resumoDoAcervo.retornoPendente > 0 ? ` · ${resumoDoAcervo.retornoPendente} sem retorno` : "")
+                    : "Quais peças suas saem do galpão para este evento"}
                 </p>
               </div>
             </div>

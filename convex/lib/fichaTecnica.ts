@@ -453,6 +453,10 @@ export type CoberturaDaLinha = {
   alvo: number;
   /** Somado das compras vinculadas NÃO canceladas. */
   comprado: number;
+  /** Reservado do acervo para este evento. `null` = disponibilidade não informada. */
+  doAcervo: number | null;
+  /** Comprado + acervo — o que de fato está providenciado. */
+  providenciado: number;
   /** Falta para alcançar o alvo. Nunca negativo — sobra não é falta. */
   faltam: number;
   /** Sobra acima do alvo, quando existe. */
@@ -486,7 +490,17 @@ export type CoberturaDaLinha = {
 export function coberturaDaLinha(
   linha: { necessario: number; sugerido?: number; tipo?: TipoDeMaterial },
   compras: readonly CompraVinculada[],
-  opcoes: { temSemelhanteSemVinculo?: boolean } = {},
+  opcoes: {
+    temSemelhanteSemVinculo?: boolean;
+    /**
+     * Quanto o ACERVO cobre desta linha nesta janela (MASTER #8).
+     *
+     * `undefined` = o sistema continua sem saber, e a resposta segue sendo
+     * "disponibilidade do acervo não informada". Só quando existe item de
+     * acervo VINCULADO é que este número aparece.
+     */
+    doAcervo?: number;
+  } = {},
 ): CoberturaDaLinha {
   const validas = compras.filter((c) => !c.cancelada);
   const comprado = quantidadeLimpa(
@@ -507,24 +521,41 @@ export function coberturaDaLinha(
 
   const temCompra = validas.length > 0;
   // O material JÁ É da empresa (acervo) ou volta para o fornecedor (locação).
-  // Sem módulo de acervo, ausência de compra aqui não significa falta.
+  // Sem item de acervo vinculado, ausência de compra aqui não significa falta.
   const dependeDoAcervo = linha.tipo === "reutilizavel" || linha.tipo === "locacao";
 
-  const situacao: SituacaoDaCobertura = temCompra
-    ? faltam === 0
-      ? "coberto"
-      : "parcial"
-    : opcoes.temSemelhanteSemVinculo
-      ? "sem_vinculo"
-      : dependeDoAcervo
-        ? "acervo_nao_informado"
-        : "sem_providencia";
+  // ── O ACERVO ENTRA NA CONTA (MASTER #8) ──────────────────────────────────
+  // Quando existe item de acervo vinculado, o que ele cobre soma com o que foi
+  // comprado: 14 do acervo + 0 comprados para uma necessidade de 20 significa
+  // "faltam 6", não "faltam 20". O acervo é providência tanto quanto a compra.
+  const doAcervo = typeof opcoes.doAcervo === "number" ? quantidadeLimpa(opcoes.doAcervo) : null;
+  const providenciado = quantidadeLimpa(comprado + (doAcervo ?? 0));
+  const faltamComAcervo = quantidadeLimpa(Math.max(0, alvo - providenciado));
+
+  const situacao: SituacaoDaCobertura =
+    doAcervo !== null
+      ? faltamComAcervo === 0
+        ? "coberto"
+        : "parcial"
+      : temCompra
+        ? faltam === 0
+          ? "coberto"
+          : "parcial"
+        : opcoes.temSemelhanteSemVinculo
+          ? "sem_vinculo"
+          : dependeDoAcervo
+            ? "acervo_nao_informado"
+            : "sem_providencia";
 
   return {
     necessario,
     alvo,
     comprado,
-    faltam,
+    /** Reservado do acervo para este evento. `null` = ainda não informado. */
+    doAcervo,
+    /** Comprado + acervo. É o que de fato está providenciado. */
+    providenciado,
+    faltam: doAcervo !== null ? faltamComAcervo : faltam,
     excedente,
     percentual: alvo > 0 ? Math.round((comprado / alvo) * 100) : null,
     temCompra,

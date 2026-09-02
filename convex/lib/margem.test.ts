@@ -323,3 +323,51 @@ describe("ATENÇÃO — só o que é verdade verificável", () => {
     }
   });
 });
+
+// ═══════════════════════════════════════════ ACERVO NA COBERTURA (MASTER #8)
+
+describe("o acervo entra na conta — a resposta que faltava", () => {
+  const linha = { necessario: 20, sugerido: 20, tipo: "reutilizavel" as const };
+
+  it("14 do acervo para uma necessidade de 20 → faltam 6, não 20", () => {
+    const c = coberturaDaLinha(linha, [], { doAcervo: 14 });
+    expect(c.doAcervo).toBe(14);
+    expect(c.providenciado).toBe(14);
+    expect(c.faltam).toBe(6);
+    expect(c.situacao).toBe("parcial");
+  });
+
+  it("acervo cobrindo tudo é COBERTO", () => {
+    const c = coberturaDaLinha(linha, [], { doAcervo: 20 });
+    expect(c.faltam).toBe(0);
+    expect(c.situacao).toBe("coberto");
+  });
+
+  it("acervo + compra somam", () => {
+    const c = coberturaDaLinha(linha, [{ quantity: 6, cancelada: false }], { doAcervo: 14 });
+    expect(c.providenciado).toBe(20);
+    expect(c.situacao).toBe("coberto");
+  });
+
+  it("SEM reserva de acervo, continua 'não informado' — não inventamos zero", () => {
+    // É a honestidade que o MASTER #7 estabeleceu e que segue valendo: sem
+    // item de acervo vinculado, o sistema não sabe.
+    const c = coberturaDaLinha(linha, [], {});
+    expect(c.doAcervo).toBeNull();
+    expect(c.situacao).toBe("acervo_nao_informado");
+  });
+
+  it("acervo ZERO é informação, não ausência", () => {
+    // "Tenho zero vasos livres" é diferente de "não sei quantos tenho".
+    const c = coberturaDaLinha(linha, [], { doAcervo: 0 });
+    expect(c.doAcervo).toBe(0);
+    expect(c.situacao).toBe("parcial");
+    expect(c.faltam).toBe(20);
+  });
+
+  it("o acervo NÃO vira compra — `comprado` continua só das compras", () => {
+    const c = coberturaDaLinha(linha, [], { doAcervo: 20 });
+    expect(c.comprado).toBe(0);
+    expect(c.temCompra).toBe(false);
+  });
+});

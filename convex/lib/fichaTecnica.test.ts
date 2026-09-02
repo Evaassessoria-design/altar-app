@@ -421,9 +421,29 @@ describe("o consolidado é DERIVADO — nenhum total é gravado", () => {
   it("o schema não tem campo de total em lugar nenhum da ficha", () => {
     // Total guardado envelhece em silêncio; total calculado não tem como
     // divergir. Um `totalNecessario` no schema seria a porta de entrada.
+    //
+    // A trava é sobre TOTAIS DERIVADOS. `collectionItems.quantidadeTotal`
+    // (MASTER #8) NÃO é derivado de nada: é o número cadastrado do acervo, a
+    // própria fonte de verdade — e nele o disponível é que é calculado. Por
+    // isso a verificação olha as tabelas da FICHA, não o schema inteiro.
     const schema = readFileSync("convex/schema.ts", "utf-8");
-    for (const campo of ["totalNecessario", "totalConsolidado", "quantidadeTotal"]) {
-      expect(schema, `campo redundante ${campo}`).not.toContain(campo);
+    const semComentarios = (texto: string) =>
+      texto
+        .split("\n")
+        .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
+        .join("\n");
+    const daFicha = semComentarios(
+      schema.slice(
+        schema.indexOf("materials: defineTable({"),
+        schema.indexOf("collectionItems: defineTable({"),
+      ) +
+        schema.slice(
+          schema.indexOf("assemblyItems: defineTable({"),
+          schema.indexOf("layoutRenders: defineTable({"),
+        ),
+    );
+    for (const campo of ["totalNecessario", "totalConsolidado", "quantidadeTotal", "necessarioTotal"]) {
+      expect(daFicha, `campo redundante ${campo} nas tabelas da ficha`).not.toContain(campo);
     }
   });
 });

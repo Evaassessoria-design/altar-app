@@ -18,6 +18,7 @@ import {
   Home,
   Building2,
   Menu,
+  Boxes,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth.ts";
@@ -49,6 +50,7 @@ const ICONES: Record<RotaDeMenu, LucideIcon> = {
   "/eventos": CalendarDays,
   "/fornecedores": Building2,
   "/equipe": Users,
+  "/acervo": Boxes,
   "/compras": ShoppingCart,
   "/financeiro": DollarSign,
   "/funil": BarChart3,

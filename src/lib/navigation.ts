@@ -18,6 +18,7 @@ export const NAV_ITEMS = [
   { to: "/eventos", label: "Eventos" },
   { to: "/fornecedores", label: "Fornecedores" },
   { to: "/equipe", label: "Equipe" },
+  { to: "/acervo", label: "Acervo" },
   { to: "/compras", label: "Compras" },
   { to: "/financeiro", label: "Financeiro" },
   { to: "/funil", label: "Funil" },
@@ -49,6 +50,7 @@ export const BOTTOM_NAV_ITEMS = [
 export const MORE_MENU_ITEMS = [
   { to: "/fornecedores", label: "Fornecedores" },
   { to: "/equipe", label: "Equipe" },
+  { to: "/acervo", label: "Acervo" },
   { to: "/funil", label: "Funil" },
   { to: "/configuracoes", label: "Configurações" },
 ] as const satisfies readonly NavItem[];
@@ -71,6 +73,7 @@ export const ROTAS_SEM_MENU: Readonly<Record<string, string>> = {
   "/eventos/:id/planta": "acessada de dentro do evento",
   "/eventos/:id/projeto": "acessada de dentro do evento",
   "/eventos/:id/ficha-tecnica": "acessada de dentro do evento",
+  "/eventos/:id/acervo": "acessada de dentro do evento",
 } as const;
 
 /**

@@ -88,6 +88,21 @@ export const getFicha = query({
       soltasPorChave.set(`${normalizeName(c.name)}|${c.unit ?? ""}`, c);
     }
 
+    // Reservas de acervo deste evento, indexadas por material. Uma leitura só
+    // — o que o acervo cobre entra na conta da cobertura (MASTER #8).
+    const reservasDeAcervo = await ctx.db
+      .query("collectionReservations")
+      .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+      .collect();
+    const acervoPorMaterial = new Map<string, number>();
+    for (const r of reservasDeAcervo) {
+      if (!r.materialId) continue;
+      acervoPorMaterial.set(
+        r.materialId,
+        (acervoPorMaterial.get(r.materialId) ?? 0) + r.quantidade,
+      );
+    }
+
     const consolidado = linhas.map((linha) => {
       const vinculadas = compras.filter(
         (c) => linha.materialId && c.materialId === linha.materialId && (c.unit ?? "") === linha.unidade,
@@ -105,7 +120,12 @@ export const getFicha = query({
           cancelada: effectivePurchaseStatus(c) === "cancelado",
           necessidadeTecnica: c.necessidadeTecnica,
         })),
-        { temSemelhanteSemVinculo: Boolean(semelhante) },
+        {
+          temSemelhanteSemVinculo: Boolean(semelhante),
+          // `undefined` quando não há reserva: a resposta continua sendo
+          // "disponibilidade do acervo não informada", que é a verdade.
+          doAcervo: linha.materialId ? acervoPorMaterial.get(linha.materialId) : undefined,
+        },
       );
 
       return {

@@ -5,8 +5,10 @@ import { getOwnedEvent, requireEventOwner, requireUser } from "./lib/identity";
 import { comCarimbo } from "./lib/ultimaAtualizacao";
 import { resolverReceita, validadorDeComponente } from "./compositions";
 import {
-  consolidarMateriais,
   coberturaDaLinha,
+  consolidarMateriais,
+  motivoDaAtencao,
+  precisaDeAtencao,
   resumirConsolidado,
   type ComposicaoNoEvento,
 } from "./lib/fichaTecnica";
@@ -77,22 +79,46 @@ export const getFicha = query({
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
       .collect();
 
+    // Compras SEM vínculo técnico, indexadas por nome normalizado + unidade.
+    // Um Map montado uma vez: casar dentro do laço seria O(n×m) à toa.
+    const soltasPorChave = new Map<string, (typeof compras)[number]>();
+    for (const c of compras) {
+      if (c.materialId) continue;
+      if (effectivePurchaseStatus(c) === "cancelado") continue;
+      soltasPorChave.set(`${normalizeName(c.name)}|${c.unit ?? ""}`, c);
+    }
+
     const consolidado = linhas.map((linha) => {
       const vinculadas = compras.filter(
         (c) => linha.materialId && c.materialId === linha.materialId && (c.unit ?? "") === linha.unidade,
       );
+      const semelhante = vinculadas.length
+        ? undefined
+        : soltasPorChave.get(`${normalizeName(linha.nome)}|${linha.unidade}`);
+
+      const cobertura = coberturaDaLinha(
+        linha,
+        vinculadas.map((c) => ({
+          materialId: c.materialId,
+          unit: c.unit,
+          quantity: c.quantity,
+          cancelada: effectivePurchaseStatus(c) === "cancelado",
+          necessidadeTecnica: c.necessidadeTecnica,
+        })),
+        { temSemelhanteSemVinculo: Boolean(semelhante) },
+      );
+
       return {
         ...linha,
-        cobertura: coberturaDaLinha(
-          linha,
-          vinculadas.map((c) => ({
-            materialId: c.materialId,
-            unit: c.unit,
-            quantity: c.quantity,
-            cancelada: effectivePurchaseStatus(c) === "cancelado",
-            necessidadeTecnica: c.necessidadeTecnica,
-          })),
-        ),
+        cobertura,
+        // Quem a tela precisa para oferecer "Vincular" e "Reconhecer" — ids,
+        // não objetos inteiros: a compra vive em Compras, não aqui.
+        compraSemelhante: semelhante
+          ? { _id: semelhante._id, name: semelhante.name, quantity: semelhante.quantity }
+          : null,
+        comprasVinculadas: vinculadas.map((c) => c._id),
+        precisaDeAtencao: precisaDeAtencao(cobertura, linha.tipoAmbiguo),
+        motivoDaAtencao: motivoDaAtencao(cobertura, linha.tipoAmbiguo),
       };
     });
 
@@ -100,7 +126,13 @@ export const getFicha = query({
       itens: itens.filter((i) => (i.receita?.length ?? 0) > 0),
       totalDeItens: itens.length,
       consolidado,
-      resumo: resumirConsolidado(linhas),
+      resumo: {
+        ...resumirConsolidado(linhas),
+        composicoes: itens.filter((i) => (i.receita?.length ?? 0) > 0).length,
+        // "Atenção" só conta o que é verdade verificável — nunca métrica
+        // decorativa. Acervo não informado NÃO entra: é limitação nossa.
+        pendencias: consolidado.filter((l) => l.precisaDeAtencao).length,
+      },
     };
   },
 });
@@ -236,6 +268,142 @@ export const salvarNaBiblioteca = mutation({
 // receita) e IDEMPOTENTE: rodar de novo encontra a compra que já existe em vez
 // de criar outra igual, e NÃO reescreve o que a decoradora já negociou.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Vincula uma compra CADASTRADA À MÃO à necessidade técnica.
+ *
+ * A decoradora digitou "Rosa branca 200" em Compras antes de existir ficha.
+ * O sistema detecta a semelhança (mesmo nome normalizado e mesma unidade) mas
+ * NUNCA soma por conta própria — nome não é identidade. Esta ação é a decisão
+ * humana que faltava.
+ *
+ * ── O QUE ELA NÃO TOCA ──────────────────────────────────────────────────────
+ * Quantidade comprada, preço, fornecedor, situação, pagamento, lançamento.
+ * Nada. Só o vínculo técnico e o carimbo da necessidade de agora — que é o que
+ * permite, daqui a um mês, dizer "a necessidade mudou desde que você comprou".
+ */
+export const vincularCompra = mutation({
+  args: { purchaseId: v.id("purchaseItems"), materialId: v.id("materials") },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const compra = await ctx.db.get(args.purchaseId);
+    if (!compra || compra.userId !== user._id)
+      throw new ConvexError({ code: "NOT_FOUND", message: "Compra não encontrada" });
+
+    const material = await ctx.db.get(args.materialId);
+    if (!material || material.userId !== user._id)
+      throw new ConvexError({ code: "NOT_FOUND", message: "Material não encontrado" });
+
+    if (compra.materialId && compra.materialId !== args.materialId) {
+      throw new ConvexError({
+        code: "CONFLICT",
+        message: "Esta compra já está vinculada a outro material.",
+      });
+    }
+
+    // A unidade tem de bater: haste e maço são compras diferentes, e vincular
+    // por cima disso faria a cobertura somar coisas incomparáveis.
+    if ((compra.unit ?? "") !== material.unidade) {
+      throw new ConvexError({
+        code: "INVALID",
+        message: `A compra está em "${compra.unit || "sem unidade"}" e o material em "${material.unidade}".`,
+      });
+    }
+
+    // Necessidade de AGORA, como carimbo. Só o que o material representa neste
+    // evento — a mesma conta do consolidado, nunca uma segunda.
+    const itens = await ctx.db
+      .query("assemblyItems")
+      .withIndex("by_event", (q) => q.eq("eventId", compra.eventId))
+      .collect();
+    const linha = consolidarMateriais(paraCalculo(itens as never), ehObrigacaoDeMontagem).find(
+      (l) => l.materialId === args.materialId && l.unidade === material.unidade,
+    );
+
+    await ctx.db.patch(args.purchaseId, {
+      materialId: args.materialId,
+      necessidadeTecnica: linha?.necessario,
+      updatedAt: new Date().toISOString(),
+    });
+    return { necessidadeTecnica: linha?.necessario ?? null };
+  },
+});
+
+/**
+ * Desfaz o vínculo técnico. A COMPRA CONTINUA EXISTINDO, intocada.
+ *
+ * `undefined` remove o campo no Convex (a compra volta a ser uma linha solta
+ * de Compras, que é o estado de toda compra anterior à Ficha Técnica).
+ */
+export const desvincularCompra = mutation({
+  args: { purchaseId: v.id("purchaseItems") },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const compra = await ctx.db.get(args.purchaseId);
+    if (!compra || compra.userId !== user._id)
+      throw new ConvexError({ code: "NOT_FOUND", message: "Compra não encontrada" });
+    if (!compra.materialId) return { desvinculado: false };
+
+    await ctx.db.patch(args.purchaseId, {
+      materialId: undefined,
+      necessidadeTecnica: undefined,
+      updatedAt: new Date().toISOString(),
+    });
+    return { desvinculado: true };
+  },
+});
+
+/**
+ * "Eu vi que a necessidade mudou" — sem mexer no que foi comprado.
+ *
+ * A dívida que a auditoria do MASTER #6 registrou: o aviso "185 → 210" ficava
+ * para sempre, porque não havia como reconhecê-lo. Reescrever `quantity`
+ * apagaria a negociação que ela fez com o fornecedor; ignorar deixaria o aviso
+ * gritando eternamente.
+ *
+ * A saída é atualizar SÓ o carimbo. Depois disso:
+ *
+ *     compra              = 200  (intocada)
+ *     necessidadeTecnica  = 210  (reconhecida)
+ *     cobertura           = faltam 10
+ *
+ * Que é exatamente a verdade operacional.
+ */
+export const reconhecerNecessidade = mutation({
+  args: { purchaseId: v.id("purchaseItems") },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const compra = await ctx.db.get(args.purchaseId);
+    if (!compra || compra.userId !== user._id)
+      throw new ConvexError({ code: "NOT_FOUND", message: "Compra não encontrada" });
+    if (!compra.materialId)
+      throw new ConvexError({
+        code: "INVALID",
+        message: "Esta compra não está vinculada a nenhum material da ficha.",
+      });
+
+    const itens = await ctx.db
+      .query("assemblyItems")
+      .withIndex("by_event", (q) => q.eq("eventId", compra.eventId))
+      .collect();
+    const linha = consolidarMateriais(paraCalculo(itens as never), ehObrigacaoDeMontagem).find(
+      (l) => l.materialId === compra.materialId && l.unidade === (compra.unit ?? ""),
+    );
+    if (!linha)
+      throw new ConvexError({
+        code: "NOT_FOUND",
+        message: "Este material não aparece mais na ficha técnica deste evento.",
+      });
+
+    const anterior = compra.necessidadeTecnica ?? null;
+    // SÓ o carimbo. `quantity`, preço, fornecedor e situação ficam como estão.
+    await ctx.db.patch(args.purchaseId, {
+      necessidadeTecnica: linha.necessario,
+      updatedAt: new Date().toISOString(),
+    });
+    return { anterior, atual: linha.necessario };
+  },
+});
 
 export const gerarCompras = mutation({
   args: {

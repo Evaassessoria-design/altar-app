@@ -380,6 +380,19 @@ export async function deleteUserDataCascade(
     documents += 1;
   }
 
+  // Ficha Técnica: catálogo de materiais e biblioteca de composições são dados
+  // da EMPRESA, como o catálogo de fornecedores — saem com ela. (A exclusão de
+  // um EVENTO nunca os toca: as receitas dos eventos são snapshots embutidos,
+  // e o catálogo continua servindo os outros eventos.)
+  const materials = await ctx.db
+    .query("materials")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .collect();
+  const compositions = await ctx.db
+    .query("compositions")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .collect();
+
   const teamMembers = await ctx.db
     .query("teamMembers")
     .withIndex("by_user", (q) => q.eq("userId", userId))
@@ -397,7 +410,7 @@ export async function deleteUserDataCascade(
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .collect();
 
-  for (const row of [...teamMembers, ...notifications, ...transactions]) {
+  for (const row of [...teamMembers, ...notifications, ...transactions, ...materials, ...compositions]) {
     await ctx.db.delete(row._id);
     documents += 1;
   }

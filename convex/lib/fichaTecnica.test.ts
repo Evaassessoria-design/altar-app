@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { TIPOS_DE_MATERIAL, UNIDADES } from "./materiais";
 import {
   coberturaDaLinha,
   consolidarMateriais,
@@ -358,5 +360,70 @@ describe("texto da quantidade", () => {
     [7, "", "7"],
   ])("%s %s → %s", (q, u, esperado) => {
     expect(quantidadeTexto(q as number, u as string)).toBe(esperado);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ANTIDUPLICAÇÃO — achados da auditoria cruzada do MASTER #6.
+//
+// O Convex exige literais estáticos nos validadores, então unidades e tipos
+// aparecem escritos em `schema.ts`, `materials.ts` e `compositions.ts`. Este
+// bloco garante que a repetição não vire divergência — já aconteceu quatro
+// vezes neste projeto (categoria de fornecedor, tipo de evento, papel da
+// equipe, tipo de documento do lead).
+// ─────────────────────────────────────────────────────────────────────────────
+describe("as listas escritas à mão batem com a fonte única", () => {
+  const literais = (fonte: string, trecho: string) => {
+    const i = fonte.indexOf(trecho);
+    expect(i, `trecho "${trecho}" não existe mais`).toBeGreaterThan(-1);
+    const abre = fonte.indexOf("v.union(", i);
+    const fecha = fonte.indexOf(");", abre);
+    return [...fonte.slice(abre, fecha).matchAll(/v\.literal\("([^"]+)"\)/g)].map((m) => m[1]);
+  };
+
+  const unidades = UNIDADES.map((u) => u.valor);
+  const tipos = TIPOS_DE_MATERIAL.map((t) => t.valor);
+
+  it.each([
+    ["convex/schema.ts", "const unidadeDeMaterial = v.union("],
+    ["convex/materials.ts", "const unidade = v.union("],
+    ["convex/compositions.ts", "const unidade = v.union("],
+  ])("%s aceita exatamente as unidades da fonte", (arquivo, trecho) => {
+    expect(literais(readFileSync(arquivo, "utf-8"), trecho)).toEqual(unidades);
+  });
+
+  it.each([
+    ["convex/schema.ts", "const tipoDeMaterial = v.union("],
+    ["convex/materials.ts", "const tipo = v.union("],
+    ["convex/compositions.ts", "const tipo = v.union("],
+  ])("%s aceita exatamente os tipos da fonte", (arquivo, trecho) => {
+    expect(literais(readFileSync(arquivo, "utf-8"), trecho)).toEqual(tipos);
+  });
+});
+
+describe("a multiplicação existe em UM lugar só", () => {
+  it.each([
+    "convex/fichaTecnica.ts",
+    "src/pages/app/events/[id]/ficha-tecnica/page.tsx",
+    "src/pages/app/events/[id]/ficha-tecnica/_components/receita-dialog.tsx",
+  ])("%s não refaz a conta", (arquivo) => {
+    // `quantidade * quantity` espalhado é como a tela mostraria 185 e o PDF
+    // 180 — e a decoradora compraria pelo número errado.
+    const fonte = readFileSync(arquivo, "utf-8");
+    expect(fonte, `${arquivo} multiplica por conta própria`).not.toMatch(
+      /quantidade\s*\*\s*\(?item\.quantity|c\.quantidade\s*\*/,
+    );
+    expect(fonte).toMatch(/necessidadeDoComponente|consolidarMateriais/);
+  });
+});
+
+describe("o consolidado é DERIVADO — nenhum total é gravado", () => {
+  it("o schema não tem campo de total em lugar nenhum da ficha", () => {
+    // Total guardado envelhece em silêncio; total calculado não tem como
+    // divergir. Um `totalNecessario` no schema seria a porta de entrada.
+    const schema = readFileSync("convex/schema.ts", "utf-8");
+    for (const campo of ["totalNecessario", "totalConsolidado", "quantidadeTotal"]) {
+      expect(schema, `campo redundante ${campo}`).not.toContain(campo);
+    }
   });
 });

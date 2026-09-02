@@ -382,6 +382,67 @@ async function seedCatalogo(t: ReturnType<typeof convexTest>) {
   });
 }
 
+describe("Ficha Técnica: catálogo e biblioteca são dados da EMPRESA", () => {
+  // Achado na auditoria cruzada do MASTER #6: `materials` e `compositions` são
+  // tabelas de usuário (não de evento), então o guarda de "tabela nova com
+  // eventId" não as cobria — e excluir a empresa deixava as duas órfãs.
+  async function comFichaTecnica() {
+    const t = convexTest(schema, modules);
+    const ids = await t.run(async (ctx: TestMutationCtx) => {
+      const { userId, eventId } = await seedFullEvent(ctx);
+      const materialId = await ctx.db.insert("materials", {
+        userId, nome: "Rosa branca", searchName: "rosa branca", unidade: "haste",
+        updatedAt: NOW_ISO,
+      });
+      const compositionId = await ctx.db.insert("compositions", {
+        userId, nome: "Arranjo", searchName: "arranjo", updatedAt: NOW_ISO,
+        receita: [{ materialId, nome: "Rosa branca", unidade: "haste", quantidade: 5 }],
+      });
+      return { userId, eventId, materialId, compositionId };
+    });
+    return { t, ...ids };
+  }
+
+  it("excluir o EVENTO não encosta no catálogo nem na biblioteca", async () => {
+    // Elas servem os outros eventos — apagá-las aqui destruiria o trabalho
+    // inteiro por causa de um evento. Mesma regra do catálogo de fornecedores.
+    const { t, eventId, materialId, compositionId } = await comFichaTecnica();
+    await t.run(async (ctx) => deleteEventCascade(ctx, eventId));
+    const [material, composicao] = await t.run(async (ctx) => [
+      await ctx.db.get(materialId),
+      await ctx.db.get(compositionId),
+    ]);
+    expect(material).not.toBeNull();
+    expect(composicao).not.toBeNull();
+  });
+
+  it("excluir a EMPRESA leva as duas junto", async () => {
+    const { t, userId, materialId, compositionId } = await comFichaTecnica();
+    await t.run(async (ctx) => deleteUserDataCascade(ctx, userId));
+    const [material, composicao] = await t.run(async (ctx) => [
+      await ctx.db.get(materialId),
+      await ctx.db.get(compositionId),
+    ]);
+    expect(material).toBeNull();
+    expect(composicao).toBeNull();
+  });
+
+  it("não encosta no catálogo de OUTRA empresa", async () => {
+    const { t, userId } = await comFichaTecnica();
+    const alheio = await t.run(async (ctx) => {
+      const outraId = await ctx.db.insert("users", {
+        name: "Outra", email: "o@ex.com", role: "user", subscriptionStatus: "active",
+      });
+      return ctx.db.insert("materials", {
+        userId: outraId, nome: "Rosa branca", searchName: "rosa branca",
+        unidade: "haste", updatedAt: NOW_ISO,
+      });
+    });
+    await t.run(async (ctx) => deleteUserDataCascade(ctx, userId));
+    expect(await t.run(async (ctx) => ctx.db.get(alheio))).not.toBeNull();
+  });
+});
+
 describe("catálogo central: excluir evento NUNCA apaga o fornecedor", () => {
   it("apaga o vínculo do evento e PRESERVA o fornecedor do catálogo", async () => {
     const t = convexTest(schema, modules);

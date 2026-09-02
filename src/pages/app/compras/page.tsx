@@ -29,6 +29,7 @@ import { z } from "zod";
 import { ConvexError } from "convex/values";
 import { cn } from "@/lib/utils.ts";
 import { StatusSelect } from "@/components/status-select.tsx";
+import { ResponsavelInline, ResponsavelSelect } from "@/components/responsavel-select.tsx";
 import { PainelDeCompras } from "./_components/painel-de-compras.tsx";
 import {
   PURCHASE_STATUSES,
@@ -110,6 +111,7 @@ function PurchaseDialog({
   onClose,
   defaultValues,
   defaultSupplierId,
+  defaultResponsibleId,
   title,
   onSubmit,
 }: {
@@ -117,8 +119,13 @@ function PurchaseDialog({
   onClose: () => void;
   defaultValues?: Partial<PurchaseFormValues>;
   defaultSupplierId?: string;
+  defaultResponsibleId?: string;
   title: string;
-  onSubmit: (values: PurchaseFormValues, supplierId?: string) => Promise<void>;
+  onSubmit: (
+    values: PurchaseFormValues,
+    supplierId?: string,
+    responsibleId?: string,
+  ) => Promise<void>;
 }) {
   const {
     register,
@@ -135,11 +142,13 @@ function PurchaseDialog({
   // campo de texto continua sendo o caminho único, como sempre foi.
   const catalogo = useQuery(api.supplierCatalog.list, {});
   const [supplierId, setSupplierId] = useState<string | undefined>(defaultSupplierId);
+  const [responsibleId, setResponsibleId] = useState<string | undefined>(defaultResponsibleId);
 
   const submit = async (values: PurchaseFormValues) => {
-    await onSubmit(values, supplierId);
+    await onSubmit(values, supplierId, responsibleId);
     reset();
     setSupplierId(undefined);
+    setResponsibleId(undefined);
     onClose();
   };
 
@@ -228,8 +237,21 @@ function PurchaseDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Responsável</Label>
-              <Input placeholder="Quem está tocando" {...register("responsible")} />
+              <Label htmlFor="compra-responsavel">Responsável</Label>
+              {/* Vínculo com a equipe cadastrada. O campo de texto continua
+                  logo abaixo para quem não está na tabela (a própria
+                  decoradora, um sócio) — ver convex/lib/responsavel.ts. */}
+              <ResponsavelSelect
+                id="compra-responsavel"
+                value={responsibleId as Id<"teamMembers"> | undefined}
+                onChange={(id) => setResponsibleId(id)}
+                anotacao={defaultValues?.responsible || undefined}
+              />
+              <Input
+                placeholder="ou anote um nome"
+                className="mt-1"
+                {...register("responsible")}
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Precisa até</Label>
@@ -375,7 +397,9 @@ function EventSection({
                             <span>{item.quantity}{item.unit ? ` ${item.unit}` : ""}</span>
                           )}
                           {item.supplier && <span>· {item.supplier}</span>}
-                          {item.responsible && <span>· {item.responsible}</span>}
+                          {/* Vínculo com a equipe ganha do texto livre; sem
+                              nenhum dos dois, não se escreve nada. */}
+                          <ResponsavelInline registro={item} prefixo="· " />
                           {item.unitPrice && item.quantity && (
                             <span className="text-primary font-medium">
                               · {(item.unitPrice * item.quantity).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
@@ -499,7 +523,11 @@ function ComprasContent() {
     }
   };
 
-  const handleAdd = async (values: PurchaseFormValues, supplierId?: string) => {
+  const handleAdd = async (
+    values: PurchaseFormValues,
+    supplierId?: string,
+    responsibleId?: string,
+  ) => {
     if (!addingToEvent) return;
     try {
       await addPurchase({
@@ -513,6 +541,7 @@ function ComprasContent() {
         unitPrice: values.unitPrice ? parseFloat(values.unitPrice) : undefined,
         notes: values.notes || undefined,
         responsible: values.responsible || undefined,
+        responsibleId: responsibleId as Id<"teamMembers"> | undefined,
         dueDate: values.dueDate || undefined,
       });
       toast.success("Item adicionado!");
@@ -522,7 +551,11 @@ function ComprasContent() {
     }
   };
 
-  const handleEdit = async (values: PurchaseFormValues, supplierId?: string) => {
+  const handleEdit = async (
+    values: PurchaseFormValues,
+    supplierId?: string,
+    responsibleId?: string,
+  ) => {
     if (!editing) return;
     try {
       // Edição é substituição: campo esvaziado no formulário precisa sumir do
@@ -539,6 +572,8 @@ function ComprasContent() {
         unitPrice: values.unitPrice ? parseFloat(values.unitPrice) : null,
         notes: values.notes || null,
         responsible: values.responsible || null,
+        // `null` limpa o vínculo quando a decoradora escolhe "Ninguém definido".
+        responsibleId: (responsibleId ?? null) as Id<"teamMembers"> | null,
         dueDate: values.dueDate || null,
       });
       toast.success("Item atualizado!");
@@ -650,6 +685,7 @@ function ComprasContent() {
           title="Editar Item"
           // Sem isto, editar um item vinculado perderia o vínculo em silêncio.
           defaultSupplierId={editing.supplierId}
+          defaultResponsibleId={editing.responsibleId}
           defaultValues={{
             name: editing.name,
             category: editing.category,

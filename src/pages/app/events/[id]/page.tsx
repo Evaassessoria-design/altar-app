@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button.tsx";
 import { AgendaSection } from "./_components/agenda-section.tsx";
 import { OperationalSummary } from "./_components/operational-summary.tsx";
 import { EventDocuments } from "./_components/event-documents.tsx";
+import { ResponsavelSelect } from "@/components/responsavel-select.tsx";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -715,6 +716,43 @@ export default function EventDetailsPage() {
             <Plus className="size-3.5" /> Adicionar
           </button>
         </div>
+        {/* ── QUEM RESPONDE PELO EVENTO ───────────────────────────────────
+            Antes, o cartão do evento mostrava o PRIMEIRO membro escalado como
+            "Resp.". Ninguém escolhia essa pessoa — mudar a ordem da equipe
+            trocava o responsável sozinho. Agora a escolha é explícita, e sem
+            escolha o sistema não elege ninguém (convex/lib/responsavel.ts). */}
+        <div className="px-5 py-3 border-b border-border">
+          <label htmlFor="evento-responsavel" className="text-xs text-muted-foreground">
+            Responsável pelo evento
+          </label>
+          <div className="mt-1">
+            <ResponsavelSelect
+              id="evento-responsavel"
+              value={event.responsibleId}
+              anotacao={event.responsible}
+              onChange={(membroId) => {
+                void (async () => {
+                  try {
+                    await updateEvent({
+                      id: id as Id<"events">,
+                      responsibleId: membroId ?? null,
+                    });
+                    toast.success(
+                      membroId ? "Responsável definido." : "Responsável removido.",
+                    );
+                  } catch (e) {
+                    toast.error(
+                      e instanceof ConvexError
+                        ? (e.data as { message: string }).message
+                        : "Não foi possível definir o responsável.",
+                    );
+                  }
+                })();
+              }}
+            />
+          </div>
+        </div>
+
         {eventTeam === undefined ? (
           <div className="px-5 py-4 space-y-2">
             <Skeleton className="h-10 w-full" />

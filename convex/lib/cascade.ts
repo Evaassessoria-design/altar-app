@@ -1,5 +1,6 @@
 import type { MutationCtx } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
+import { desvincularMembro } from "./responsavel";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EXCLUSÃO EM CASCATA
@@ -210,6 +211,62 @@ export async function deleteEventCascade(
 
   await ctx.db.delete(eventId);
   return { events: 1, documents, files };
+}
+
+/**
+ * Exclui um membro da equipe SEM deixar ponteiros mortos nem apagar história.
+ *
+ * Antes, `team.deleteMember` apagava só a linha de `teamMembers`. O que ficava:
+ *
+ *  · linhas de `eventTeam` apontando para alguém que não existe mais. A tela
+ *    as escondia (`listEventTeam` filtra membro nulo), mas a SAÚDE do evento
+ *    contava essas linhas como "equipe escalada" — o evento parecia coberto
+ *    com ninguém escalado de verdade;
+ *  · `responsibleId` de eventos, leads e compras apontando para o vazio, o que
+ *    fazia o responsável simplesmente sumir dos registros.
+ *
+ * Agora o vínculo morre e o NOME é preservado como anotação livre (a mesma
+ * forma que todo registro antigo já usa) — a compra continua tendo sido
+ * tocada pela Camila. Anotação que já existia nunca é sobrescrita.
+ */
+export async function deleteTeamMemberCascade(
+  ctx: MutationCtx,
+  memberId: Id<"teamMembers">,
+): Promise<{ escalas: number; vinculos: number }> {
+  const membro = await ctx.db.get(memberId);
+  if (!membro) return { escalas: 0, vinculos: 0 };
+  const nome = membro.name;
+
+  let escalas = 0;
+  const escalado = await ctx.db
+    .query("eventTeam")
+    .withIndex("by_member", (q) => q.eq("teamMemberId", memberId))
+    .collect();
+  for (const linha of escalado) {
+    await ctx.db.delete(linha._id);
+    escalas += 1;
+  }
+
+  let vinculos = 0;
+  const [eventos, leads, compras] = await Promise.all([
+    ctx.db.query("events").withIndex("by_user", (q) => q.eq("userId", membro.userId)).collect(),
+    ctx.db.query("leads").withIndex("by_user", (q) => q.eq("userId", membro.userId)).collect(),
+    ctx.db
+      .query("purchaseItems")
+      .withIndex("by_user", (q) => q.eq("userId", membro.userId))
+      .collect(),
+  ]);
+
+  for (const registro of [...eventos, ...leads, ...compras]) {
+    if (registro.responsibleId !== memberId) continue;
+    const patch = desvincularMembro(registro, nome);
+    if (!patch) continue;
+    await ctx.db.patch(registro._id, patch);
+    vinculos += 1;
+  }
+
+  await ctx.db.delete(memberId);
+  return { escalas, vinculos };
 }
 
 /**

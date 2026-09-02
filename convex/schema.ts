@@ -244,6 +244,13 @@ export default defineSchema({
     budget: v.optional(v.number()),
     status: eventStatus,
     notes: v.optional(v.string()),
+    // ── QUEM RESPONDE POR ESTE EVENTO ───────────────────────────────────────
+    // Antes, o cartao do evento mostrava o PRIMEIRO membro escalado como
+    // "Resp." — ninguem escolheu essa pessoa, ela so foi adicionada primeiro.
+    // AUSENTE = ninguem escolheu; a regra em lib/responsavel.ts decide o que
+    // dizer (e prefere nao dizer nada a eleger alguem).
+    responsibleId: v.optional(v.id("teamMembers")),
+    responsible: v.optional(v.string()),
     // Importação do contrato por IA (status + pendências identificadas no doc).
     contractAnalyzedAt: v.optional(v.string()),
     contractPendings: v.optional(v.array(v.string())),
@@ -272,6 +279,8 @@ export default defineSchema({
     /** Como chegou: indicacao, Instagram, site, feira... texto livre. */
     source: v.optional(v.string()),
     responsible: v.optional(v.string()),
+    /** Vinculo com a equipe. O texto acima continua valendo como anotacao. */
+    responsibleId: v.optional(v.id("teamMembers")),
     /** "AAAA-MM-DD" da ultima conversa. Sem ela nao se afirma abandono. */
     lastInteraction: v.optional(v.string()),
     nextAction: v.optional(v.string()),
@@ -343,7 +352,10 @@ export default defineSchema({
     notes: v.optional(v.string()),
   })
     .index("by_event", ["eventId"])
-    .index("by_event_member", ["eventId", "teamMemberId"]),
+    .index("by_event_member", ["eventId", "teamMemberId"])
+    // Excluir um membro precisa achar TODAS as escalas dele, em qualquer
+    // evento — sem este indice a exclusao varreria a tabela inteira.
+    .index("by_member", ["teamMemberId"]),
 
   // Documentos do evento (contrato, adendo, orçamento, referência, outros).
   // `kind` ausente = contrato legado (compatibilidade com dados existentes).
@@ -394,8 +406,11 @@ export default defineSchema({
       ),
     ),
     // Quem esta tocando este item. Texto livre: pode ser alguem de fora da
-    // tabela `teamMembers` (a propria decoradora, um socio).
+    // tabela `teamMembers` (a propria decoradora, um socio). Continua valendo
+    // como anotacao mesmo depois do vinculo abaixo — ver lib/responsavel.ts.
     responsible: v.optional(v.string()),
+    /** Vinculo com a equipe cadastrada. AUSENTE = so a anotacao livre. */
+    responsibleId: v.optional(v.id("teamMembers")),
     // Vinculo com o catalogo central. `supplier` (texto) continua existindo
     // como historico do que valia quando o item foi cadastrado.
     supplierId: v.optional(v.id("suppliers")),

@@ -1,8 +1,9 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
-import { requireUser } from "./lib/identity";
+import { requireTeamMember, requireUser } from "./lib/identity";
 import { deleteEventCascade } from "./lib/cascade";
+import { limparCampos } from "./lib/limparCampos";
 import { requireActiveAccess } from "./lib/accessGuard";
 
 const eventType = v.union(
@@ -102,14 +103,24 @@ export const update = mutation({
     budget: v.optional(v.number()),
     status: v.optional(eventStatus),
     notes: v.optional(v.string()),
+    // Quem responde pelo evento. `null` LIMPA o vínculo (campo ausente não
+    // mexe) — a convenção de lib/limparCampos.ts, porque `undefined` some no
+    // transporte do Convex e a limpeza falharia em silêncio.
+    responsibleId: v.optional(v.union(v.id("teamMembers"), v.null())),
+    responsible: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const event = await ctx.db.get(args.id);
     if (!event || event.userId !== user._id)
       throw new ConvexError({ message: "Evento não encontrado", code: "NOT_FOUND" });
+
+    // Vincular só a quem é da MINHA equipe: um id de outra empresa viraria um
+    // ponteiro cruzado, e o nome dela apareceria no meu evento.
+    await requireTeamMember(ctx, user._id, args.responsibleId);
+
     const { id, ...fields } = args;
-    await ctx.db.patch(id, fields);
+    await ctx.db.patch(id, limparCampos(fields));
   },
 });
 

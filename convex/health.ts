@@ -1,4 +1,5 @@
 import { query } from "./_generated/server";
+import { responsavelDoEvento } from "./lib/responsavel";
 import { v } from "convex/values";
 import type { QueryCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
@@ -89,11 +90,23 @@ async function computeHealth(
   const percent = Math.round((passed / checks.length) * 100);
   const status = percent >= 80 ? "complete" : percent >= 50 ? "attention" : "incomplete";
 
-  let responsible: string | undefined;
-  if (team[0]) {
-    const member = await ctx.db.get(team[0].teamMemberId);
-    responsible = member?.name;
-  }
+  // ── QUEM RESPONDE PELO EVENTO ─────────────────────────────────────────────
+  // Antes: `team[0]` — o PRIMEIRO membro escalado. Ninguém escolheu essa
+  // pessoa; ela só foi adicionada primeiro, e mudar a ordem da equipe trocava
+  // o "Resp." do cartão sem que ninguém pedisse. Pior: se esse primeiro
+  // registro apontasse para um membro já excluído, o evento ficava SEM
+  // responsável mesmo tendo gente escalada.
+  //
+  // A regra agora vive em lib/responsavel.ts e prefere não dizer nada a
+  // eleger alguém: escolha explícita > anotação > única pessoa escalada.
+  const membrosEscalados = (
+    await Promise.all(team.map((t) => ctx.db.get(t.teamMemberId)))
+  ).filter((m): m is NonNullable<typeof m> => m !== null);
+  const responsavel = responsavelDoEvento(
+    { responsibleId: event.responsibleId, responsible: event.responsible },
+    membrosEscalados.map((m) => ({ _id: m._id, name: m.name, role: m.role })),
+  );
+  const responsible = responsavel?.nome;
 
   return {
     percent,

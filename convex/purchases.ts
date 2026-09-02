@@ -1,7 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
-import { getOwnedEvent, requireEventOwner, requireUser } from "./lib/identity";
+import { getOwnedEvent, requireEventOwner, requireTeamMember, requireUser } from "./lib/identity";
 import {
   effectivePurchaseStatus,
   isPurchasedForStatus,
@@ -98,11 +98,14 @@ export const addPurchase = mutation({
     notes: v.optional(v.string()),
     status: v.optional(purchaseStatus),
     responsible: v.optional(v.string()),
+    /** Vínculo com a equipe. O texto acima continua valendo como anotação. */
+    responsibleId: v.optional(v.id("teamMembers")),
     supplierId: v.optional(v.id("suppliers")),
     dueDate: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { user } = await requireEventOwner(ctx, args.eventId);
+    await requireTeamMember(ctx, user._id, args.responsibleId);
     // Fornecedor do catálogo tem que ser da MESMA empresa — senão daria para
     // pendurar o fornecedor de outra decoradora num item seu.
     if (args.supplierId) {
@@ -249,6 +252,7 @@ export const updatePurchase = mutation({
     notes: v.optional(v.union(v.string(), v.null())),
     status: v.optional(purchaseStatus),
     responsible: v.optional(v.union(v.string(), v.null())),
+    responsibleId: v.optional(v.union(v.id("teamMembers"), v.null())),
     supplierId: v.optional(v.union(v.id("suppliers"), v.null())),
     dueDate: v.optional(v.union(v.string(), v.null())),
   },
@@ -257,6 +261,7 @@ export const updatePurchase = mutation({
     const item = await ctx.db.get(args.id);
     if (!item || item.userId !== user._id)
       throw new ConvexError({ message: "Item não encontrado", code: "NOT_FOUND" });
+    await requireTeamMember(ctx, user._id, args.responsibleId);
     if (args.supplierId) {
       const supplier = await ctx.db.get(args.supplierId);
       if (!supplier || supplier.userId !== user._id) {

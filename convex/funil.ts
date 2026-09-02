@@ -1,7 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
-import { requireUser } from "./lib/identity";
+import { requireTeamMember, requireUser } from "./lib/identity";
 import { deleteLeadCascade } from "./lib/cascade";
 import { requireActiveAccess } from "./lib/accessGuard";
 import { limparCampos } from "./lib/limparCampos";
@@ -41,11 +41,14 @@ export const createLead = mutation({
     guestCount: v.optional(v.number()),
     source: v.optional(v.string()),
     responsible: v.optional(v.string()),
+    /** Vínculo com a equipe. O texto acima continua valendo como anotação. */
+    responsibleId: v.optional(v.id("teamMembers")),
     lastInteraction: v.optional(v.string()),
     nextAction: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
+    await requireTeamMember(ctx, user._id, args.responsibleId);
     // Get max order for this stage
     const stageleads = await ctx.db
       .query("leads")
@@ -83,6 +86,7 @@ export const updateLead = mutation({
     guestCount: v.optional(v.union(v.number(), v.null())),
     source: v.optional(v.union(v.string(), v.null())),
     responsible: v.optional(v.union(v.string(), v.null())),
+    responsibleId: v.optional(v.union(v.id("teamMembers"), v.null())),
     lastInteraction: v.optional(v.union(v.string(), v.null())),
     nextAction: v.optional(v.union(v.string(), v.null())),
     order: v.optional(v.number()),
@@ -92,6 +96,7 @@ export const updateLead = mutation({
     const lead = await ctx.db.get(args.id);
     if (!lead || lead.userId !== user._id)
       throw new ConvexError({ message: "Lead não encontrado", code: "NOT_FOUND" });
+    await requireTeamMember(ctx, user._id, args.responsibleId);
     const { id, ...fields } = args;
     await ctx.db.patch(id, limparCampos(fields));
   },

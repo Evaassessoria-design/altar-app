@@ -1,4 +1,5 @@
 import { mutation, query } from "./_generated/server";
+import { deleteTeamMemberCascade } from "./lib/cascade";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { getOwnedEvent, requireEventOwner, requireUser } from "./lib/identity";
@@ -56,7 +57,10 @@ export const deleteMember = mutation({
     const member = await ctx.db.get(args.id);
     if (!member || member.userId !== user._id)
       throw new ConvexError({ message: "Membro não encontrado", code: "NOT_FOUND" });
-    await ctx.db.delete(args.id);
+    // Cascata: apagar só a linha deixava escalas apontando para o vazio (que a
+    // saúde do evento contava como "equipe escalada") e fazia o responsável
+    // sumir de eventos, leads e compras. Ver lib/cascade.ts.
+    return deleteTeamMemberCascade(ctx, args.id);
   },
 });
 

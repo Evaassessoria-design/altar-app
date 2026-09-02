@@ -34,6 +34,7 @@ import {
   Paperclip,
 } from "lucide-react";
 import { LeadDocumentsDialog } from "./_components/lead-documents.tsx";
+import { ResponsavelInline, ResponsavelSelect } from "@/components/responsavel-select.tsx";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -99,14 +100,18 @@ function LeadDialog({
   open,
   onClose,
   defaultValues,
+  defaultResponsibleId,
+  anotacaoDoResponsavel,
   title,
   onSubmit,
 }: {
   open: boolean;
   onClose: () => void;
   defaultValues?: Partial<LeadFormValues>;
+  defaultResponsibleId?: string;
+  anotacaoDoResponsavel?: string;
   title: string;
-  onSubmit: (values: LeadFormValues) => Promise<void>;
+  onSubmit: (values: LeadFormValues, responsibleId?: string) => Promise<void>;
 }) {
   const {
     register,
@@ -118,9 +123,12 @@ function LeadDialog({
     defaultValues: { stage: "contact", ...defaultValues },
   });
 
+  const [responsibleId, setResponsibleId] = useState<string | undefined>(defaultResponsibleId);
+
   const submit = async (values: LeadFormValues) => {
-    await onSubmit(values);
+    await onSubmit(values, responsibleId);
     reset();
+    setResponsibleId(undefined);
     onClose();
   };
 
@@ -182,6 +190,18 @@ function LeadDialog({
           <div className="space-y-1.5">
             <Label>Observações</Label>
             <Input placeholder="Notas sobre o cliente..." {...register("notes")} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="lead-responsavel">Quem está atendendo</Label>
+            {/* Vínculo com a equipe. A anotação livre que já existia continua
+                valendo quando não há vínculo — ver convex/lib/responsavel.ts. */}
+            <ResponsavelSelect
+              id="lead-responsavel"
+              value={responsibleId as Id<"teamMembers"> | undefined}
+              onChange={(id) => setResponsibleId(id)}
+              anotacao={anotacaoDoResponsavel}
+            />
           </div>
 
           <DialogFooter>
@@ -393,6 +413,12 @@ function LeadCard({
         )}
       </div>
 
+      <ResponsavelInline
+        registro={lead}
+        prefixo="Atendendo: "
+        className="block text-xs text-muted-foreground"
+      />
+
       {lead.notes && (
         <p className="text-xs text-muted-foreground italic line-clamp-2">{lead.notes}</p>
       )}
@@ -548,10 +574,11 @@ export default function FunilPage() {
   const [dragging, setDragging] = useState<Doc<"leads"> | null>(null);
   const [dragOverStage, setDragOverStage] = useState<Stage | null>(null);
 
-  const handleCreate = async (values: LeadFormValues) => {
+  const handleCreate = async (values: LeadFormValues, responsibleId?: string) => {
     try {
       await createLead({
         ...values,
+        responsibleId: responsibleId as Id<"teamMembers"> | undefined,
         budget: values.budget ? parseFloat(values.budget) : undefined,
         stage: values.stage as Stage,
         eventType: values.eventType || undefined,
@@ -565,7 +592,7 @@ export default function FunilPage() {
     }
   };
 
-  const handleEdit = async (values: LeadFormValues) => {
+  const handleEdit = async (values: LeadFormValues, responsibleId?: string) => {
     if (!editing) return;
     try {
       // Edição é substituição: `null` limpa o campo. Com `undefined`, o pedido
@@ -573,6 +600,8 @@ export default function FunilPage() {
       await updateLead({
         id: editing._id,
         ...values,
+        // `null` limpa o vínculo quando a decoradora escolhe "Ninguém definido".
+        responsibleId: (responsibleId ?? null) as Id<"teamMembers"> | null,
         budget: values.budget ? parseFloat(values.budget) : null,
         stage: values.stage as Stage,
         eventType: values.eventType || null,
@@ -729,6 +758,9 @@ export default function FunilPage() {
             stage: editing.stage,
             notes: editing.notes,
           }}
+          // Sem isto, editar um lead vinculado perderia o vínculo em silêncio.
+          defaultResponsibleId={editing.responsibleId}
+          anotacaoDoResponsavel={editing.responsible}
           onSubmit={handleEdit}
         />
       )}

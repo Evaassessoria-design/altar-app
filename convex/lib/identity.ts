@@ -142,6 +142,27 @@ export async function requireLeadOwner(
   return { user, lead };
 }
 
+/**
+ * Exige que um membro da equipe seja da empresa do usuário.
+ *
+ * Usado por toda mutation que aceita `responsibleId`: sem esta checagem, um id
+ * vindo do navegador poderia apontar para a equipe de OUTRA empresa, e o nome
+ * de uma pessoa de fora apareceria no evento, no lead ou na compra.
+ *
+ * `null`/ausente passa direto — limpar o vínculo não precisa de dono.
+ */
+export async function requireTeamMember(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+  memberId: Id<"teamMembers"> | null | undefined,
+): Promise<void> {
+  if (!memberId) return;
+  const membro = await ctx.db.get(memberId);
+  if (!membro || membro.userId !== userId) {
+    throw new ConvexError({ code: "NOT_FOUND", message: "Membro da equipe não encontrado" });
+  }
+}
+
 // Contexto mínimo com `auth` — cobre QueryCtx, MutationCtx e ActionCtx.
 type AuthCtx = { auth: QueryCtx["auth"] };
 

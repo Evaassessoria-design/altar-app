@@ -641,7 +641,7 @@ function SupplierDetail({
         <DialogHeader>
           <div className="flex items-center gap-3">
             {supplier.logoUrl ? (
-              <img src={supplier.logoUrl} alt="logo" className="size-12 rounded-xl object-cover flex-shrink-0" />
+              <img loading="lazy" decoding="async" src={supplier.logoUrl} alt="logo" className="size-12 rounded-xl object-cover flex-shrink-0" />
             ) : (
               <span className="inline-flex size-12 items-center justify-center rounded-xl bg-primary/10 flex-shrink-0">
                 <Icon className="size-6 text-primary" />
@@ -949,7 +949,7 @@ export default function FornecedoresPage() {
       >
         <div className="flex items-start gap-3">
           {s.logoUrl ? (
-            <img src={s.logoUrl} alt="" className="size-10 rounded-lg object-cover flex-shrink-0" />
+            <img loading="lazy" decoding="async" src={s.logoUrl} alt="" className="size-10 rounded-lg object-cover flex-shrink-0" />
           ) : (
             <span className="inline-flex size-10 items-center justify-center rounded-lg bg-primary/10 flex-shrink-0">
               <Icon className="size-5 text-primary" />

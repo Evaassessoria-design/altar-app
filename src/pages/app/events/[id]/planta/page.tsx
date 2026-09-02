@@ -487,7 +487,7 @@ export default function PlantaPage() {
                     <figcaption className="text-xs text-muted-foreground">Croqui original</figcaption>
                     {r.sketchUrl && (
                       <a href={r.sketchUrl} target="_blank" rel="noreferrer">
-                        <img
+                        <img loading="lazy" decoding="async"
                           src={r.sketchUrl}
                           alt={`Croqui da versão ${r.generationVersion}`}
                           className="w-full rounded-lg border border-border object-contain max-h-48 bg-muted/30"
@@ -499,7 +499,7 @@ export default function PlantaPage() {
                     <figcaption className="text-xs text-muted-foreground">Planta premium</figcaption>
                     {r.outputUrl ? (
                       <a href={r.outputUrl} target="_blank" rel="noreferrer">
-                        <img
+                        <img loading="lazy" decoding="async"
                           src={r.outputUrl}
                           alt={`Planta premium versão ${r.generationVersion}`}
                           className="w-full rounded-lg border border-border object-contain max-h-48 bg-muted/30"

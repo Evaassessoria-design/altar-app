@@ -258,7 +258,7 @@ function ItemCard({
       {/* Resumo */}
       <div className="flex items-center gap-3 px-3 py-2.5">
         {item.referencePhotoUrl ? (
-          <img
+          <img loading="lazy" decoding="async"
             src={item.referencePhotoUrl}
             alt=""
             className="size-10 rounded object-cover flex-shrink-0 border border-border"

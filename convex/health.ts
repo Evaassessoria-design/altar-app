@@ -41,7 +41,18 @@ async function computeHealth(
   const checks: HealthCheck[] = [
     { key: "evento", label: "Dados do evento", ok: !!(event.name && event.date && event.location && event.clientName) },
     { key: "contrato", label: "Contrato anexado", ok: !!contract },
-    { key: "contrato_ia", label: "Contrato analisado", ok: !!event.contractAnalyzedAt },
+    // ── POR QUE "CONTRATO ANALISADO" SAIU ───────────────────────────────────
+    // Dependia de `contractAnalyzedAt`, que só existe para quem usa a leitura
+    // de contrato por IA. Uma decoradora que anexa o contrato e lê com os
+    // próprios olhos ficava presa em 7 de 8 para sempre — penalizada por não
+    // usar uma funcionalidade opcional.
+    //
+    // Critério de saúde tem de medir a OPERAÇÃO, não a adesão a um recurso.
+    // Foi removido em vez de substituído: os sete que restam são universais, e
+    // inventar um oitavo só para manter o número seria fabricar exigência.
+    //
+    // Efeito: contas que nunca usaram a IA sobem de percentual. É a correção,
+    // não um efeito colateral.
     { key: "financeiro", label: "Financeiro", ok: txs.length > 0 },
     { key: "fornecedores", label: "Fornecedores", ok: suppliers.length > 0 },
     // ── POR QUE "ASSESSORIA DEFINIDA" SAIU ──────────────────────────────────
@@ -62,8 +73,9 @@ async function computeHealth(
 
   // Pontos de atenção — apenas ausências objetivas (nada presumido/inventado).
   const attention: string[] = [];
+  // "Contrato não processado" saiu pelo mesmo motivo do critério acima: cobrar
+  // o uso da leitura por IA de quem escolheu não usá-la é ruído permanente.
   if (!contract) attention.push("Contrato ainda não anexado");
-  else if (!event.contractAnalyzedAt) attention.push("Contrato ainda não processado");
   if (team.length === 0) attention.push("Responsável do evento não definido");
   if (suppliers.length === 0) attention.push("Nenhum fornecedor cadastrado");
   for (const s of suppliers) {

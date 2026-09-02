@@ -160,13 +160,48 @@ describe("evento sem assessoria não fica incompleto", () => {
   });
 });
 
-describe("o total de critérios não mudou", () => {
-  it("continuam sendo oito — a assessoria foi SUBSTITUÍDA, não removida", () => {
-    // Remover sem repor mudaria o percentual de todo evento já existente.
-    const bloco = CODIGO.slice(
+describe("os critérios medem operação, não adesão a funcionalidade", () => {
+  const bloco = () =>
+    CODIGO.slice(
       CODIGO.indexOf("const checks: HealthCheck[] = ["),
       CODIGO.indexOf("// Pontos de atenção"),
     );
-    expect((bloco.match(/\{ key: "/g) ?? []).length).toBe(8);
+
+  it("a assessoria foi SUBSTITUÍDA por montagem, não simplesmente removida", () => {
+    expect(bloco()).toContain('key: "montagem"');
+    expect(bloco()).not.toContain('key: "assessoria"');
+  });
+
+  it('"Contrato analisado" saiu — dependia de uma funcionalidade opcional', () => {
+    // Dependia de `contractAnalyzedAt`, que só existe para quem usa a leitura
+    // por IA. Quem anexa o contrato e lê com os próprios olhos ficava preso em
+    // 7 de 8 para sempre. Critério de saúde mede a operação, não a adesão a um
+    // recurso — por isso este foi REMOVIDO, e não trocado por um substituto
+    // inventado só para manter o número.
+    expect(bloco()).not.toContain('key: "contrato_ia"');
+    expect(bloco()).not.toContain("Contrato analisado");
+    expect(CODIGO).not.toContain("Contrato ainda não processado");
+  });
+
+  it("todos os critérios restantes valem para qualquer decoradora", () => {
+    // Nenhum depende de IA, de integração externa ou de plano.
+    const chaves = [...bloco().matchAll(/key: "(\w+)"/g)].map((m) => m[1]);
+    expect(chaves).toEqual([
+      "evento",
+      "contrato",
+      "financeiro",
+      "fornecedores",
+      "montagem",
+      "responsavel",
+      "briefing",
+    ]);
+    for (const chave of chaves) {
+      expect(chave).not.toMatch(/ia|ai|premium|beta/i);
+    }
+  });
+
+  it("o contrato ANEXADO continua sendo cobrado — isso é operação", () => {
+    expect(bloco()).toContain('key: "contrato"');
+    expect(CODIGO).toContain("Contrato ainda não anexado");
   });
 });

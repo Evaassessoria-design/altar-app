@@ -108,18 +108,21 @@ function PurchaseDialog({
   open,
   onClose,
   defaultValues,
+  defaultSupplierId,
   title,
   onSubmit,
 }: {
   open: boolean;
   onClose: () => void;
   defaultValues?: Partial<PurchaseFormValues>;
+  defaultSupplierId?: string;
   title: string;
-  onSubmit: (values: PurchaseFormValues) => Promise<void>;
+  onSubmit: (values: PurchaseFormValues, supplierId?: string) => Promise<void>;
 }) {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
     reset,
   } = useForm<PurchaseFormValues>({
@@ -127,9 +130,15 @@ function PurchaseDialog({
     defaultValues: defaultValues ?? {},
   });
 
+  // Catálogo central da empresa. Ausente/vazio → o seletor nem aparece, e o
+  // campo de texto continua sendo o caminho único, como sempre foi.
+  const catalogo = useQuery(api.supplierCatalog.list, {});
+  const [supplierId, setSupplierId] = useState<string | undefined>(defaultSupplierId);
+
   const submit = async (values: PurchaseFormValues) => {
-    await onSubmit(values);
+    await onSubmit(values, supplierId);
     reset();
+    setSupplierId(undefined);
     onClose();
   };
 
@@ -160,8 +169,44 @@ function PurchaseDialog({
               </select>
             </div>
             <div className="space-y-1.5">
-              <Label>Fornecedor</Label>
-              <Input placeholder="Floricultura ABC" {...register("supplier")} />
+              <Label htmlFor="compra-fornecedor">Fornecedor</Label>
+              {/* Dois caminhos de propósito: escolher do catálogo cria o
+                  VÍNCULO (supplierId) e preenche o nome; digitar à mão
+                  continua valendo, porque uma compra de fita de cetim não
+                  justifica cadastrar fornecedor. */}
+              {catalogo && catalogo.length > 0 && (
+                <select
+                  aria-label="Escolher do catálogo"
+                  value={supplierId ?? ""}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setSupplierId(id || undefined);
+                    const achado = catalogo.find((c) => c._id === id);
+                    if (achado) setValue("supplier", achado.companyName, { shouldDirty: true });
+                  }}
+                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">Do catálogo…</option>
+                  {catalogo.map((c) => (
+                    <option key={c._id} value={c._id}>{c.companyName}</option>
+                  ))}
+                </select>
+              )}
+              <Input
+                id="compra-fornecedor"
+                placeholder="Floricultura ABC"
+                {...register("supplier", {
+                  // Digitar por cima desfaz o vínculo: guardar um id que não
+                  // corresponde mais ao nome escrito seria pior do que não
+                  // ter vínculo nenhum.
+                  onChange: () => setSupplierId(undefined),
+                })}
+              />
+              {supplierId && (
+                <p className="text-xs text-muted-foreground">
+                  Vinculado ao catálogo — o histórico de compras deste fornecedor fica junto.
+                </p>
+              )}
             </div>
           </div>
 
@@ -407,7 +452,7 @@ function ComprasContent() {
     return e.status !== "cancelled";
   });
 
-  const handleAdd = async (values: PurchaseFormValues) => {
+  const handleAdd = async (values: PurchaseFormValues, supplierId?: string) => {
     if (!addingToEvent) return;
     try {
       await addPurchase({
@@ -417,6 +462,7 @@ function ComprasContent() {
         quantity: values.quantity ? parseFloat(values.quantity) : undefined,
         unit: values.unit || undefined,
         supplier: values.supplier || undefined,
+        supplierId: supplierId as Id<"suppliers"> | undefined,
         unitPrice: values.unitPrice ? parseFloat(values.unitPrice) : undefined,
         notes: values.notes || undefined,
         responsible: values.responsible || undefined,
@@ -429,7 +475,7 @@ function ComprasContent() {
     }
   };
 
-  const handleEdit = async (values: PurchaseFormValues) => {
+  const handleEdit = async (values: PurchaseFormValues, supplierId?: string) => {
     if (!editing) return;
     try {
       // Edição é substituição: campo esvaziado no formulário precisa sumir do
@@ -441,6 +487,8 @@ function ComprasContent() {
         quantity: values.quantity ? parseFloat(values.quantity) : null,
         unit: values.unit || null,
         supplier: values.supplier || null,
+        // `null` limpa o vínculo quando a decoradora digitou outro nome.
+        supplierId: (supplierId ?? null) as Id<"suppliers"> | null,
         unitPrice: values.unitPrice ? parseFloat(values.unitPrice) : null,
         notes: values.notes || null,
         responsible: values.responsible || null,
@@ -552,6 +600,8 @@ function ComprasContent() {
           open={!!editing}
           onClose={() => setEditing(null)}
           title="Editar Item"
+          // Sem isto, editar um item vinculado perderia o vínculo em silêncio.
+          defaultSupplierId={editing.supplierId}
           defaultValues={{
             name: editing.name,
             category: editing.category,

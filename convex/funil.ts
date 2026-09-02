@@ -1,4 +1,5 @@
 import { mutation, query } from "./_generated/server";
+import { normalizarDataDeEvento } from "./lib/dataDeEvento";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { requireTeamMember, requireUser } from "./lib/identity";
@@ -273,7 +274,7 @@ export const convertToEvent = mutation({
     const eventId = await ctx.db.insert("events", {
       userId: user._id,
       name: eventName,
-      date: eventDate,
+      date: normalizarDataDeEvento(eventDate),
       ...rest,
       location: rest.location || lead.venue || "",
       clientPhone: rest.clientPhone ?? lead.clientPhone,

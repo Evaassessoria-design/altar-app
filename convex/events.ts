@@ -1,4 +1,5 @@
 import { mutation, query } from "./_generated/server";
+import { normalizarDataDeEvento } from "./lib/dataDeEvento";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { requireTeamMember, requireUser } from "./lib/identity";
@@ -91,7 +92,10 @@ export const create = mutation({
     // Criar evento NOVO é o recurso pago central — exige acesso liberado.
     // Editar e ler os eventos que já existem continua livre (ver lib/accessGuard.ts).
     const user = await requireActiveAccess(ctx);
-    return ctx.db.insert("events", { userId: user._id, ...args });
+    // Formato canonico (convex/lib/dataDeEvento.ts): so o dia, ou dia e hora.
+    // Qualquer outra forma e recusada aqui em vez de entrar calada no banco.
+    const date = normalizarDataDeEvento(args.date);
+    return ctx.db.insert("events", { userId: user._id, ...args, date });
   },
 });
 
@@ -124,6 +128,10 @@ export const update = mutation({
     await requireTeamMember(ctx, user._id, args.responsibleId);
 
     const { id, ...fields } = args;
+    // Campo ausente nao mexe na data (convencao de limparCampos). Quando VEM,
+    // passa pela mesma porta da criacao — editar nao pode ser a brecha por
+    // onde um terceiro formato entra.
+    if (fields.date !== undefined) fields.date = normalizarDataDeEvento(fields.date);
     await ctx.db.patch(id, comCarimbo(limparCampos(fields)));
   },
 });

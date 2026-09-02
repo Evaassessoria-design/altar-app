@@ -4,6 +4,7 @@ import { ConvexError } from "convex/values";
 import { requireUser } from "./lib/identity";
 import { requireActiveAccess } from "./lib/accessGuard";
 import { limparCampos } from "./lib/limparCampos";
+import { diasSemContato, resumirFollowUp } from "./lib/leadFollowUp";
 
 export const listLeads = query({
   args: {},
@@ -103,6 +104,61 @@ export const deleteLead = mutation({
     if (!lead || lead.userId !== user._id)
       throw new ConvexError({ message: "Lead não encontrado", code: "NOT_FOUND" });
     await ctx.db.delete(args.id);
+  },
+});
+
+/**
+ * Oportunidades que pedem alguma coisa da decoradora hoje.
+ *
+ * Devolve JÁ AGREGADO: o Dashboard mostra "3 leads precisam de follow-up",
+ * não três cartões quase iguais. As listas vêm junto para quem quiser abrir,
+ * limitadas — o painel é para agir, não para inventariar.
+ *
+ * As REGRAS vivem em lib/leadFollowUp.ts, puras e testadas. Esta query só lê
+ * o banco do usuário logado; nenhum julgamento nasce aqui.
+ */
+export const getFollowUp = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+
+    const leads = await ctx.db
+      .query("leads")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+
+    // Mesma âncora de data do painel de atenção: dia civil local, montado a
+    // partir dos componentes, para não deslizar para a véspera.
+    const hoje = new Date();
+    const hojeISO = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
+
+    const resumo = resumirFollowUp(
+      leads.map((l) => ({
+        _id: l._id as string,
+        clientName: l.clientName,
+        stage: l.stage,
+        nextAction: l.nextAction,
+        lastInteraction: l.lastInteraction,
+        _creationTime: l._creationTime,
+      })),
+      hojeISO,
+    );
+
+    const enxugar = (lista: typeof resumo.semAcao) =>
+      lista.slice(0, 5).map((l) => ({
+        _id: l._id,
+        clientName: l.clientName,
+        stage: l.stage,
+        diasSemContato: diasSemContato(l, hojeISO),
+      }));
+
+    return {
+      total: resumo.total,
+      semAcao: enxugar(resumo.semAcao),
+      parados: enxugar(resumo.parados),
+      totalSemAcao: resumo.semAcao.length,
+      totalParados: resumo.parados.length,
+    };
   },
 });
 

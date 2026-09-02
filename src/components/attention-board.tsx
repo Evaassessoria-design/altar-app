@@ -2,7 +2,7 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import { Link } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
-import { AlertTriangle, CheckCircle2, ChevronRight } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronRight, Users } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -18,6 +18,50 @@ function diasTexto(dias: number): string {
   if (dias === 0) return "é hoje";
   if (dias === 1) return "amanhã";
   return `em ${dias} dias`;
+}
+
+/**
+ * Uma linha só para o funil inteiro.
+ *
+ * Cinco leads sem follow-up viravam cinco cartões quase idênticos e empurravam
+ * os eventos para fora da tela. O painel é para AGIR: uma frase com o número e
+ * um caminho para resolver diz o mesmo e cabe.
+ */
+function LinhaDoFunil() {
+  const funil = useQuery(api.funil.getFollowUp);
+  if (!funil || funil.total === 0) return null;
+
+  const partes: string[] = [];
+  if (funil.totalSemAcao > 0) {
+    partes.push(
+      funil.totalSemAcao === 1 ? "1 sem próxima ação" : `${funil.totalSemAcao} sem próxima ação`,
+    );
+  }
+  if (funil.totalParados > 0) {
+    partes.push(funil.totalParados === 1 ? "1 parado" : `${funil.totalParados} parados`);
+  }
+
+  return (
+    <Link
+      to="/funil"
+      className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-accent/50 cursor-pointer border-b border-border"
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        <Users className="size-4 text-primary flex-shrink-0" />
+        <p className="text-sm truncate">
+          <span className="font-medium">
+            {funil.total === 1
+              ? "1 oportunidade precisa de você"
+              : `${funil.total} oportunidades precisam de você`}
+          </span>
+          {partes.length > 0 && (
+            <span className="text-muted-foreground"> · {partes.join(" · ")}</span>
+          )}
+        </p>
+      </div>
+      <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
+    </Link>
+  );
 }
 
 export function AttentionBoard() {
@@ -43,6 +87,8 @@ export function AttentionBoard() {
           Eventos próximos com alguma pendência registrada
         </p>
       </div>
+
+      <LinhaDoFunil />
 
       {eventos.length === 0 ? (
         <div className="px-5 py-8 text-center">

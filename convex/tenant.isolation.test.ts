@@ -77,6 +77,7 @@ const MODULOS = [
   "materials",
   "compositions",
   "fichaTecnica",
+  "acervo",
 ];
 
 type Funcao = { id: string; tipo: string; corpo: string };

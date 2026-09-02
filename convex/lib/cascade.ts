@@ -98,6 +98,13 @@ export async function deleteEventCascade(
     .query("transactions")
     .withIndex("by_event", (q) => q.eq("eventId", eventId))
     .collect();
+  // Reservas de acervo: a promessa morre com o evento, e as peças voltam a
+  // ficar disponíveis para os outros. NÃO apagamos o item do acervo — ele é
+  // da empresa e serve os demais eventos.
+  const reservasDeAcervo = await ctx.db
+    .query("collectionReservations")
+    .withIndex("by_event", (q) => q.eq("eventId", eventId))
+    .collect();
 
   for (const row of [
     ...briefings,
@@ -106,6 +113,7 @@ export async function deleteEventCascade(
     ...budgetItems,
     ...eventTeam,
     ...transactions,
+    ...reservasDeAcervo,
   ]) {
     await ctx.db.delete(row._id);
     documents += 1;
@@ -392,6 +400,16 @@ export async function deleteUserDataCascade(
     .query("compositions")
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .collect();
+  // Acervo e reservas soltas são dados da EMPRESA, como o catálogo de
+  // fornecedores. (Excluir um EVENTO nunca toca no acervo.)
+  const collectionItems = await ctx.db
+    .query("collectionItems")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .collect();
+  const collectionReservations = await ctx.db
+    .query("collectionReservations")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .collect();
 
   const teamMembers = await ctx.db
     .query("teamMembers")
@@ -410,7 +428,7 @@ export async function deleteUserDataCascade(
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .collect();
 
-  for (const row of [...teamMembers, ...notifications, ...transactions, ...materials, ...compositions]) {
+  for (const row of [...teamMembers, ...notifications, ...transactions, ...materials, ...compositions, ...collectionReservations, ...collectionItems]) {
     await ctx.db.delete(row._id);
     documents += 1;
   }

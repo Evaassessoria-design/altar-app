@@ -839,6 +839,92 @@ export default defineSchema({
     .index("by_user_categoria", ["userId", "categoria"])
     .index("by_supplier", ["supplierId"]),
 
+  // ── ACERVO — O QUE A DECORADORA POSSUI ────────────────────────────────────
+  // "Vaso cilíndrico 25cm: 40 unidades". Contagem por QUANTIDADE, nunca por
+  // peça numerada: patrimônio individual, QR e prateleira sao ERP, e a
+  // pergunta que precisa ser respondida ("tenho essas pecas livres para este
+  // evento?") nao exige nada disso.
+  //
+  // Separado de `materials` de proposito. Um material tecnico pode NUNCA ser
+  // acervo (rosa branca some no evento) e um item de acervo pode existir sem
+  // material tecnico nenhum (sousplat que ela so usa em corporativo). Enfiar
+  // estoque em `materials` criaria um objeto com metade dos campos sempre
+  // vazios — e obrigaria toda rosa a carregar um `quantidadeTotal` sem
+  // sentido.
+  collectionItems: defineTable({
+    userId: v.id("users"),
+    nome: v.string(),
+    /** Nome normalizado — busca e deduplicacao (lib/materiais.ts). */
+    searchName: v.string(),
+    unidade: unidadeDeMaterial,
+    /**
+     * O UNICO numero cadastrado do acervo. Reservado, disponivel e "falta
+     * voltar" sao SEMPRE derivados (lib/acervo.ts) — um `disponivel` guardado
+     * diverge em silencio na primeira reserva cancelada.
+     *
+     * NUNCA e alterado automaticamente: se sairam 20 e voltaram 19, o total
+     * continua 40 ate alguem decidir o que aconteceu com a peca.
+     */
+    quantidadeTotal: v.number(),
+    categoria: v.optional(v.string()),
+    /**
+     * Material tecnico correspondente. OPCIONAL e EXPLICITO: nao vinculamos
+     * por nome. "Vaso X reutilizavel" pode ser da decoradora OU alugado de
+     * terceiro, e so ela sabe a diferenca.
+     */
+    materialId: v.optional(v.id("materials")),
+    notes: v.optional(v.string()),
+    /** Arquivado sai das reservas novas; o historico continua legivel. */
+    archived: v.optional(v.boolean()),
+    updatedAt: v.optional(v.string()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_search", ["userId", "searchName"])
+    .index("by_material", ["materialId"]),
+
+  // ── RESERVA DE ACERVO POR EVENTO ──────────────────────────────────────────
+  // "Prometi 20 destes vasos para o casamento da Marina, de 09 a 11/10."
+  //
+  // A reserva e INTENCAO, nao movimento fisico. `saiu` e `voltou` moram aqui
+  // porque sao a operacao DAQUELE evento com AQUELAS pecas — uma tabela de
+  // movimentos separada seria uma segunda fonte para os mesmos dois numeros.
+  //
+  // A situacao (planejada/fora/retorno parcial/retornada) e DERIVADA das
+  // quantidades: um `status` gravado ao lado divergiria no primeiro ajuste.
+  collectionReservations: defineTable({
+    userId: v.id("users"),
+    collectionItemId: v.id("collectionItems"),
+    eventId: v.id("events"),
+    /** Quanto foi prometido. Pode exceder o disponivel — o deficit fica visivel. */
+    quantidade: v.number(),
+    /** Janela operacional, DIA CIVIL "AAAA-MM-DD". Inclusiva nas duas pontas. */
+    inicio: v.string(),
+    fim: v.string(),
+    /** De onde nasceu. `ficha` guarda o vinculo tecnico; `manual` nao precisa. */
+    origem: v.union(v.literal("ficha"), v.literal("manual")),
+    /** Material da ficha que originou. So quando `origem` e `ficha`. */
+    materialId: v.optional(v.id("materials")),
+    /**
+     * Necessidade tecnica no momento em que a reserva foi criada/atualizada.
+     * Mesmo papel do carimbo em `purchaseItems`: e comparando-o com a
+     * necessidade de agora que o sistema diz "a ficha mudou desde entao" —
+     * sem NUNCA mexer na reserva sozinho.
+     */
+    necessidadeTecnica: v.optional(v.number()),
+    /** Saiu fisicamente do galpao. AUSENTE = nada saiu ainda. */
+    saiu: v.optional(v.number()),
+    /** Voltou fisicamente. AUSENTE = nada voltou ainda. */
+    voltou: v.optional(v.number()),
+    notes: v.optional(v.string()),
+    updatedAt: v.optional(v.string()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_event", ["eventId"])
+    .index("by_item", ["collectionItemId"])
+    // Uma reserva por item por evento — e o que torna a geracao a partir da
+    // ficha idempotente (clicar duas vezes nao reserva 40).
+    .index("by_event_item", ["eventId", "collectionItemId"]),
+
   // ── BIBLIOTECA DE COMPOSIÇÕES (receitas) ──────────────────────────────────
   // "Arranjo baixo clássico branco" — a receita que a decoradora reaproveita
   // de evento em evento. Por EMPRESA.

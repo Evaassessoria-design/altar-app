@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as acervo from "../acervo.js";
 import type * as admin from "../admin.js";
 import type * as ai from "../ai.js";
 import type * as aiVisual from "../aiVisual.js";
@@ -59,6 +60,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  acervo: typeof acervo;
   admin: typeof admin;
   ai: typeof ai;
   aiVisual: typeof aiVisual;

@@ -1,4 +1,8 @@
-import { agruparPorAmbiente, type GrupoDeAmbiente } from "./decoration-project.ts";
+import {
+  agruparPorAmbiente,
+  ehObrigacaoDeMontagem,
+  type GrupoDeAmbiente,
+} from "./decoration-project.ts";
 import {
   ASSEMBLY_STATUS_LABEL,
   effectiveAssemblyStatus,
@@ -36,6 +40,8 @@ export type ItemDeCarregamento = {
   unit?: string;
   ambiente?: string;
   operationalStatus?: string;
+  /** "referencia" e "nao_incluso" não são objeto físico. */
+  projectScope?: string;
 };
 
 export type LinhaDaFolha = ItemDeCarregamento & {
@@ -69,7 +75,17 @@ export function quantidadeTexto(item: ItemDeCarregamento): string {
 export function montarFolhaDeCarregamento(
   itens: readonly ItemDeCarregamento[],
 ): FolhaDeCarregamento {
-  const linhas: LinhaDaFolha[] = itens.map((i) => {
+  // ── SÓ ENTRA O QUE É COISA ────────────────────────────────────────────────
+  // Uma "referência visual" é uma foto de inspiração; "não incluso" é o que
+  // ficou fora do contrato. Nenhum dos dois é caixa para pôr no caminhão.
+  // Mandar a equipe procurar no galpão um objeto que nunca existiu é fazer
+  // alguém perder a manhã.
+  //
+  // É a MESMA regra do Caderno de Montagem (`ehObrigacaoDeMontagem`): item sem
+  // classificação continua entrando, porque sair exige escolha explícita.
+  const fisicos = itens.filter(ehObrigacaoDeMontagem);
+
+  const linhas: LinhaDaFolha[] = fisicos.map((i) => {
     const situacao = effectiveAssemblyStatus(i);
     return {
       ...i,
@@ -79,7 +95,7 @@ export function montarFolhaDeCarregamento(
     };
   });
 
-  const resumo = resumirCarregamento(itens);
+  const resumo = resumirCarregamento(fisicos);
 
   return {
     ambientes: agruparPorAmbiente(linhas),

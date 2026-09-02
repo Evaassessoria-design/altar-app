@@ -55,6 +55,35 @@ describe("agrupamento por ambiente", () => {
   });
 });
 
+describe("só entra o que é coisa física", () => {
+  it.each([
+    ["referencia", false],
+    ["nao_incluso", false],
+    ["incluso", true],
+    [undefined, true],
+  ])("projectScope %s entra na folha? %s", (scope, entra) => {
+    // Mandar a equipe procurar no galpão uma foto de inspiração é fazer
+    // alguém perder a manhã. Item SEM classificação continua entrando:
+    // sair exige escolha explícita, igual ao Caderno de Montagem.
+    const folha = montarFolhaDeCarregamento([item({ projectScope: scope })]);
+    expect(folha.total).toBe(entra ? 1 : 0);
+  });
+
+  it("usa a MESMA regra do Caderno de Montagem", () => {
+    const fonte = readFileSync("src/lib/loading-sheet.ts", "utf-8");
+    expect(fonte).toContain("ehObrigacaoDeMontagem");
+  });
+
+  it("o que fica de fora não conta nos totais", () => {
+    const folha = montarFolhaDeCarregamento([
+      item({ _id: "a", operationalStatus: "carregado" }),
+      item({ _id: "b", projectScope: "referencia", operationalStatus: "carregado" }),
+    ]);
+    expect(folha.total).toBe(1);
+    expect(folha.naoVoltaram).toBe(1);
+  });
+});
+
 describe("situação e o que não voltou", () => {
   it("item sem status é pendente — registro antigo continua correto", () => {
     const folha = montarFolhaDeCarregamento([item({ operationalStatus: undefined })]);

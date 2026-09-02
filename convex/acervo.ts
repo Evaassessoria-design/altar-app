@@ -2,7 +2,7 @@ import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { getOwnedEvent, requireEventOwner, requireUser } from "./lib/identity";
+import { getOwnedEvent, requireEventOwner, requireTeamMember, requireUser } from "./lib/identity";
 import { comCarimbo } from "./lib/ultimaAtualizacao";
 import { chaveDoMaterial, normalizeName } from "./lib/materiais";
 import {
@@ -680,12 +680,9 @@ export const ajustarEstoque = mutation({
     const item = await itemDoUsuario(ctx, args.collectionItemId, user._id);
     const eventId = await eventoDoUsuario(ctx, args.eventId, user._id);
 
-    if (args.responsibleId) {
-      const membro = await ctx.db.get(args.responsibleId);
-      if (!membro || membro.userId !== user._id) {
-        throw new ConvexError({ code: "NOT_FOUND", message: "Responsável não encontrado" });
-      }
-    }
+    // Mesma porta das outras mutations: id do navegador nao pode apontar para
+    // a equipe de outra empresa.
+    await requireTeamMember(ctx, user._id, args.responsibleId);
 
     const r = aplicarAjuste({
       quantidadeAtual: item.quantidadeTotal,
@@ -729,6 +726,7 @@ export const registrarContagem = mutation({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const item = await itemDoUsuario(ctx, args.collectionItemId, user._id);
+    await requireTeamMember(ctx, user._id, args.responsibleId);
 
     const r = aplicarContagem({
       quantidadeAtual: item.quantidadeTotal,

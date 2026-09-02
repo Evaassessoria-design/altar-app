@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AjusteDeAcervoDialog } from "@/components/ajuste-de-acervo-dialog.tsx";
 import { Link, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
@@ -76,6 +77,11 @@ export default function AcervoDoEventoPage() {
   const registrarRetorno = useMutation(api.acervo.registrarRetorno);
   const liberar = useMutation(api.acervo.liberarReserva);
   const [gerando, setGerando] = useState(false);
+  // Baixa iniciada a partir do evento: leva a sugestao de quantidade, mas a
+  // confirmacao (tipo, numero, motivo) continua sendo da pessoa.
+  const [baixa, setBaixa] = useState<
+    { item: { _id: Id<"collectionItems">; nome: string; unidade: string; quantidadeTotal: number }; quantidade: number } | null
+  >(null);
 
   const comErro = (e: unknown) =>
     toast.error(
@@ -207,10 +213,27 @@ export default function AcervoDoEventoPage() {
               </div>
 
               {r.faltaVoltar > 0 && (
-                <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
-                  {r.faltaVoltar} {r.faltaVoltar === 1 ? "peça saiu e não voltou" : "peças saíram e não voltaram"}.
-                  O total do acervo não foi alterado.
-                </p>
+                <div className="mt-2">
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    {r.faltaVoltar} {r.faltaVoltar === 1 ? "peça saiu e não voltou" : "peças saíram e não voltaram"}.
+                    O total do acervo não foi alterado.
+                  </p>
+                  {/* "Nao voltou" NAO e "perdeu". A peca pode estar no carro, na
+                      casa da cliente, ou voltar na segunda. O sistema nunca
+                      converte um no outro sozinho — oferece a baixa e espera a
+                      pessoa confirmar tipo, quantidade e motivo. */}
+                  {r.item && (
+                    <button
+                      onClick={() => setBaixa({
+                        item: r.item!,
+                        quantidade: r.faltaVoltar,
+                      })}
+                      className="mt-1 text-xs text-muted-foreground hover:text-destructive hover:underline cursor-pointer"
+                    >
+                      Dar baixa no acervo
+                    </button>
+                  )}
+                </div>
               )}
 
               {(r.saiu ?? 0) === 0 && (
@@ -228,6 +251,16 @@ export default function AcervoDoEventoPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {baixa && (
+        <AjusteDeAcervoDialog
+          item={baixa.item}
+          eventId={eventId}
+          tipoInicial="perda"
+          quantidadeInicial={baixa.quantidade}
+          onClose={() => setBaixa(null)}
+        />
       )}
     </div>
   );

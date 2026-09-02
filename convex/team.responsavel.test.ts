@@ -316,6 +316,7 @@ describe("a fonte faz o que estes testes assumem", () => {
       ["convex/events.ts", ["update"]],
       ["convex/purchases.ts", ["addPurchase", "updatePurchase"]],
       ["convex/funil.ts", ["createLead", "updateLead"]],
+      ["convex/acervo.ts", ["ajustarEstoque", "registrarContagem"]],
     ] as const) {
       const fonte = readFileSync(arquivo, "utf-8");
       for (const fn of funcoes) {
@@ -329,9 +330,17 @@ describe("a fonte faz o que estes testes assumem", () => {
     }
   });
 
-  it("as três tabelas guardam o vínculo como id, não como texto", () => {
+  it("todo responsibleId do schema é id de teamMembers, nunca texto", () => {
+    // Por INTENÇÃO, não por contagem: uma tabela nova que guarde responsável
+    // deve entrar na regra, não quebrar um número mágico. O que não pode
+    // existir é `responsibleId` com outro tipo — aí o vínculo viraria string
+    // solta e o nome de quem saiu da equipe ficaria congelado para sempre.
     const schemaFonte = readFileSync("convex/schema.ts", "utf-8");
-    const ocorrencias = schemaFonte.match(/responsibleId: v\.optional\(v\.id\("teamMembers"\)\)/g);
-    expect(ocorrencias).toHaveLength(3); // events, leads, purchaseItems
+    const todos = schemaFonte.match(/responsibleId: [^,\n]+/g) ?? [];
+    expect(todos.length).toBeGreaterThanOrEqual(4); // events, leads, purchaseItems, collectionAdjustments
+    const forasDaRegra = todos.filter(
+      (t) => !t.includes('v.optional(v.id("teamMembers"))'),
+    );
+    expect(forasDaRegra).toEqual([]);
   });
 });

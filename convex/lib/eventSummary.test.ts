@@ -120,7 +120,10 @@ describe("resumirFinanceiro", () => {
   ];
 
   it("separa previsto de realizado, receita de despesa", () => {
-    expect(resumirFinanceiro(txs)).toEqual({
+    // `toMatchObject`: o retorno ganhou os campos de completude do custo
+    // (custoForaDoLivro, custoCompleto…). Estes números, que são o assunto
+    // deste teste, não mudaram.
+    expect(resumirFinanceiro(txs)).toMatchObject({
       receitaPrevista: 1500,
       receitaRecebida: 1000,
       despesaPrevista: 500,
@@ -132,10 +135,29 @@ describe("resumirFinanceiro", () => {
     });
   });
 
+  it("sem compras, o custo é considerado completo e a margem aparece", () => {
+    const r = resumirFinanceiro(txs);
+    expect(r.custoCompleto).toBe(true);
+    expect(r.custoForaDoLivro).toBe(0);
+    expect(r.motivoSemMargem).toBeNull();
+    expect(r.saldoAPagar).toBe(200);
+  });
+
+  it("compra com preço e sem lançamento CALA a margem", () => {
+    // Margem sobre metade das compras engana; ausência avisa.
+    const r = resumirFinanceiro(txs, [
+      { isPurchased: false, status: "comprado", unitPrice: 400, quantity: 2 },
+    ]);
+    expect(r.custoCompleto).toBe(false);
+    expect(r.custoForaDoLivro).toBe(800);
+    expect(r.margemPrevista).toBeNull();
+    expect(r.motivoSemMargem).toContain("não foi lançada");
+  });
+
   it("sem lançamentos, tudo é zero e `lancamentos` deixa isso explícito", () => {
     // A tela usa `lancamentos === 0` para dizer "nada lançado" em vez de
     // exibir R$ 0,00 como se fosse um resultado apurado.
-    expect(resumirFinanceiro([])).toEqual({
+    expect(resumirFinanceiro([])).toMatchObject({
       receitaPrevista: 0,
       receitaRecebida: 0,
       despesaPrevista: 0,

@@ -2,8 +2,13 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { getOwnedEvent, requireEventOwner, requireUser } from "./lib/identity";
-import { isPurchasedForStatus, type PurchaseStatus } from "./lib/purchaseStatus";
+import {
+  effectivePurchaseStatus,
+  isPurchasedForStatus,
+  type PurchaseStatus,
+} from "./lib/purchaseStatus";
 import { limparCampos } from "./lib/limparCampos";
+import { valorDaCompra } from "./lib/custoDoEvento";
 
 /** Validador reutilizado por `addPurchase`, `updatePurchase` e `setStatus`. */
 const purchaseStatus = v.union(
@@ -69,6 +74,115 @@ export const addPurchase = mutation({
       isPurchased: isPurchasedForStatus(status),
       order: maxOrder + 1,
     });
+  },
+});
+
+/**
+ * Lança (ou reajusta) o custo desta compra no livro-caixa.
+ *
+ * ── IDEMPOTÊNCIA ────────────────────────────────────────────────────────────
+ * É esta função que impede a mesma despesa de contar duas vezes. Se a compra
+ * já tem `transactionId` e o lançamento ainda existe, ela ATUALIZA aquele
+ * registro. Só cria um novo quando não há nenhum — ou quando o antigo foi
+ * apagado à mão no Financeiro, caso em que o ponteiro está velho.
+ *
+ * Chamar dez vezes seguidas produz UM lançamento, com o valor atual.
+ *
+ * ── O QUE ELA NÃO FAZ ───────────────────────────────────────────────────────
+ * Não decide se a compra foi paga. `isPaid` do lançamento espelha a situação
+ * operacional (recebido = pago), mas a decoradora continua dona do Financeiro:
+ * se ela marcar o lançamento como pago lá, nada aqui desfaz isso — só um novo
+ * lançamento da mesma compra reajusta, e aí é escolha dela.
+ */
+export const registerCost = mutation({
+  args: { id: v.id("purchaseItems") },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const item = await ctx.db.get(args.id);
+    if (!item || item.userId !== user._id)
+      throw new ConvexError({ message: "Item não encontrado", code: "NOT_FOUND" });
+
+    const status = effectivePurchaseStatus(item);
+    if (status === "cancelado") {
+      throw new ConvexError({
+        code: "BAD_REQUEST",
+        message: "Compra cancelada não vira custo. Nada foi lançado.",
+      });
+    }
+
+    const valor = valorDaCompra({
+      unitPrice: item.unitPrice,
+      quantity: item.quantity,
+      cancelada: false,
+    });
+    if (valor <= 0) {
+      throw new ConvexError({
+        code: "BAD_REQUEST",
+        message: "Informe o preço da compra antes de lançar no financeiro.",
+      });
+    }
+
+    // A data do lançamento é o vencimento quando existe — é a data que a
+    // decoradora combinou com o fornecedor. Sem ela, hoje.
+    const hoje = new Date();
+    const data =
+      item.dueDate?.trim() ||
+      `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
+
+    const campos = {
+      type: "expense" as const,
+      category: item.category?.trim() || "Compras",
+      description: item.supplier?.trim()
+        ? `${item.name} — ${item.supplier.trim()}`
+        : item.name,
+      amount: valor,
+      date: data,
+      // "Recebido" é o único estado em que a mercadoria chegou. Antes disso a
+      // despesa existe mas não está liquidada.
+      isPaid: status === "recebido",
+      eventId: item.eventId,
+    };
+
+    // Reaproveita o lançamento existente — este `if` é a idempotência.
+    if (item.transactionId) {
+      const existente = await ctx.db.get(item.transactionId);
+      if (existente && existente.userId === user._id) {
+        await ctx.db.patch(item.transactionId, campos);
+        return { transactionId: item.transactionId, criado: false };
+      }
+    }
+
+    const transactionId = await ctx.db.insert("transactions", {
+      userId: user._id,
+      ...campos,
+    });
+    await ctx.db.patch(args.id, { transactionId });
+    return { transactionId, criado: true };
+  },
+});
+
+/**
+ * Desfaz o vínculo e apaga o lançamento que nasceu desta compra.
+ *
+ * Só apaga o lançamento que ELA gerou — nunca um que a decoradora tenha
+ * criado à mão no Financeiro. Idempotente: sem vínculo, não faz nada.
+ */
+export const unregisterCost = mutation({
+  args: { id: v.id("purchaseItems") },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const item = await ctx.db.get(args.id);
+    if (!item || item.userId !== user._id)
+      throw new ConvexError({ message: "Item não encontrado", code: "NOT_FOUND" });
+
+    if (!item.transactionId) return { removido: false };
+
+    const lancamento = await ctx.db.get(item.transactionId);
+    if (lancamento && lancamento.userId === user._id) {
+      await ctx.db.delete(item.transactionId);
+    }
+    await ctx.db.patch(args.id, { transactionId: undefined });
+    return { removido: true };
   },
 });
 

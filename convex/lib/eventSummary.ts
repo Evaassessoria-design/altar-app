@@ -19,6 +19,7 @@
 
 import { effectivePurchaseStatus, isPendingStatus } from "./purchaseStatus";
 import { resultadoDoProjeto } from "./financeScope";
+import { custoDoEvento, motivoDaMargemAusente } from "./custoDoEvento";
 
 export type ContagemFeita = { total: number; feitos: number; pendentes: number };
 
@@ -98,22 +99,60 @@ export type ResumoFinanceiro = {
    */
   margemPrevista: number | null;
   margemPercentual: number | null;
+  /** Lançado e ainda não pago. */
+  saldoAPagar: number;
+  /** Compras com preço que ainda não viraram lançamento. */
+  custoForaDoLivro: number;
+  comprasForaDoLivro: number;
+  custoCompleto: boolean;
+  /** Por que a margem não aparece, quando não aparece. */
+  motivoSemMargem: string | null;
 };
 
-export function resumirFinanceiro(txs: readonly TransacaoLike[]): ResumoFinanceiro {
+/**
+ * O retrato financeiro do evento.
+ *
+ * ── POR QUE AS COMPRAS ENTRAM AQUI ──────────────────────────────────────────
+ * Antes esta função via só o livro-caixa. As compras tinham `unitPrice` e não
+ * entravam em cálculo nenhum: a decoradora registrava R$ 12.000 em flores e a
+ * margem seguia como se nada tivesse sido comprado.
+ *
+ * As compras NÃO são somadas ao custo — isso duplicaria o que já foi lançado.
+ * Elas entram por AUSÊNCIA: as que ainda não viraram lançamento tornam o
+ * resultado explicitamente incompleto, e a margem se cala em vez de mentir.
+ */
+export function resumirFinanceiro(
+  txs: readonly TransacaoLike[],
+  compras: readonly CompraLike[] = [],
+): ResumoFinanceiro {
   const soma = (tipo: string, apenasPagos: boolean) =>
     txs
       .filter((t) => t.type === tipo && (!apenasPagos || t.isPaid))
       .reduce((s, t) => s + t.amount, 0);
-  const resultado = resultadoDoProjeto(txs);
+
+  const custo = custoDoEvento(
+    txs,
+    compras.map((c) => ({
+      unitPrice: c.unitPrice,
+      quantity: c.quantity,
+      cancelada: effectivePurchaseStatus(c) === "cancelado",
+      transactionId: (c as { transactionId?: string }).transactionId,
+    })),
+  );
+
   return {
     receitaPrevista: soma("income", false),
     receitaRecebida: soma("income", true),
     despesaPrevista: soma("expense", false),
     despesaPaga: soma("expense", true),
     lancamentos: txs.length,
-    margemPrevista: resultado.margemPrevista,
-    margemPercentual: resultado.margemPercentual,
+    margemPrevista: custo.margem,
+    margemPercentual: custo.margemPercentual,
+    saldoAPagar: custo.saldoAPagar,
+    custoForaDoLivro: custo.custoForaDoLivro,
+    comprasForaDoLivro: custo.comprasForaDoLivro,
+    custoCompleto: custo.completo,
+    motivoSemMargem: motivoDaMargemAusente(custo),
   };
 }
 
@@ -272,7 +311,9 @@ export function montarResumoOperacional(input: {
   const checklistPos = contar(input.checklistPos.map((i) => ({ feito: i.isChecked })));
   const compras = resumirCompras(input.compras);
   const fornecedores = resumirFornecedores(input.fornecedores);
-  const financeiro = resumirFinanceiro(input.transacoes);
+  // As compras entram para denunciar o que ainda não foi lançado — nunca
+  // para serem somadas ao custo, o que duplicaria o que já está no livro.
+  const financeiro = resumirFinanceiro(input.transacoes, input.compras);
 
   const equipe = {
     escalados: input.equipe.length,

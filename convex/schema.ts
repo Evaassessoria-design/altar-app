@@ -366,6 +366,16 @@ export default defineSchema({
     supplierId: v.optional(v.id("suppliers")),
     // "AAAA-MM-DD". So com ela o sistema pode afirmar atraso.
     dueDate: v.optional(v.string()),
+    // ── O VÍNCULO COM O LIVRO-CAIXA ─────────────────────────────────────────
+    // A compra é OPERACIONAL; `transactions` é o livro contábil. Este campo
+    // diz qual lançamento nasceu desta compra — e é ele que impede a mesma
+    // despesa de ser contada duas vezes: enquanto existir, lançar de novo
+    // ATUALIZA o mesmo registro em vez de criar outro.
+    //
+    // Ausente = compra ainda não lançada. É o estado de toda compra que já
+    // existe hoje, e continua válido: o custo dela aparece como "fora do
+    // livro", não como erro.
+    transactionId: v.optional(v.id("transactions")),
   }).index("by_event", ["eventId"]),
 
   budgetItems: defineTable({

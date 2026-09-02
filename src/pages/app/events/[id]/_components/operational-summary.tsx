@@ -276,7 +276,32 @@ export function OperationalSummary({ eventId }: { eventId: Id<"events"> }) {
               )}
               {financeiro.lancamentos > 0 && financeiro.margemPrevista === null && (
                 <p className="text-[11px] text-muted-foreground mt-2">
-                  Margem aparece quando houver receita e custo lançados.
+                  {financeiro.motivoSemMargem ??
+                    "Margem aparece quando houver receita e custo lançados."}
+                </p>
+              )}
+
+              {/* Compras com preço que ainda não viraram lançamento. Mostrar o
+                  valor é o que transforma "está incompleto" em algo acionável:
+                  ela vê QUANTO falta e vai lançar. */}
+              {!financeiro.custoCompleto && (
+                <div className="mt-2 pt-2 border-t border-border">
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    {brl.format(financeiro.custoForaDoLivro)} em compras ainda fora do
+                    financeiro
+                  </p>
+                  <Link
+                    to="/compras"
+                    className="text-[11px] text-primary hover:underline cursor-pointer"
+                  >
+                    Lançar agora
+                  </Link>
+                </div>
+              )}
+
+              {financeiro.lancamentos > 0 && financeiro.saldoAPagar > 0 && (
+                <p className="text-[11px] text-muted-foreground mt-2">
+                  Falta pagar {brl.format(financeiro.saldoAPagar)}
                 </p>
               )}
 

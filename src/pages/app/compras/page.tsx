@@ -261,6 +261,7 @@ function EventSection({
   onToggle,
   onDelete,
   onSetStatus,
+  onLancarCusto,
 }: {
   event: Doc<"events">;
   items: Doc<"purchaseItems">[];
@@ -269,6 +270,7 @@ function EventSection({
   onToggle: (id: Id<"purchaseItems">) => void;
   onDelete: (id: Id<"purchaseItems">) => void;
   onSetStatus: (id: Id<"purchaseItems">, status: PurchaseStatus) => void;
+  onLancarCusto: (id: Id<"purchaseItems">) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const hoje = hojeISO();
@@ -378,6 +380,28 @@ function EventSection({
                               · {(item.unitPrice * item.quantity).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                             </span>
                           )}
+                          {/* O elo com o financeiro. Uma compra com preço que
+                              nunca foi lançada é dinheiro que saiu e não está
+                              no livro-caixa — e é isso que deixa a margem do
+                              evento incompleta. */}
+                          {item.transactionId ? (
+                            <span
+                              className="inline-flex items-center gap-1 text-green-700 dark:text-green-400"
+                              title="Esta compra já está no financeiro"
+                            >
+                              <Check className="size-3" /> no financeiro
+                            </span>
+                          ) : (
+                            !!item.unitPrice && (
+                              <button
+                                onClick={() => onLancarCusto(item._id)}
+                                className="text-primary hover:underline cursor-pointer"
+                                title="Cria o lançamento de despesa deste item"
+                              >
+                                · lançar no financeiro
+                              </button>
+                            )
+                          )}
                           {/* Atraso só é afirmado quando existe data limite
                               gravada E o item ainda exige ação. */}
                           {item.dueDate && (
@@ -437,6 +461,7 @@ function ComprasContent() {
   const deletePurchase = useMutation(api.purchases.deletePurchase);
   const addPurchase = useMutation(api.purchases.addPurchase);
   const updatePurchase = useMutation(api.purchases.updatePurchase);
+  const registerCost = useMutation(api.purchases.registerCost);
   const setPurchaseStatus = useMutation(api.purchases.setPurchaseStatus);
 
   const [addingToEvent, setAddingToEvent] = useState<Id<"events"> | null>(null);
@@ -451,6 +476,27 @@ function ComprasContent() {
     if (eventFilter === "completed") return e.status === "completed";
     return e.status !== "cancelled";
   });
+
+  /**
+   * Lança o custo desta compra no financeiro.
+   *
+   * A mutation é idempotente: chamar de novo reajusta o mesmo lançamento em
+   * vez de criar outro. É ela que impede a mesma despesa de contar duas vezes.
+   */
+  const handleLancarCusto = async (id: Id<"purchaseItems">) => {
+    try {
+      const r = await registerCost({ id });
+      toast.success(
+        r.criado ? "Lançado no financeiro!" : "Lançamento atualizado no financeiro.",
+      );
+    } catch (e) {
+      toast.error(
+        e instanceof ConvexError
+          ? (e.data as { message: string }).message
+          : "Erro ao lançar no financeiro.",
+      );
+    }
+  };
 
   const handleAdd = async (values: PurchaseFormValues, supplierId?: string) => {
     if (!addingToEvent) return;
@@ -583,6 +629,7 @@ function ComprasContent() {
               onToggle={handleToggle}
               onDelete={handleDelete}
               onSetStatus={handleSetStatus}
+              onLancarCusto={handleLancarCusto}
             />
           ))}
         </div>
@@ -627,6 +674,7 @@ function EventSectionWithData({
   onToggle,
   onDelete,
   onSetStatus,
+  onLancarCusto,
 }: {
   event: Doc<"events">;
   onAdd: (eventId: Id<"events">) => void;
@@ -634,6 +682,7 @@ function EventSectionWithData({
   onToggle: (id: Id<"purchaseItems">) => void;
   onDelete: (id: Id<"purchaseItems">) => void;
   onSetStatus: (id: Id<"purchaseItems">, status: PurchaseStatus) => void;
+  onLancarCusto: (id: Id<"purchaseItems">) => void;
 }) {
   const items = useQuery(api.purchases.listPurchases, { eventId: event._id });
 
@@ -650,6 +699,7 @@ function EventSectionWithData({
       onToggle={onToggle}
       onDelete={onDelete}
       onSetStatus={onSetStatus}
+      onLancarCusto={onLancarCusto}
     />
   );
 }

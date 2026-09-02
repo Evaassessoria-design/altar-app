@@ -1,4 +1,5 @@
 import jsPDF from "jspdf";
+import { entregarPdf } from "./pdf-delivery.ts";
 import { effectivePurchaseStatus } from "@/convex/lib/purchaseStatus.ts";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
@@ -392,5 +393,5 @@ export function generateEventPDF(data: EventReportData): void {
 
   // ── Save ──────────────────────────────────────────────────────────────────
   const safeName = event.name.replace(/[^a-zA-Z0-9\u00C0-\u024F ]/g, "").trim().replace(/\s+/g, "-");
-  doc.save(`altar-relatorio-${safeName}.pdf`);
+  entregarPdf(doc, `altar-relatorio-${safeName}.pdf`);
 }

@@ -1,4 +1,5 @@
 import jsPDF from "jspdf";
+import { entregarPdf } from "./pdf-delivery.ts";
 import { ASSINATURA_ALTAR, resolveIdentidade, type EmpresaLike } from "./brand.ts";
 import { formatEventDayOnly } from "./event-date.ts";
 import {
@@ -214,5 +215,5 @@ export async function generateLoadingPDF(data: LoadingPdfData): Promise<void> {
     doc.text(ASSINATURA_ALTAR, PAGE_W - MARGIN, PAGE_H - 6, { align: "right" });
   }
 
-  doc.save(`carregamento-${data.event.name.replace(/[^\w\s-]/g, "").trim() || "evento"}.pdf`);
+  entregarPdf(doc, `carregamento-${data.event.name.replace(/[^\w\s-]/g, "").trim() || "evento"}.pdf`);
 }

@@ -1,4 +1,5 @@
 import jsPDF from "jspdf";
+import { entregarPdf } from "./pdf-delivery.ts";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -195,5 +196,5 @@ export function generateOrcamentoPDF(data: OrcamentoPDFData): void {
   }
 
   const safeName = event.name.replace(/[^a-zA-Z0-9\u00C0-\u024F ]/g, "").trim().replace(/\s+/g, "-");
-  doc.save(`altar-orcamento-${safeName}.pdf`);
+  entregarPdf(doc, `altar-orcamento-${safeName}.pdf`);
 }

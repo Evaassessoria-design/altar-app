@@ -216,6 +216,9 @@ function ConvertDialog({
     defaultValues: {
       eventName: `${lead.clientName} - ${EVENT_TYPES.find((t) => t.value === lead.eventType)?.label ?? "Evento"}`,
       eventDate: lead.eventDate ?? "",
+      // O local já foi anotado durante a negociação. Sem isto, a decoradora
+      // redigitava a fazenda que ela mesma cadastrou no lead.
+      location: lead.venue ?? "",
       type: (lead.eventType as ConvertFormValues["type"]) ?? "other",
     },
   });

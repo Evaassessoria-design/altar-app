@@ -231,6 +231,28 @@ export const convertToEvent = mutation({
       status: "planning",
     });
 
+    // ── O NÚMERO DE CONVIDADOS NÃO SE PERDE ──────────────────────────────────
+    // A decoradora pergunta "quantas pessoas?" na primeira conversa e anota no
+    // lead. Sem isto, ela reabria o briefing e digitava de novo o mesmo número
+    // — e enquanto não digitasse, a saúde do evento apontava "Convidados
+    // (briefing)" em falta por um dado que o sistema já tinha.
+    //
+    // Só CRIA quando ainda não existe briefing. Nunca sobrescreve: converter de
+    // novo (evento apagado e refeito) não pode apagar o que já foi preenchido.
+    if (lead.guestCount !== undefined) {
+      const briefingExistente = await ctx.db
+        .query("briefings")
+        .withIndex("by_event", (q) => q.eq("eventId", eventId))
+        .unique();
+      if (!briefingExistente) {
+        await ctx.db.insert("briefings", {
+          eventId,
+          userId: user._id,
+          guestCount: String(lead.guestCount),
+        });
+      }
+    }
+
     await ctx.db.patch(leadId, {
       stage: "contracted",
       convertedEventId: eventId,

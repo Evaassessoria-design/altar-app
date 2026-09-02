@@ -26,6 +26,7 @@ async function cenario() {
       stage: "negotiating",
       order: 0,
       venue: "Fazenda Aurora",
+      guestCount: 180,
       budget: 186500,
       notes: "Cerimônia no jardim",
     });
@@ -66,6 +67,22 @@ async function converter(
       budget: form.budget ?? l.budget,
       notes: l.notes,
     });
+    // Espelha o mesmo passo da mutation real: o número de convidados anotado
+    // no lead nasce como briefing, e NUNCA sobrescreve um que já exista.
+    const g = (lead as unknown as { guestCount?: number }).guestCount;
+    if (g !== undefined) {
+      const existente = await ctx.db
+        .query("briefings")
+        .withIndex("by_event", (q) => q.eq("eventId", eventId))
+        .unique();
+      if (!existente) {
+        await ctx.db.insert("briefings", {
+          eventId,
+          userId: userId as never,
+          guestCount: String(g),
+        });
+      }
+    }
     await ctx.db.patch(leadId as never, {
       stage: "contracted", convertedEventId: eventId,
     } as never);
@@ -119,6 +136,62 @@ describe("reaproveitamento de dados do lead", () => {
     expect(e.notes).toBe("Cerimônia no jardim");
   });
 
+  it("o número de convidados vira briefing — não se digita duas vezes", async () => {
+    // A decoradora pergunta "quantas pessoas?" na primeira conversa. Sem isto
+    // ela reabria o briefing e digitava o mesmo número, e até lá a saúde do
+    // evento apontava "Convidados (briefing)" em falta por um dado que o
+    // sistema já tinha.
+    const { t, leadId, userId } = await cenario();
+    const eventId = await converter(t, leadId, userId);
+    const briefing = await t.run(async (ctx) =>
+      ctx.db
+        .query("briefings")
+        .withIndex("by_event", (q) => q.eq("eventId", eventId as never))
+        .unique(),
+    );
+    expect((briefing as unknown as { guestCount?: string } | null)?.guestCount).toBe("180");
+  });
+
+  it("NÃO sobrescreve um briefing que já existe", async () => {
+    // Converter de novo (evento apagado e refeito) não pode apagar o que a
+    // decoradora já preencheu à mão.
+    const { t, leadId, userId } = await cenario();
+    const eventId = await converter(t, leadId, userId);
+    await t.run(async (ctx) => {
+      const b = await ctx.db
+        .query("briefings")
+        .withIndex("by_event", (q) => q.eq("eventId", eventId as never))
+        .unique();
+      await ctx.db.patch(b!._id, { guestCount: "200", theme: "Jardim" });
+    });
+
+    await converter(t, leadId, userId);
+
+    const briefings = await t.run(async (ctx) => ctx.db.query("briefings").collect());
+    expect(briefings).toHaveLength(1);
+    expect((briefings[0] as unknown as { guestCount?: string }).guestCount).toBe("200");
+  });
+
+  it("lead SEM número de convidados não cria briefing vazio", async () => {
+    const { t, userId } = await cenario();
+    const semConvidados = await t.run(async (ctx) =>
+      ctx.db.insert("leads", {
+        userId,
+        clientName: "Empresa Acme",
+        stage: "negotiating",
+        order: 1,
+      }),
+    );
+    const eventId = await converter(t, semConvidados, userId);
+    const briefing = await t.run(async (ctx) =>
+      ctx.db
+        .query("briefings")
+        .withIndex("by_event", (q) => q.eq("eventId", eventId as never))
+        .unique(),
+    );
+    expect(briefing).toBeNull();
+  });
+
   it("o formulário tem precedência sobre o lead", async () => {
     const { t, leadId, userId } = await cenario();
     const eventId = await converter(t, leadId, userId, {
@@ -131,6 +204,16 @@ describe("reaproveitamento de dados do lead", () => {
     expect(e.budget).toBe(200000);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTA SOBRE O HELPER `converter`
+//
+// Ele ESPELHA a mutation em vez de chamá-la: `convertToEvent` exige sessão
+// (`requireActiveAccess`), e o componente do Better Auth não fica registrado no
+// ambiente de teste. Um espelho prova o comportamento, não o código — por isso
+// o bloco abaixo amarra as duas coisas lendo a fonte da mutation real. Quando
+// um deles mudar sem o outro, este arquivo falha.
+// ─────────────────────────────────────────────────────────────────────────────
 
 describe("a guarda existe na mutation real", () => {
   const corpo = (() => {
@@ -148,6 +231,19 @@ describe("a guarda existe na mutation real", () => {
 
   it("confere que o evento apontado é do MESMO usuário", () => {
     expect(corpo).toContain("jaConvertido.userId === user._id");
+  });
+
+  it("cria o briefing com o número de convidados do lead", () => {
+    expect(corpo).toContain('ctx.db.insert("briefings"');
+    expect(corpo).toContain("guestCount: String(lead.guestCount)");
+  });
+
+  it("só cria o briefing quando ainda NÃO existe um", () => {
+    const bloco = corpo.slice(corpo.indexOf("if (lead.guestCount !== undefined)"));
+    const checa = bloco.indexOf("if (!briefingExistente)");
+    const insere = bloco.indexOf('ctx.db.insert("briefings"');
+    expect(checa).toBeGreaterThan(-1);
+    expect(checa).toBeLessThan(insere);
   });
 
   it("o paywall continua antes de tudo", () => {

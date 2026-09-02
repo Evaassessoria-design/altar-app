@@ -55,6 +55,7 @@ function LinhaConsolidada({
     necessario: number;
     tipo: string;
     retornavel: boolean;
+    tipoAmbiguo: boolean;
     custoEstimado: number | null;
     origens: { composicao: string; area: string; ambiente?: string; unidades: number; porUnidade: number; necessario: number }[];
     cobertura: {
@@ -84,6 +85,13 @@ function LinhaConsolidada({
               {linha.retornavel && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
                   volta para o galpão
+                </span>
+              )}
+              {/* Dois ambientes classificaram este material de formas
+                  diferentes. O dado não escolhe por ela — a tela avisa. */}
+              {linha.tipoAmbiguo && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                  classificação divergente
                 </span>
               )}
               <span className="text-xs text-muted-foreground">
@@ -182,6 +190,13 @@ export default function FichaTecnicaPage() {
       if (r.divergentes > 0) {
         toast.warning(
           `${r.divergentes} compra(s) foram criadas com outra quantidade. Nada foi reescrito — confira em Compras.`,
+        );
+      }
+      // Compra que a decoradora já tinha cadastrado à mão: NÃO geramos outra —
+      // seria dinheiro comprado duas vezes — e dizemos exatamente qual.
+      if (r.possiveisDuplicatas.length > 0) {
+        toast.warning(
+          `Já existe compra parecida para ${r.possiveisDuplicatas.join(", ")}. Nada foi criado — confira em Compras.`,
         );
       }
       if (r.ignoradas.length > 0) {

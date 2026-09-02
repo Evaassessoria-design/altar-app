@@ -1,4 +1,11 @@
-import { abreviarUnidade, ehRetornavel, normalmenteVeraCompra, tipoEfetivo, type TipoDeMaterial } from "./materiais";
+import {
+  abreviarUnidade,
+  ehRetornavel,
+  normalizeName,
+  normalmenteVeraCompra,
+  tipoEfetivo,
+  type TipoDeMaterial,
+} from "./materiais";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FICHA TÉCNICA — a conta que transforma projeto em necessidade real.
@@ -115,8 +122,37 @@ export type OrigemDaNecessidade = {
   necessario: number;
 };
 
+/**
+ * A CHAVE DE CONSOLIDAÇÃO — deliberada, e a pergunta mais importante deste
+ * módulo: "estas duas linhas são o mesmo material?".
+ *
+ *   com `materialId` → o id, sempre. Dois cadastros distintos do catálogo são
+ *                      materiais distintos, mesmo com nome igual: se fossem o
+ *                      mesmo, a deduplicação do catálogo já os teria fundido.
+ *   sem `materialId` → o nome NORMALIZADO, com a MESMA `normalizeName` do
+ *                      catálogo de materiais e de fornecedores.
+ *
+ * A unidade entra sempre. Haste e maço nunca se somam.
+ *
+ * Antes desta correção o ramo sem id usava `trim().toLowerCase()`, que não
+ * remove acento nem pontuação: "Eucalípto" e "Eucalipto" viravam duas linhas,
+ * e "Vaso (25cm)" não encontrava "Vaso 25cm" — enquanto o catálogo, com a
+ * regra completa, trataria os dois como o mesmo material. Duas normalizações
+ * é duas respostas para a mesma pergunta.
+ */
+export function chaveDeConsolidacao(componente: {
+  materialId?: string;
+  nome: string;
+  unidade?: string;
+}): string {
+  const identidade = componente.materialId
+    ? `id:${componente.materialId}`
+    : `nome:${normalizeName(componente.nome)}`;
+  return `${identidade}|${componente.unidade ?? ""}`;
+}
+
 export type LinhaConsolidada = {
-  /** Chave de agrupamento: material + unidade. Nunca só o material. */
+  /** Chave de agrupamento — ver `chaveDeConsolidacao`. */
   chave: string;
   materialId?: string;
   nome: string;
@@ -128,6 +164,15 @@ export type LinhaConsolidada = {
   retornavel: boolean;
   /** Entra na lista de compras por padrão? */
   normalmenteCompra: boolean;
+  /**
+   * Dois snapshots do MESMO material discordam sobre o tipo.
+   *
+   * Acontece de verdade: a ficha do ambiente A foi montada quando o vaso era
+   * "consumível" e a do ambiente B depois de ele virar "acervo". Fundir as
+   * duas e adotar a primeira em silêncio faria a linha prometer (ou negar)
+   * devolução sem ninguém saber. A tela mostra o aviso; o dado não escolhe.
+   */
+  tipoAmbiguo: boolean;
   /** Custo estimado — só quando TODAS as origens tinham custo de referência. */
   custoEstimado: number | null;
   origens: OrigemDaNecessidade[];
@@ -158,7 +203,7 @@ export function consolidarMateriais(
       const unidade = componente.unidade ?? "";
       // A unidade entra na chave: somar haste com maço seria inventar uma
       // conversão que ninguém informou.
-      const chave = `${componente.materialId ?? `nome:${componente.nome.trim().toLowerCase()}`}|${unidade}`;
+      const chave = chaveDeConsolidacao({ ...componente, unidade });
       const necessario = necessidadeDoComponente(composicao, componente);
 
       const origem: OrigemDaNecessidade = {
@@ -175,6 +220,7 @@ export function consolidarMateriais(
       if (existente) {
         existente.necessario = quantidadeLimpa(existente.necessario + necessario);
         existente.origens.push(origem);
+        if (tipoEfetivo(componente) !== existente.tipo) existente.tipoAmbiguo = true;
         // O custo só continua sendo afirmável enquanto TODA origem tiver
         // referência. Uma linha sem custo torna a estimativa incompleta — e
         // incompleta a gente não mostra como se fosse total.
@@ -197,6 +243,7 @@ export function consolidarMateriais(
         necessario,
         retornavel: ehRetornavel(componente),
         normalmenteCompra: normalmenteVeraCompra(componente),
+        tipoAmbiguo: false,
         custoEstimado:
           typeof componente.custoReferencia === "number"
             ? quantidadeLimpa(necessario * componente.custoReferencia)

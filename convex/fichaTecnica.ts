@@ -12,6 +12,7 @@ import {
 } from "./lib/fichaTecnica";
 import { ehObrigacaoDeMontagem } from "./lib/escopoDoProjeto";
 import { effectivePurchaseStatus } from "./lib/purchaseStatus";
+import { normalizeName } from "./lib/materiais";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FICHA TÉCNICA DO EVENTO
@@ -260,10 +261,23 @@ export const gerarCompras = mutation({
     const ultimaOrdem = compras.reduce((max, c) => Math.max(max, c.order), -1);
     let ordem = ultimaOrdem + 1;
 
+    // ── O MATERIAL É CARREGADO DE UMA VEZ ────────────────────────────────────
+    // Buscar um a um dentro do laço era N+1: 50 materiais, 50 consultas. Aqui
+    // uma leitura resolve o catálogo inteiro da empresa.
+    const catalogo = new Map(
+      (
+        await ctx.db
+          .query("materials")
+          .withIndex("by_user", (q) => q.eq("userId", user._id))
+          .collect()
+      ).map((m) => [m._id as string, m]),
+    );
+
     let criadas = 0;
     let jaExistiam = 0;
     let divergentes = 0;
     const ignoradas: string[] = [];
+    const possiveisDuplicatas: string[] = [];
 
     for (const linha of linhas) {
       // Sem vínculo com o catálogo não há como ser idempotente: a próxima
@@ -293,7 +307,28 @@ export const gerarCompras = mutation({
         continue;
       }
 
-      const material = await ctx.db.get(linha.materialId as Id<"materials">);
+      // ── COMPRA CADASTRADA À MÃO PARA O MESMO MATERIAL ─────────────────────
+      // A decoradora digitou "Rosa branca 200 haste" em Compras antes de vir
+      // aqui. Essa linha não tem `materialId`, então a checagem acima não a
+      // encontra — e a geração criaria uma SEGUNDA compra de rosas.
+      //
+      // Não fundimos por semelhança: nome não é identidade, e casar por nome
+      // poderia grudar duas coisas diferentes. Mas criar em silêncio é pior —
+      // é dinheiro comprado duas vezes. Então NÃO GERA e diz exatamente o que
+      // encontrou; a decoradora resolve (usa a compra que já existe, ou apaga
+      // e gera de novo).
+      const semelhante = compras.find(
+        (c) =>
+          !c.materialId &&
+          (c.unit ?? "") === linha.unidade &&
+          normalizeName(c.name) === normalizeName(linha.nome),
+      );
+      if (semelhante) {
+        possiveisDuplicatas.push(linha.nome);
+        continue;
+      }
+
+      const material = catalogo.get(linha.materialId);
       await ctx.db.insert("purchaseItems", {
         userId: user._id,
         eventId: event._id,
@@ -303,16 +338,25 @@ export const gerarCompras = mutation({
         isPurchased: false,
         status: "necessidade" as const,
         order: ordem++,
-        materialId: linha.materialId as never,
+        materialId: linha.materialId as Id<"materials">,
         necessidadeTecnica: linha.necessario,
         // Fornecedor PREFERENCIAL do material, como ponto de partida. A
         // decoradora troca na hora de comprar — nunca é vínculo obrigatório.
         supplierId: material?.supplierId,
         updatedAt: new Date().toISOString(),
       });
+      // A lista local acompanha o que acabou de ser criado — sem reler do
+      // banco. Só os campos que o casamento acima consulta; sem isto, dois
+      // materiais na mesma chave gerariam duas linhas na MESMA execução.
+      compras.push({
+        materialId: linha.materialId,
+        unit: linha.unidade,
+        name: linha.nome,
+        order: ordem,
+      } as (typeof compras)[number]);
       criadas += 1;
     }
 
-    return { criadas, jaExistiam, divergentes, ignoradas };
+    return { criadas, jaExistiam, divergentes, ignoradas, possiveisDuplicatas };
   },
 });

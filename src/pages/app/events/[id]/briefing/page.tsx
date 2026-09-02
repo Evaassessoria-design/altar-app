@@ -10,10 +10,11 @@ import { Textarea } from "@/components/ui/textarea.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { toast } from "sonner";
-import { ArrowLeft, Save, ChevronRight, Sparkles, FileDown, Loader2 } from "lucide-react";
+import { ArrowLeft, Save, ChevronRight, Sparkles, FileDown, Loader2, Truck } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
 import { BRIEFING_AREAS, type BriefingFields } from "@/lib/briefing-areas.ts";
 import { generateAssemblyPDF } from "@/lib/generate-assembly-pdf.ts";
+import { generateLoadingPDF } from "@/lib/generate-loading-pdf.ts";
 
 /**
  * Converte a logo em data URL para o jsPDF.
@@ -49,6 +50,7 @@ export default function EventBriefingPage() {
   const [activeArea, setActiveArea] = useState(0);
   const [suggesting, setSuggesting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportandoCarga, setExportandoCarga] = useState(false);
 
   const event = useQuery(api.events.get, { id: eventId });
   const briefing = useQuery(api.briefing.getBriefing, { eventId });
@@ -105,6 +107,33 @@ export default function EventBriefingPage() {
   // existir, a seção simplesmente não aparece no PDF.
   const mapUrl =
     renders?.find((r) => r.status === "done" && r.outputUrl)?.outputUrl ?? null;
+
+  /**
+   * Folha de carregamento — LOGÍSTICA, não projeto.
+   *
+   * Documento irmão do Caderno, e de propósito separado dele: quem carrega o
+   * caminhão precisa de item, quantidade e caixas de marcar; quem monta
+   * precisa de referência e composição. Cobre o evento INTEIRO, não só a área
+   * aberta na tela.
+   */
+  const handleExportarCarregamento = async () => {
+    if (!event) return;
+    setExportandoCarga(true);
+    try {
+      await generateLoadingPDF({
+        event,
+        items: (items ?? []) as never,
+        empresa: empresa ?? null,
+        responsible: health?.responsible,
+        responsiblePhone: responsavelTelefone,
+      });
+      toast.success("Folha de carregamento gerada!");
+    } catch {
+      toast.error("Erro ao gerar a folha de carregamento.");
+    } finally {
+      setExportandoCarga(false);
+    }
+  };
 
   const handleExport = async () => {
     if (!event) return;
@@ -173,6 +202,22 @@ export default function EventBriefingPage() {
                 )}
                 <span className="hidden sm:inline">Caderno de Montagem</span>
                 <span className="sm:hidden">PDF</span>
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void handleExportarCarregamento()}
+                disabled={exportandoCarga || !event}
+                className="cursor-pointer gap-1.5"
+                title="Lista do que entra no caminhão, por ambiente, com saída e retorno"
+              >
+                {exportandoCarga ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Truck className="size-3.5" />
+                )}
+                <span className="hidden sm:inline">Carregamento</span>
+                <span className="sm:hidden">Carga</span>
               </Button>
               <Button
                 onClick={handleSubmit(onSave)}

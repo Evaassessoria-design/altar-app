@@ -88,8 +88,27 @@ export function ehObrigacaoDeMontagem(item: { projectScope?: string }): boolean 
  *
  * Ambiente sem item nenhum não aparece: o projeto mostra o que existe.
  */
-export function montarProjeto(itens: readonly ItemDoProjeto[]): AmbienteDoProjeto[] {
-  const porArea = new Map<string, ItemDoProjeto[]>();
+export type GrupoDeAmbiente<T> = {
+  key: string;
+  label: string;
+  emoji?: string;
+  itens: T[];
+};
+
+/**
+ * Agrupa QUALQUER coisa que tenha `area` por ambiente, na ordem das áreas
+ * conhecidas, com os personalizados no fim.
+ *
+ * Genérica de propósito: o Projeto de Decoração e a Folha de Carregamento
+ * olham os MESMOS itens sob ângulos diferentes. Se cada um tivesse a própria
+ * ordenação, o mesmo evento apareceria com os ambientes fora de ordem entre
+ * uma tela e a outra — e "Mesa do bolo" viria antes de "Cerimônia" num lugar
+ * e depois no outro, sem que ninguém entendesse por quê.
+ */
+export function agruparPorAmbiente<T extends { area: string }>(
+  itens: readonly T[],
+): GrupoDeAmbiente<T>[] {
+  const porArea = new Map<string, T[]>();
   for (const item of itens) {
     const lista = porArea.get(item.area) ?? [];
     lista.push(item);
@@ -107,13 +126,16 @@ export function montarProjeto(itens: readonly ItemDoProjeto[]): AmbienteDoProjet
   });
 
   return chaves.map((key) => {
-    const itensDoAmbiente = porArea.get(key)!;
     const { label, emoji } = labelDoAmbiente(key);
+    return { key, label, emoji, itens: porArea.get(key)! };
+  });
+}
+
+export function montarProjeto(itens: readonly ItemDoProjeto[]): AmbienteDoProjeto[] {
+  return agruparPorAmbiente(itens).map((grupo) => {
+    const itensDoAmbiente = grupo.itens;
     return {
-      key,
-      label,
-      emoji,
-      itens: itensDoAmbiente,
+      ...grupo,
       inclusos: itensDoAmbiente.filter((i) => escopoDoItem(i) === "incluso").length,
       referencias: itensDoAmbiente.filter((i) => escopoDoItem(i) === "referencia").length,
     };

@@ -28,7 +28,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ConvexError } from "convex/values";
 import { cn } from "@/lib/utils.ts";
-import { hojeDateKey } from "@/lib/event-date.ts";
+import { formatEventDayOnly, hojeDateKey } from "@/lib/event-date.ts";
 import { StatusSelect } from "@/components/status-select.tsx";
 import { ResponsavelInline, ResponsavelSelect } from "@/components/responsavel-select.tsx";
 import { PainelDeCompras } from "./_components/painel-de-compras.tsx";
@@ -437,7 +437,7 @@ function EventSection({
                               )}
                             >
                               · {isOverdue(item, hoje) ? "atrasado desde" : "até"}{" "}
-                              {new Date(`${item.dueDate}T12:00:00`).toLocaleDateString("pt-BR")}
+                              {formatEventDayOnly(item.dueDate)}
                             </span>
                           )}
                         </div>

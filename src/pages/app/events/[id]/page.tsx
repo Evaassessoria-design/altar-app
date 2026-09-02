@@ -1,4 +1,5 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
+import { formatTimestamp } from "@/lib/safe-date.ts";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
@@ -36,8 +37,6 @@ import {
   Layers,
   Boxes,
 } from "lucide-react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils.ts";
 import { sortEventTeam } from "@/lib/event-team.ts";
 import { useRef, useState } from "react";
@@ -605,7 +604,7 @@ export default function EventDetailsPage() {
             <div className="rounded-lg bg-primary/5 border border-primary/20 px-3 py-2 text-xs">
               <p className="text-primary font-medium">✓ Contrato importado e analisado</p>
               <p className="text-muted-foreground">
-                {format(new Date(event.contractAnalyzedAt), "dd/MM/yyyy", { locale: ptBR })}
+                {formatTimestamp(event.contractAnalyzedAt)}
                 {event.contractPendings && event.contractPendings.length > 0
                   ? ` · ${event.contractPendings.length} pendência(s) para revisar`
                   : ""}

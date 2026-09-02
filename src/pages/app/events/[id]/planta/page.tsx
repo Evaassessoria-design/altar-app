@@ -1,12 +1,11 @@
 import { useState, useRef } from "react";
+import { formatTimestampComHora } from "@/lib/safe-date.ts";
 import { useParams, Link } from "react-router-dom";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
 import { ConvexError } from "convex/values";
 import { toast } from "sonner";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
@@ -472,7 +471,7 @@ export default function PlantaPage() {
                     <StatusBadge status={r.status} />
                   </div>
                   <span className="text-xs text-muted-foreground">
-                    {format(new Date(r.createdAt), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                    {formatTimestampComHora(r.createdAt)}
                   </span>
                 </div>
 

@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { formatTimestamp } from "@/lib/safe-date.ts";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
@@ -109,7 +110,7 @@ export function EventDocuments({ eventId }: { eventId: Id<"events"> }) {
                   <p className="text-sm font-medium truncate">{doc.filename}</p>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Anexado em {new Date(doc.uploadedAt).toLocaleDateString("pt-BR")}
+                  Anexado em {formatTimestamp(doc.uploadedAt)}
                 </p>
               </div>
               {doc.url && (
@@ -154,7 +155,7 @@ export function EventDocuments({ eventId }: { eventId: Id<"events"> }) {
                       <p className="text-sm font-medium truncate">{doc.fileName}</p>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Anexado em {new Date(doc.uploadedAt).toLocaleDateString("pt-BR")}
+                      Anexado em {formatTimestamp(doc.uploadedAt)}
                       {tamanho && ` · ${tamanho}`}
                     </p>
                     {!doc.arquivoDisponivel && (

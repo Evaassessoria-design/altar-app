@@ -30,8 +30,8 @@ import {
   AlertTriangle,
   RefreshCw,
 } from "lucide-react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { formatTimestamp, formatTimestampComHora } from "@/lib/safe-date.ts";
+import { formatEventDayOnly } from "@/lib/event-date.ts";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -474,7 +474,7 @@ export default function AdminPage() {
                         </td>
 
                         <td className="px-3 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                          {format(new Date(u._creationTime), "dd/MM/yyyy", { locale: ptBR })}
+                          {formatTimestamp(u._creationTime)}
                         </td>
 
                         <td className="px-3 py-3 text-xs whitespace-nowrap">
@@ -651,7 +651,7 @@ function LastSeen({ lastSeenAt }: { lastSeenAt?: number }) {
         : "text-muted-foreground";
 
   return (
-    <span className={cor} title={format(new Date(lastSeenAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}>
+    <span className={cor} title={formatTimestampComHora(lastSeenAt)}>
       {rotulo}
     </span>
   );
@@ -673,7 +673,7 @@ function SubscriptionCell({ user }: { user: AdminUser }) {
 
       {user.subscriptionStatus === "trial" && user.trialEndDate && (
         <p className="text-xs text-muted-foreground">
-          até {format(new Date(user.trialEndDate), "dd/MM/yyyy", { locale: ptBR })}
+          até {formatTimestamp(user.trialEndDate)}
         </p>
       )}
 
@@ -715,12 +715,12 @@ function EventsSummary({ user }: { user: AdminUser }) {
       </p>
       {user.lastEventAt !== undefined && (
         <p className="text-xs text-muted-foreground">
-          último criado {format(new Date(user.lastEventAt), "dd/MM/yyyy", { locale: ptBR })}
+          último criado {formatTimestamp(user.lastEventAt)}
         </p>
       )}
       {user.nextEventDate && (
         <p className="text-xs text-muted-foreground">
-          próximo {format(new Date(user.nextEventDate + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}
+          próximo {formatEventDayOnly(user.nextEventDate)}
         </p>
       )}
     </div>
@@ -818,7 +818,7 @@ function UserCard({ user, actions }: { user: AdminUser; actions: React.ReactNode
         <div>
           <dt className="text-muted-foreground">Cadastro</dt>
           <dd className="font-medium mt-0.5">
-            {format(new Date(user._creationTime), "dd/MM/yyyy", { locale: ptBR })}
+            {formatTimestamp(user._creationTime)}
           </dd>
         </div>
         <div>
@@ -856,7 +856,7 @@ function AccessCell({ user }: { user: AdminUser }) {
           }`}
         >
           {user.access.betaExpired ? "expirou em " : "até "}
-          {format(new Date(expiresAt), "dd/MM/yyyy", { locale: ptBR })}
+          {formatTimestamp(expiresAt)}
         </p>
       )}
       {user.access.type === "beta" && expiresAt === undefined && (
@@ -958,7 +958,7 @@ function InteressadosNoAltar() {
                     </a>
                   )}
                   <span className="text-xs text-muted-foreground">
-                    {new Date(lead.createdAt).toLocaleDateString("pt-BR")}
+                    {formatTimestamp(lead.createdAt)}
                   </span>
                 </div>
               </div>
@@ -1102,7 +1102,7 @@ function AvisosDoAsaas() {
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {format(new Date(e.receivedAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                    {formatTimestampComHora(e.receivedAt)}
                     {e.value !== undefined &&
                       ` · ${e.value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`}
                     {e.matchedBy && ` · casou por ${e.matchedBy}`}

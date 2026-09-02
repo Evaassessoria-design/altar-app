@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { formatTimestamp } from "@/lib/safe-date.ts";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
@@ -162,7 +163,7 @@ export function LeadDocumentsDialog({
                       <p className="text-sm font-medium truncate">{doc.fileName}</p>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {new Date(doc.uploadedAt).toLocaleDateString("pt-BR")}
+                      {formatTimestamp(doc.uploadedAt)}
                       {tamanho && ` · ${tamanho}`}
                     </p>
                     {/* O arquivo pode ter sumido do storage (upload interrompido,

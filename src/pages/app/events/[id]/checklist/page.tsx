@@ -332,7 +332,12 @@ export default function EventChecklistPage() {
               <button
                 onClick={() => handleToggle(item)}
                 aria-label={item.isChecked ? `Reabrir ${item.name}` : `Concluir ${item.name}`}
-                className="flex-shrink-0 cursor-pointer text-primary hover:scale-110 transition-transform"
+                /* `-m-2.5 p-2.5`: cresce a AREA DE TOQUE para ~44px sem mover
+                   nada na tela. O icone tem 20px, e 20px e alvo de mouse, nao
+                   de dedo — esta e a tela que se usa em pe no galpao, com uma
+                   mao, marcando item enquanto se segura caixa. Errar o toque
+                   ali custa parar e tentar de novo. */
+                className="flex-shrink-0 cursor-pointer text-primary hover:scale-110 transition-transform -m-2.5 p-2.5"
               >
                 {item.isChecked ? (
                   <CheckSquare className="size-5" />

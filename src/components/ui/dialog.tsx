@@ -59,7 +59,16 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
+          // `max-h` + rolagem interna: o dialogo e `fixed` e centrado por
+          // translate, entao sem teto de altura um formulario mais alto que a
+          // tela transborda para cima E para baixo, e rolar a pagina atras nao
+          // traz nada de volta — o botao "Salvar" fica inalcancavel. Com o
+          // teclado aberto num aparelho de 320 a 430px isso acontece em quase
+          // todo formulario do ALTAR.
+          //
+          // `dvh` e nao `vh`: no celular `vh` e a altura COM a barra do
+          // navegador recolhida, maior que o espaco que existe de verdade.
+          "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
           className,
         )}
         {...props}

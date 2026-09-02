@@ -55,12 +55,32 @@ export type LancamentoParaCusto = {
   isPaid: boolean;
 };
 
-/** Valor de uma compra. Sem preço = zero, nunca `NaN`. */
-export function valorDaCompra(c: CompraParaCusto): number {
+/**
+ * Valor de uma compra. Sem preço = zero, nunca `NaN`.
+ *
+ * Recebe só o que de fato usa (preço e quantidade) em vez de `CompraParaCusto`
+ * inteiro: assim o `panoramaDeCompras`, que trabalha com o item cru do banco,
+ * reaproveita a MESMA conta em vez de escrever outra.
+ */
+export function valorDaCompra(c: { unitPrice?: number; quantity?: number }): number {
   if (typeof c.unitPrice !== "number" || !Number.isFinite(c.unitPrice)) return 0;
   const qtd =
     typeof c.quantity === "number" && Number.isFinite(c.quantity) ? c.quantity : 1;
   return c.unitPrice * qtd;
+}
+
+/**
+ * A compra tem dinheiro definido e AINDA NÃO virou lançamento no livro-caixa.
+ *
+ * Regra única, usada tanto pelo cálculo de custo quanto pelo panorama
+ * operacional — duas telas que discordassem sobre "o que falta lançar" fariam
+ * a decoradora não confiar em nenhuma das duas.
+ *
+ * Compra cancelada não é dinheiro que saiu; compra já lançada está no livro;
+ * compra sem preço não tem o que lançar.
+ */
+export function foraDoLivro(c: CompraParaCusto): boolean {
+  return !c.cancelada && !c.transactionId && valorDaCompra(c) > 0;
 }
 
 export type CustoDoEvento = {
@@ -116,10 +136,7 @@ export function custoDoEvento(
   const custoLancado = soma("expense", false);
   const custoPago = soma("expense", true);
 
-  // Compra cancelada não é dinheiro que saiu; compra já lançada está no livro.
-  const pendentesDeLancamento = compras.filter(
-    (c) => !c.cancelada && !c.transactionId && valorDaCompra(c) > 0,
-  );
+  const pendentesDeLancamento = compras.filter(foraDoLivro);
   const custoForaDoLivro = pendentesDeLancamento.reduce((s, c) => s + valorDaCompra(c), 0);
 
   const completo = custoForaDoLivro === 0;

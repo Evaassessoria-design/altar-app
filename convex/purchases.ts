@@ -34,6 +34,58 @@ export const listPurchases = query({
   },
 });
 
+/**
+ * PANORAMA — todas as compras da empresa, com o evento de cada uma.
+ *
+ * A tela de Compras é organizada por evento e responde "o que falta neste
+ * casamento?". Esta consulta responde a outra pergunta, a de segunda-feira:
+ * "o que eu preciso resolver esta semana, em TODOS os eventos?". Antes só dava
+ * para respondê-la abrindo evento por evento e somando de cabeça — uma compra
+ * atrasada de um evento distante ficava escondida atrás de um acordeão fechado.
+ *
+ * Devolve o item CRU mais o mínimo do evento (nome, data, situação). O
+ * julgamento — o que é urgente, o que está fora do livro — mora em
+ * lib/panoramaDeCompras.ts, puro e testado; aqui só se lê o banco.
+ *
+ * Eventos cancelados ficam de fora: comprar para um evento cancelado não é
+ * pendência de ninguém. Concluídos entram, porque uma compra atrasada de
+ * evento que já aconteceu ainda pode ter conta a pagar.
+ */
+export const listPanorama = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+
+    const [compras, eventos] = await Promise.all([
+      ctx.db
+        .query("purchaseItems")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .collect(),
+      ctx.db
+        .query("events")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .collect(),
+    ]);
+
+    const porId = new Map(eventos.map((e) => [e._id, e]));
+
+    return compras.flatMap((item) => {
+      const evento = porId.get(item.eventId);
+      // Compra órfã (evento apagado fora da cascata) não vira linha fantasma
+      // sem nome na tela — some, como já sumiu do resto do app.
+      if (!evento || evento.status === "cancelled") return [];
+      return [
+        {
+          ...item,
+          eventName: evento.name,
+          eventDate: evento.date,
+          eventStatus: evento.status,
+        },
+      ];
+    });
+  },
+});
+
 export const addPurchase = mutation({
   args: {
     eventId: v.id("events"),
@@ -110,11 +162,7 @@ export const registerCost = mutation({
       });
     }
 
-    const valor = valorDaCompra({
-      unitPrice: item.unitPrice,
-      quantity: item.quantity,
-      cancelada: false,
-    });
+    const valor = valorDaCompra(item);
     if (valor <= 0) {
       throw new ConvexError({
         code: "BAD_REQUEST",

@@ -29,6 +29,7 @@ import { z } from "zod";
 import { ConvexError } from "convex/values";
 import { cn } from "@/lib/utils.ts";
 import { StatusSelect } from "@/components/status-select.tsx";
+import { PainelDeCompras } from "./_components/painel-de-compras.tsx";
 import {
   PURCHASE_STATUSES,
   PURCHASE_STATUS_LABEL,
@@ -704,14 +705,51 @@ function EventSectionWithData({
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// DUAS LEITURAS DA MESMA LISTA — e por que as duas existem.
+//
+//  · PAINEL: "o que resolvo esta semana, em todos os eventos?" — a pergunta de
+//    segunda-feira. Transversal, ordenada por prazo. Só lê.
+//  · POR EVENTO: "o que falta neste casamento?" — a pergunta de quem está
+//    planejando um evento. É onde se cadastra, edita e lança custo.
+//
+// O painel abre primeiro porque a urgência não pode depender de a decoradora
+// lembrar de abrir o acordeão certo. Editar continua sendo na lista por evento:
+// duas telas gravando a mesma coisa é como se cria divergência.
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function ComprasPage() {
+  const [aba, setAba] = useState<"painel" | "eventos">("painel");
+
   return (
     <div className="p-4 md:p-6 max-w-2xl mx-auto">
-      <div className="mb-6">
+      <div className="mb-4">
         <h1 className="text-2xl font-bold">Compras</h1>
-        <p className="text-sm text-muted-foreground">Lista de compras por evento</p>
+        <p className="text-sm text-muted-foreground">
+          {aba === "painel"
+            ? "O que precisa da sua atenção, em todos os eventos"
+            : "Lista de compras por evento"}
+        </p>
       </div>
-      <ComprasContent />
+
+      <div className="flex gap-2 mb-5">
+        {(["painel", "eventos"] as const).map((a) => (
+          <button
+            key={a}
+            onClick={() => setAba(a)}
+            className={cn(
+              "px-4 py-1.5 rounded-full text-sm font-medium transition-colors cursor-pointer",
+              aba === a
+                ? "bg-primary text-primary-foreground"
+                : "bg-card border border-border text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {a === "painel" ? "Painel" : "Por evento"}
+          </button>
+        ))}
+      </div>
+
+      {aba === "painel" ? <PainelDeCompras /> : <ComprasContent />}
     </div>
   );
 }

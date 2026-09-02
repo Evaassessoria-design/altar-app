@@ -5,6 +5,7 @@ import schema from "./schema";
 import { modules } from "./test.setup";
 import { diasEntre, montarAtencao } from "./lib/attention";
 import { effectivePurchaseStatus, isOverdue, isPendingStatus } from "./lib/purchaseStatus";
+import { aguardandoEntrega } from "./lib/panoramaDeCompras";
 import { resumirFornecedores } from "./lib/eventSummary";
 
 // lib/attention.test.ts cobre as REGRAS. Aqui exercitamos a LEITURA sobre banco
@@ -35,6 +36,10 @@ async function cenario() {
     await ctx.db.insert("purchaseItems", { userId, eventId: perto, name: "Rosas", isPurchased: false, order: 0 });
     await ctx.db.insert("purchaseItems", { userId, eventId: perto, name: "Fita", isPurchased: false, order: 1 });
     await ctx.db.insert("eventSuppliers", { userId, eventId: perto, category: "flores", companyName: "Flores Bela", status: "cotacao" });
+    // Comprada e ainda nao recebida: o dinheiro saiu, a caixa nao chegou.
+    await ctx.db.insert("purchaseItems", {
+      userId, eventId: perto, name: "Arco de ferro", isPurchased: true, order: 2, status: "comprado",
+    });
     await ctx.db.insert("eventTeam", {
       userId, eventId: perto,
       teamMemberId: await ctx.db.insert("teamMembers", { userId, name: "Camila", role: "Coordenação" }),
@@ -72,6 +77,7 @@ async function painel(t: Awaited<ReturnType<typeof cenario>>["t"], userId: strin
           checklistPendentes: checklist.filter((i) => i.phase === "pre" && !i.isChecked).length,
           comprasPendentes: compras.filter((i) => isPendingStatus(effectivePurchaseStatus(i))).length,
           comprasAtrasadas: compras.filter((i) => isOverdue(i, HOJE)).length,
+          comprasAguardandoEntrega: compras.filter(aguardandoEntrega).length,
           fornecedoresAguardando: resumirFornecedores(fornecedores).aguardando,
           equipeEscalada: equipe.length,
           acoesDeFornecedor: fornecedores
@@ -96,6 +102,21 @@ describe("painel de atencao sobre banco real", () => {
     expect(textos).toContain("1 fornecedor sem confirmação");
     // Tem equipe escalada — nao pode aparecer como faltando gente.
     expect(textos.join(" ")).not.toContain("Ninguém escalado");
+  });
+
+  it("avisa o que foi comprado e nao chegou, no evento proximo", async () => {
+    const { t, userId, perto } = await cenario();
+    const p = await painel(t, userId);
+    const ev = p.find((e) => e.eventId === perto)!;
+    expect(ev.motivos.map((m) => m.texto)).toContain("1 compra ainda não recebida");
+  });
+
+  it("a compra comprada NAO conta como pendente — sao estados diferentes", async () => {
+    const { t, userId, perto } = await cenario();
+    const p = await painel(t, userId);
+    const ev = p.find((e) => e.eventId === perto)!;
+    // Continuam sendo 2 pendentes (Rosas e Fita); o arco ja foi comprado.
+    expect(ev.motivos.map((m) => m.texto)).toContain("2 itens de compra pendentes");
   });
 
   it("evento DISTANTE so aparece pelo atraso, nao pelas pendencias normais", async () => {
@@ -134,5 +155,25 @@ describe("painel de atencao sobre banco real", () => {
     expect(corpo).toContain("requireUser");
     expect(corpo).toContain('withIndex("by_user"');
     expect(corpo).not.toMatch(/ctx\.db\.(insert|patch|delete)/);
+  });
+
+  it("a query alimenta TODOS os campos que a regra le", () => {
+    // O espelho acima so prova a regra se a query de verdade mandar os mesmos
+    // campos. Um campo novo alimentado so no teste passaria despercebido e o
+    // motivo nunca apareceria em producao.
+    const fonte = readFileSync("convex/dashboard.ts", "utf-8");
+    const i = fonte.indexOf("export const getAttentionBoard =");
+    const corpo = fonte.slice(i);
+    for (const campo of [
+      "checklistPendentes",
+      "comprasPendentes",
+      "comprasAtrasadas",
+      "comprasAguardandoEntrega",
+      "fornecedoresAguardando",
+      "equipeEscalada",
+      "acoesDeFornecedor",
+    ]) {
+      expect(corpo, `getAttentionBoard nao envia ${campo}`).toContain(`${campo}:`);
+    }
   });
 });

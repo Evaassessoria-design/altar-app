@@ -65,6 +65,13 @@ export type EntradaAtencao = {
   checklistPendentes: number;
   comprasPendentes: number;
   comprasAtrasadas: number;
+  /**
+   * Compradas e ainda NÃO recebidas. O dinheiro saiu, a caixa não chegou.
+   *
+   * Ausente nas leituras antigas (campo aditivo): sem ele, o motivo
+   * simplesmente não aparece — nunca um número inventado.
+   */
+  comprasAguardandoEntrega?: number;
   fornecedoresAguardando: number;
   equipeEscalada: number;
   /**
@@ -137,6 +144,22 @@ export function motivosDeAtencao(e: EntradaAtencao): MotivoAtencao[] {
       destino: `${base}/fornecedores`,
     });
   }
+  // ── O QUE FOI COMPRADO E NÃO CHEGOU ──────────────────────────────────────
+  // Estado que nenhuma tela mostrava: o item foi pago e continua com o
+  // fornecedor. Enquanto o evento está longe isso é normal — a entrega tem
+  // prazo. Perto do evento vira risco operacional real, porque não há mais
+  // tempo de cobrar, trocar ou improvisar.
+  //
+  // Por isso só entra na janela urgente, e NÃO torna o evento urgente por si:
+  // é um aviso, não um atraso. Quem define atraso é a data limite que a
+  // decoradora gravou.
+  if ((e.comprasAguardandoEntrega ?? 0) > 0 && e.diasAte <= JANELA_URGENTE_DIAS) {
+    motivos.push({
+      texto: `${plural(e.comprasAguardandoEntrega!, "compra ainda não recebida", "compras ainda não recebidas")}`,
+      destino: "/compras",
+    });
+  }
+
   // Falta de equipe só é problema quando o evento está realmente perto.
   if (e.equipeEscalada === 0 && e.diasAte <= JANELA_URGENTE_DIAS) {
     motivos.push({ texto: "Ninguém escalado para a montagem", destino: base });

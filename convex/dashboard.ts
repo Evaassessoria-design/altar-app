@@ -2,6 +2,7 @@ import { query } from "./_generated/server";
 import { requireUser } from "./lib/identity";
 import { diasEntre, montarAtencao } from "./lib/attention";
 import { effectivePurchaseStatus, isOverdue, isPendingStatus } from "./lib/purchaseStatus";
+import { aguardandoEntrega } from "./lib/panoramaDeCompras";
 import { resumirFornecedores } from "./lib/eventSummary";
 import { fornecedoresDaDecoradora } from "./lib/escopoDecoradora";
 
@@ -95,7 +96,13 @@ export const getDashboardStats = query({
         .query("purchaseItems")
         .withIndex("by_event", (q) => q.eq("eventId", ev._id))
         .collect();
-      pendingPurchasesCount += items.filter((i) => !i.isPurchased).length;
+      // `!isPurchased` contava CANCELADO como "falta comprar": um item que a
+      // decoradora tirou da lista continuava inflando o número do painel, e o
+      // Quadro de Atenção (que já usava esta regra) mostrava outro valor para
+      // o mesmo evento. A verdade é a situação efetiva do item.
+      pendingPurchasesCount += items.filter((i) =>
+        isPendingStatus(effectivePurchaseStatus(i)),
+      ).length;
     }
 
     return {
@@ -158,6 +165,9 @@ export const getAttentionBoard = query({
           checklistPendentes: checklist.filter((i) => i.phase === "pre" && !i.isChecked).length,
           comprasPendentes: compras.filter((i) => isPendingStatus(effectivePurchaseStatus(i))).length,
           comprasAtrasadas: compras.filter((i) => isOverdue(i, hojeISO)).length,
+          // Comprado e ainda não recebido: o dinheiro saiu, a caixa não chegou.
+          // A regra de quando isso vira atenção é de lib/attention.ts.
+          comprasAguardandoEntrega: compras.filter(aguardandoEntrega).length,
           // "Fornecedor sem confirmação" também é sobre a operação dela: o
           // buffet não ter confirmado é uma pendência do cliente, não da
           // decoradora. A regra é a mesma de `acoesDeFornecedor`.

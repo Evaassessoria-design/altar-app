@@ -411,7 +411,12 @@ export default defineSchema({
     // existe hoje, e continua válido: o custo dela aparece como "fora do
     // livro", não como erro.
     transactionId: v.optional(v.id("transactions")),
-  }).index("by_event", ["eventId"]),
+  })
+    .index("by_event", ["eventId"])
+    // O panorama de compras lê TODAS as compras da empresa de uma vez (a
+    // pergunta de segunda-feira: "o que resolvo esta semana?"). Sem este
+    // indice a consulta varreria a tabela de todos os usuarios.
+    .index("by_user", ["userId"]),
 
   budgetItems: defineTable({
     userId: v.id("users"),

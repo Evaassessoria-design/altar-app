@@ -92,6 +92,35 @@ describe("motivos que valem independente da data", () => {
   });
 });
 
+describe("comprado e ainda nao recebido", () => {
+  it("NAO aparece com o evento longe — prazo de entrega e normal", () => {
+    const m = motivosDeAtencao(base({ diasAte: 20, comprasAguardandoEntrega: 3 }));
+    expect(m.map((x) => x.texto)).not.toContain("3 compras ainda não recebidas");
+  });
+
+  it("aparece dentro da janela urgente, apontando para /compras", () => {
+    const m = motivosDeAtencao(base({ diasAte: 5, comprasAguardandoEntrega: 3 }));
+    const motivo = m.find((x) => x.texto.includes("não recebidas"));
+    expect(motivo?.texto).toBe("3 compras ainda não recebidas");
+    expect(motivo?.destino).toBe("/compras");
+  });
+
+  it("uma so usa o singular", () => {
+    const m = motivosDeAtencao(base({ diasAte: 2, comprasAguardandoEntrega: 1 }));
+    expect(m.map((x) => x.texto)).toContain("1 compra ainda não recebida");
+  });
+
+  it("leitura ANTIGA sem o campo nao inventa motivo nenhum", () => {
+    // O campo e aditivo: consulta que ainda nao o envia continua funcionando,
+    // e o painel simplesmente nao mostra este motivo.
+    expect(motivosDeAtencao(base({ diasAte: 2 }))).toEqual([]);
+  });
+
+  it("aguardar entrega NAO promove o evento sozinho — e aviso, nao atraso", () => {
+    expect(montarAtencao([base({ diasAte: 20, comprasAguardandoEntrega: 5 })])).toEqual([]);
+  });
+});
+
 describe("equipe", () => {
   it("falta de equipe so pesa quando o evento esta realmente perto", () => {
     expect(motivosDeAtencao(base({ diasAte: 20, equipeEscalada: 0 }))).toEqual([]);

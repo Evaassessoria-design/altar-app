@@ -29,6 +29,7 @@ import type * as health from "../health.js";
 import type * as http from "../http.js";
 import type * as landingLeads from "../landingLeads.js";
 import type * as layoutRenders from "../layoutRenders.js";
+import type * as leadDocuments from "../leadDocuments.js";
 import type * as demo from "../demo.js";
 import type * as demoAuth from "../demoAuth.js";
 import type * as lib_access from "../lib/access.js";
@@ -76,6 +77,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   landingLeads: typeof landingLeads;
   layoutRenders: typeof layoutRenders;
+  leadDocuments: typeof leadDocuments;
   demo: typeof demo;
   demoAuth: typeof demoAuth;
   "lib/access": typeof lib_access;

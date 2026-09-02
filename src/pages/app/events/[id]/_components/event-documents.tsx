@@ -6,7 +6,12 @@ import { Button } from "@/components/ui/button.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { toast } from "sonner";
 import { ConvexError } from "convex/values";
-import { FolderOpen, Upload, ExternalLink, Loader2 } from "lucide-react";
+import { FolderOpen, Upload, ExternalLink, Loader2, Handshake, FileWarning } from "lucide-react";
+import {
+  ordenarDocumentosDoLead,
+  rotuloDoTipo,
+  tamanhoLegivel,
+} from "@/convex/lib/tiposDeDocumento.ts";
 import {
   DOCUMENT_KINDS,
   labelDoTipo,
@@ -29,6 +34,10 @@ import {
 
 export function EventDocuments({ eventId }: { eventId: Id<"events"> }) {
   const documentos = useQuery(api.contracts.listDocuments, { eventId });
+  // Documentos que vieram da NEGOCIAÇÃO (proposta, comprovante do sinal). Eles
+  // continuam morando no lead — o evento só os enxerga. Ver
+  // convex/leadDocuments.ts: copiar criaria dois donos para o mesmo arquivo.
+  const daNegociacao = useQuery(api.leadDocuments.listForEvent, { eventId });
   const generateUploadUrl = useMutation(api.contracts.generateUploadUrl);
   const saveContract = useMutation(api.contracts.saveContract);
 
@@ -116,6 +125,59 @@ export function EventDocuments({ eventId }: { eventId: Id<"events"> }) {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Vindos do funil: leitura apenas. Quem anexa e exclui é a tela da
+          negociação — dois donos para o mesmo arquivo geraria exclusão órfã. */}
+      {daNegociacao && daNegociacao.length > 0 && (
+        <div className="border-t border-border">
+          <div className="px-5 pt-3 pb-1 flex items-center gap-2">
+            <Handshake className="size-3.5 text-muted-foreground" />
+            <p className="text-xs font-medium text-muted-foreground">
+              Da negociação (funil) — anexados antes do evento existir
+            </p>
+          </div>
+          <div className="divide-y divide-border">
+            {ordenarDocumentosDoLead(daNegociacao).map((doc) => {
+              const rotulo = rotuloDoTipo(doc.documentType);
+              const tamanho = tamanhoLegivel(doc.fileSize);
+              return (
+                <div key={doc._id} className="px-5 py-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {rotulo && (
+                        <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full font-medium">
+                          {rotulo}
+                        </span>
+                      )}
+                      <p className="text-sm font-medium truncate">{doc.fileName}</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Anexado em {new Date(doc.uploadedAt).toLocaleDateString("pt-BR")}
+                      {tamanho && ` · ${tamanho}`}
+                    </p>
+                    {!doc.arquivoDisponivel && (
+                      <p className="text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1 mt-0.5">
+                        <FileWarning className="size-3" /> Arquivo indisponível
+                      </p>
+                    )}
+                  </div>
+                  {doc.url && (
+                    <a
+                      href={doc.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-2 rounded-lg hover:bg-accent transition-colors cursor-pointer text-muted-foreground flex-shrink-0"
+                      aria-label={`Abrir ${doc.fileName}`}
+                    >
+                      <ExternalLink className="size-4" />
+                    </a>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

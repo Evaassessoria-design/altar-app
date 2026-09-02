@@ -23,7 +23,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog.tsx";
-import { Phone, Plus, Pencil, Trash2, ArrowRight, CalendarDays, DollarSign } from "lucide-react";
+import {
+  Phone,
+  Plus,
+  Pencil,
+  Trash2,
+  ArrowRight,
+  CalendarDays,
+  DollarSign,
+  Paperclip,
+} from "lucide-react";
+import { LeadDocumentsDialog } from "./_components/lead-documents.tsx";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -308,6 +318,7 @@ function LeadCard({
   onDropBefore: (target: Doc<"leads">) => void;
 }) {
   const [converting, setConverting] = useState(false);
+  const [documentos, setDocumentos] = useState(false);
   const stageConfig = STAGES.find((s) => s.id === lead.stage)!;
   const nextStage = STAGES[STAGES.findIndex((s) => s.id === lead.stage) + 1];
 
@@ -408,10 +419,27 @@ function LeadCard({
         {lead.convertedEventId && (
           <span className="text-xs text-muted-foreground">✓ Evento criado</span>
         )}
+        {/* Proposta e contrato ficam com o LEAD, disponíveis em qualquer
+            estágio — a papelada da negociação existe antes do evento. */}
+        <button
+          onClick={() => setDocumentos(true)}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline cursor-pointer ml-auto"
+        >
+          <Paperclip className="size-3" /> Documentos
+        </button>
       </div>
 
       {converting && (
         <ConvertDialog lead={lead} open={converting} onClose={() => setConverting(false)} />
+      )}
+
+      {documentos && (
+        <LeadDocumentsDialog
+          leadId={lead._id}
+          clientName={lead.clientName}
+          open={documentos}
+          onClose={() => setDocumentos(false)}
+        />
       )}
     </div>
   );

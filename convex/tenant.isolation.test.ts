@@ -20,6 +20,8 @@ const GUARDAS = [
   "requireAdmin", // painel: exige administrador do ALTAR
   "requireEventOwner", // lança se o evento não for do usuário
   "getOwnedEvent", // devolve null se o evento não for do usuário
+  "requireLeadOwner", // lança se o lead do funil não for do usuário
+  "getOwnedLead", // devolve null se o lead do funil não for do usuário
   "requireActiveAccess", // paywall; resolve o usuário via requireUser
   "requireUser", // resolve o usuário; a função filtra por ele
 ];
@@ -49,6 +51,7 @@ const SEM_GUARDA_JUSTIFICADO: Record<string, string> = {
   "suppliers.generateUploadUrl": "URL de upload sem vínculo com tenant",
   "assemblyItems.generateUploadUrl": "URL de upload sem vínculo com tenant",
   "gallery.generateUploadUrl": "URL de upload sem vínculo com tenant",
+  "leadDocuments.generateUploadUrl": "URL de upload sem vínculo com tenant",
 };
 
 /** Módulos tocados ou recém-expostos nesta rodada e na anterior. */
@@ -67,6 +70,7 @@ const MODULOS = [
   "gallery",
   "funil",
   "events",
+  "leadDocuments",
 ];
 
 type Funcao = { id: string; tipo: string; corpo: string };

@@ -110,6 +110,38 @@ export async function requireEventOwner(
   return { user, event };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTORIZAÇÃO POR LEAD
+// Mesma regra do evento, aplicada ao funil: um lead de outra decoradora não
+// pode ser lido, alterado nem ter arquivo anexado. NOT_FOUND (e não FORBIDDEN)
+// pelo mesmo motivo — não confirmar que o lead existe.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Lead do usuário atual, ou `null` (inexistente, de outro dono, ou sem sessão). */
+export async function getOwnedLead(
+  ctx: QueryCtx | MutationCtx,
+  leadId: Id<"leads">,
+): Promise<Doc<"leads"> | null> {
+  const user = await getOptionalUser(ctx);
+  if (!user) return null;
+  const lead = await ctx.db.get(leadId);
+  if (!lead || lead.userId !== user._id) return null;
+  return lead;
+}
+
+/** Exige que o lead pertença ao usuário atual. Devolve o par `{ user, lead }`. */
+export async function requireLeadOwner(
+  ctx: QueryCtx | MutationCtx,
+  leadId: Id<"leads">,
+): Promise<{ user: Doc<"users">; lead: Doc<"leads"> }> {
+  const user = await requireUser(ctx);
+  const lead = await ctx.db.get(leadId);
+  if (!lead || lead.userId !== user._id) {
+    throw new ConvexError({ code: "NOT_FOUND", message: "Lead não encontrado" });
+  }
+  return { user, lead };
+}
+
 // Contexto mínimo com `auth` — cobre QueryCtx, MutationCtx e ActionCtx.
 type AuthCtx = { auth: QueryCtx["auth"] };
 

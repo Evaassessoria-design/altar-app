@@ -39,6 +39,15 @@ const leadStage = v.union(
   v.literal("discarded"),
 );
 
+// Tipos de documento que nascem na negociacao, antes de existir evento.
+const leadDocumentType = v.union(
+  v.literal("proposta"),
+  v.literal("contrato"),
+  v.literal("comprovante"),
+  v.literal("referencia"),
+  v.literal("outro"),
+);
+
 const txType = v.union(v.literal("income"), v.literal("expense"));
 
 const checklistPhase = v.union(v.literal("pre"), v.literal("post"));
@@ -269,6 +278,32 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_stage", ["userId", "stage"]),
+
+  // ── DOCUMENTOS DO LEAD (comercial) ────────────────────────────────────────
+  // A negociacao gera arquivos ANTES de existir evento: proposta enviada,
+  // contrato assinado, comprovante do sinal, referencias que a cliente mandou
+  // no WhatsApp. Ate aqui esses arquivos so tinham onde morar depois da
+  // conversao (tabela `contracts`, que exige eventId) — na pratica ficavam no
+  // celular da decoradora e sumiam.
+  //
+  // Tabela separada de `contracts` de proposito: o dono aqui e o LEAD, que
+  // pode nunca virar evento. Converter o lead NAO move nem copia arquivo — o
+  // lead sobrevive a conversao e continua sendo a origem deles (ver
+  // `leadDocuments.listForEvent`).
+  leadDocuments: defineTable({
+    userId: v.id("users"),
+    leadId: v.id("leads"),
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    /** Tipo do documento. AUSENTE = nao classificado; nada e presumido. */
+    documentType: v.optional(leadDocumentType),
+    /** Metadados do arquivo, quando o navegador informou. Nunca obrigatorios. */
+    mimeType: v.optional(v.string()),
+    fileSize: v.optional(v.number()),
+    uploadedAt: v.string(),
+  })
+    .index("by_lead", ["leadId"])
+    .index("by_user", ["userId"]),
 
   briefings: defineTable({
     eventId: v.id("events"),

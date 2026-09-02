@@ -32,12 +32,16 @@ import type { Id } from "../_generated/dataModel";
 /**
  * Apaga um arquivo do storage sem nunca lançar.
  *
+ * Exportada porque a regra vale fora da cascata também: qualquer exclusão de
+ * linha-com-arquivo (ex.: `leadDocuments.remove`) precisa continuar apagando o
+ * registro mesmo quando o arquivo já não existe.
+ *
  * O storageId pode já não existir (arquivo removido antes, exclusão repetida
  * após uma falha parcial). Nesse caso o certo é seguir apagando o resto — o
  * registro no banco é o que importa; um arquivo órfão é desperdício, um banco
  * pela metade é corrupção.
  */
-async function safeDeleteFile(
+export async function safeDeleteFile(
   ctx: MutationCtx,
   storageId: Id<"_storage"> | undefined | null,
 ): Promise<boolean> {
@@ -209,6 +213,39 @@ export async function deleteEventCascade(
 }
 
 /**
+ * Apaga um lead do funil e os DOCUMENTOS dele (linhas e arquivos).
+ *
+ * Existe porque `leadDocuments` foi a primeira tabela pendurada em `leads` com
+ * arquivo no storage: antes, `funil.deleteLead` apagava só a linha do lead e a
+ * proposta assinada ficava no storage para sempre, cobrada e inalcançável.
+ *
+ * NÃO apaga o evento que o lead gerou. Converter cria um evento com vida
+ * própria — o histórico comercial pode ser descartado sem levar junto o
+ * trabalho já contratado.
+ */
+export async function deleteLeadCascade(
+  ctx: MutationCtx,
+  leadId: Id<"leads">,
+): Promise<CascadeSummary> {
+  let documents = 0;
+  let files = 0;
+
+  const docs = await ctx.db
+    .query("leadDocuments")
+    .withIndex("by_lead", (q) => q.eq("leadId", leadId))
+    .collect();
+  for (const doc of docs) {
+    if (await safeDeleteFile(ctx, doc.storageId)) files += 1;
+    await ctx.db.delete(doc._id);
+    documents += 1;
+  }
+
+  await ctx.db.delete(leadId);
+  documents += 1;
+  return { events: 0, documents, files };
+}
+
+/**
  * Apaga TUDO que pertence a um usuário: cada evento (com a cascata acima) e,
  * em seguida, os dados que vivem fora de evento — equipe, funil, notificações,
  * lançamentos financeiros avulsos e a logo da empresa.
@@ -269,9 +306,18 @@ export async function deleteUserDataCascade(
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .collect();
 
-  for (const row of [...teamMembers, ...leads, ...notifications, ...transactions]) {
+  for (const row of [...teamMembers, ...notifications, ...transactions]) {
     await ctx.db.delete(row._id);
     documents += 1;
+  }
+
+  // Leads saem pela cascata própria: cada um leva os documentos comerciais
+  // (linhas e ARQUIVOS) junto. Apagá-los aqui direto deixaria proposta e
+  // contrato assinado no storage, cobrados e sem dono.
+  for (const lead of leads) {
+    const partial = await deleteLeadCascade(ctx, lead._id);
+    documents += partial.documents;
+    files += partial.files;
   }
 
   // Logo da empresa.

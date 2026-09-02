@@ -2,6 +2,7 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { requireUser } from "./lib/identity";
+import { deleteLeadCascade } from "./lib/cascade";
 import { requireActiveAccess } from "./lib/accessGuard";
 import { limparCampos } from "./lib/limparCampos";
 import { diasSemContato, resumirFollowUp } from "./lib/leadFollowUp";
@@ -103,7 +104,10 @@ export const deleteLead = mutation({
     const lead = await ctx.db.get(args.id);
     if (!lead || lead.userId !== user._id)
       throw new ConvexError({ message: "Lead não encontrado", code: "NOT_FOUND" });
-    await ctx.db.delete(args.id);
+    // Cascata: o lead carrega documentos comerciais com ARQUIVO no storage.
+    // Apagar só a linha deixava proposta e contrato assinado no storage para
+    // sempre — cobrados e inalcançáveis. Ver lib/cascade.ts.
+    return deleteLeadCascade(ctx, args.id);
   },
 });
 

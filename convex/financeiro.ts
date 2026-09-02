@@ -124,7 +124,28 @@ export const deleteTransaction = mutation({
     const tx = await ctx.db.get(args.id);
     if (!tx || tx.userId !== user._id)
       throw new ConvexError({ message: "Lançamento não encontrado", code: "NOT_FOUND" });
+
+    // ── O VÍNCULO NÃO PODE APONTAR PARA O VAZIO ─────────────────────────────
+    // Uma compra pode ter gerado este lançamento (`purchaseItems.transactionId`).
+    // Apagando só a linha daqui, a compra continuava "lançada" para todos os
+    // efeitos — e como `custoDoEvento` só olhava a EXISTÊNCIA do vínculo, o
+    // custo sumia do livro e a margem saía afirmada, com confiança, sobre um
+    // custo menor do que o real.
+    //
+    // A compra NÃO é apagada: a decisão de apagar a despesa é do Financeiro,
+    // a compra continua sendo trabalho a fazer. Ela só volta a contar como
+    // "fora do financeiro", que é a verdade.
+    const vinculadas = await ctx.db
+      .query("purchaseItems")
+      .withIndex("by_transaction", (q) => q.eq("transactionId", args.id))
+      .collect();
+    for (const compra of vinculadas) {
+      if (compra.userId !== user._id) continue;
+      await ctx.db.patch(compra._id, { transactionId: undefined });
+    }
+
     await ctx.db.delete(args.id);
+    return { vinculosLimpos: vinculadas.length };
   },
 });
 

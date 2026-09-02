@@ -47,7 +47,29 @@ export type CompraParaCusto = {
   cancelada: boolean;
   /** Lançamento gerado a partir desta compra, quando existe. */
   transactionId?: string;
+  /**
+   * Valor do lançamento vinculado, resolvido por quem lê o banco:
+   *
+   *   número  → o lançamento existe e vale isso;
+   *   `null`  → o vínculo aponta para um lançamento que NÃO EXISTE MAIS;
+   *   ausente → quem chamou não resolveu (só em código de teste — há um
+   *             teste estrutural exigindo que todo consumidor real resolva).
+   *
+   * Sem este dado o vínculo mente em silêncio: a compra parece lançada, o
+   * custo sumiu do livro, e a margem sai afirmada sobre um custo menor.
+   */
+  valorLancado?: number | null;
 };
+
+/**
+ * Tolerância de comparação entre o valor da compra e o do lançamento.
+ *
+ * `unitPrice * quantity` é aritmética de ponto flutuante: `0.1 * 3` dá
+ * `0.30000000000000004`. Comparar por igualdade acusaria divergência em
+ * centenas de compras corretas. Meio centavo é a menor diferença que importa
+ * para dinheiro.
+ */
+export const TOLERANCIA_EM_REAIS = 0.005;
 
 export type LancamentoParaCusto = {
   type: string;
@@ -83,6 +105,43 @@ export function foraDoLivro(c: CompraParaCusto): boolean {
   return !c.cancelada && !c.transactionId && valorDaCompra(c) > 0;
 }
 
+/**
+ * O vínculo aponta para um lançamento que não existe mais.
+ *
+ * Acontece quando a decoradora apaga a despesa no Financeiro. Antes disto ser
+ * detectado, a compra continuava "lançada" para todos os efeitos: o custo
+ * sumia do livro, `custoForaDoLivro` ficava zero e a margem era afirmada com
+ * confiança sobre um custo menor do que o real.
+ */
+export function vinculoQuebrado(c: CompraParaCusto): boolean {
+  return Boolean(c.transactionId) && c.valorLancado === null;
+}
+
+/**
+ * Compra CANCELADA que ainda tem despesa viva no livro.
+ *
+ * O dinheiro não saiu, mas o lançamento continua lá reduzindo a margem. Não
+ * apagamos sozinhos — o Financeiro é da decoradora — mas o resultado não pode
+ * se declarar completo enquanto isso estiver de pé.
+ */
+export function canceladaComLancamento(c: CompraParaCusto): boolean {
+  return c.cancelada && Boolean(c.transactionId) && typeof c.valorLancado === "number";
+}
+
+/**
+ * A compra vale uma coisa e o lançamento dela vale outra.
+ *
+ * Acontece ao corrigir preço ou quantidade DEPOIS de lançar: o vínculo
+ * continua, mas o livro guarda o número velho. A margem sairia sobre o valor
+ * antigo, com cara de exata. O conserto é lançar de novo — `registerCost` é
+ * idempotente e reajusta o mesmo lançamento.
+ */
+export function valorDivergente(c: CompraParaCusto): boolean {
+  if (c.cancelada || !c.transactionId) return false;
+  if (typeof c.valorLancado !== "number") return false;
+  return Math.abs(c.valorLancado - valorDaCompra(c)) >= TOLERANCIA_EM_REAIS;
+}
+
 export type CustoDoEvento = {
   /** Vendido ao cliente — entradas do livro-caixa. */
   receita: number;
@@ -98,6 +157,12 @@ export type CustoDoEvento = {
   custoForaDoLivro: number;
   /** Quantas compras estão nessa situação. */
   comprasForaDoLivro: number;
+  /** Vínculo apontando para lançamento apagado. */
+  comprasComVinculoQuebrado: number;
+  /** Compra cancelada com despesa ainda viva no livro. */
+  comprasCanceladasComLancamento: number;
+  /** Compra e lançamento com valores diferentes (preço mudou depois). */
+  comprasComValorDivergente: number;
   /**
    * O custo conhecido está completo?
    *
@@ -136,10 +201,30 @@ export function custoDoEvento(
   const custoLancado = soma("expense", false);
   const custoPago = soma("expense", true);
 
-  const pendentesDeLancamento = compras.filter(foraDoLivro);
+  // ── AS QUATRO MANEIRAS DE O CUSTO NÃO SER CONFIÁVEL ──────────────────────
+  // Cada compra entra em NO MÁXIMO um balde, na ordem de gravidade — senão a
+  // mesma compra apareceria em dois motivos e a mensagem contaria duas vezes.
+  const quebrados: CompraParaCusto[] = [];
+  const canceladasComDespesa: CompraParaCusto[] = [];
+  const divergentes: CompraParaCusto[] = [];
+  const pendentesDeLancamento: CompraParaCusto[] = [];
+
+  for (const c of compras) {
+    if (vinculoQuebrado(c)) quebrados.push(c);
+    else if (canceladaComLancamento(c)) canceladasComDespesa.push(c);
+    else if (valorDivergente(c)) divergentes.push(c);
+    else if (foraDoLivro(c)) pendentesDeLancamento.push(c);
+  }
+
   const custoForaDoLivro = pendentesDeLancamento.reduce((s, c) => s + valorDaCompra(c), 0);
 
-  const completo = custoForaDoLivro === 0;
+  // Completo = o livro conhece o custo E o vínculo não está mentindo em
+  // nenhuma das quatro formas. Basta uma para a margem se calar.
+  const completo =
+    custoForaDoLivro === 0 &&
+    quebrados.length === 0 &&
+    canceladasComDespesa.length === 0 &&
+    divergentes.length === 0;
   const temBase = receita > 0 && custoLancado > 0;
   const podeCalcularMargem = temBase && completo;
 
@@ -151,6 +236,9 @@ export function custoDoEvento(
     saldoAPagar: custoLancado - custoPago,
     custoForaDoLivro,
     comprasForaDoLivro: pendentesDeLancamento.length,
+    comprasComVinculoQuebrado: quebrados.length,
+    comprasCanceladasComLancamento: canceladasComDespesa.length,
+    comprasComValorDivergente: divergentes.length,
     completo,
     margem: podeCalcularMargem ? receita - custoLancado : null,
     margemPercentual: podeCalcularMargem
@@ -166,6 +254,33 @@ export function custoDoEvento(
  */
 export function motivoDaMargemAusente(c: CustoDoEvento): string | null {
   if (c.margem !== null) return null;
+
+  // Ordem de gravidade: o vínculo quebrado é o pior porque o custo SUMIU do
+  // livro; os outros três ainda têm dinheiro rastreável em algum lugar.
+  const plural = (n: number, um: string, muitos: string) =>
+    n === 1 ? `1 ${um}` : `${n} ${muitos}`;
+
+  if (c.comprasComVinculoQuebrado > 0) {
+    return `${plural(
+      c.comprasComVinculoQuebrado,
+      "compra aponta para um lançamento apagado",
+      "compras apontam para lançamentos apagados",
+    )} — lance de novo no financeiro`;
+  }
+  if (c.comprasCanceladasComLancamento > 0) {
+    return `${plural(
+      c.comprasCanceladasComLancamento,
+      "compra cancelada ainda tem despesa no financeiro",
+      "compras canceladas ainda têm despesa no financeiro",
+    )}`;
+  }
+  if (c.comprasComValorDivergente > 0) {
+    return `${plural(
+      c.comprasComValorDivergente,
+      "compra mudou de valor depois de lançada",
+      "compras mudaram de valor depois de lançadas",
+    )} — lance de novo para atualizar`;
+  }
   if (!c.completo) {
     return c.comprasForaDoLivro === 1
       ? "1 compra ainda não foi lançada no financeiro"

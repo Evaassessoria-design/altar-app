@@ -299,7 +299,22 @@ export const deletePurchase = mutation({
     const item = await ctx.db.get(args.id);
     if (!item || item.userId !== user._id)
       throw new ConvexError({ message: "Item não encontrado", code: "NOT_FOUND" });
+
+    // ── A DESPESA QUE ESTA COMPRA GEROU SAI JUNTO ────────────────────────────
+    // Antes, apagar a compra deixava a despesa órfã no Financeiro: a linha
+    // "Rosas — R$ 400" sumia de Compras e os R$ 400 continuavam pesando na
+    // margem para sempre, sem nada que os ligasse de volta a coisa alguma.
+    //
+    // Só o lançamento que ELA gerou (o do vínculo) — nunca um que a
+    // decoradora tenha criado à mão. É a mesma regra de `unregisterCost`.
+    if (item.transactionId) {
+      const lancamento = await ctx.db.get(item.transactionId);
+      if (lancamento && lancamento.userId === user._id) {
+        await ctx.db.delete(item.transactionId);
+      }
+    }
     await ctx.db.delete(args.id);
+    return { lancamentoRemovido: Boolean(item.transactionId) };
   },
 });
 

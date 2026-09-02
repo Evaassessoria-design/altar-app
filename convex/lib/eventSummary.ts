@@ -30,6 +30,7 @@ type CompraLike = {
   quantity?: number;
   unitPrice?: number;
   supplier?: string;
+  transactionId?: string;
 };
 type FornecedorLike = {
   companyName: string;
@@ -38,7 +39,7 @@ type FornecedorLike = {
 };
 type EscalaLike = { scheduledTime?: string };
 type CarregamentoLike = { checkOnAssembly: boolean; quantity?: number };
-type TransacaoLike = { type: string; amount: number; isPaid: boolean };
+type TransacaoLike = { _id?: string; type: string; amount: number; isPaid: boolean };
 
 function contar(itens: readonly { feito: boolean }[]): ContagemFeita {
   const total = itens.length;
@@ -104,6 +105,12 @@ export type ResumoFinanceiro = {
   /** Compras com preço que ainda não viraram lançamento. */
   custoForaDoLivro: number;
   comprasForaDoLivro: number;
+  /** Vínculos que apontam para lançamento apagado. */
+  comprasComVinculoQuebrado: number;
+  /** Canceladas que ainda têm despesa viva. */
+  comprasCanceladasComLancamento: number;
+  /** Compra e lançamento com valores diferentes. */
+  comprasComValorDivergente: number;
   custoCompleto: boolean;
   /** Por que a margem não aparece, quando não aparece. */
   motivoSemMargem: string | null;
@@ -130,13 +137,25 @@ export function resumirFinanceiro(
       .filter((t) => t.type === tipo && (!apenasPagos || t.isPaid))
       .reduce((s, t) => s + t.amount, 0);
 
+  // O valor de CADA lançamento vinculado é resolvido aqui, com os mesmos
+  // `txs` que já estão em mãos. Sem isto, `custoDoEvento` não consegue ver
+  // vínculo apagado nem valor divergente, e a margem sai afirmada em cima de
+  // um custo que não existe mais.
+  const valorPorLancamento = new Map<string, number>();
+  for (const t of txs) if (t._id) valorPorLancamento.set(String(t._id), t.amount);
+
   const custo = custoDoEvento(
     txs,
     compras.map((c) => ({
       unitPrice: c.unitPrice,
       quantity: c.quantity,
       cancelada: effectivePurchaseStatus(c) === "cancelado",
-      transactionId: (c as { transactionId?: string }).transactionId,
+      transactionId: c.transactionId,
+      // `null` quando o vínculo existe e o lançamento não está entre os `txs`
+      // deste evento — ou seja, foi apagado.
+      valorLancado: c.transactionId
+        ? (valorPorLancamento.get(String(c.transactionId)) ?? null)
+        : undefined,
     })),
   );
 
@@ -151,6 +170,9 @@ export function resumirFinanceiro(
     saldoAPagar: custo.saldoAPagar,
     custoForaDoLivro: custo.custoForaDoLivro,
     comprasForaDoLivro: custo.comprasForaDoLivro,
+    comprasComVinculoQuebrado: custo.comprasComVinculoQuebrado,
+    comprasCanceladasComLancamento: custo.comprasCanceladasComLancamento,
+    comprasComValorDivergente: custo.comprasComValorDivergente,
     custoCompleto: custo.completo,
     motivoSemMargem: motivoDaMargemAusente(custo),
   };

@@ -461,6 +461,9 @@ export default defineSchema({
     transactionId: v.optional(v.id("transactions")),
   })
     .index("by_event", ["eventId"])
+    // Apagar um lancamento no Financeiro precisa achar a compra que aponta
+    // para ele — sem este indice o vinculo ficaria apontando para o vazio.
+    .index("by_transaction", ["transactionId"])
     // O panorama de compras lê TODAS as compras da empresa de uma vez (a
     // pergunta de segunda-feira: "o que resolvo esta semana?"). Sem este
     // indice a consulta varreria a tabela de todos os usuarios.

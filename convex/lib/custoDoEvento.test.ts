@@ -1,8 +1,12 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  canceladaComLancamento,
   custoDoEvento,
   motivoDaMargemAusente,
   valorDaCompra,
+  valorDivergente,
+  vinculoQuebrado,
   type CompraParaCusto,
   type LancamentoParaCusto,
 } from "./custoDoEvento";
@@ -200,5 +204,163 @@ describe("compatibilidade com o que já está gravado", () => {
   it("livro sem nenhuma compra continua funcionando como antes", () => {
     const c = custoDoEvento([lanc("income", 100), lanc("expense", 40)], []);
     expect(c.margem).toBe(60);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INTEGRIDADE DO VÍNCULO (auditoria pós-MASTER #5)
+//
+// Até aqui o vínculo era verificado só por EXISTÊNCIA. Isso deixava três
+// maneiras de ele mentir em silêncio — e as três produziam MARGEM AFIRMADA
+// sobre um custo errado, que é o pior resultado possível: um número com cara
+// de exato.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const compraBase = {
+  unitPrice: 100,
+  quantity: 4, // R$ 400
+  cancelada: false,
+};
+
+const LANCAMENTOS = [
+  { type: "income", amount: 10_000, isPaid: true },
+  { type: "expense", amount: 400, isPaid: false },
+];
+
+describe("vínculo quebrado — o lançamento foi apagado", () => {
+  it("é detectado", () => {
+    expect(vinculoQuebrado({ ...compraBase, transactionId: "tx1", valorLancado: null })).toBe(true);
+  });
+
+  it("compra sem vínculo nenhum não é vínculo quebrado", () => {
+    expect(vinculoQuebrado({ ...compraBase })).toBe(false);
+  });
+
+  it("cala a margem, mesmo com receita e custo lançados", () => {
+    const c = custoDoEvento(LANCAMENTOS, [
+      { ...compraBase, transactionId: "tx1", valorLancado: null },
+    ]);
+    expect(c.comprasComVinculoQuebrado).toBe(1);
+    expect(c.completo).toBe(false);
+    expect(c.margem).toBeNull();
+    expect(motivoDaMargemAusente(c)).toBe(
+      "1 compra aponta para um lançamento apagado — lance de novo no financeiro",
+    );
+  });
+});
+
+describe("cancelada com despesa viva", () => {
+  it("é detectada", () => {
+    expect(
+      canceladaComLancamento({ ...compraBase, cancelada: true, transactionId: "tx1", valorLancado: 400 }),
+    ).toBe(true);
+  });
+
+  it("cancelada SEM lançamento continua sendo apenas cancelada", () => {
+    expect(canceladaComLancamento({ ...compraBase, cancelada: true })).toBe(false);
+  });
+
+  it("cala a margem — o dinheiro não saiu e a despesa está lá", () => {
+    const c = custoDoEvento(LANCAMENTOS, [
+      { ...compraBase, cancelada: true, transactionId: "tx1", valorLancado: 400 },
+    ]);
+    expect(c.comprasCanceladasComLancamento).toBe(1);
+    expect(c.margem).toBeNull();
+    expect(motivoDaMargemAusente(c)).toBe(
+      "1 compra cancelada ainda tem despesa no financeiro",
+    );
+  });
+});
+
+describe("valor divergente — o preço mudou depois de lançar", () => {
+  it("é detectado", () => {
+    // Compra vale 400 agora; o livro guarda os 250 de antes.
+    expect(valorDivergente({ ...compraBase, transactionId: "tx1", valorLancado: 250 })).toBe(true);
+  });
+
+  it("valores iguais não são divergência", () => {
+    expect(valorDivergente({ ...compraBase, transactionId: "tx1", valorLancado: 400 })).toBe(false);
+  });
+
+  it("RUÍDO DE PONTO FLUTUANTE não é divergência", () => {
+    // `0.1 * 3` dá 0.30000000000000004. Comparar por igualdade acusaria
+    // centenas de compras corretas.
+    const c = { unitPrice: 0.1, quantity: 3, cancelada: false, transactionId: "tx1" };
+    expect(valorDivergente({ ...c, valorLancado: 0.3 })).toBe(false);
+  });
+
+  it("um centavo de diferença JÁ é divergência — é dinheiro", () => {
+    expect(valorDivergente({ ...compraBase, transactionId: "tx1", valorLancado: 400.01 })).toBe(true);
+  });
+
+  it("cancelada não é avaliada por divergência — ela tem motivo próprio", () => {
+    expect(
+      valorDivergente({ ...compraBase, cancelada: true, transactionId: "tx1", valorLancado: 1 }),
+    ).toBe(false);
+  });
+
+  it("cala a margem e diz como consertar", () => {
+    const c = custoDoEvento(LANCAMENTOS, [
+      { ...compraBase, transactionId: "tx1", valorLancado: 250 },
+    ]);
+    expect(c.comprasComValorDivergente).toBe(1);
+    expect(c.margem).toBeNull();
+    expect(motivoDaMargemAusente(c)).toBe(
+      "1 compra mudou de valor depois de lançada — lance de novo para atualizar",
+    );
+  });
+});
+
+describe("cada compra entra em UM balde só", () => {
+  it("vínculo quebrado não conta também como fora do livro", () => {
+    const c = custoDoEvento(LANCAMENTOS, [
+      { ...compraBase, transactionId: "tx1", valorLancado: null },
+    ]);
+    expect(c.comprasForaDoLivro).toBe(0);
+    expect(c.custoForaDoLivro).toBe(0);
+    expect(c.comprasComVinculoQuebrado).toBe(1);
+  });
+
+  it("a mensagem segue a ordem de gravidade", () => {
+    // Quebrado é o pior: o custo SUMIU do livro. Os outros têm dinheiro
+    // rastreável em algum lugar.
+    const c = custoDoEvento(LANCAMENTOS, [
+      { ...compraBase, transactionId: "tx1", valorLancado: null },
+      { ...compraBase, transactionId: "tx2", valorLancado: 250 },
+      { ...compraBase },
+    ]);
+    expect(motivoDaMargemAusente(c)).toContain("apagado");
+  });
+});
+
+describe("compra correta e lançada continua permitindo a margem", () => {
+  it("nada disto quebra o caminho feliz", () => {
+    const c = custoDoEvento(LANCAMENTOS, [
+      { ...compraBase, transactionId: "tx1", valorLancado: 400 },
+    ]);
+    expect(c.completo).toBe(true);
+    expect(c.margem).toBe(9600);
+    expect(motivoDaMargemAusente(c)).toBeNull();
+  });
+
+  it("compra SEM preço e sem vínculo não atrapalha nada", () => {
+    // Zero e ausente têm a mesma resposta aqui: não há o que lançar.
+    const c = custoDoEvento(LANCAMENTOS, [
+      { cancelada: false },
+      { unitPrice: 0, quantity: 10, cancelada: false },
+      { ...compraBase, transactionId: "tx1", valorLancado: 400 },
+    ]);
+    expect(c.completo).toBe(true);
+    expect(c.comprasForaDoLivro).toBe(0);
+  });
+});
+
+describe("todo consumidor real resolve `valorLancado`", () => {
+  it("resumirFinanceiro monta o mapa de lançamentos", () => {
+    // Um consumidor que esqueça este campo volta ao comportamento antigo — o
+    // vínculo mentindo em silêncio — sem que nenhum outro teste acuse.
+    const fonte = readFileSync("convex/lib/eventSummary.ts", "utf-8");
+    expect(fonte).toContain("valorLancado:");
+    expect(fonte).toMatch(/valorPorLancamento/);
   });
 });

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AutoTextarea } from "@/components/ui/auto-textarea.tsx";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Doc, Id } from "@/convex/_generated/dataModel.d.ts";
@@ -192,7 +193,7 @@ function LeadDialog({
 
           <div className="space-y-1.5">
             <Label>Observações</Label>
-            <Input placeholder="Notas sobre o cliente..." {...register("notes")} />
+            <AutoTextarea minRows={2} placeholder="Notas sobre o cliente..." {...register("notes")} />
           </div>
 
           <div className="space-y-1.5">

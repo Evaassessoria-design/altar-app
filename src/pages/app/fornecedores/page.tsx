@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { AutoTextarea } from "@/components/ui/auto-textarea.tsx";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Doc, Id } from "@/convex/_generated/dataModel.d.ts";
@@ -99,8 +100,11 @@ function SupplierDialog({
 }) {
   const [v, setV] = useState<FormValues>(inicial);
   const [salvando, setSalvando] = useState(false);
-  const set = (campo: keyof FormValues) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setV((atual) => ({ ...atual, [campo]: e.target.value }));
+  // Serve a <Input> e a <AutoTextarea>: so le `value`, que os dois tem.
+  const set =
+    (campo: keyof FormValues) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      setV((atual) => ({ ...atual, [campo]: e.target.value }));
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -183,7 +187,8 @@ function SupplierDialog({
 
           <div className="space-y-1.5">
             <Label>Observações</Label>
-            <Input
+            <AutoTextarea
+              minRows={2}
               value={v.notes}
               onChange={set("notes")}
               placeholder="Ex.: entrega só até as 14h"

@@ -1,4 +1,5 @@
 import { useParams, Link } from "react-router-dom";
+import { AutoTextarea } from "@/components/ui/auto-textarea.tsx";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Doc, Id } from "@/convex/_generated/dataModel.d.ts";
@@ -128,7 +129,8 @@ function ItemDialog({
 
           <div className="space-y-1.5">
             <Label>Observação</Label>
-            <Input
+            <AutoTextarea
+              minRows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Ex.: buscar no galpão 2"

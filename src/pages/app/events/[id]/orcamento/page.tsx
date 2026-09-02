@@ -1,4 +1,5 @@
 import { useParams, Link } from "react-router-dom";
+import { AutoTextarea } from "@/components/ui/auto-textarea.tsx";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
@@ -571,7 +572,8 @@ export default function OrcamentoPage() {
 
             <div className="space-y-1.5">
               <Label>Observações</Label>
-              <Input
+              <AutoTextarea
+                minRows={2}
                 placeholder="Opcional"
                 value={form.notes}
                 onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}

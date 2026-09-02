@@ -1,4 +1,5 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
+import { AutoTextarea } from "@/components/ui/auto-textarea.tsx";
 import { formatTimestamp } from "@/lib/safe-date.ts";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
@@ -977,7 +978,8 @@ export default function EventDetailsPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Observação</Label>
-              <Input
+              <AutoTextarea
+                minRows={2}
                 placeholder="Ex.: chega com a equipe de montagem"
                 value={editTeamNotes}
                 onChange={(e) => setEditTeamNotes(e.target.value)}

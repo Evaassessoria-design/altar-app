@@ -1,4 +1,5 @@
 import { useForm } from "react-hook-form";
+import { AutoTextarea } from "@/components/ui/auto-textarea.tsx";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
@@ -199,7 +200,7 @@ export default function EventFormDialog({ open, onClose, onSubmit, defaultValues
 
           <div className="space-y-1.5">
             <Label htmlFor="notes">Observações</Label>
-            <Textarea id="notes" placeholder="Notas adicionais..." rows={3} {...register("notes")} />
+            <AutoTextarea id="notes" placeholder="Notas adicionais..." minRows={3} {...register("notes")} />
           </div>
 
           <DialogFooter className="pt-2">

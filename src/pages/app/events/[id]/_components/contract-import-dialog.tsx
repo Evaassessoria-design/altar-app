@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AutoTextarea } from "@/components/ui/auto-textarea.tsx";
 import { useAction, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Doc, Id } from "@/convex/_generated/dataModel.d.ts";
@@ -344,7 +345,7 @@ export function ContractImportDialog({
               )}
               <div className="space-y-1.5">
                 <Label>Observações</Label>
-                <Input value={decorNotes} onChange={(e) => setDecorNotes(e.target.value)} placeholder={NI} />
+                <AutoTextarea minRows={2} value={decorNotes} onChange={(e) => setDecorNotes(e.target.value)} placeholder={NI} />
               </div>
               <p className="text-xs text-muted-foreground">Ao confirmar, estas informações abastecem o briefing do evento.</p>
             </Block>

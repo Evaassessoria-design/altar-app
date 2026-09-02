@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useEnvioDeArquivo } from "@/hooks/use-upload.ts";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
@@ -219,6 +220,7 @@ function ItemCard({
 }) {
   const setPhoto = useMutation(api.assemblyItems.setPhoto);
   const generateUploadUrl = useMutation(api.assemblyItems.generateUploadUrl);
+  const { enviar } = useEnvioDeArquivo(generateUploadUrl, { tipo: "imagem", aceitos: ["image/"] });
   const [uploading, setUploading] = useState<"reference" | "contracted" | null>(null);
   const refInput = useRef<HTMLInputElement>(null);
   const contractedInput = useRef<HTMLInputElement>(null);
@@ -236,13 +238,12 @@ function ItemCard({
   const uploadPhoto = async (slot: "reference" | "contracted", file: File) => {
     setUploading(slot);
     try {
-      const url = await generateUploadUrl();
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
+      const envio = await enviar(file);
+      if (!envio.ok) {
+        toast.error(envio.motivo);
+        return;
+      }
+      const storageId = envio.storageId;
       await setPhoto({ id: item._id, slot, storageId });
       toast.success("Foto salva.");
     } catch {

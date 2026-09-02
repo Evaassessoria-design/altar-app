@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useEnvioDeArquivo } from "@/hooks/use-upload.ts";
 import { formatTimestamp } from "@/lib/safe-date.ts";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
@@ -40,6 +41,7 @@ export function EventDocuments({ eventId }: { eventId: Id<"events"> }) {
   // convex/leadDocuments.ts: copiar criaria dois donos para o mesmo arquivo.
   const daNegociacao = useQuery(api.leadDocuments.listForEvent, { eventId });
   const generateUploadUrl = useMutation(api.contracts.generateUploadUrl);
+  const { enviar } = useEnvioDeArquivo(generateUploadUrl, { tipo: "documento", aceitos: ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain"] });
   const saveContract = useMutation(api.contracts.saveContract);
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -52,14 +54,12 @@ export function EventDocuments({ eventId }: { eventId: Id<"events"> }) {
     if (!file) return;
     setEnviando(true);
     try {
-      const uploadUrl = await generateUploadUrl();
-      const res = await fetch(uploadUrl, {
-        method: "POST",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      if (!res.ok) throw new Error("upload");
-      const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
+      const envio = await enviar(file);
+      if (!envio.ok) {
+        toast.error(envio.motivo);
+        return;
+      }
+      const storageId = envio.storageId;
       await saveContract({ eventId, storageId, filename: file.name, kind: tipo });
       toast.success(`${labelDoTipo(tipo)} anexado à pasta do evento.`);
     } catch (e) {

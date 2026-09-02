@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { useEnvioDeArquivo } from "@/hooks/use-upload.ts";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
@@ -102,6 +103,7 @@ export default function ConfiguracoesPage() {
 
   const updateProfile = useMutation(api.users.updateProfile);
   const generateLogoUpload = useMutation(api.users.generateLogoUploadUrl);
+  const { enviar } = useEnvioDeArquivo(generateLogoUpload, { tipo: "imagem", aceitos: ["image/"] });
   const createCheckout = useAction(api.asaas.createCheckoutSession);
   const cancelSub = useAction(api.asaas.cancelSubscription);
   const [subscribing, setSubscribing] = useState(false);
@@ -172,13 +174,12 @@ export default function ConfiguracoesPage() {
     }
     setLogoUploading(true);
     try {
-      const uploadUrl = await generateLogoUpload();
-      const res = await fetch(uploadUrl, {
-        method: "POST",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
+      const envio = await enviar(file);
+      if (!envio.ok) {
+        toast.error(envio.motivo);
+        return;
+      }
+      const storageId = envio.storageId;
       await updateProfile({ logoStorageId: storageId });
       toast.success("Logo atualizada!");
     } catch {

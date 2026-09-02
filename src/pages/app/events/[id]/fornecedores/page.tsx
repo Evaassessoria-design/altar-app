@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { useEnvioDeArquivo } from "@/hooks/use-upload.ts";
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
@@ -299,6 +300,7 @@ function SupplierForm({
   const isKnown = !!initialCategory && !!categoryConfig(initialCategory);
 
   const generateUpload = useMutation(api.suppliers.generateUploadUrl);
+  const { enviar } = useEnvioDeArquivo(generateUpload, { tipo: "imagem", aceitos: ["image/"] });
 
   const [category, setCategory] = useState(
     initialCategory ? (isKnown ? initialCategory : "outro") : "",
@@ -336,9 +338,12 @@ function SupplierForm({
   const handleLogo = async (file: File) => {
     setLogoUploading(true);
     try {
-      const url = await generateUpload();
-      const res = await fetch(url, { method: "POST", headers: { "Content-Type": file.type }, body: file });
-      const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
+      const envio = await enviar(file);
+      if (!envio.ok) {
+        toast.error(envio.motivo);
+        return;
+      }
+      const storageId = envio.storageId;
       setLogoStorageId(storageId);
       setLogoPreview(URL.createObjectURL(file));
     } catch {

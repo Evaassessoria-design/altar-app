@@ -1,4 +1,5 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
+import { useEnvioDeArquivo } from "@/hooks/use-upload.ts";
 import { AutoTextarea } from "@/components/ui/auto-textarea.tsx";
 import { formatTimestamp } from "@/lib/safe-date.ts";
 import { useQuery, useMutation, useAction } from "convex/react";
@@ -120,6 +121,7 @@ export default function EventDetailsPage() {
   const contract = useQuery(api.contracts.getContract, { eventId: id as Id<"events"> });
   const health = useQuery(api.health.getEventHealth, { eventId: id as Id<"events"> });
   const generateUploadUrl = useMutation(api.contracts.generateUploadUrl);
+  const { enviar } = useEnvioDeArquivo(generateUploadUrl, { tipo: "documento" });
   const saveContract = useMutation(api.contracts.saveContract);
   const generateChecklist = useAction(api.ai.generateChecklistFromBriefing);
   const briefing = useQuery(api.briefing.getBriefing, { eventId: id as Id<"events"> });
@@ -187,13 +189,12 @@ export default function EventDetailsPage() {
   const handleContractUpload = async (file: File) => {
     setContractUploading(true);
     try {
-      const uploadUrl = await generateUploadUrl();
-      const res = await fetch(uploadUrl, {
-        method: "POST",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
+      const envio = await enviar(file);
+      if (!envio.ok) {
+        toast.error(envio.motivo);
+        return;
+      }
+      const storageId = envio.storageId;
       await saveContract({ eventId: event._id, storageId, filename: file.name });
       toast.success("Contrato anexado!");
     } catch {

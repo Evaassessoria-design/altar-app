@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useEnvioDeArquivo } from "@/hooks/use-upload.ts";
 import { formatTimestamp } from "@/lib/safe-date.ts";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
@@ -51,6 +52,7 @@ export function LeadDocumentsDialog({
 }) {
   const documentos = useQuery(api.leadDocuments.list, open ? { leadId } : "skip");
   const generateUploadUrl = useMutation(api.leadDocuments.generateUploadUrl);
+  const { enviar } = useEnvioDeArquivo(generateUploadUrl, { tipo: "documento" });
   const save = useMutation(api.leadDocuments.save);
   const remove = useMutation(api.leadDocuments.remove);
 
@@ -72,14 +74,12 @@ export function LeadDocumentsDialog({
 
     setEnviando(true);
     try {
-      const uploadUrl = await generateUploadUrl();
-      const res = await fetch(uploadUrl, {
-        method: "POST",
-        headers: { "Content-Type": file.type || "application/octet-stream" },
-        body: file,
-      });
-      if (!res.ok) throw new Error("upload");
-      const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
+      const envio = await enviar(file);
+      if (!envio.ok) {
+        toast.error(envio.motivo);
+        return;
+      }
+      const storageId = envio.storageId;
       await save({
         leadId,
         storageId,

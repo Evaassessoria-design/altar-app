@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { useEnvioDeArquivo } from "@/hooks/use-upload.ts";
 import { formatTimestampComHora } from "@/lib/safe-date.ts";
 import { useParams, Link } from "react-router-dom";
 import { useAction, useMutation, useQuery } from "convex/react";
@@ -55,6 +56,7 @@ export default function PlantaPage() {
   const providerStatus = useQuery(api.layoutRenders.providerStatus);
 
   const generateUploadUrl = useMutation(api.layoutRenders.generateUploadUrl);
+  const { enviar } = useEnvioDeArquivo(generateUploadUrl, { tipo: "imagem", aceitos: ["image/"] });
   const interpretSketch = useAction(api.aiVisual.interpretSketch);
   const generatePlan = useAction(api.aiVisual.generatePremiumPlan);
 
@@ -75,13 +77,12 @@ export default function PlantaPage() {
     setInterpretation(null);
     setCorrections("");
     try {
-      const uploadUrl = await generateUploadUrl();
-      const res = await fetch(uploadUrl, {
-        method: "POST",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
+      const envio = await enviar(file);
+      if (!envio.ok) {
+        toast.error(envio.motivo);
+        return;
+      }
+      const storageId = envio.storageId;
       setSketch({
         storageId,
         filename: file.name,

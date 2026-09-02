@@ -1,4 +1,5 @@
 import { useParams, Link } from "react-router-dom";
+import { useEnvioDeArquivo } from "@/hooks/use-upload.ts";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
@@ -17,8 +18,7 @@ import {
   Download,
   Pencil,
   Check,
-  Loader2,
-} from "lucide-react";
+  Loader2, Camera,} from "lucide-react";
 import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils.ts";
@@ -73,6 +73,7 @@ export default function GaleriaPage() {
   const updatePhoto = useMutation(api.gallery.updatePhoto);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadCategory, setUploadCategory] = useState<Category>("evento");
   const [uploadQueue, setUploadQueue] = useState<string[]>([]); // filenames being uploaded
@@ -83,6 +84,11 @@ export default function GaleriaPage() {
   const [scopeValue, setScopeValue] = useState<ProjectScope | null>(null);
   const [draggingOver, setDraggingOver] = useState(false);
 
+  const { enviar } = useEnvioDeArquivo(generateUploadUrl, {
+    tipo: "imagem",
+    aceitos: ["image/"],
+  });
+
   const handleFiles = useCallback(
     async (files: FileList | File[]) => {
       const arr = Array.from(files).filter((f) => f.type.startsWith("image/"));
@@ -90,33 +96,41 @@ export default function GaleriaPage() {
       setUploading(true);
       setUploadQueue(arr.map((f) => f.name));
 
+      let enviadas = 0;
       for (const file of arr) {
+        const r = await enviar(file);
+        if (!r.ok) {
+          toast.error(r.motivo);
+          setUploadQueue((q) => q.filter((n) => n !== file.name));
+          continue;
+        }
         try {
-          const uploadUrl = await generateUploadUrl();
-          const res = await fetch(uploadUrl, {
-            method: "POST",
-            headers: { "Content-Type": file.type },
-            body: file,
-          });
-          const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
           await savePhoto({
             eventId,
-            storageId,
+            storageId: r.storageId,
             filename: file.name,
             category: uploadCategory,
           });
-          setUploadQueue((q) => q.filter((n) => n !== file.name));
+          enviadas++;
         } catch (e) {
-          if (e instanceof ConvexError) toast.error((e.data as { message: string }).message);
-          else toast.error(`Erro ao enviar ${file.name}`);
+          toast.error(
+            e instanceof ConvexError
+              ? (e.data as { message: string }).message
+              : `Erro ao salvar ${file.name}`,
+          );
+        } finally {
           setUploadQueue((q) => q.filter((n) => n !== file.name));
         }
       }
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
-      toast.success(`${arr.length} foto${arr.length > 1 ? "s" : ""} adicionada${arr.length > 1 ? "s" : ""}!`);
+      // Contagem REAL. Antes o "N fotos adicionadas!" saia sempre, mesmo com
+      // todas falhando — a pessoa fechava a tela achando que tinha subido.
+      if (enviadas > 0) {
+        toast.success(`${enviadas} foto${enviadas > 1 ? "s" : ""} adicionada${enviadas > 1 ? "s" : ""}!`);
+      }
     },
-    [eventId, generateUploadUrl, savePhoto, uploadCategory],
+    [eventId, enviar, savePhoto, uploadCategory],
   );
 
   const handleDrop = (e: React.DragEvent) => {
@@ -219,6 +233,20 @@ export default function GaleriaPage() {
           className="hidden"
           onChange={(e) => { if (e.target.files) void handleFiles(e.target.files); }}
         />
+        {/* Camera em input SEPARADO, de proposito.
+            `capture` no input de cima nao adicionaria a camera: ele SUBSTITUI o
+            seletor de arquivos por ela na maioria dos navegadores de celular —
+            quem quisesse mandar uma foto que ja tem na galeria perderia o
+            caminho. Dois botoes mantem as duas portas abertas, e no computador
+            este aqui simplesmente abre o seletor comum. */}
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => { if (e.target.files) void handleFiles(e.target.files); }}
+        />
         <div className="space-y-3">
           <div className="size-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
             <Upload className="size-5 text-primary" />
@@ -249,15 +277,29 @@ export default function GaleriaPage() {
             Enviando como: <strong>{categoryMeta(uploadCategory).label}</strong>
           </p>
 
-          <Button
-            size="sm"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="cursor-pointer gap-1.5"
-          >
-            {uploading ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
-            {uploading ? `Enviando ${uploadQueue.length} foto${uploadQueue.length !== 1 ? "s" : ""}...` : "Selecionar Fotos"}
-          </Button>
+          <div className="flex flex-wrap justify-center gap-2">
+            {/* Tirar foto vem PRIMEIRO: no galpao, durante a montagem, e o que
+                se faz. Escolher da galeria e o caso de escritorio. */}
+            <Button
+              size="sm"
+              onClick={() => cameraInputRef.current?.click()}
+              disabled={uploading}
+              className="cursor-pointer gap-1.5 min-h-11"
+            >
+              {uploading ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />}
+              {uploading ? `Enviando ${uploadQueue.length}...` : "Tirar foto"}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="cursor-pointer gap-1.5 min-h-11"
+            >
+              <Upload className="size-4" />
+              Escolher arquivos
+            </Button>
+          </div>
         </div>
       </motion.div>
 

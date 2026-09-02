@@ -98,6 +98,8 @@ export default function EventDetailsPage() {
   const postChecklist = useQuery(api.briefing.getChecklist, { eventId: id as Id<"events">, phase: "post" });
   const eventTeam = useQuery(api.team.listEventTeam, { eventId: id as Id<"events"> });
   const allMembers = useQuery(api.team.listMembers);
+  const fichaTecnica = useQuery(api.fichaTecnica.getFicha, { eventId: id as Id<"events"> });
+  const resumoDaFicha = fichaTecnica?.resumo;
   const addToEventTeam = useMutation(api.team.addToEventTeam);
   const removeFromEventTeam = useMutation(api.team.removeFromEventTeam);
   const updateEventTeamMember = useMutation(api.team.updateEventTeamMember);
@@ -451,8 +453,15 @@ export default function EventDetailsPage() {
               <ClipboardList className="size-5 text-primary" />
               <div>
                 <p className="font-medium text-sm">Ficha técnica</p>
+                {/* O resumo vem do backend, já calculado. A página do evento
+                    não recalcula nada — seria a segunda conta. */}
                 <p className="text-xs text-muted-foreground">
-                  Do que cada composição é feita e quanto o evento inteiro precisa
+                  {resumoDaFicha && resumoDaFicha.materiais > 0
+                    ? `${resumoDaFicha.composicoes} ${resumoDaFicha.composicoes === 1 ? "composição" : "composições"} · ${resumoDaFicha.materiais} ${resumoDaFicha.materiais === 1 ? "material" : "materiais"}` +
+                      (resumoDaFicha.pendencias > 0
+                        ? ` · ${resumoDaFicha.pendencias} ${resumoDaFicha.pendencias === 1 ? "pendência" : "pendências"}`
+                        : "")
+                    : "Do que cada composição é feita e quanto o evento inteiro precisa"}
                 </p>
               </div>
             </div>

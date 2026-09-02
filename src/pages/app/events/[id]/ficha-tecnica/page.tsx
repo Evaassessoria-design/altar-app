@@ -14,17 +14,20 @@ import {
 } from "@/components/ui/empty.tsx";
 import { toast } from "sonner";
 import { ConvexError } from "convex/values";
-import { ArrowLeft, ClipboardList, Layers, Package, ShoppingCart, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ClipboardList, FileDown, Layers, Package, ShoppingCart } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
 import { formatEventDateLong } from "@/lib/event-date.ts";
 import { labelDoAmbiente } from "@/lib/decoration-project.ts";
 import {
+  ROTULO_DA_SITUACAO,
   necessidadeDoComponente,
   quantidadeTexto,
   unidadesDaComposicao,
+  type SituacaoDaCobertura,
 } from "@/convex/lib/fichaTecnica.ts";
 import { metaDoTipo, tipoEfetivo } from "@/convex/lib/materiais.ts";
 import { ReceitaDialog } from "./_components/receita-dialog.tsx";
+import { generateFichaTecnicaPDF } from "@/lib/generate-ficha-tecnica-pdf.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FICHA TÉCNICA DO EVENTO
@@ -50,6 +53,7 @@ function LinhaConsolidada({
 }: {
   linha: {
     chave: string;
+    materialId?: string;
     nome: string;
     unidade: string;
     necessario: number;
@@ -57,18 +61,47 @@ function LinhaConsolidada({
     retornavel: boolean;
     tipoAmbiguo: boolean;
     custoEstimado: number | null;
+    margemPercentual: number | null;
+    sugerido: number;
+    sugeridoOperacional: number;
     origens: { composicao: string; area: string; ambiente?: string; unidades: number; porUnidade: number; necessario: number }[];
     cobertura: {
+      necessario: number;
       comprado: number;
       faltam: number;
+      alvo: number;
       percentual: number | null;
       temCompra: boolean;
+      situacao: SituacaoDaCobertura;
       necessidadeMudou: boolean | null;
+      necessidadeNaCompra: number | null;
     };
+    compraSemelhante: { _id: string; name: string; quantity?: number } | null;
+    comprasVinculadas: string[];
+    precisaDeAtencao: boolean;
+    motivoDaAtencao: string | null;
   };
+  eventId: Id<"events">;
 }) {
   const [aberto, setAberto] = useState(false);
+  const [agindo, setAgindo] = useState(false);
   const meta = metaDoTipo(tipoEfetivo({ tipo: linha.tipo }));
+  const vincular = useMutation(api.fichaTecnica.vincularCompra);
+  const reconhecer = useMutation(api.fichaTecnica.reconhecerNecessidade);
+
+  const agir = async (acao: () => Promise<unknown>, sucesso: string) => {
+    setAgindo(true);
+    try {
+      await acao();
+      toast.success(sucesso);
+    } catch (e) {
+      toast.error(
+        e instanceof ConvexError ? (e.data as { message: string }).message : "Não foi possível concluir.",
+      );
+    } finally {
+      setAgindo(false);
+    }
+  };
 
   return (
     <div className="border-b border-border last:border-0">
@@ -109,32 +142,98 @@ function LinhaConsolidada({
           </div>
         </div>
 
-        {/* Cobertura: necessidade × o que já foi comprado. Necessidade NÃO é
-            compra — comprar 200 para precisar de 185 é correto, não erro. */}
-        {linha.cobertura.temCompra && (
-          <div className="mt-1.5 flex items-center gap-2 flex-wrap text-xs">
+        {/* NECESSÁRIO ≠ SUGERIDO ≠ PROVIDENCIADO. A margem aparece como uma
+            terceira linha, nunca somada dentro do necessário. */}
+        {linha.margemPercentual !== null && linha.margemPercentual > 0 && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Margem {linha.margemPercentual}% · providenciar{" "}
+            <span className="text-foreground font-medium">
+              {quantidadeTexto(linha.sugeridoOperacional, linha.unidade)}
+            </span>
+          </p>
+        )}
+
+        <div className="mt-1.5 flex items-center gap-2 flex-wrap text-xs">
+          {linha.cobertura.temCompra && (
             <span className="text-muted-foreground">
-              Comprado: {quantidadeTexto(linha.cobertura.comprado, linha.unidade)}
+              Providenciado: {quantidadeTexto(linha.cobertura.comprado, linha.unidade)}
               {linha.cobertura.percentual !== null && ` (${linha.cobertura.percentual}%)`}
             </span>
-            {linha.cobertura.faltam > 0 && (
-              <span className="text-amber-700 dark:text-amber-400">
-                faltam {quantidadeTexto(linha.cobertura.faltam, linha.unidade)}
-              </span>
+          )}
+          {/* Frase humana, vinda do backend. A tela não classifica nada. */}
+          <span
+            className={cn(
+              linha.precisaDeAtencao
+                ? "text-amber-700 dark:text-amber-400"
+                : "text-muted-foreground",
             )}
-            {linha.cobertura.necessidadeMudou === true && (
-              <span className="flex items-center gap-1 text-amber-700 dark:text-amber-400">
-                <TriangleAlert className="size-3" />
-                a necessidade mudou desde a compra
-              </span>
-            )}
-          </div>
-        )}
+          >
+            {linha.motivoDaAtencao ?? ROTULO_DA_SITUACAO[linha.cobertura.situacao]}
+          </span>
+        </div>
       </button>
 
       {/* A ORIGEM de cada número — é o que permite conferir em vez de confiar. */}
       {aberto && (
         <div className="px-4 pb-3 space-y-1">
+          {/* Ações explícitas. Nenhuma delas altera a compra: vincular só liga,
+              reconhecer só atualiza o carimbo da necessidade. */}
+          {linha.compraSemelhante && linha.materialId && (
+            <div className="mb-2 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-900/10 px-3 py-2">
+              <p className="text-xs">
+                Existe a compra “{linha.compraSemelhante.name}”
+                {linha.compraSemelhante.quantity !== undefined &&
+                  ` (${quantidadeTexto(linha.compraSemelhante.quantity, linha.unidade)})`}{" "}
+                sem vínculo com a ficha.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={agindo}
+                className="mt-1.5 cursor-pointer"
+                onClick={() =>
+                  void agir(
+                    () =>
+                      vincular({
+                        purchaseId: linha.compraSemelhante!._id as Id<"purchaseItems">,
+                        materialId: linha.materialId as Id<"materials">,
+                      }),
+                    "Compra vinculada à ficha técnica.",
+                  )
+                }
+              >
+                Vincular a esta necessidade
+              </Button>
+            </div>
+          )}
+
+          {linha.cobertura.necessidadeMudou === true && linha.comprasVinculadas.length > 0 && (
+            <div className="mb-2 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-900/10 px-3 py-2">
+              <p className="text-xs">
+                A necessidade mudou de {linha.cobertura.necessidadeNaCompra} para{" "}
+                {linha.cobertura.necessario} depois da compra. Reconhecer NÃO altera o que foi
+                comprado.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={agindo}
+                className="mt-1.5 cursor-pointer"
+                onClick={() =>
+                  void agir(
+                    () =>
+                      reconhecer({
+                        purchaseId: linha.comprasVinculadas[0] as Id<"purchaseItems">,
+                      }),
+                    "Necessidade reconhecida. A compra não foi alterada.",
+                  )
+                }
+              >
+                Reconhecer nova necessidade
+              </Button>
+            </div>
+          )}
+
           {linha.origens.map((o, i) => (
             <div key={i} className="flex items-baseline justify-between gap-2 text-xs">
               <span className="text-muted-foreground truncate">
@@ -161,6 +260,7 @@ export default function FichaTecnicaPage() {
   const ficha = useQuery(api.fichaTecnica.getFicha, { eventId });
   const itensDoEvento = useQuery(api.assemblyItems.listByEvent, { eventId });
   const gerarCompras = useMutation(api.fichaTecnica.gerarCompras);
+  const empresa = useQuery(api.users.getCurrentUser);
 
   const [aba, setAba] = useState<"consolidado" | "ambientes">("consolidado");
   const [editando, setEditando] = useState<string | null>(null);
@@ -175,6 +275,27 @@ export default function FichaTecnicaPage() {
     }
     return [...mapa.entries()];
   }, [itensDoEvento]);
+
+  // O PDF é gerado a partir do SNAPSHOT do evento — nunca da biblioteca
+  // central. Um evento de seis meses atrás imprime a receita executada.
+  const handlePdf = async () => {
+    try {
+      await generateFichaTecnicaPDF({
+        event: {
+          name: event!.name, date: event!.date,
+          location: event!.location, clientName: event!.clientName,
+        },
+        composicoes: (itensDoEvento ?? []).map((i) => ({
+          _id: i._id, nome: i.name, area: i.area, ambiente: i.ambiente,
+          quantidade: i.quantity, projectScope: i.projectScope, receita: i.receita,
+        })),
+        empresa: empresa ?? null,
+      });
+      toast.success("Ficha técnica gerada.");
+    } catch {
+      toast.error("Não foi possível gerar o PDF.");
+    }
+  };
 
   const handleGerar = async () => {
     setGerando(true);
@@ -262,10 +383,23 @@ export default function FichaTecnicaPage() {
             <div className="bg-card border border-border rounded-xl px-3 py-2">
               <p className="text-xs text-muted-foreground">Materiais</p>
               <p className="text-xl font-bold">{ficha.resumo.materiais}</p>
+              <p className="text-[10px] text-muted-foreground">
+                {ficha.resumo.composicoes}{" "}
+                {ficha.resumo.composicoes === 1 ? "composição" : "composições"}
+              </p>
             </div>
+            {/* "Pendências" vem de regra real (backend). Acervo não informado
+                NÃO conta: é limitação nossa, não tarefa dela. */}
             <div className="bg-card border border-border rounded-xl px-3 py-2">
-              <p className="text-xs text-muted-foreground">Voltam</p>
-              <p className="text-xl font-bold">{ficha.resumo.retornaveis}</p>
+              <p className="text-xs text-muted-foreground">Precisam de atenção</p>
+              <p
+                className={cn(
+                  "text-xl font-bold",
+                  ficha.resumo.pendencias > 0 && "text-amber-700 dark:text-amber-400",
+                )}
+              >
+                {ficha.resumo.pendencias}
+              </p>
             </div>
             {/* A estimativa só aparece como TOTAL quando cobre tudo. Metade do
                 preço com cara de total seria pior que preço nenhum. */}
@@ -309,19 +443,29 @@ export default function FichaTecnicaPage() {
             <p className="text-sm font-semibold flex items-center gap-2">
               <Package className="size-4 text-primary" /> Preciso no evento inteiro
             </p>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={gerando}
-              onClick={() => void handleGerar()}
-              className="cursor-pointer gap-1.5"
-            >
-              <ShoppingCart className="size-3.5" />
-              {gerando ? "Enviando..." : "Gerar compras"}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => void handlePdf()}
+                className="cursor-pointer gap-1.5"
+              >
+                <FileDown className="size-3.5" /> PDF
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={gerando}
+                onClick={() => void handleGerar()}
+                className="cursor-pointer gap-1.5"
+              >
+                <ShoppingCart className="size-3.5" />
+                {gerando ? "Enviando..." : "Gerar compras"}
+              </Button>
+            </div>
           </div>
           {ficha.consolidado.map((linha) => (
-            <LinhaConsolidada key={linha.chave} linha={linha as never} />
+            <LinhaConsolidada key={linha.chave} linha={linha as never} eventId={eventId} />
           ))}
         </div>
       )}

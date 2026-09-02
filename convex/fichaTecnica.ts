@@ -501,12 +501,19 @@ export const gerarCompras = mutation({
         userId: user._id,
         eventId: event._id,
         name: linha.nome,
-        quantity: linha.necessario,
+        // A compra nasce com o que a ficha SUGERE PROVIDENCIAR (necessário +
+        // margem, arredondado pela unidade) — é o número que a tela mostra e
+        // que ela iria digitar. Gerar `necessario` faria a compra nascer já
+        // divergindo da própria sugestão que acabou de ser exibida.
+        quantity: linha.sugeridoOperacional,
         unit: linha.unidade,
         isPurchased: false,
         status: "necessidade" as const,
         order: ordem++,
         materialId: linha.materialId as Id<"materials">,
+        // O carimbo é o NECESSÁRIO puro, nunca o sugerido: ele existe para
+        // responder "a receita mudou desde que comprei?", e a margem não faz
+        // parte dessa pergunta.
         necessidadeTecnica: linha.necessario,
         // Fornecedor PREFERENCIAL do material, como ponto de partida. A
         // decoradora troca na hora de comprar — nunca é vínculo obrigatório.

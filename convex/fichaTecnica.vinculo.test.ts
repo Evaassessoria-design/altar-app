@@ -252,6 +252,50 @@ describe("DETECÇÃO da compra semelhante", () => {
   });
 });
 
+describe("AUDITORIA HOSTIL — o que atacamos e o que quebrou", () => {
+  it("a compra gerada nasce com o SUGERIDO, não com o necessário puro", async () => {
+    // Bug real desta auditoria: a tela dizia "providenciar 204" e a compra
+    // gerada nascia com 185 — divergindo da própria sugestão exibida.
+    const { t, donaId, eventId } = await cenario();
+    const criada = await t.run(async (ctx) => {
+      const linha = await linhaDoConsolidado(ctx, eventId);
+      return ctx.db.insert("purchaseItems", {
+        userId: donaId, eventId, name: linha.nome,
+        quantity: linha.sugeridoOperacional, unit: linha.unidade,
+        isPurchased: false, status: "necessidade", order: 9,
+        materialId: linha.materialId as Id<"materials">,
+        necessidadeTecnica: linha.necessario, updatedAt: NOW,
+      });
+    });
+    const compra = await t.run(async (ctx) => ctx.db.get(criada));
+    expect(compra!.quantity).toBe(204); // 185 + 10%, arredondado para cima
+    expect(compra!.necessidadeTecnica).toBe(185); // o carimbo é o necessário
+  });
+
+  it("a fonte usa `sugeridoOperacional` na quantidade e `necessario` no carimbo", () => {
+    const fonte = readFileSync("convex/fichaTecnica.ts", "utf-8");
+    const i = fonte.indexOf("export const gerarCompras");
+    const insert = fonte.slice(fonte.indexOf('ctx.db.insert("purchaseItems"', i));
+    expect(insert).toContain("quantity: linha.sugeridoOperacional");
+    expect(insert).toContain("necessidadeTecnica: linha.necessario");
+  });
+
+  it("a margem do catálogo mudando NÃO mexe no evento já montado", async () => {
+    const { t, eventId, rosa } = await cenario();
+    await t.run(async (ctx) => ctx.db.patch(rosa, { margemPercentual: 90 }));
+    const linha = await t.run(async (ctx) => linhaDoConsolidado(ctx, eventId));
+    expect(linha.margemPercentual).toBe(10); // o snapshot manda
+    expect(linha.sugerido).toBe(203.5);
+  });
+
+  it("o sugerido NUNCA fica abaixo do necessário", async () => {
+    const { t, eventId } = await cenario();
+    const linha = await t.run(async (ctx) => linhaDoConsolidado(ctx, eventId));
+    expect(linha.sugerido).toBeGreaterThanOrEqual(linha.necessario);
+    expect(linha.sugeridoOperacional).toBeGreaterThanOrEqual(linha.necessario);
+  });
+});
+
 describe("a fonte faz o que o espelho reproduz", () => {
   const FONTE = readFileSync("convex/fichaTecnica.ts", "utf-8");
   const corpo = (nome: string) => {

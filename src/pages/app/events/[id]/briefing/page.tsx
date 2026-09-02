@@ -62,17 +62,11 @@ export default function EventBriefingPage() {
   // caderno sai igualmente completo, só com o padrão do ALTAR.
   const empresa = useQuery(api.users.getCurrentUser);
   const logoUrl = useQuery(api.users.getLogoUrl);
-  const eventTeam = useQuery(api.team.listEventTeam, { eventId });
 
-  // LACUNA CONHECIDA: o evento não tem um campo "responsável operacional".
-  // `health.getEventHealth` já usava a PRIMEIRA pessoa escalada como
-  // responsável; aqui buscamos o telefone DELA, casando pelo nome, para que o
-  // documento nunca mostre o nome de uma pessoa com o telefone de outra.
-  // Um campo explícito de responsável é a próxima etapa — não inventamos um
-  // contato paralelo agora.
-  const responsavelTelefone = eventTeam?.find(
-    (a) => a.member?.name === health?.responsible,
-  )?.member?.phone;
+  // O telefone vem do VÍNCULO resolvido no servidor (convex/health.ts), não de
+  // casar o nome com a lista de escalados. Casar por nome errava com duas
+  // "Camila" e falhava sempre que o responsável era uma anotação livre.
+  const responsavelTelefone = health?.responsiblePhone;
   const upsertBriefing = useMutation(api.briefing.upsertBriefing);
 
   const {

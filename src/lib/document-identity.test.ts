@@ -87,17 +87,32 @@ describe("protagonismo da empresa, assinatura discreta do ALTAR", () => {
 });
 
 describe("responsável operacional", () => {
+  // Este bloco travava o CONTORNO que existia enquanto o evento não tinha um
+  // campo próprio de responsável: o telefone era achado casando
+  // `member.name === health.responsible`. O campo agora existe
+  // (`events.responsibleId`, ver convex/lib/responsavel.ts), então o que
+  // precisa ser travado mudou — a garantia é a mesma, o meio é outro.
   it("nome e telefone saem juntos, do MESMO registro", () => {
-    // Casados pelo nome na tela: o documento nunca mostra o nome de uma pessoa
-    // com o telefone de outra.
     const tela = readFileSync("src/pages/app/events/[id]/briefing/page.tsx", "utf-8");
-    expect(tela).toContain("a.member?.name === health?.responsible");
+    // Os dois vêm resolvidos do servidor, do mesmo vínculo.
+    expect(tela).toContain("health?.responsiblePhone");
     expect(PDF).toContain("data.responsiblePhone");
   });
 
-  it("a lacuna do campo próprio está documentada, não improvisada", () => {
+  it("o telefone NÃO é mais achado casando nome", () => {
+    // Casar por nome errava com duas pessoas chamadas "Camila" e falhava
+    // sempre que o responsável era uma anotação livre — o documento saía com
+    // o nome de uma e o telefone de outra.
     const tela = readFileSync("src/pages/app/events/[id]/briefing/page.tsx", "utf-8");
-    expect(tela).toContain("LACUNA CONHECIDA");
+    expect(tela).not.toContain("a.member?.name === health?.responsible");
+    expect(tela).not.toContain("LACUNA CONHECIDA");
+  });
+
+  it("o evento tem um campo próprio de responsável", () => {
+    const schema = readFileSync("convex/schema.ts", "utf-8");
+    const i = schema.indexOf("events: defineTable({");
+    const corpo = schema.slice(i, schema.indexOf("leads: defineTable({", i));
+    expect(corpo).toContain('responsibleId: v.optional(v.id("teamMembers"))');
   });
 });
 

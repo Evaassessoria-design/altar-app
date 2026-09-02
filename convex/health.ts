@@ -21,6 +21,8 @@ export type EventHealth = {
   guestCount?: string;
   assessoria?: string;
   responsible?: string;
+  /** Telefone do responsável, quando ele é membro da equipe com telefone. */
+  responsiblePhone?: string;
 };
 
 async function computeHealth(
@@ -107,6 +109,12 @@ async function computeHealth(
     membrosEscalados.map((m) => ({ _id: m._id, name: m.name, role: m.role })),
   );
   const responsible = responsavel?.nome;
+  // O TELEFONE vem do vínculo, não de casar o nome com a lista de escalados.
+  // Casar por nome errava com duas "Camila" e falhava sempre que o
+  // responsável era uma anotação livre (alguém de fora da equipe).
+  const responsiblePhone = responsavel?.membroId
+    ? membrosEscalados.find((m) => m._id === responsavel.membroId)?.phone
+    : undefined;
 
   return {
     percent,
@@ -116,6 +124,7 @@ async function computeHealth(
     guestCount: briefing?.guestCount ?? undefined,
     assessoria: suppliers.find((s) => s.category === "assessoria")?.companyName,
     responsible,
+    responsiblePhone,
   };
 }
 

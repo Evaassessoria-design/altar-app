@@ -170,6 +170,76 @@ describe("responsável do evento sobre banco real", () => {
   });
 });
 
+describe("o telefone do responsável vem do vínculo, não do nome", () => {
+  it("duas pessoas com o MESMO nome não trocam de telefone", async () => {
+    // Casar `member.name === health.responsible` errava aqui: a busca achava a
+    // primeira "Camila" da lista e o documento saía com o nome de uma pessoa e
+    // o telefone de outra.
+    const { t, eventoId, donaId } = await cenario();
+    const escolhida = await t.run(async (ctx) => {
+      const outraCamila = await ctx.db.insert("teamMembers", {
+        userId: donaId, name: "Camila", role: "Montagem", phone: "11 99999-0000",
+      });
+      await ctx.db.insert("eventTeam", {
+        userId: donaId, eventId: eventoId, teamMemberId: outraCamila,
+      });
+      // A responsável do evento é a OUTRA Camila, com telefone diferente.
+      const responsavel = (await ctx.db.get((await ctx.db.get(eventoId))!.responsibleId!))!;
+      await ctx.db.patch(responsavel._id, { phone: "11 98888-1111" });
+      return responsavel._id;
+    });
+
+    const telefone = await t.run(async (ctx) => {
+      const evento = (await ctx.db.get(eventoId))!;
+      const escalas = await ctx.db
+        .query("eventTeam")
+        .withIndex("by_event", (q) => q.eq("eventId", eventoId))
+        .collect();
+      const membros = (await Promise.all(escalas.map((e) => ctx.db.get(e.teamMemberId)))).filter(
+        (m): m is NonNullable<typeof m> => m !== null,
+      );
+      const r = responsavelDoEvento(
+        evento,
+        membros.map((m) => ({ _id: m._id, name: m.name, role: m.role })),
+      );
+      return r?.membroId ? membros.find((m) => m._id === r.membroId)?.phone : undefined;
+    });
+
+    expect(telefone).toBe("11 98888-1111");
+    expect(escolhida).toBeDefined();
+  });
+
+  it("responsável que é ANOTAÇÃO livre não empresta o telefone de ninguém", async () => {
+    const { t, eventoId, donaId } = await cenario();
+    const vinculado = await t.run(async (ctx) => {
+      await ctx.db.patch(eventoId, { responsibleId: undefined, responsible: "Eu mesma" });
+      const membros = await ctx.db
+        .query("teamMembers")
+        .withIndex("by_user", (q) => q.eq("userId", donaId))
+        .collect();
+      const r = responsavelDoEvento(
+        (await ctx.db.get(eventoId))!,
+        membros.map((m) => ({ _id: m._id, name: m.name, role: m.role })),
+      );
+      // Booleano de propósito: `t.run` devolve `null` para `undefined`.
+      return Boolean(r?.membroId);
+    });
+    expect(vinculado).toBe(false);
+  });
+
+  it("`health` devolve o telefone pelo vínculo, não casando nomes", () => {
+    const fonte = readFileSync("convex/health.ts", "utf-8");
+    expect(fonte).toContain("responsavel?.membroId");
+    expect(fonte).toContain("responsiblePhone");
+  });
+
+  it("a tela do briefing não casa mais nome com escalado", () => {
+    const fonte = readFileSync("src/pages/app/events/[id]/briefing/page.tsx", "utf-8");
+    expect(fonte).toContain("health?.responsiblePhone");
+    expect(fonte).not.toMatch(/member\?\.name === health\?\.responsible/);
+  });
+});
+
 describe("a fonte faz o que estes testes assumem", () => {
   it("`team.deleteMember` passa pela cascata", () => {
     const fonte = readFileSync("convex/team.ts", "utf-8");

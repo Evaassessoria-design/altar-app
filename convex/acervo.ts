@@ -17,6 +17,7 @@ import {
   situacaoDaReserva,
 } from "./lib/acervo";
 import { consolidarMateriais } from "./lib/fichaTecnica";
+import { aplicarAjuste, aplicarContagem } from "./lib/ajusteDeAcervo";
 import { ehObrigacaoDeMontagem } from "./lib/escopoDoProjeto";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -142,7 +143,10 @@ export const updateItem = mutation({
   args: {
     id: v.id("collectionItems"),
     nome: v.optional(v.string()),
-    quantidadeTotal: v.optional(v.number()),
+    // `quantidadeTotal` NAO entra aqui de proposito. Mudar estoque em silencio
+    // por um formulario de edicao seria uma segunda porta sem historico — e o
+    // historico e justamente o que torna a baixa auditavel. Estoque muda por
+    // `ajustarEstoque` ou `registrarContagem`, sempre com motivo e rastro.
     categoria: v.optional(v.union(v.string(), v.null())),
     materialId: v.optional(v.union(v.id("materials"), v.null())),
     notes: v.optional(v.union(v.string(), v.null())),
@@ -153,9 +157,6 @@ export const updateItem = mutation({
     if (!item || item.userId !== user._id)
       throw new ConvexError({ code: "NOT_FOUND", message: "Item do acervo não encontrado" });
 
-    if (args.quantidadeTotal !== undefined) {
-      exigirQuantidade(args.quantidadeTotal, item.unidade, "Quantidade total");
-    }
     if (args.materialId) {
       const material = await ctx.db.get(args.materialId);
       if (!material || material.userId !== user._id) {
@@ -168,7 +169,6 @@ export const updateItem = mutation({
       patch.nome = args.nome.trim();
       patch.searchName = normalizeName(args.nome);
     }
-    if (args.quantidadeTotal !== undefined) patch.quantidadeTotal = args.quantidadeTotal;
     if (args.categoria !== undefined) patch.categoria = args.categoria ?? undefined;
     if (args.materialId !== undefined) patch.materialId = args.materialId ?? undefined;
     if (args.notes !== undefined) patch.notes = args.notes ?? undefined;
@@ -613,5 +613,170 @@ export const reservarDaFicha = mutation({
     }
 
     return { criadas, atualizadas, semAcervo, comDeficit };
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AJUSTE DE ESTOQUE — a única porta que muda `quantidadeTotal`
+//
+// Reserva, saída e retorno NÃO mexem no estoque físico, e continuam não
+// mexendo. Saíram 20 e voltaram 19? O total fica igual até alguém decidir o
+// que aconteceu com a peça — ela pode estar no carro, na casa da cliente, ou
+// voltar na segunda. Transformar "não voltou" em "perdeu" automaticamente
+// inventaria um prejuízo que ninguém constatou.
+//
+// Concorrência: a quantidade de partida é lida DENTRO da mutation, nunca vinda
+// da tela. Duas pessoas baixando 2 peças de um acervo de 3 — a segunda enxerga
+// o resultado da primeira e é recusada, em vez das duas lerem "3" e o estoque
+// terminar em -1.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Lê o item garantindo que é de quem está pedindo. */
+async function itemDoUsuario(ctx: MutationCtx, id: Id<"collectionItems">, userId: Id<"users">) {
+  const item = await ctx.db.get(id);
+  if (!item || item.userId !== userId) {
+    throw new ConvexError({ code: "NOT_FOUND", message: "Item do acervo não encontrado" });
+  }
+  return item;
+}
+
+/** Confere que o evento citado é da mesma empresa — senão o ajuste apontaria para fora. */
+async function eventoDoUsuario(
+  ctx: MutationCtx,
+  eventId: Id<"events"> | undefined,
+  userId: Id<"users">,
+) {
+  if (!eventId) return undefined;
+  const evento = await ctx.db.get(eventId);
+  if (!evento || evento.userId !== userId) {
+    throw new ConvexError({ code: "NOT_FOUND", message: "Evento não encontrado" });
+  }
+  return eventId;
+}
+
+/**
+ * Entrada, perda, quebra, avaria ou descarte.
+ *
+ * `quantidade` é sempre POSITIVA: o tipo decide o sinal. "Perda" que aumenta o
+ * estoque não é ajuste, é erro de digitação.
+ */
+export const ajustarEstoque = mutation({
+  args: {
+    collectionItemId: v.id("collectionItems"),
+    tipo: v.union(
+      v.literal("entrada"),
+      v.literal("perda"),
+      v.literal("quebra"),
+      v.literal("avaria"),
+      v.literal("descarte"),
+    ),
+    quantidade: v.number(),
+    motivo: v.optional(v.string()),
+    eventId: v.optional(v.id("events")),
+    responsibleId: v.optional(v.id("teamMembers")),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const item = await itemDoUsuario(ctx, args.collectionItemId, user._id);
+    const eventId = await eventoDoUsuario(ctx, args.eventId, user._id);
+
+    if (args.responsibleId) {
+      const membro = await ctx.db.get(args.responsibleId);
+      if (!membro || membro.userId !== user._id) {
+        throw new ConvexError({ code: "NOT_FOUND", message: "Responsável não encontrado" });
+      }
+    }
+
+    const r = aplicarAjuste({
+      quantidadeAtual: item.quantidadeTotal,
+      tipo: args.tipo,
+      quantidade: args.quantidade,
+      unidade: item.unidade,
+    });
+    if (!r.ok) throw new ConvexError({ code: "AJUSTE_INVALIDO", message: r.motivo });
+
+    await ctx.db.patch(item._id, comCarimbo({ quantidadeTotal: r.quantidadeDepois }));
+    await ctx.db.insert("collectionAdjustments", {
+      userId: user._id,
+      collectionItemId: item._id,
+      tipo: args.tipo,
+      delta: r.delta,
+      quantidadeAntes: item.quantidadeTotal,
+      quantidadeDepois: r.quantidadeDepois,
+      motivo: args.motivo?.trim() || undefined,
+      eventId,
+      responsibleId: args.responsibleId,
+    });
+
+    return { quantidadeAntes: item.quantidadeTotal, quantidadeDepois: r.quantidadeDepois };
+  },
+});
+
+/**
+ * Contagem física: informa-se o que foi CONTADO, não a diferença.
+ *
+ * É o que alguém faz de prancheta na mão — conta e escreve o que achou. Pedir
+ * a diferença obrigaria a pessoa a fazer a subtração de cabeça, que é
+ * justamente onde o erro entra.
+ */
+export const registrarContagem = mutation({
+  args: {
+    collectionItemId: v.id("collectionItems"),
+    quantidadeContada: v.number(),
+    motivo: v.optional(v.string()),
+    responsibleId: v.optional(v.id("teamMembers")),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const item = await itemDoUsuario(ctx, args.collectionItemId, user._id);
+
+    const r = aplicarContagem({
+      quantidadeAtual: item.quantidadeTotal,
+      quantidadeContada: args.quantidadeContada,
+      unidade: item.unidade,
+    });
+    if (!r.ok) throw new ConvexError({ code: "AJUSTE_INVALIDO", message: r.motivo });
+
+    await ctx.db.patch(item._id, comCarimbo({ quantidadeTotal: r.quantidadeDepois }));
+    await ctx.db.insert("collectionAdjustments", {
+      userId: user._id,
+      collectionItemId: item._id,
+      tipo: "acerto_inventario",
+      delta: r.delta,
+      quantidadeAntes: item.quantidadeTotal,
+      quantidadeDepois: r.quantidadeDepois,
+      motivo: args.motivo?.trim() || undefined,
+      responsibleId: args.responsibleId,
+    });
+
+    return { quantidadeAntes: item.quantidadeTotal, quantidadeDepois: r.quantidadeDepois };
+  },
+});
+
+/** Ajustes recentes de um item, do mais novo para o mais antigo. */
+export const historicoDoItem = query({
+  args: { collectionItemId: v.id("collectionItems"), limite: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const item = await ctx.db.get(args.collectionItemId);
+    if (!item || item.userId !== user._id) return [];
+
+    const ajustes = await ctx.db
+      .query("collectionAdjustments")
+      .withIndex("by_item", (q) => q.eq("collectionItemId", args.collectionItemId))
+      .order("desc")
+      .take(args.limite ?? 20);
+
+    // O nome do evento é resolvido aqui para a tela não fazer uma consulta por
+    // linha (o N+1 que já custou caro noutra tela).
+    const eventos = new Map<string, string>();
+    for (const a of ajustes) {
+      if (a.eventId && !eventos.has(a.eventId)) {
+        const e = await ctx.db.get(a.eventId);
+        if (e && e.userId === user._id) eventos.set(a.eventId, e.name);
+      }
+    }
+
+    return ajustes.map((a) => ({ ...a, eventName: a.eventId ? eventos.get(a.eventId) : undefined }));
   },
 });

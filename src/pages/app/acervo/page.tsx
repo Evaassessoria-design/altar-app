@@ -1,4 +1,10 @@
 import { useState } from "react";
+import { AutoTextarea } from "@/components/ui/auto-textarea.tsx";
+import { formatTimestamp } from "@/lib/safe-date.ts";
+import {
+  aplicarAjuste, aplicarContagem, ROTULO_DO_AJUSTE, TIPOS_DE_AJUSTE,
+  type TipoDeAjuste,
+} from "@/convex/lib/ajusteDeAcervo.ts";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
@@ -14,7 +20,7 @@ import {
 } from "@/components/ui/empty.tsx";
 import { toast } from "sonner";
 import { ConvexError } from "convex/values";
-import { Boxes, Plus, Archive, Search } from "lucide-react";
+import { Boxes, Plus, Archive, Search, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
 import { UNIDADES, abreviarUnidade } from "@/convex/lib/materiais.ts";
 
@@ -52,12 +58,15 @@ function ItemDialog({
   const salvar = async () => {
     const quantidadeTotal = Number(total.replace(",", "."));
     if (!nome.trim()) return toast.error("Informe o nome do item.");
-    if (!Number.isFinite(quantidadeTotal)) return toast.error("Quantidade inválida.");
+    if (!item && !Number.isFinite(quantidadeTotal)) return toast.error("Quantidade inválida.");
     setSalvando(true);
     try {
       if (item) {
+        // Sem `quantidadeTotal`: estoque so muda por "Ajustar estoque", que
+        // registra motivo e deixa historico. Editar nome nao pode ser a porta
+        // dos fundos para mexer no numero de pecas.
         await atualizar({
-          id: item._id, nome: nome.trim(), quantidadeTotal,
+          id: item._id, nome: nome.trim(),
           categoria: categoria.trim() || null,
           materialId: (materialId || null) as Id<"materials"> | null,
         });
@@ -99,8 +108,17 @@ function ItemDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="ac-total">Quantas eu tenho</Label>
+              {/* Na EDICAO a quantidade e so leitura: mexer nela aqui mudaria
+                  o estoque sem motivo nem historico. Quem muda e "Ajustar
+                  estoque". Na CRIACAO ela e o saldo de abertura. */}
               <Input id="ac-total" inputMode="decimal" value={total} placeholder="40"
+                disabled={!!item}
                 onChange={(e) => setTotal(e.target.value)} />
+              {item && (
+                <p className="text-xs text-muted-foreground">
+                  Para mudar, use “Ajustar estoque”.
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="ac-un">Unidade</Label>
@@ -148,12 +166,149 @@ function ItemDialog({
   );
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AJUSTAR ESTOQUE — a única tela que muda a quantidade física
+//
+// Mostra sempre o "Antes → Depois" ANTES de confirmar. Baixa de acervo é
+// decisão que custa dinheiro: a pessoa precisa ver o número que vai ficar, não
+// deduzir. E a conta é feita no servidor de novo, na hora de gravar — o que
+// aparece aqui é uma prévia, nunca o valor gravado.
+// ─────────────────────────────────────────────────────────────────────────────
+function AjusteDialog({
+  item,
+  onClose,
+}: {
+  item: { _id: Id<"collectionItems">; nome: string; unidade: string; quantidadeTotal: number };
+  onClose: () => void;
+}) {
+  const ajustar = useMutation(api.acervo.ajustarEstoque);
+  const contar = useMutation(api.acervo.registrarContagem);
+  const historico = useQuery(api.acervo.historicoDoItem, { collectionItemId: item._id, limite: 8 });
+
+  const [tipo, setTipo] = useState<TipoDeAjuste>("perda");
+  const [quantidade, setQuantidade] = useState("");
+  const [motivo, setMotivo] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  const ehContagem = tipo === "acerto_inventario";
+  const numero = Number(quantidade.replace(",", "."));
+  const valido = Number.isFinite(numero) && quantidade.trim() !== "";
+
+  // Prévia — a decisão de verdade é do servidor (lib/ajusteDeAcervo.ts).
+  const previa = !valido
+    ? null
+    : ehContagem
+      ? aplicarContagem({ quantidadeAtual: item.quantidadeTotal, quantidadeContada: numero, unidade: item.unidade })
+      : aplicarAjuste({ quantidadeAtual: item.quantidadeTotal, tipo, quantidade: numero, unidade: item.unidade });
+
+  const salvar = async () => {
+    if (!valido) return toast.error("Informe a quantidade.");
+    setSalvando(true);
+    try {
+      if (ehContagem) {
+        await contar({ collectionItemId: item._id, quantidadeContada: numero, motivo: motivo.trim() || undefined });
+      } else {
+        await ajustar({
+          collectionItemId: item._id, tipo, quantidade: numero,
+          motivo: motivo.trim() || undefined,
+        });
+      }
+      toast.success("Estoque ajustado.");
+      onClose();
+    } catch (e) {
+      toast.error(
+        e instanceof ConvexError ? (e.data as { message: string }).message : "Não foi possível ajustar.",
+      );
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Ajustar estoque — {item.nome}</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Hoje: <strong className="text-foreground">{item.quantidadeTotal} {abreviarUnidade(item.unidade)}</strong>
+          </p>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="aj-tipo">O que aconteceu</Label>
+            <select id="aj-tipo" value={tipo} onChange={(e) => setTipo(e.target.value as TipoDeAjuste)}
+              className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm cursor-pointer">
+              {TIPOS_DE_AJUSTE.map((t) => (
+                <option key={t} value={t}>{ROTULO_DO_AJUSTE[t]}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="aj-qtd">{ehContagem ? "Quantas eu contei" : "Quantas peças"}</Label>
+            <Input id="aj-qtd" inputMode="decimal" value={quantidade} placeholder="2"
+              onChange={(e) => setQuantidade(e.target.value)} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="aj-motivo">Observações</Label>
+            <AutoTextarea id="aj-motivo" minRows={2} value={motivo} placeholder="Ex.: quebrou no retorno do casamento"
+              onChange={(e) => setMotivo(e.target.value)} />
+          </div>
+
+          {previa && (
+            previa.ok ? (
+              <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
+                <span className="text-muted-foreground">{item.quantidadeTotal}</span>
+                <span className="mx-2">→</span>
+                <strong>{previa.quantidadeDepois} {abreviarUnidade(item.unidade)}</strong>
+              </div>
+            ) : (
+              <p className="text-xs text-destructive">{previa.motivo}</p>
+            )
+          )}
+
+          {historico && historico.length > 0 && (
+            <div className="pt-1">
+              <p className="text-xs font-semibold text-muted-foreground mb-1">Ajustes recentes</p>
+              <ul className="space-y-1">
+                {historico.map((h) => (
+                  <li key={h._id} className="text-xs text-muted-foreground flex items-baseline gap-1.5">
+                    <span className={h.delta > 0 ? "text-green-600 dark:text-green-400" : "text-destructive"}>
+                      {h.delta > 0 ? "+" : ""}{h.delta}
+                    </span>
+                    <span>{ROTULO_DO_AJUSTE[h.tipo]}</span>
+                    <span className="opacity-60">({h.quantidadeAntes} → {h.quantidadeDepois})</span>
+                    {h.eventName && <span className="opacity-60 truncate">· {h.eventName}</span>}
+                    <span className="ml-auto opacity-60 flex-shrink-0">{formatTimestamp(h._creationTime)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} className="cursor-pointer">Cancelar</Button>
+          <Button disabled={salvando || !previa?.ok} onClick={() => void salvar()} className="cursor-pointer">
+            {salvando ? "Salvando..." : "Confirmar ajuste"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function AcervoPage() {
   const itens = useQuery(api.acervo.listItems, {});
   const arquivar = useMutation(api.acervo.setItemArchived);
   const [busca, setBusca] = useState("");
   const [criando, setCriando] = useState(false);
   const [editando, setEditando] = useState<string | null>(null);
+  const [ajustando, setAjustando] = useState<string | null>(null);
 
   const visiveis = (itens ?? []).filter((i) =>
     i.nome.toLowerCase().includes(busca.trim().toLowerCase()),
@@ -230,11 +385,20 @@ export default function AcervoPage() {
                   )}
                 </button>
                 {!item.archived && (
-                  <button onClick={() => void handleArquivar(item._id, item.nome)}
-                    aria-label={`Arquivar ${item.nome}`}
-                    className="p-2 rounded-lg hover:bg-accent text-muted-foreground cursor-pointer flex-shrink-0">
-                    <Archive className="size-4" />
-                  </button>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {/* Alvo de toque de 40px: esta tela e usada no galpao, em pe. */}
+                    <button onClick={() => setAjustando(item._id)}
+                      aria-label={`Ajustar estoque de ${item.nome}`}
+                      title="Ajustar estoque"
+                      className="p-2.5 rounded-lg hover:bg-accent text-muted-foreground cursor-pointer">
+                      <SlidersHorizontal className="size-4" />
+                    </button>
+                    <button onClick={() => void handleArquivar(item._id, item.nome)}
+                      aria-label={`Arquivar ${item.nome}`}
+                      className="p-2.5 rounded-lg hover:bg-accent text-muted-foreground cursor-pointer">
+                      <Archive className="size-4" />
+                    </button>
+                  </div>
                 )}
               </div>
             ))}
@@ -243,6 +407,10 @@ export default function AcervoPage() {
       )}
 
       {criando && <ItemDialog open onClose={() => setCriando(false)} />}
+      {ajustando && (() => {
+        const alvo = (itens ?? []).find((i) => i._id === ajustando);
+        return alvo ? <AjusteDialog item={alvo} onClose={() => setAjustando(null)} /> : null;
+      })()}
       {editando && (
         <ItemDialog open onClose={() => setEditando(null)}
           item={(itens ?? []).find((i) => i._id === editando) as never} />

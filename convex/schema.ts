@@ -110,6 +110,16 @@ const componenteDaReceita = v.object({
   notes: v.optional(v.string()),
 });
 
+/** Tipos de ajuste de estoque — a lista vive em lib/ajusteDeAcervo.ts. */
+const tipoDeAjusteDeAcervo = v.union(
+  v.literal("entrada"),
+  v.literal("perda"),
+  v.literal("quebra"),
+  v.literal("avaria"),
+  v.literal("descarte"),
+  v.literal("acerto_inventario"),
+);
+
 const txType = v.union(v.literal("income"), v.literal("expense"));
 
 const checklistPhase = v.union(v.literal("pre"), v.literal("post"));
@@ -891,6 +901,38 @@ export default defineSchema({
   //
   // A situacao (planejada/fora/retorno parcial/retornada) e DERIVADA das
   // quantidades: um `status` gravado ao lado divergiria no primeiro ajuste.
+  // ── Historico de ajustes do acervo ────────────────────────────────────────
+  // AUDITORIA, nao fonte de verdade. `collectionItems.quantidadeTotal` continua
+  // sendo o estoque fisico; esta tabela EXPLICA como ele chegou onde chegou.
+  // Somar este historico para descobrir o estoque criaria dois numeros que
+  // discordam no primeiro registro perdido.
+  //
+  // Imutavel por convencao: nao ha mutation de edicao nem de exclusao. Correcao
+  // se faz com ajuste compensatorio, que deixa os dois registros na historia —
+  // apagar o erro apagaria tambem a prova de que ele existiu.
+  collectionAdjustments: defineTable({
+    userId: v.id("users"),
+    collectionItemId: v.id("collectionItems"),
+    tipo: tipoDeAjusteDeAcervo,
+    /** ASSINADO: +entrada, -perda. E o que efetivamente moveu o estoque. */
+    delta: v.number(),
+    /** Antes e depois ficam gravados: o historico se le sem recalcular nada. */
+    quantidadeAntes: v.number(),
+    quantidadeDepois: v.number(),
+    motivo: v.optional(v.string()),
+    /**
+     * Evento de onde a perda veio, quando veio de um. So PROCEDENCIA: o ajuste
+     * nao mexe em reserva, saida nem retorno daquele evento.
+     */
+    eventId: v.optional(v.id("events")),
+    responsibleId: v.optional(v.id("teamMembers")),
+  })
+    .index("by_user", ["userId"])
+    .index("by_item", ["collectionItemId"]),
+  // A data do ajuste e o `_creationTime` do proprio Convex: carimbo do
+  // servidor, que o cliente nao consegue forjar. Um campo de data proprio
+  // seria um segundo relogio, livre para divergir.
+
   collectionReservations: defineTable({
     userId: v.id("users"),
     collectionItemId: v.id("collectionItems"),

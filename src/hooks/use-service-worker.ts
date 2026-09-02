@@ -7,13 +7,32 @@ export function useServiceWorker() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
-    const showUpdateToast = () => {
+    const showUpdateToast = (registration: ServiceWorkerRegistration) => {
       if (toastShown.current) return;
       toastShown.current = true;
 
       toast("Nova versão disponível!", {
         duration: Infinity,
-        action: { label: "Atualizar", onClick: () => window.location.reload() },
+        action: {
+          label: "Atualizar",
+          onClick: () => {
+            // Manda a versão nova assumir e SÓ ENTÃO recarrega. Recarregar sem
+            // isso traria a mesma versão antiga de volta, e o aviso voltaria a
+            // aparecer — um botão que parece não funcionar.
+            registration.waiting?.postMessage({ type: "ATIVAR_NOVA_VERSAO" });
+            // `controllerchange` avisa que a troca terminou. O tempo limite é
+            // rede de segurança: sem ele, uma troca que não completasse
+            // deixaria a pessoa presa num aviso que não sai.
+            let recarregou = false;
+            const recarregar = () => {
+              if (recarregou) return;
+              recarregou = true;
+              window.location.reload();
+            };
+            navigator.serviceWorker.addEventListener("controllerchange", recarregar, { once: true });
+            setTimeout(recarregar, 3000);
+          },
+        },
       });
     };
 
@@ -24,7 +43,7 @@ export function useServiceWorker() {
 
         // Check if update is already waiting
         if (registration.waiting) {
-          showUpdateToast();
+          showUpdateToast(registration);
           return;
         }
 
@@ -35,7 +54,7 @@ export function useServiceWorker() {
 
           newWorker.addEventListener("statechange", () => {
             if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-              showUpdateToast();
+              showUpdateToast(registration);
             }
           });
         });

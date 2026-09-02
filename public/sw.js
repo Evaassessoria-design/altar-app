@@ -2,13 +2,29 @@ const CACHE_NAME = "altar-v1";
 const urlsToCache = ["/", "/icon/icon-192.png", "/icon/icon-512.png"];
 
 // Install event - cache core assets
+//
+// NAO chama skipWaiting aqui, de proposito.
+//
+// Com skipWaiting o service worker NOVO assume no mesmo instante, enquanto a
+// aba continua rodando o JavaScript ANTIGO. As telas do ALTAR chegam sob
+// demanda: a pagina velha pede um pedaco com nome antigo, o worker novo vai
+// buscar na rede, e esse arquivo ja nao existe mais no servidor. Resultado:
+// tela que nao abre, no meio de uma montagem.
+//
+// Esperando, o worker novo fica em `waiting` ate a pessoa aceitar o aviso
+// "Nova versao disponivel" — e ai a pagina recarrega inteira, coerente consigo
+// mesma. Enquanto ela nao aceita, tudo continua servido pela versao antiga,
+// que e a que a aba esta rodando.
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches
-      .open(CACHE_NAME)
-      .then((cache) => cache.addAll(urlsToCache))
-      .then(() => self.skipWaiting()),
-  );
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(urlsToCache)));
+});
+
+// A troca acontece quando a PESSOA aceita, nunca no meio do uso.
+// Quem envia esta mensagem e o aviso de atualizacao (src/hooks/use-service-worker.ts).
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "ATIVAR_NOVA_VERSAO") {
+    self.skipWaiting();
+  }
 });
 
 // Fetch event - network first, fall back to cache

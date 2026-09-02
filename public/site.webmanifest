@@ -1,8 +1,10 @@
 {
-  "name": "Altar",
-  "short_name": "Altar",
-  "description": "Plataforma de gestão para cerimonialistas e organizadores de eventos",
+  "id": "/",
+  "name": "ALTAR — Gestão para Decoradores de Eventos",
+  "short_name": "ALTAR",
+  "description": "Sistema operacional para empresas de decoração de eventos: briefing, ficha técnica, acervo, compras, equipe e financeiro.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f7f3ee",
   "theme_color": "#b89a6a",

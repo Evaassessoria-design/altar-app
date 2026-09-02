@@ -410,6 +410,14 @@ export async function deleteUserDataCascade(
     .query("collectionReservations")
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .collect();
+  // O historico de ajustes tambem e dado da empresa. Ele SOBREVIVE a exclusao
+  // de um evento — apagar o evento nao apaga a prova de que a peca quebrou —
+  // mas nao sobrevive a exclusao da CONTA: seria dado de quem pediu para ser
+  // esquecido continuando no banco.
+  const collectionAdjustments = await ctx.db
+    .query("collectionAdjustments")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .collect();
 
   const teamMembers = await ctx.db
     .query("teamMembers")
@@ -428,7 +436,7 @@ export async function deleteUserDataCascade(
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .collect();
 
-  for (const row of [...teamMembers, ...notifications, ...transactions, ...materials, ...compositions, ...collectionReservations, ...collectionItems]) {
+  for (const row of [...teamMembers, ...notifications, ...transactions, ...materials, ...compositions, ...collectionAdjustments, ...collectionReservations, ...collectionItems]) {
     await ctx.db.delete(row._id);
     documents += 1;
   }

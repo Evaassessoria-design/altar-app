@@ -58,6 +58,7 @@ export function ReceitaDialog({
 
   const [linhas, setLinhas] = useState<Linha[]>([]);
   const [salvando, setSalvando] = useState(false);
+  const [salvandoNaBiblioteca, setSalvandoNaBiblioteca] = useState(false);
   const [carregada, setCarregada] = useState(false);
 
   // Carrega a receita existente uma vez por abertura — reabrir o diálogo não
@@ -321,10 +322,16 @@ export function ReceitaDialog({
               type="button"
               variant="ghost"
               size="sm"
+              disabled={salvandoNaBiblioteca}
               onClick={() => {
+                // Sem esta trava, dois toques criavam DUAS composicoes iguais
+                // na biblioteca: a mutation faz `insert`, nao upsert.
+                if (salvandoNaBiblioteca) return;
+                setSalvandoNaBiblioteca(true);
                 void salvarNaBiblioteca({ id: itemId })
                   .then(() => toast.success("Receita salva na biblioteca."))
-                  .catch(() => toast.error("Não foi possível salvar na biblioteca."));
+                  .catch(() => toast.error("Não foi possível salvar na biblioteca."))
+                  .finally(() => setSalvandoNaBiblioteca(false));
               }}
               className="cursor-pointer gap-1.5 mr-auto"
             >

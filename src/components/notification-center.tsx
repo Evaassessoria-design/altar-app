@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "convex/react";
+import { Spinner } from "@/components/ui/spinner.tsx";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
 import { Bell, X, CheckCheck, Calendar, CreditCard, ShoppingBag, ClipboardList } from "lucide-react";
@@ -130,7 +131,14 @@ export function NotificationCenter() {
 
             {/* List */}
             <div className="max-h-[400px] overflow-y-auto">
-              {!notifications || notifications.length === 0 ? (
+              {/* `!notifications` juntava duas coisas diferentes: "ainda nao
+                  chegou" e "nao tem nenhuma". Quem abria o sino num 4G lento
+                  lia "Voce esta em dia!" antes de a lista chegar — e fechava. */}
+              {notifications === undefined ? (
+                <div className="py-10 flex justify-center">
+                  <Spinner className="size-5" />
+                </div>
+              ) : notifications.length === 0 ? (
                 <div className="py-10 text-center text-sm text-muted-foreground">
                   <Bell className="size-8 mx-auto mb-2 opacity-20" />
                   <p>Nenhuma notificação</p>

@@ -122,6 +122,19 @@ export async function deleteEventCascade(
     documents += 1;
   }
 
+  // Documentos herdados de um lead já excluído: agora são do evento e saem
+  // com ele. Os que ainda pertencem a um lead vivo NÃO entram aqui — a busca
+  // é pelo índice `by_event`, e eles não têm `eventId`.
+  const documentosHerdados = await ctx.db
+    .query("leadDocuments")
+    .withIndex("by_event", (q) => q.eq("eventId", eventId))
+    .collect();
+  for (const doc of documentosHerdados) {
+    if (await safeDeleteFile(ctx, doc.storageId)) files += 1;
+    await ctx.db.delete(doc._id);
+    documents += 1;
+  }
+
   const contracts = await ctx.db
     .query("contracts")
     .withIndex("by_event", (q) => q.eq("eventId", eventId))
@@ -287,11 +300,32 @@ export async function deleteLeadCascade(
   let documents = 0;
   let files = 0;
 
+  // ── O CONTRATO ASSINADO NÃO MORRE COM A FICHA DO FUNIL ───────────────────
+  // Se este lead já virou evento e o evento ainda existe, a papelada dele é
+  // história do EVENTO, não da negociação: proposta aprovada, contrato
+  // assinado, comprovante do sinal. Excluir o cartão do funil (limpeza
+  // rotineira depois de fechar) destruía tudo isso — arquivo e linha.
+  //
+  // Aqui o vínculo MIGRA em vez de o arquivo ser destruído. Nada é copiado:
+  // continua sendo o mesmo arquivo, com um dono novo.
+  const lead = await ctx.db.get(leadId);
+  let herdeiro: Id<"events"> | null = null;
+  if (lead?.convertedEventId) {
+    const evento = await ctx.db.get(lead.convertedEventId);
+    // Mesmo dono, obrigatoriamente: um ponteiro cruzado entregaria o contrato
+    // de uma decoradora ao evento de outra.
+    if (evento && evento.userId === lead.userId) herdeiro = evento._id;
+  }
+
   const docs = await ctx.db
     .query("leadDocuments")
     .withIndex("by_lead", (q) => q.eq("leadId", leadId))
     .collect();
   for (const doc of docs) {
+    if (herdeiro) {
+      await ctx.db.patch(doc._id, { leadId: undefined, eventId: herdeiro });
+      continue;
+    }
     if (await safeDeleteFile(ctx, doc.storageId)) files += 1;
     await ctx.db.delete(doc._id);
     documents += 1;

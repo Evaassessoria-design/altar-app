@@ -27,6 +27,11 @@ import { safeDeleteFile } from "./lib/cascade";
 //     documentos continuam dele. O evento os ENXERGA (`listForEvent`) sem
 //     copiar bytes nem duplicar linha — cópia criaria dois donos para o mesmo
 //     arquivo e a exclusão de um deixaria o outro apontando para o vazio.
+//  4. MAS EXCLUIR O LEAD NÃO DESTRÓI A HISTÓRIA DO EVENTO. Se o lead já virou
+//     evento, apagar o cartão do funil (limpeza rotineira depois de fechar)
+//     destruía o contrato assinado — arquivo e tudo. Agora o vínculo MIGRA
+//     para o evento (`eventId`), sem copiar bytes: mesmo arquivo, dono novo.
+//     `listForEvent` lê os dois lados, por isso a tela não muda.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Os valores vêm de `lib/tiposDeDocumento.ts`, a fonte única. O Convex exige
@@ -148,17 +153,28 @@ export const listForEvent = query({
   handler: async (ctx, args): Promise<DocumentoResolvido[]> => {
     const event = await getOwnedEvent(ctx, args.eventId);
     if (!event) return [];
+
+    // 1. Documentos que o evento HERDOU — o lead de origem foi excluído e o
+    //    vínculo migrou para cá (ver deleteLeadCascade). São dele agora.
+    const herdados = await ctx.db
+      .query("leadDocuments")
+      .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+      .collect();
+
+    // 2. Documentos que ainda moram no lead que gerou este evento.
     const leads = await ctx.db
       .query("leads")
       .withIndex("by_user", (q) => q.eq("userId", event.userId))
       .collect();
     const origem = leads.find((l) => l.convertedEventId === args.eventId);
-    if (!origem) return [];
-    const docs = await ctx.db
-      .query("leadDocuments")
-      .withIndex("by_lead", (q) => q.eq("leadId", origem._id))
-      .collect();
-    return resolverDocumentos(ctx, docs);
+    const doLead = origem
+      ? await ctx.db
+          .query("leadDocuments")
+          .withIndex("by_lead", (q) => q.eq("leadId", origem._id))
+          .collect()
+      : [];
+
+    return resolverDocumentos(ctx, [...herdados, ...doLead]);
   },
 });
 

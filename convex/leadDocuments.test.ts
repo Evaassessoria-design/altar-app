@@ -4,7 +4,7 @@ import { convexTest } from "convex-test";
 import { api } from "./_generated/api";
 import schema from "./schema";
 import { modules } from "./test.setup";
-import { deleteLeadCascade, deleteUserDataCascade } from "./lib/cascade";
+import { deleteEventCascade, deleteLeadCascade, deleteUserDataCascade } from "./lib/cascade";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 
@@ -298,6 +298,136 @@ describe("conversão do lead em evento", () => {
       return leads.find((l) => l.convertedEventId === eventId) ? ["achou"] : [];
     });
     expect(vistos).toEqual([]);
+  });
+});
+
+describe("EXCLUIR O LEAD CONVERTIDO NÃO DESTRÓI A HISTÓRIA DO EVENTO", () => {
+  // O defeito, achado na auditoria pós-MASTER #5: a decoradora fecha a venda,
+  // converte o lead, e depois limpa o funil apagando o cartão. Isso destruía o
+  // CONTRATO ASSINADO do evento — linha e arquivo, sem aviso.
+  //
+  // Agora o vínculo MIGRA para o evento. Nada é copiado: mesmo arquivo, dono
+  // novo. Cópia criaria dois donos e a exclusão de um deixaria o outro
+  // apontando para o vazio.
+  async function convertido() {
+    const c = await cenario();
+    const eventId = await c.t.run(async (ctx) => {
+      const id = await ctx.db.insert("events", {
+        userId: c.donaId, name: "Casamento", type: "wedding", date: "2026-12-12",
+        location: "Fazenda", clientName: "Noiva", status: "confirmed",
+      });
+      await ctx.db.patch(c.leadId, { stage: "contracted", convertedEventId: id });
+      return id;
+    });
+    return { ...c, eventId };
+  }
+
+  it("o documento sobrevive, com o arquivo intacto", async () => {
+    const { t, leadId, docId, arquivo } = await convertido();
+    await t.run(async (ctx) => deleteLeadCascade(ctx, leadId));
+    const [doc, url] = await t.run(async (ctx) => [
+      await ctx.db.get(docId),
+      await ctx.storage.getUrl(arquivo),
+    ]);
+    expect(doc).not.toBeNull();
+    expect(url).not.toBeNull();
+  });
+
+  it("o dono passa a ser o EVENTO, e o vínculo com o lead some", async () => {
+    const { t, leadId, docId, eventId } = await convertido();
+    await t.run(async (ctx) => deleteLeadCascade(ctx, leadId));
+    const doc = await t.run(async (ctx) => ctx.db.get(docId));
+    expect(doc!.eventId).toBe(eventId);
+    expect(doc!.leadId).toBeUndefined();
+  });
+
+  it("a tela do evento continua mostrando o mesmo documento", async () => {
+    const { t, leadId, docId, eventId } = await convertido();
+    await t.run(async (ctx) => deleteLeadCascade(ctx, leadId));
+    const vistos = await t.run(async (ctx) =>
+      ctx.db.query("leadDocuments").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+    );
+    expect(vistos.map((d) => d._id)).toEqual([docId]);
+  });
+
+  it("nada é duplicado — continua sendo UMA linha e UM arquivo", async () => {
+    const { t, leadId, donaId } = await convertido();
+    await t.run(async (ctx) => deleteLeadCascade(ctx, leadId));
+    const total = await t.run(async (ctx) =>
+      (await ctx.db.query("leadDocuments").withIndex("by_user", (q) => q.eq("userId", donaId))
+        .collect()).length,
+    );
+    expect(total).toBe(1);
+  });
+
+  it("lead NÃO convertido continua levando os documentos junto", async () => {
+    // A migração é só para história que virou evento. Um lead descartado não
+    // deixa arquivo pago para trás.
+    const { t, leadId, docId, arquivo } = await cenario();
+    await t.run(async (ctx) => deleteLeadCascade(ctx, leadId));
+    expect(await t.run(async (ctx) => ctx.db.get(docId))).toBeNull();
+    expect(await t.run(async (ctx) => ctx.storage.getUrl(arquivo))).toBeNull();
+  });
+
+  it("evento JÁ APAGADO não herda nada — o documento sai junto", async () => {
+    const { t, leadId, eventId, docId, arquivo } = await convertido();
+    await t.run(async (ctx) => ctx.db.delete(eventId));
+    await t.run(async (ctx) => deleteLeadCascade(ctx, leadId));
+    expect(await t.run(async (ctx) => ctx.db.get(docId))).toBeNull();
+    expect(await t.run(async (ctx) => ctx.storage.getUrl(arquivo))).toBeNull();
+  });
+
+  it("evento de OUTRA empresa nunca herda — nem por ponteiro cruzado", async () => {
+    const { t, leadId, outraId, docId, arquivo } = await cenario();
+    await t.run(async (ctx) => {
+      const alheio = await ctx.db.insert("events", {
+        userId: outraId, name: "Da outra", type: "wedding", date: "2026-12-12",
+        location: "L", clientName: "C", status: "confirmed",
+      });
+      await ctx.db.patch(leadId, { convertedEventId: alheio });
+    });
+    await t.run(async (ctx) => deleteLeadCascade(ctx, leadId));
+    // Some, como qualquer lead sem herdeiro legítimo — nunca vaza para a outra.
+    expect(await t.run(async (ctx) => ctx.db.get(docId))).toBeNull();
+    expect(await t.run(async (ctx) => ctx.storage.getUrl(arquivo))).toBeNull();
+  });
+
+  it("apagar o EVENTO depois leva o documento herdado, arquivo incluído", async () => {
+    const { t, leadId, eventId, docId, arquivo } = await convertido();
+    await t.run(async (ctx) => deleteLeadCascade(ctx, leadId));
+    await t.run(async (ctx) => deleteEventCascade(ctx, eventId));
+    expect(await t.run(async (ctx) => ctx.db.get(docId))).toBeNull();
+    expect(await t.run(async (ctx) => ctx.storage.getUrl(arquivo))).toBeNull();
+  });
+
+  it("apagar o EVENTO com o lead VIVO não encosta no documento do lead", async () => {
+    const { t, eventId, docId, arquivo } = await convertido();
+    await t.run(async (ctx) => deleteEventCascade(ctx, eventId));
+    expect(await t.run(async (ctx) => ctx.db.get(docId))).not.toBeNull();
+    expect(await t.run(async (ctx) => ctx.storage.getUrl(arquivo))).not.toBeNull();
+  });
+
+  it("excluir a EMPRESA não deixa arquivo herdado para trás", async () => {
+    // A ordem importa: eventos saem primeiro (levando os herdados), depois os
+    // leads. Um documento que escapasse das duas viraria arquivo cobrado sem
+    // dono nenhum.
+    const { t, leadId, donaId, arquivo } = await convertido();
+    await t.run(async (ctx) => deleteLeadCascade(ctx, leadId));
+    await t.run(async (ctx) => deleteUserDataCascade(ctx, donaId));
+    const sobrou = await t.run(async (ctx) =>
+      (await ctx.db.query("leadDocuments").withIndex("by_user", (q) => q.eq("userId", donaId))
+        .collect()).length,
+    );
+    expect(sobrou).toBe(0);
+    expect(await t.run(async (ctx) => ctx.storage.getUrl(arquivo))).toBeNull();
+  });
+
+  it("o documento herdado continua podendo ser excluído pela dona", async () => {
+    const { t, leadId, donaId, docId, arquivo } = await convertido();
+    await t.run(async (ctx) => deleteLeadCascade(ctx, leadId));
+    const r = await t.run(async (ctx) => removeEspelho(ctx, donaId, docId));
+    expect(r).toEqual({ removido: true });
+    expect(await t.run(async (ctx) => ctx.storage.getUrl(arquivo))).toBeNull();
   });
 });
 

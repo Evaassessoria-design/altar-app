@@ -323,7 +323,19 @@ export default defineSchema({
   // `leadDocuments.listForEvent`).
   leadDocuments: defineTable({
     userId: v.id("users"),
-    leadId: v.id("leads"),
+    /**
+     * Lead de origem. OPCIONAL porque o documento SOBREVIVE ao lead: quando um
+     * lead ja convertido e excluido, o vinculo migra para o evento (abaixo) em
+     * vez de o arquivo ser destruido. Um contrato assinado nao pode sumir
+     * porque a decoradora arrumou o funil.
+     */
+    leadId: v.optional(v.id("leads")),
+    /**
+     * Evento que herdou o documento quando o lead de origem foi excluido.
+     * AUSENTE enquanto o lead existe — a origem continua sendo ele.
+     * Exatamente um dos dois esta presente.
+     */
+    eventId: v.optional(v.id("events")),
     storageId: v.id("_storage"),
     fileName: v.string(),
     /** Tipo do documento. AUSENTE = nao classificado; nada e presumido. */
@@ -334,6 +346,7 @@ export default defineSchema({
     uploadedAt: v.string(),
   })
     .index("by_lead", ["leadId"])
+    .index("by_event", ["eventId"])
     .index("by_user", ["userId"]),
 
   briefings: defineTable({

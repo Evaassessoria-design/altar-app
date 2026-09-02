@@ -99,7 +99,12 @@ describe("nenhuma consulta volta a comparar dia com instante", () => {
   it("a data de hoje existe UMA vez no backend, não montada à mão em cada consulta", () => {
     // `${ano}-${mes}-${dia}` repetido em cada arquivo foi como o Dashboard e o
     // Financeiro acabaram discordando sobre onde um mês começa.
-    for (const arquivo of ["convex/dashboard.ts", "convex/purchases.ts", "convex/health.ts"]) {
+    for (const arquivo of [
+      "convex/dashboard.ts",
+      "convex/purchases.ts",
+      "convex/health.ts",
+      "convex/funil.ts",
+    ]) {
       const fonte = readFileSync(arquivo, "utf-8");
       expect(fonte, `${arquivo} monta a data à mão`).not.toMatch(
         /getMonth\(\) \+ 1\)\.toString\(\)|String\(.*getMonth\(\) \+ 1\)\.padStart/,

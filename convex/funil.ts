@@ -4,6 +4,7 @@ import { ConvexError } from "convex/values";
 import { requireTeamMember, requireUser } from "./lib/identity";
 import { deleteLeadCascade } from "./lib/cascade";
 import { comCarimbo } from "./lib/ultimaAtualizacao";
+import { dataDoDia } from "./lib/dataDoDia";
 import { requireActiveAccess } from "./lib/accessGuard";
 import { limparCampos } from "./lib/limparCampos";
 import { diasSemContato, resumirFollowUp } from "./lib/leadFollowUp";
@@ -118,6 +119,48 @@ export const deleteLead = mutation({
 });
 
 /**
+ * "Conversei com esta cliente agora."
+ *
+ * ── POR QUE UMA MUTATION SÓ PARA ISTO ───────────────────────────────────────
+ * `lastInteraction` existe no schema desde o começo e a regra de follow-up
+ * (lib/leadFollowUp.ts) sempre a respeitou — mas NENHUMA tela a gravava. Na
+ * prática o campo estava sempre vazio, a regra caía no `_creationTime`, e um
+ * lead que recebeu mensagem hoje de manhã continuava listado como parado. A
+ * decoradora não tinha como dizer ao sistema "já falei com ela".
+ *
+ * Passar isso pelo `updateLead` seria pior: o formulário manda o objeto
+ * inteiro, e qualquer edição gravaria contato junto. Aqui a ação é EXPLÍCITA
+ * e mexe em UM campo.
+ *
+ * ── O QUE ELA NÃO FAZ ───────────────────────────────────────────────────────
+ * Não muda o estágio (avançar no funil é decisão separada — houve conversa
+ * que não avança nada), não mexe em `nextAction` (um lead com quem falei hoje
+ * e ainda sem próximo passo definido CONTINUA sendo uma falha de processo),
+ * não escreve nota nenhuma, não toca em mais nada.
+ *
+ * ── DATETIME, NÃO DATA ──────────────────────────────────────────────────────
+ * Grava o INSTANTE em ISO, carimbado pelo servidor — o relógio do navegador
+ * não decide isso. A tela converte para o fuso de quem lê. A regra de
+ * follow-up corta em 10 caracteres (`diasEntre`), então o valor com hora
+ * continua funcionando lá sem nenhuma mudança, e os registros antigos que
+ * eram só data seguem válidos.
+ */
+export const registrarContato = mutation({
+  args: { id: v.id("leads") },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const lead = await ctx.db.get(args.id);
+    if (!lead || lead.userId !== user._id)
+      throw new ConvexError({ message: "Lead não encontrado", code: "NOT_FOUND" });
+
+    const lastInteraction = new Date().toISOString();
+    // Dois campos e nada mais: a conversa e o carimbo de "mexeram aqui".
+    await ctx.db.patch(args.id, comCarimbo({ lastInteraction }));
+    return { lastInteraction };
+  },
+});
+
+/**
  * Oportunidades que pedem alguma coisa da decoradora hoje.
  *
  * Devolve JÁ AGREGADO: o Dashboard mostra "3 leads precisam de follow-up",
@@ -137,10 +180,8 @@ export const getFollowUp = query({
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .collect();
 
-    // Mesma âncora de data do painel de atenção: dia civil local, montado a
-    // partir dos componentes, para não deslizar para a véspera.
-    const hoje = new Date();
-    const hojeISO = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
+    // Mesma âncora do resto do backend — ver lib/dataDoDia.ts.
+    const hojeISO = dataDoDia();
 
     const resumo = resumirFollowUp(
       leads.map((l) => ({

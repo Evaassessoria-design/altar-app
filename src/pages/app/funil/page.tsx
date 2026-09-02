@@ -32,10 +32,12 @@ import {
   CalendarDays,
   DollarSign,
   Paperclip,
+  MessageCircle,
 } from "lucide-react";
 import { LeadDocumentsDialog } from "./_components/lead-documents.tsx";
 import { ResponsavelInline, ResponsavelSelect } from "@/components/responsavel-select.tsx";
 import { descreverUltimaAtualizacao } from "@/convex/lib/ultimaAtualizacao.ts";
+import { descreverUltimoContato } from "@/lib/ultimo-contato.ts";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -340,7 +342,27 @@ function LeadCard({
 }) {
   const [converting, setConverting] = useState(false);
   const [documentos, setDocumentos] = useState(false);
+  const [registrando, setRegistrando] = useState(false);
+  const registrarContato = useMutation(api.funil.registrarContato);
+  const ultimoContato = descreverUltimoContato(lead.lastInteraction);
   const stageConfig = STAGES.find((s) => s.id === lead.stage)!;
+
+  const registrar = async () => {
+    setRegistrando(true);
+    try {
+      await registrarContato({ id: lead._id });
+      toast.success("Contato registrado.");
+    } catch (e) {
+      toast.error(
+        e instanceof ConvexError
+          ? (e.data as { message: string }).message
+          : "Não foi possível registrar o contato.",
+      );
+    } finally {
+      setRegistrando(false);
+    }
+  };
+
   const nextStage = STAGES[STAGES.findIndex((s) => s.id === lead.stage) + 1];
 
   return (
@@ -420,6 +442,16 @@ function LeadCard({
         className="block text-xs text-muted-foreground"
       />
 
+      {/* ÚLTIMO CONTATO — a pergunta que custa dinheiro no funil. Distinto de
+          "Atualizado", logo abaixo: aquilo é "alguém mexeu no registro", isto
+          é "falei com a cliente". Ver src/lib/ultimo-contato.ts. */}
+      {ultimoContato && (
+        <p className="text-xs text-muted-foreground flex items-center gap-1">
+          <MessageCircle className="size-3" />
+          Último contato: <span className="text-foreground">{ultimoContato}</span>
+        </p>
+      )}
+
       {/* "Faz quanto tempo que eu nao olho isto?" — o Convex so da a data de
           CRIACAO, entao um lead de janeiro revisado ontem parecia de janeiro.
           Isto NAO e contato com a cliente: quem responde por isso e
@@ -455,6 +487,20 @@ function LeadCard({
         )}
         {lead.convertedEventId && (
           <span className="text-xs text-muted-foreground">✓ Evento criado</span>
+        )}
+        {/* Um clique, sem diálogo: registrar conversa é o gesto mais frequente
+            do funil e não pode custar três toques. Some nos estágios finais —
+            cobrar follow-up de lead fechado ou perdido é ruído. */}
+        {lead.stage !== "contracted" && lead.stage !== "discarded" && (
+          <button
+            onClick={() => void registrar()}
+            disabled={registrando}
+            title="Grava a data e a hora de agora como último contato"
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline cursor-pointer disabled:opacity-50"
+          >
+            <MessageCircle className="size-3" />
+            {registrando ? "Registrando..." : "Registrar contato"}
+          </button>
         )}
         {/* Proposta e contrato ficam com o LEAD, disponíveis em qualquer
             estágio — a papelada da negociação existe antes do evento. */}

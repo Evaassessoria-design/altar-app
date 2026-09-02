@@ -17,6 +17,7 @@ import {
   situacaoDaReserva,
 } from "./lib/acervo";
 import { consolidarMateriais } from "./lib/fichaTecnica";
+import { agruparAcervoPorMaterial, substitutosCompativeis } from "./lib/acervo";
 import { aplicarAjuste, aplicarContagem } from "./lib/ajusteDeAcervo";
 import { ehObrigacaoDeMontagem } from "./lib/escopoDoProjeto";
 
@@ -550,25 +551,47 @@ export const reservarDaFicha = mutation({
       .query("collectionItems")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .collect();
-    const porMaterial = new Map(
-      acervo.filter((i) => i.materialId && !i.archived).map((i) => [i.materialId as string, i]),
-    );
+    // Agrupa preservando TODOS os itens de cada material. A forma anterior era
+    // um Map de pares, onde o ultimo item sobrescrevia os anteriores: dois
+    // castiçais vinculados ao mesmo material e um deles sumia em silencio.
+    const porMaterial = agruparAcervoPorMaterial(acervo);
 
     const janela = janelaSugerida(event.date);
     let criadas = 0;
     let atualizadas = 0;
     const semAcervo: string[] = [];
+    /** Material com mais de um item de acervo equivalente — precisa de escolha. */
+    const precisamEscolha: { nome: string; opcoes: string[] }[] = [];
     const comDeficit: { nome: string; deficit: number }[] = [];
 
     for (const linha of linhas) {
       if (!linha.materialId) continue;
-      const item = porMaterial.get(linha.materialId);
-      if (!item) {
+      const candidatos = porMaterial.get(linha.materialId) ?? [];
+      const { compativeis } = substitutosCompativeis(candidatos, linha.unidade ?? "");
+
+      if (compativeis.length === 0) {
         // Reutilizável sem item de acervo vinculado continua respondendo
         // "disponibilidade não informada" — não inventamos vínculo por nome.
+        // Vale também quando existe item vinculado mas de OUTRA unidade: 15
+        // metros de fita não são 15 peças, e converter seria inventar.
         if (linha.tipo === "reutilizavel") semAcervo.push(linha.nome);
         continue;
       }
+
+      if (compativeis.length > 1) {
+        // Substituição explícita: a decoradora vinculou vários itens ao mesmo
+        // material. QUAIS peças saem do galpão é decisão dela — dividir 30
+        // castiçais em 20 Roma + 10 Viena por conta própria mudaria o que a
+        // equipe vai carregar. O sistema mostra as opções e espera a escolha,
+        // em vez de escolher calado (que era o efeito do bug do Map).
+        precisamEscolha.push({
+          nome: linha.nome,
+          opcoes: compativeis.map((i) => i.nome),
+        });
+        continue;
+      }
+
+      const item = compativeis[0];
 
       const existente = await ctx.db
         .query("collectionReservations")
@@ -612,7 +635,7 @@ export const reservarDaFicha = mutation({
       criadas += 1;
     }
 
-    return { criadas, atualizadas, semAcervo, comDeficit };
+    return { criadas, atualizadas, semAcervo, comDeficit, precisamEscolha };
   },
 });
 

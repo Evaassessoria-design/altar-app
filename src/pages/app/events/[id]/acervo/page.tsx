@@ -102,6 +102,16 @@ export default function AcervoDoEventoPage() {
           `Faltam peças: ${r.comDeficit.map((d) => `${d.nome} (${d.deficit})`).join(", ")}.`,
         );
       }
+      if (r.precisamEscolha.length > 0) {
+        // Varios itens do acervo servem o mesmo material. QUAIS pecas saem do
+        // galpao e decisao da decoradora — o sistema mostra as opcoes em vez
+        // de dividir por conta propria.
+        for (const p of r.precisamEscolha) {
+          toast.info(`${p.nome}: escolha de qual item reservar`, {
+            description: `Equivalentes no acervo: ${p.opcoes.join(", ")}. Reserve manualmente o que for usar.`,
+          });
+        }
+      }
       if (r.semAcervo.length > 0) {
         toast.info(`Sem item de acervo vinculado: ${r.semAcervo.join(", ")}.`);
       }

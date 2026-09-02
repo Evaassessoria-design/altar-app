@@ -277,3 +277,79 @@ export function retornoPossivel(saiu: number | undefined, voltou: number): boole
   if (voltou < 0) return false;
   return voltou <= (saiu ?? 0);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUBSTITUIÇÃO EXPLÍCITA — vários itens de acervo para o mesmo material
+//
+// "Preciso de 30 castiçais dourados, e posso atender com Roma, Viena ou Alto."
+//
+// O modelo já permitia isso: `collectionItems.materialId` sempre aceitou que
+// vários itens apontassem para o mesmo material, e esse vínculo sempre foi
+// feito à mão — o ALTAR nunca juntou peça por nome parecido, e continua não
+// juntando. O que faltava era o CÓDIGO respeitar a relação: o agrupamento era
+// um `new Map(itens.map(i => [i.materialId, i]))`, e num Map o último par com
+// a mesma chave sobrescreve os anteriores. Dois castiçais no mesmo material e
+// um deles sumia, sem erro e sem aviso.
+//
+// UNIDADE NUNCA É CONVERTIDA. 15 metros de fita não viram 15 peças. Item de
+// unidade diferente fica de fora da soma — mas é DEVOLVIDO à parte, para a
+// tela poder dizer por que ficou.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type ItemDeAcervoAgrupavel = {
+  materialId?: string;
+  unidade: string;
+  quantidadeTotal: number;
+  archived?: boolean;
+};
+
+/**
+ * Agrupa o acervo por material técnico, preservando TODOS os itens de cada um.
+ *
+ * Arquivado fica de fora (não entra em reserva nova). Item sem material
+ * vinculado não entra: vínculo é sempre explícito.
+ */
+export function agruparAcervoPorMaterial<T extends ItemDeAcervoAgrupavel>(
+  itens: readonly T[],
+): Map<string, T[]> {
+  const grupos = new Map<string, T[]>();
+  for (const item of itens) {
+    if (!item.materialId || item.archived) continue;
+    const atual = grupos.get(item.materialId);
+    if (atual) atual.push(item);
+    else grupos.set(item.materialId, [item]);
+  }
+  return grupos;
+}
+
+export type Substitutos<T> = {
+  /** Mesma unidade do material — podem somar. */
+  compativeis: T[];
+  /** Unidade diferente. Ficam de fora da conta, mas não são escondidos. */
+  incompativeis: T[];
+  /** Soma do estoque FÍSICO dos compatíveis. Não é disponibilidade. */
+  totalFisico: number;
+};
+
+/**
+ * Separa os substitutos que podem somar dos que não podem.
+ *
+ * `totalFisico` é estoque, NÃO disponibilidade: disponibilidade depende de
+ * janela e continua saindo de `disponibilidadeNaJanela`, item por item.
+ */
+export function substitutosCompativeis<T extends ItemDeAcervoAgrupavel>(
+  itens: readonly T[],
+  unidadeDoMaterial: string,
+): Substitutos<T> {
+  const compativeis: T[] = [];
+  const incompativeis: T[] = [];
+  for (const i of itens) {
+    if (i.unidade === unidadeDoMaterial) compativeis.push(i);
+    else incompativeis.push(i);
+  }
+  return {
+    compativeis,
+    incompativeis,
+    totalFisico: compativeis.reduce((s, i) => s + i.quantidadeTotal, 0),
+  };
+}

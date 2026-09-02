@@ -8,6 +8,7 @@ import {
   janelaSugerida,
   janelaValida,
   janelasConflitam,
+  normalizarJanela,
   quantidadeFisicaValida,
   retornoPossivel,
   situacaoDaReserva,
@@ -336,5 +337,49 @@ describe("retorno impossível é recusado", () => {
 
   it("retorno negativo é recusado", () => {
     expect(retornoPossivel(20, -1)).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUDITORIA HOSTIL — o que quebrou depois de implementado.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("janela INVERTIDA em dado corrompido", () => {
+  // A mutation recusa janela invertida, mas dado vindo de importação ou edição
+  // direta chegaria aqui. `10 → 05` contida numa janela larga produzia
+  // conflito por acidente aritmético, e a tela exibiria "de 10/10 a 05/10".
+  it("é normalizada, não descartada — as peças ESTÃO prometidas a alguém", () => {
+    expect(normalizarJanela({ inicio: "2026-10-10", fim: "2026-10-05" })).toEqual({
+      inicio: "2026-10-05", fim: "2026-10-10",
+    });
+  });
+
+  it("janela correta passa intacta", () => {
+    const boa = { inicio: "2026-10-05", fim: "2026-10-10" };
+    expect(normalizarJanela(boa)).toEqual(boa);
+  });
+
+  it("o conflito sai com as datas legíveis", () => {
+    const invertida = {
+      _id: "r1", eventId: "evB", quantidade: 30,
+      inicio: "2026-10-10", fim: "2026-10-05",
+    };
+    const estado = disponibilidadeNaJanela(
+      40, [invertida], { inicio: "2026-10-01", fim: "2026-10-20" }, "evA",
+    );
+    expect(estado.reservadoPorOutros).toBe(30); // o compromisso é mantido
+    expect(estado.conflitos[0].inicio).toBe("2026-10-05");
+    expect(estado.conflitos[0].fim).toBe("2026-10-10");
+  });
+
+  it("descartar seria pior: liberaria peça que não está livre", () => {
+    const invertida = {
+      _id: "r1", eventId: "evB", quantidade: 40,
+      inicio: "2026-10-11", fim: "2026-10-09",
+    };
+    const estado = disponibilidadeNaJanela(
+      40, [invertida], { inicio: "2026-10-10", fim: "2026-10-10" }, "evA",
+    );
+    expect(estado.disponivel).toBe(0);
   });
 });

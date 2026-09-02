@@ -193,6 +193,43 @@ describe("IDEMPOTÊNCIA da reserva", () => {
   });
 });
 
+describe("as travas da FONTE — o espelho do teste não protege o código real", () => {
+  const FONTE = readFileSync("convex/acervo.ts", "utf-8");
+  const corpo = (fn: string) => {
+    const i = FONTE.indexOf(`export const ${fn} =`);
+    expect(i, `${fn} não existe`).toBeGreaterThan(-1);
+    return FONTE.slice(i, FONTE.indexOf("\nexport ", i + 1));
+  };
+
+  it("`reservar` procura a reserva existente ANTES de inserir", () => {
+    // Sem isto, o duplo clique cria duas reservas do mesmo item no mesmo
+    // evento — e a peça passa a contar duas vezes contra os outros eventos.
+    const c = corpo("reservar");
+    expect(c).toContain('withIndex("by_event_item"');
+    const antesDoInsert = c.slice(0, c.indexOf('ctx.db.insert("collectionReservations"'));
+    expect(antesDoInsert, "insere sem checar duplicata").toContain("if (existente)");
+  });
+
+  it("`reservarDaFicha` também é idempotente", () => {
+    const c = corpo("reservarDaFicha");
+    expect(c).toContain('withIndex("by_event_item"');
+    expect(c).toContain("if (existente)");
+  });
+
+  it("a disponibilidade é recalculada DENTRO da mutation, não recebida", () => {
+    for (const fn of ["reservar", "reservarDaFicha"]) {
+      expect(corpo(fn), `${fn} não recalcula`).toContain("disponibilidadeNaJanela(");
+    }
+  });
+
+  it("nenhuma mutation corta a reserva para caber no disponível", () => {
+    // Cortar em silêncio esconderia justamente o déficit que ela precisa ver.
+    const c = corpo("reservar");
+    expect(c).not.toMatch(/Math\.min\([^)]*disponivel/);
+    expect(c).toContain("quantidade: args.quantidade");
+  });
+});
+
 describe("SAÍDA E RETORNO", () => {
   async function comReserva() {
     const c = await cenario();

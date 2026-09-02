@@ -77,6 +77,24 @@ export function janelaValida(janela: Janela): boolean {
 }
 
 /**
+ * Janela em ordem canônica.
+ *
+ * A mutation recusa janela invertida, mas dado corrompido (importação, edição
+ * direta, versão futura com bug) chegaria até aqui — e uma janela `10 → 05`
+ * contida numa janela larga produz conflito por acidente aritmético, com datas
+ * ilegíveis na tela ("de 10/10 a 05/10").
+ *
+ * Normalizamos em vez de descartar: as peças ESTÃO prometidas a alguém, e
+ * fingir que a reserva não existe liberaria peça que não está livre. Trocar as
+ * pontas é a leitura conservadora — mantém o compromisso e o torna legível.
+ */
+export function normalizarJanela(janela: Janela): Janela {
+  return janela.inicio <= janela.fim
+    ? janela
+    : { inicio: janela.fim, fim: janela.inicio };
+}
+
+/**
  * Duas janelas disputam as mesmas peças?
  *
  * INCLUSIVA nas duas pontas, e isso é uma decisão, não um descuido: uma janela
@@ -85,7 +103,9 @@ export function janelaValida(janela: Janela): boolean {
  * na dúvida entre avisar demais e deixar a decoradora descobrir no galpão, o
  * certo é avisar.
  */
-export function janelasConflitam(a: Janela, b: Janela): boolean {
+export function janelasConflitam(entradaA: Janela, entradaB: Janela): boolean {
+  const a = normalizarJanela(entradaA);
+  const b = normalizarJanela(entradaB);
   return a.inicio <= b.fim && b.inicio <= a.fim;
 }
 
@@ -150,13 +170,17 @@ export function disponibilidadeNaJanela(
     reservadoPorOutros,
     disponivel: quantidadeLimpa(Math.max(0, total - reservadoPorOutros)),
     jaReservadoAqui,
-    conflitos: conflitantes.map((r) => ({
-      reservaId: r._id,
-      eventId: r.eventId,
-      quantidade: r.quantidade,
-      inicio: r.inicio,
-      fim: r.fim,
-    })),
+    conflitos: conflitantes.map((r) => {
+      // A janela sai normalizada para a tela nunca exibir "de 10/10 a 05/10".
+      const janelaDele = normalizarJanela({ inicio: r.inicio, fim: r.fim });
+      return {
+        reservaId: r._id,
+        eventId: r.eventId,
+        quantidade: r.quantidade,
+        inicio: janelaDele.inicio,
+        fim: janelaDele.fim,
+      };
+    }),
   };
 }
 

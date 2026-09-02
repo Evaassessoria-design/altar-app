@@ -382,6 +382,37 @@ async function seedCatalogo(t: ReturnType<typeof convexTest>) {
   });
 }
 
+describe("Acervo: excluir o evento LIBERA as peças", () => {
+  it("a reserva sai com o evento e o acervo volta a ficar disponível", async () => {
+    // Um evento apagado que continuasse segurando 30 vasos faria o próximo
+    // evento ver déficit por causa de algo que não existe mais.
+    const t = convexTest(schema, modules);
+    const { vaso, eventId } = await t.run(async (ctx: TestMutationCtx) => {
+      const { userId, eventId } = await seedFullEvent(ctx);
+      const vaso = await ctx.db.insert("collectionItems", {
+        userId, nome: "Vaso", searchName: "vaso", unidade: "un",
+        quantidadeTotal: 40, updatedAt: NOW_ISO,
+      });
+      await ctx.db.insert("collectionReservations", {
+        userId, collectionItemId: vaso, eventId, quantidade: 30,
+        inicio: "2026-12-11", fim: "2026-12-13", origem: "manual", updatedAt: NOW_ISO,
+      });
+      return { vaso, eventId };
+    });
+
+    await t.run(async (ctx) => deleteEventCascade(ctx, eventId));
+
+    const [reservas, item] = await t.run(async (ctx) => [
+      await ctx.db.query("collectionReservations").collect(),
+      await ctx.db.get(vaso),
+    ]);
+    expect(reservas).toHaveLength(0);
+    // E o item do acervo NÃO some: ele é da empresa e serve os outros eventos.
+    expect(item).not.toBeNull();
+    expect(item!.quantidadeTotal).toBe(40);
+  });
+});
+
 describe("Ficha Técnica: catálogo e biblioteca são dados da EMPRESA", () => {
   // Achado na auditoria cruzada do MASTER #6: `materials` e `compositions` são
   // tabelas de usuário (não de evento), então o guarda de "tabela nova com

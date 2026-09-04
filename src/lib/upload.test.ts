@@ -6,6 +6,10 @@ import {
   tetoDoTipo,
   validarArquivo,
 } from "./upload.ts";
+import {
+  TAMANHO_MAXIMO_MB,
+  motivoParaRecusarArquivo,
+} from "@/convex/lib/tiposDeDocumento.ts";
 
 const MB = 1024 * 1024;
 const arq = (over: Partial<{ name: string; type: string; size: number }> = {}) => ({
@@ -31,9 +35,63 @@ describe("tamanho", () => {
     expect(validarArquivo(arq({ size: TAMANHO_MAXIMO_IMAGEM + 1 }), { tipo: "imagem" }).ok).toBe(false);
   });
 
-  it("documento tem teto próprio, menor que o de foto", () => {
+  it("documento tem teto próprio, MAIOR que o de foto", () => {
+    // A ordem é essa mesmo, e não por descuido: orçamento de fornecedor pesa
+    // mais que foto de celular. Foto tem teto menor porque o navegador ainda
+    // precisa desenhá-la; documento só é guardado e baixado.
     expect(tetoDoTipo("documento")).toBe(TAMANHO_MAXIMO_DOCUMENTO);
-    expect(TAMANHO_MAXIMO_DOCUMENTO).toBeLessThan(TAMANHO_MAXIMO_IMAGEM);
+    expect(TAMANHO_MAXIMO_DOCUMENTO).toBeGreaterThan(TAMANHO_MAXIMO_IMAGEM);
+  });
+
+  it("o teto de foto NÃO foi arrastado junto com o de documento", () => {
+    // Guarda contra "subiram tudo para 50" numa próxima rodada.
+    expect(TAMANHO_MAXIMO_IMAGEM).toBe(15 * MB);
+    expect(validarArquivo(arq({ size: 20 * MB }), { tipo: "imagem" }).ok).toBe(false);
+    expect(validarArquivo(arq({ size: 50 * MB }), { tipo: "imagem" }).ok).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOCUMENTOS ATÉ 50 MB
+//
+// A faixa que a operação real usa: orçamento de fornecedor entre 30 e 36 MB.
+// Antes o teto era 10 MB e esses arquivos simplesmente não entravam.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("documento — teto de 50 MB", () => {
+  const doc = (size: number) => ({ name: "orcamento.pdf", type: "application/pdf", size });
+
+  it("o teto é exatamente 50 MB", () => {
+    expect(TAMANHO_MAXIMO_DOCUMENTO).toBe(50 * MB);
+  });
+
+  it.each([1, 35, 36, 49, 50])("%i MB é aceito", (mb) => {
+    expect(validarArquivo(doc(mb * MB), { tipo: "documento" }).ok).toBe(true);
+  });
+
+  it("um byte acima de 50 MB é recusado", () => {
+    expect(validarArquivo(doc(50 * MB + 1), { tipo: "documento" }).ok).toBe(false);
+  });
+
+  it("60 MB é recusado e a mensagem diz o limite real", () => {
+    const r = validarArquivo(doc(60 * MB), { tipo: "documento" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.motivo).toContain("50,0 MB");
+      expect(r.motivo).toContain("60,0 MB");
+      expect(r.motivo).toContain("orcamento.pdf");
+    }
+  });
+
+  it("tipo inválido continua recusado, mesmo dentro do tamanho", () => {
+    const r = validarArquivo(
+      { name: "clipe.mp4", type: "video/mp4", size: 35 * MB },
+      { tipo: "documento", aceitos: ["application/pdf"] },
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  it("documento vazio continua recusado", () => {
+    expect(validarArquivo(doc(0), { tipo: "documento" }).ok).toBe(false);
   });
 
   it("arquivo vazio é recusado", () => {
@@ -94,5 +152,32 @@ describe("tipo", () => {
 describe("tamanhoEmMB", () => {
   it("usa vírgula, como se escreve em português", () => {
     expect(tamanhoEmMB(1.5 * MB)).toBe("1,5 MB");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AS DUAS CAMADAS PRECISAM CONCORDAR
+//
+// A tela de documentos do lead valida DUAS vezes: `motivoParaRecusarArquivo`
+// (antes de gastar a URL de upload) e depois o hook, que chama
+// `validarArquivo`. Se os tetos divergirem, o menor vence calado e a mensagem
+// mostrada cita um limite que não é o que está sendo aplicado — foi exatamente
+// o que acontecia com 20 MB de um lado e 10 MB do outro.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("acordo entre as duas camadas de validação", () => {
+  it("o teto do pré-check é o mesmo do hook de envio", () => {
+    expect(TAMANHO_MAXIMO_MB * MB).toBe(TAMANHO_MAXIMO_DOCUMENTO);
+  });
+
+  it.each([35, 36, 49, 50])("%i MB passa nas DUAS camadas", (mb) => {
+    const arquivo = { name: "orcamento.pdf", type: "application/pdf", size: mb * MB };
+    expect(motivoParaRecusarArquivo(arquivo)).toBeNull();
+    expect(validarArquivo(arquivo, { tipo: "documento" }).ok).toBe(true);
+  });
+
+  it("acima de 50 MB as duas camadas recusam", () => {
+    const arquivo = { name: "pesado.pdf", type: "application/pdf", size: 51 * MB };
+    expect(motivoParaRecusarArquivo(arquivo)).toBe("Arquivo maior que 50 MB.");
+    expect(validarArquivo(arquivo, { tipo: "documento" }).ok).toBe(false);
   });
 });

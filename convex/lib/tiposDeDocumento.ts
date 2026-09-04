@@ -43,8 +43,16 @@ export function ordenarDocumentosDoLead<T extends { uploadedAt: string }>(
   return [...docs].sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
 }
 
-/** Limite por arquivo. Acima disso o upload falha no meio, sem mensagem útil. */
-export const TAMANHO_MAXIMO_MB = 20;
+/**
+ * Limite por arquivo desta tela, em MB.
+ *
+ * PRECISA acompanhar `TAMANHO_MAXIMO_DOCUMENTO` de `src/lib/upload.ts`: esta
+ * checagem roda ANTES de gastar uma URL de upload, e logo depois o hook de
+ * envio confere de novo. Quando os dois números divergiam (20 aqui, 10 lá), o
+ * menor vencia calado e esta mensagem nunca aparecia — dizia-se "20 MB" numa
+ * tela que recusava a partir de 10. `upload.test.ts` trava os dois juntos.
+ */
+export const TAMANHO_MAXIMO_MB = 50;
 
 /**
  * Diz por que o arquivo não pode ser enviado, ou `null` se pode.

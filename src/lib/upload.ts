@@ -26,8 +26,22 @@ const MB = 1024 * 1024;
  */
 export const TAMANHO_MAXIMO_IMAGEM = 15 * MB;
 
-/** Teto dos DOCUMENTOS — contrato e proposta em PDF cabem de sobra. */
-export const TAMANHO_MAXIMO_DOCUMENTO = 10 * MB;
+/**
+ * Teto dos DOCUMENTOS. Maior que o das fotos, e de propósito: orçamento de
+ * fornecedor chega na faixa de 30–36 MB (PDF com foto de produto em alta,
+ * planta escaneada, catálogo inteiro). Com 10 MB a operação real batia no
+ * limite toda semana e o arquivo acabava indo parar no WhatsApp.
+ *
+ * Foto continua com teto menor porque o problema dela é outro: o navegador
+ * precisa DESENHAR a imagem depois, e a galeria trava com arquivo enorme.
+ * Documento a gente só guarda e baixa — não há render para travar.
+ *
+ * Cabe nos 50 MB porque o arquivo vai DIRETO do navegador para o Convex
+ * Storage (ver `use-upload.ts`), sem passar por função nossa nem pela Vercel.
+ * A documentação do Convex é explícita: no upload por URL "o tamanho do
+ * arquivo não é limitado", o que existe é um timeout de 2 minutos no POST.
+ */
+export const TAMANHO_MAXIMO_DOCUMENTO = 50 * MB;
 
 export type TipoDeEnvio = "imagem" | "documento";
 

@@ -6,6 +6,14 @@ import { ConvexError } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { requireIdentity } from "./lib/identity";
 import { isBillingExempt } from "./lib/access";
+import {
+  assinaturaEmDia,
+  escolherAssinatura,
+  STATUS_EM_ABERTO,
+  STATUS_PAGO,
+  type AssinaturaAsaas,
+  type CobrancaAsaas,
+} from "./lib/escolhaDeAssinatura";
 
 // Base URL por ambiente. ASAAS_ENV="sandbox" usa o sandbox do Asaas (homologação,
 // sem cobrança real); qualquer outro valor (ou ausente) usa PRODUÇÃO.
@@ -70,19 +78,8 @@ async function asaasFetchOptional(path: string): Promise<unknown | null> {
   }
 }
 
-type AsaasSubscription = { id: string; status?: string; paymentLink?: string | null };
-type AsaasPayment = {
-  id: string;
-  status?: string;
-  invoiceUrl?: string | null;
-  dateCreated?: string;
-};
-
-/** Cobranças que ainda podem ser pagas — levam o cliente de volta ao pagamento. */
-const STATUS_EM_ABERTO = ["PENDING", "OVERDUE", "AWAITING_RISK_ANALYSIS"];
-
-/** Cobranças que JÁ FORAM PAGAS — provam que a assinatura está em dia. */
-const STATUS_PAGO = ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"];
+type AsaasSubscription = AssinaturaAsaas;
+type AsaasPayment = CobrancaAsaas;
 
 /**
  * A assinatura VIVA deste cliente no Asaas, se houver.
@@ -90,27 +87,52 @@ const STATUS_PAGO = ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"];
  * ── POR QUE NÃO BASTA OLHAR O ID GRAVADO ────────────────────────────────────
  * O id gravado no ALTAR pode apontar para a assinatura errada: foi o que
  * aconteceu quando o checkout criou uma segunda assinatura e sobrescreveu o
- * vínculo da primeira — a que estava efetivamente sendo paga. Por isso, quando
- * o id gravado não estiver ativo, perguntamos ao Asaas quais assinaturas ATIVAS
- * aquele cliente tem. Isso encontra inclusive uma assinatura criada à mão no
- * painel do Asaas, que o ALTAR nunca soube que existia.
+ * vínculo da primeira — a que estava efetivamente sendo paga.
+ *
+ * ── E POR QUE NÃO BASTA "A PRIMEIRA ACTIVE" ─────────────────────────────────
+ * A versão anterior devolvia o id gravado assim que ele estivesse ACTIVE. Com
+ * DUAS assinaturas ativas — a paga e a duplicada — ela devolvia a duplicada,
+ * via que ela não tinha cobrança paga e concluía "sem assinatura paga". Uma
+ * cliente adimplente ficou presa no paywall por dias, e o cron de conferência
+ * repetia o mesmo engano todo dia.
+ *
+ * Agora perguntamos ao Asaas TODAS as assinaturas do cliente e deixamos
+ * `lib/escolhaDeAssinatura` decidir pela prova do dinheiro. Isso encontra
+ * inclusive uma assinatura criada à mão no painel do Asaas, que o ALTAR nunca
+ * soube que existia.
  */
 async function assinaturaVivaDoCliente(
   customerId: string,
   idGravado: string | undefined,
 ): Promise<AsaasSubscription | null> {
-  if (idGravado) {
+  const lista = (await asaasFetchOptional(
+    `/subscriptions?customer=${customerId}&limit=50`,
+  )) as { data?: AsaasSubscription[] } | null;
+
+  const ativas = (lista?.data ?? []).filter((a) => a.status === "ACTIVE");
+
+  // O id gravado pode não vir na listagem (paginação, assinatura de outro
+  // cliente por engano). Vale uma consulta direta antes de desistir dele.
+  if (idGravado && !ativas.some((a) => a.id === idGravado)) {
     const atual = (await asaasFetchOptional(
       `/subscriptions/${idGravado}`,
     )) as AsaasSubscription | null;
-    if (atual?.status === "ACTIVE") return atual;
+    if (atual?.status === "ACTIVE") ativas.push(atual);
   }
 
-  const lista = (await asaasFetchOptional(
-    `/subscriptions?customer=${customerId}&limit=20`,
-  )) as { data?: AsaasSubscription[] } | null;
+  if (ativas.length === 0) return null;
+  // Caminho normal — um cliente, uma assinatura. Não gasta chamada à toa.
+  if (ativas.length === 1) return ativas[0];
 
-  return (lista?.data ?? []).find((a) => a.status === "ACTIVE") ?? null;
+  // Mais de uma ativa: só as cobranças dizem qual é a real.
+  const candidatas = await Promise.all(
+    ativas.map(async (assinatura) => ({
+      assinatura,
+      cobrancas: await cobrancasDaAssinatura(assinatura.id),
+    })),
+  );
+
+  return escolherAssinatura(candidatas, idGravado);
 }
 
 /** Cobranças de uma assinatura, da mais recente para a mais antiga. */
@@ -391,6 +413,22 @@ async function conferirNoAsaas(
       userId: conta.userId,
       status: "sem_assinatura_paga",
       detalhe: `Assinatura ${assinatura.id} está ativa, mas sem nenhuma cobrança paga.`,
+    };
+  }
+
+  // Pagou um dia NÃO é o mesmo que estar em dia. Um cliente que pagou seis
+  // meses e parou tem cobranças CONFIRMED antigas E uma OVERDUE atual — e a
+  // conferência o reativaria todos os dias, desfazendo o bloqueio correto que
+  // o aviso de atraso tinha aplicado. Ver `assinaturaEmDia`.
+  if (!assinaturaEmDia(cobrancas)) {
+    const atrasada = cobrancas.find((p) => p.status === "OVERDUE");
+    return {
+      userId: conta.userId,
+      status: "sem_assinatura_paga",
+      detalhe:
+        `Assinatura ${assinatura.id} tem cobrança paga, mas também tem cobrança ` +
+        `vencida em aberto (${atrasada?.id ?? "?"}). A conferência não libera acesso ` +
+        "enquanto houver dinheiro faltando.",
     };
   }
 

@@ -295,10 +295,41 @@ export async function encontrarUsuarioPorRefAsaas(
  * Idempotente: reprocessar o mesmo aviso apenas reafirma o mesmo estado.
  */
 export type ResultadoDoAviso = {
-  matchedBy: ChaveDeBusca | "not_found";
+  matchedBy: ChaveDeBusca | "not_found" | "outra_assinatura";
   conflito: boolean;
   userId?: Id<"users">;
 };
+
+/**
+ * ── O AVISO É DA ASSINATURA QUE SUSTENTA ESTE ACESSO? ───────────────────────
+ *
+ * Só vale para avisos que REBAIXAM (atraso e cancelamento). Ativação é o
+ * contrário: dinheiro entrando prova qual assinatura é a real, e por isso ela
+ * pode e deve recosturar o vínculo.
+ *
+ * ── O RISCO CONCRETO ────────────────────────────────────────────────────────
+ * Uma cliente ficou com duas assinaturas no mesmo cliente do Asaas: a paga, no
+ * cartão, e uma duplicada sem meio de pagamento — que acumulou uma cobrança
+ * OVERDUE e uma PENDING. As duas carregam o MESMO `externalReference` (o id da
+ * conta no ALTAR), porque as duas foram criadas pelo ALTAR para a mesma pessoa.
+ *
+ * Sem esta guarda, `encontrarUsuarioPorRefAsaas` acha a conta pela referência
+ * e o rebaixamento é aplicado — mesmo que o aviso seja da assinatura FANTASMA.
+ * Na prática:
+ *   · cancelar a duplicada no painel do Asaas cancelaria o acesso da cliente;
+ *   · o atraso da cobrança fantasma marcaria como inadimplente quem está em dia.
+ *
+ * A guarda só age quando as DUAS pontas existem e divergem. Aviso sem
+ * assinatura (só cliente) e conta sem assinatura gravada seguem exatamente
+ * como antes — nenhum fluxo existente muda de comportamento.
+ */
+function avisoEDeOutraAssinatura(user: Doc<"users">, args: RefDoAsaas): boolean {
+  return (
+    args.asaasSubscriptionId !== undefined &&
+    user.asaasSubscriptionId !== undefined &&
+    args.asaasSubscriptionId !== user.asaasSubscriptionId
+  );
+}
 
 async function aplicarAtivacao(
   ctx: MutationCtx,
@@ -328,6 +359,11 @@ async function aplicarAtraso(ctx: MutationCtx, args: RefDoAsaas): Promise<Result
   {
     const { user, matchedBy, conflito } = await encontrarUsuarioPorRefAsaas(ctx, args);
     if (!user) return { matchedBy: "not_found" as const, conflito: false };
+
+    // O atraso é de OUTRA assinatura — não da que sustenta este acesso.
+    if (avisoEDeOutraAssinatura(user, args)) {
+      return { matchedBy: "outra_assinatura" as const, conflito: false, userId: user._id };
+    }
 
     const resultado = { matchedBy: matchedBy!, conflito: conflito ?? false, userId: user._id };
 
@@ -463,6 +499,12 @@ export const cancelSubscriptionByAsaasRef = internalMutation({
   handler: async (ctx, args): Promise<ResultadoDoAviso> => {
     const { user, matchedBy, conflito } = await encontrarUsuarioPorRefAsaas(ctx, args);
     if (!user) return { matchedBy: "not_found" as const, conflito: false };
+
+    // O cancelamento é de OUTRA assinatura — cancelar a duplicada de alguém
+    // não pode cancelar o acesso de quem está pagando na assinatura correta.
+    if (avisoEDeOutraAssinatura(user, args)) {
+      return { matchedBy: "outra_assinatura" as const, conflito: false, userId: user._id };
+    }
 
     await ctx.db.patch(user._id, {
       subscriptionStatus: "cancelled",

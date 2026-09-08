@@ -103,6 +103,19 @@ export const asaasReceiver = httpAction(async (ctx, request) => {
         outcome: "ignored",
         detail: `Evento sem efeito sobre cobrança: ${evento}`,
       });
+    } else if (resultado?.matchedBy === "outra_assinatura") {
+      // A conta foi encontrada, mas o aviso é de uma assinatura que NÃO é a que
+      // sustenta o acesso dela — tipicamente uma duplicata. Rebaixar aqui
+      // derrubaria um cliente adimplente. Fica registrado porque uma duplicata
+      // viva é um problema real, só que financeiro, não de acesso.
+      await ctx.runMutation(internal.asaasWebhookLog.finish, {
+        id: reserva.id,
+        outcome: "ignored",
+        userId: resultado.userId as never,
+        detail:
+          `Aviso de OUTRA assinatura (${intent.subscriptionId ?? "?"}), diferente da que ` +
+          "sustenta o acesso desta conta. Acesso preservado. Verifique se há assinatura duplicada.",
+      });
     } else if (!resultado || resultado.matchedBy === "not_found") {
       // Dinheiro se moveu no Asaas e não achamos dono. É o silêncio que custou
       // o caso de produção — agora ele fica visível no Painel Administrativo.

@@ -26,6 +26,16 @@ export default defineConfig({
           name: "convex",
           environment: "edge-runtime",
           include: ["convex/**/*.test.{ts,js}"],
+          // O PRIMEIRO teste de cada arquivo paga sozinho o carregamento dos
+          // módulos do backend sob `convex-test` — cerca de 6 s numa máquina
+          // ocupada, contra o padrão de 5 s do vitest. O resultado era um
+          // flake que derrubava 7 arquivos de uma vez, sempre no primeiro
+          // teste, sempre por tempo e nunca por asserção. Os testes seguintes
+          // de cada arquivo rodam em milissegundos.
+          //
+          // Isto NÃO afrouxa nenhuma verificação: um teste genuinamente travado
+          // continua falhando, só que depois de 30 s em vez de 5 s.
+          testTimeout: 30_000,
         },
       },
       {

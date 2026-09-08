@@ -93,11 +93,14 @@ describe("checkout não cria uma segunda assinatura para quem já tem uma", () =
   });
 
   it("considera os status de cobrança realmente pagáveis", () => {
-    // Os literais saíram do corpo do checkout para constantes do módulo, ao
-    // lado de STATUS_PAGO — que é o que faltava e causou a duplicação.
-    // asaas.checkout.test.ts cobre a regra nova em detalhe.
+    // Os literais saíram do corpo do checkout para constantes, ao lado de
+    // STATUS_PAGO — que é o que faltava e causou a duplicação. Depois do caso
+    // das DUAS assinaturas ativas, essas constantes se mudaram de novo, para o
+    // módulo puro que escolhe a assinatura pela prova do pagamento.
+    // asaas.checkout.test.ts e lib/escolhaDeAssinatura.test.ts cobrem a regra.
+    const escolha = readFileSync(join(__dirname, "lib", "escolhaDeAssinatura.ts"), "utf8");
     for (const status of ["PENDING", "OVERDUE", "AWAITING_RISK_ANALYSIS"]) {
-      expect(source).toContain(status);
+      expect(escolha).toContain(status);
     }
     expect(block).toContain("STATUS_EM_ABERTO.includes");
   });

@@ -22,6 +22,11 @@ import { join } from "node:path";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const fonte = readFileSync(join(__dirname, "asaas.ts"), "utf8");
+// As listas de status saíram de `asaas.ts` para o módulo puro que decide QUAL
+// assinatura sustenta o acesso — é lá que elas passaram a ser usadas para valer,
+// e é lá que têm teste próprio. O guarda segue a constante: continua exigindo
+// que ela exista, que cubra os mesmos status e que o checkout a use.
+const escolha = readFileSync(join(__dirname, "lib", "escolhaDeAssinatura.ts"), "utf8");
 const checkout = fonte.slice(
   fonte.indexOf("export const createCheckoutSession"),
   fonte.indexOf("// ── Reconciliação"),
@@ -49,17 +54,17 @@ describe("existindo assinatura ativa, o ALTAR NUNCA cria outra", () => {
   });
 
   it("cobrança PAGA passou a contar — era o buraco exato do bug", () => {
-    expect(fonte).toContain("const STATUS_PAGO");
-    for (const status of ["CONFIRMED", "RECEIVED"]) {
-      expect(fonte).toContain(status);
+    expect(escolha).toContain("STATUS_PAGO");
+    for (const status of ["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]) {
+      expect(escolha).toContain(status);
     }
     expect(checkout).toContain("STATUS_PAGO.includes");
   });
 
   it("os status em aberto continuam levando o cliente de volta à fatura", () => {
-    expect(fonte).toContain("const STATUS_EM_ABERTO");
+    expect(escolha).toContain("STATUS_EM_ABERTO");
     for (const status of ["PENDING", "OVERDUE", "AWAITING_RISK_ANALYSIS"]) {
-      expect(fonte).toContain(status);
+      expect(escolha).toContain(status);
     }
     expect(checkout).toContain("STATUS_EM_ABERTO.includes");
   });

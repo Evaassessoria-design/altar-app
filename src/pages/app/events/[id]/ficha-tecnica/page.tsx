@@ -26,6 +26,7 @@ import {
   type SituacaoDaCobertura,
 } from "@/convex/lib/fichaTecnica.ts";
 import { metaDoTipo, tipoEfetivo } from "@/convex/lib/materiais.ts";
+import { resumoVisivel } from "@/lib/ficha-cobertura.ts";
 import { ReceitaDialog } from "./_components/receita-dialog.tsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -67,6 +68,10 @@ function LinhaConsolidada({
     cobertura: {
       necessario: number;
       comprado: number;
+      /** Comprado + acervo. É o que de fato está providenciado. */
+      providenciado: number;
+      /** Reservado do acervo. `null` = disponibilidade não informada. */
+      doAcervo: number | null;
       faltam: number;
       alvo: number;
       percentual: number | null;
@@ -85,6 +90,10 @@ function LinhaConsolidada({
   const [aberto, setAberto] = useState(false);
   const [agindo, setAgindo] = useState(false);
   const meta = metaDoTipo(tipoEfetivo({ tipo: linha.tipo }));
+  // Quais dos quatro números aparecem. A decisão vive fora do componente para
+  // ser testável sem renderizar — e para "faltam" nunca escapar em
+  // `acervo_nao_informado`. Ver lib/ficha-cobertura.
+  const visivel = resumoVisivel(linha.cobertura, linha.sugeridoOperacional);
   const vincular = useMutation(api.fichaTecnica.vincularCompra);
   const reconhecer = useMutation(api.fichaTecnica.reconhecerNecessidade);
 
@@ -141,24 +150,67 @@ function LinhaConsolidada({
           </div>
         </div>
 
-        {/* NECESSÁRIO ≠ SUGERIDO ≠ PROVIDENCIADO. A margem aparece como uma
-            terceira linha, nunca somada dentro do necessário. */}
+        {/* NECESSÁRIO ≠ SUGERIDO ≠ PROVIDENCIADO. A margem explica POR QUE o
+            "Providenciar" abaixo é maior que o "Precisa" — o número em si vive
+            na faixa, para não aparecer duas vezes na mesma linha. */}
         {linha.margemPercentual !== null && linha.margemPercentual > 0 && (
           <p className="mt-1 text-xs text-muted-foreground">
-            Margem {linha.margemPercentual}% · providenciar{" "}
-            <span className="text-foreground font-medium">
-              {quantidadeTexto(linha.sugeridoOperacional, linha.unidade)}
-            </span>
+            Inclui {linha.margemPercentual}% de margem de segurança
           </p>
         )}
 
-        <div className="mt-1.5 flex items-center gap-2 flex-wrap text-xs">
-          {linha.cobertura.temCompra && (
-            <span className="text-muted-foreground">
-              Providenciado: {quantidadeTexto(linha.cobertura.comprado, linha.unidade)}
-              {linha.cobertura.percentual !== null && ` (${linha.cobertura.percentual}%)`}
+        {/* ── A CONTA, EM QUATRO NÚMEROS ────────────────────────────────────
+            Precisa · Providenciar · Já tem · Falta. É o que a decoradora
+            responde em três segundos, no galpão, com o celular na mão.
+            Quais aparecem é decisão de `lib/ficha-cobertura` — a tela não
+            calcula nem classifica nada. */}
+        <div className="mt-2 flex items-center gap-x-4 gap-y-1 flex-wrap text-xs">
+          <span>
+            <span className="text-muted-foreground">Precisa </span>
+            <span className="font-medium text-foreground">
+              {quantidadeTexto(visivel.necessario, linha.unidade)}
+            </span>
+          </span>
+
+          {visivel.mostrarSugerido && (
+            <span>
+              <span className="text-muted-foreground">Providenciar </span>
+              <span className="font-medium text-foreground">
+                {quantidadeTexto(visivel.sugerido, linha.unidade)}
+              </span>
             </span>
           )}
+
+          {visivel.mostrarProvidenciado && (
+            <span>
+              <span className="text-muted-foreground">Já tem </span>
+              <span className="font-medium text-foreground">
+                {quantidadeTexto(visivel.providenciado, linha.unidade)}
+              </span>
+              {/* De onde veio. É o diferencial do produto ficando visível:
+                  peça do galpão conta como providência, igual à compra. */}
+              {visivel.mostrarOrigemAcervo && (
+                <span className="text-muted-foreground">
+                  {" "}
+                  ({quantidadeTexto(visivel.doAcervo as number, linha.unidade)} do acervo)
+                </span>
+              )}
+            </span>
+          )}
+
+          {/* Só quando "falta" é VERDADE. Em `acervo_nao_informado` o número
+              seria o alvo inteiro, e mandaria comprar o que já está no galpão. */}
+          {visivel.mostrarFaltam && (
+            <span>
+              <span className="text-muted-foreground">Falta </span>
+              <span className="font-semibold text-amber-700 dark:text-amber-400">
+                {quantidadeTexto(visivel.faltam, linha.unidade)}
+              </span>
+            </span>
+          )}
+        </div>
+
+        <div className="mt-1 flex items-center gap-2 flex-wrap text-xs">
           {/* Frase humana, vinda do backend. A tela não classifica nada. */}
           <span
             className={cn(
@@ -259,11 +311,16 @@ export default function FichaTecnicaPage() {
   const ficha = useQuery(api.fichaTecnica.getFicha, { eventId });
   const itensDoEvento = useQuery(api.assemblyItems.listByEvent, { eventId });
   const gerarCompras = useMutation(api.fichaTecnica.gerarCompras);
+  // MESMA mutation que a tela de Acervo do Evento já usa. A reserva nasce da
+  // ficha; exigir que a decoradora troque de tela para pedir isso era o único
+  // ponto em que a ponte ficha↔acervo não existia na ficha.
+  const reservarDaFicha = useMutation(api.acervo.reservarDaFicha);
   const empresa = useQuery(api.users.getCurrentUser);
 
   const [aba, setAba] = useState<"consolidado" | "ambientes">("consolidado");
   const [editando, setEditando] = useState<string | null>(null);
   const [gerando, setGerando] = useState(false);
+  const [reservando, setReservando] = useState(false);
 
   const porAmbiente = useMemo(() => {
     const itens = itensDoEvento ?? [];
@@ -293,6 +350,44 @@ export default function FichaTecnicaPage() {
       toast.success("Ficha técnica gerada.");
     } catch {
       toast.error("Não foi possível gerar o PDF.");
+    }
+  };
+
+  const handleReservar = async () => {
+    setReservando(true);
+    try {
+      const r = await reservarDaFicha({ eventId });
+      toast.success(
+        r.criadas + r.atualizadas === 0
+          ? "Nenhum material da ficha tem item de acervo vinculado."
+          : `${r.criadas} reserva(s) criada(s), ${r.atualizadas} atualizada(s).`,
+      );
+      // Peça prometida a outro evento na mesma janela. O sistema não decide
+      // quem fica com ela — só avisa que a conta não fecha.
+      if (r.comDeficit.length > 0) {
+        toast.warning(
+          `Faltam peças: ${r.comDeficit.map((d) => `${d.nome} (${d.deficit})`).join(", ")}.`,
+        );
+      }
+      // Vários itens do galpão servem o mesmo material: QUAIS peças saem é
+      // decisão da decoradora, e ela se toma na tela do acervo do evento.
+      if (r.precisamEscolha.length > 0) {
+        toast.info(
+          `${r.precisamEscolha.map((p) => p.nome).join(", ")}: mais de um item equivalente no acervo.`,
+          { description: "Escolha quais peças reservar em Acervo do evento." },
+        );
+      }
+      if (r.semAcervo.length > 0) {
+        toast.info(`Sem item de acervo vinculado: ${r.semAcervo.join(", ")}.`);
+      }
+    } catch (e) {
+      toast.error(
+        e instanceof ConvexError
+          ? (e.data as { message: string }).message
+          : "Não foi possível reservar do acervo.",
+      );
+    } finally {
+      setReservando(false);
     }
   };
 
@@ -450,6 +545,19 @@ export default function FichaTecnicaPage() {
                 className="cursor-pointer gap-1.5"
               >
                 <FileDown className="size-3.5" /> PDF
+              </Button>
+              {/* As duas providências, lado a lado e na mesma ordem em que a
+                  decoradora decide: primeiro o que já é dela, depois o que
+                  precisa comprar. */}
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={reservando}
+                onClick={() => void handleReservar()}
+                className="cursor-pointer gap-1.5"
+              >
+                <Package className="size-3.5" />
+                {reservando ? "Reservando..." : "Reservar do acervo"}
               </Button>
               <Button
                 size="sm"

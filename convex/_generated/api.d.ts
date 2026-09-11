@@ -10,6 +10,7 @@
 
 import type * as acervo from "../acervo.js";
 import type * as admin from "../admin.js";
+import type * as agenda from "../agenda.js";
 import type * as ai from "../ai.js";
 import type * as aiVisual from "../aiVisual.js";
 import type * as asaas from "../asaas.js";
@@ -90,6 +91,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   acervo: typeof acervo;
   admin: typeof admin;
+  agenda: typeof agenda;
   ai: typeof ai;
   aiVisual: typeof aiVisual;
   asaas: typeof asaas;

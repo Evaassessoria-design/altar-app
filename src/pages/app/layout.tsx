@@ -20,6 +20,7 @@ import {
   Building2,
   Menu,
   Boxes,
+  CalendarClock,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth.ts";
@@ -48,6 +49,7 @@ import { ConvexError } from "convex/values";
 // menu em tempo de execucao.
 const ICONES: Record<RotaDeMenu, LucideIcon> = {
   "/dashboard": Home,
+  "/agenda": CalendarClock,
   "/eventos": CalendarDays,
   "/fornecedores": Building2,
   "/equipe": Users,

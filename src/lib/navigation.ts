@@ -15,6 +15,7 @@ export type NavItem = { to: string; label: string };
 /** Menu lateral (desktop). Ordem = ordem do dia de trabalho. */
 export const NAV_ITEMS = [
   { to: "/dashboard", label: "Início" },
+  { to: "/agenda", label: "Agenda" },
   { to: "/eventos", label: "Eventos" },
   { to: "/fornecedores", label: "Fornecedores" },
   { to: "/equipe", label: "Equipe" },
@@ -48,6 +49,9 @@ export const BOTTOM_NAV_ITEMS = [
  * não existe.
  */
 export const MORE_MENU_ITEMS = [
+  // A agenda é a tela mais consultada FORA do escritório — precisa existir no
+  // celular. A barra inferior já está no teto de quatro, então ela entra aqui.
+  { to: "/agenda", label: "Agenda" },
   { to: "/fornecedores", label: "Fornecedores" },
   { to: "/equipe", label: "Equipe" },
   { to: "/acervo", label: "Acervo" },

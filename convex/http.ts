@@ -1,6 +1,7 @@
 import { httpRouter } from "convex/server";
 import { asaasReceiver } from "./asaasWebhook";
 import { authComponent, createAuth } from "./auth";
+import { officeSnapshot } from "./officeBridgeHttp";
 
 const http = httpRouter();
 
@@ -12,6 +13,13 @@ http.route({
   path: "/asaas-webhook",
   method: "POST",
   handler: asaasReceiver,
+});
+
+// Ponte administrativa do Escritório Virtual ALTAR — somente leitura.
+http.route({
+  path: "/office-snapshot",
+  method: "GET",
+  handler: officeSnapshot,
 });
 
 export default http;

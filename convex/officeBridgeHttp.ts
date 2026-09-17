@@ -1,5 +1,6 @@
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { hasValidOfficeToken } from "./lib/officeBridgeAuth";
 
 function json(payload: unknown, status: number, extraHeaders?: HeadersInit) {
   return Response.json(payload, {
@@ -9,13 +10,6 @@ function json(payload: unknown, status: number, extraHeaders?: HeadersInit) {
       ...extraHeaders,
     },
   });
-}
-
-function bearerToken(request: Request) {
-  const authorization = request.headers.get("Authorization");
-  if (!authorization?.startsWith("Bearer ")) return null;
-  const token = authorization.slice("Bearer ".length).trim();
-  return token || null;
 }
 
 /**
@@ -28,21 +22,17 @@ export const officeSnapshot = httpAction(async (ctx, request) => {
   const expectedToken = process.env.ALTAR_OFFICE_API_TOKEN?.trim();
 
   if (!expectedToken) {
-    return json(
-      { error: "Integração administrativa não configurada." },
-      503,
-    );
+    return json({ error: "Integração administrativa não configurada." }, 503);
   }
 
-  const providedToken = bearerToken(request);
-  if (!providedToken || providedToken !== expectedToken) {
-    return json(
-      { error: "Não autorizado." },
-      401,
-      { "WWW-Authenticate": 'Bearer realm="altar-office"' },
-    );
+  if (!hasValidOfficeToken(request, expectedToken)) {
+    return json({ error: "Não autorizado." }, 401, {
+      "WWW-Authenticate": 'Bearer realm="altar-office"',
+    });
   }
 
-  const snapshot = await ctx.runQuery(internal.admin.getOfficeSnapshot, {});
+  const snapshot = await ctx.runQuery(internal.admin.getOfficeSnapshot, {
+    now: Date.now(),
+  });
   return json(snapshot, 200);
 });

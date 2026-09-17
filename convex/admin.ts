@@ -480,3 +480,66 @@ export const setLandingLeadStatus = mutation({
     await ctx.db.patch(args.leadId, { status: args.status });
   },
 });
+
+// ─── Ponte administrativa do Escritório Virtual ALTAR ─────────────────────
+
+/**
+ * Indicadores agregados para o escritório interno da ALTAR.
+ *
+ * Esta função é interna e somente leitura. Não retorna nomes, e-mails, IDs,
+ * telefones ou qualquer dado individual de clientes. O acesso HTTP protegido
+ * vive em officeBridgeHttp.ts.
+ */
+export const getOfficeSnapshot = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const users = await ctx.db.query("users").collect();
+    const now = Date.now();
+
+    const billable = users.filter((user) => !resolveAccess(user, now).billingExempt);
+    const statusOf = (user: (typeof users)[number]) =>
+      effectiveSubscriptionStatus(user, now);
+
+    const trial = billable.filter((user) => statusOf(user) === "trial").length;
+    const active = billable.filter((user) => statusOf(user) === "active").length;
+    const overdue = billable.filter((user) => statusOf(user) === "overdue").length;
+    const expired = billable.filter((user) => statusOf(user) === "expired").length;
+    const cancelled = billable.filter((user) => statusOf(user) === "cancelled").length;
+    const overdueBlocked = billable.filter(
+      (user) => statusOf(user) === "overdue" && resolveAccess(user, now).blocked,
+    ).length;
+
+    const conversionDenominator = active + expired;
+    const eventsTotal = await ctx.db.query("events").collect();
+
+    return {
+      vertical: "altar_decor" as const,
+      generatedAt: new Date(now).toISOString(),
+      metrics: {
+        total: users.length,
+        trial,
+        active,
+        overdue,
+        overdueBlocked,
+        expired,
+        cancelled,
+        mrr: active * 119.9,
+        conversionRate:
+          conversionDenominator > 0
+            ? Math.round((active / conversionDenominator) * 100)
+            : 0,
+        eventsTotal: eventsTotal.length,
+        activeDay: users.filter((user) =>
+          isActiveWithin(user.lastSeenAt, ACTIVE_WINDOWS.day, now),
+        ).length,
+        activeWeek: users.filter((user) =>
+          isActiveWithin(user.lastSeenAt, ACTIVE_WINDOWS.week, now),
+        ).length,
+        activeMonth: users.filter((user) =>
+          isActiveWithin(user.lastSeenAt, ACTIVE_WINDOWS.month, now),
+        ).length,
+        neverSeen: users.filter((user) => user.lastSeenAt === undefined).length,
+      },
+    };
+  },
+});

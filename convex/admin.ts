@@ -491,10 +491,10 @@ export const setLandingLeadStatus = mutation({
  * vive em officeBridgeHttp.ts.
  */
 export const getOfficeSnapshot = internalQuery({
-  args: {},
-  handler: async (ctx) => {
-    const users = await ctx.db.query("users").collect();
-    const now = Date.now();
+  args: { now: v.number() },
+  handler: async (ctx, args) => {
+    const users = await ctx.db.query("users").take(5_000);
+    const now = args.now;
 
     const billable = users.filter((user) => !resolveAccess(user, now).billingExempt);
     const statusOf = (user: (typeof users)[number]) =>
@@ -510,7 +510,7 @@ export const getOfficeSnapshot = internalQuery({
     ).length;
 
     const conversionDenominator = active + expired;
-    const eventsTotal = await ctx.db.query("events").collect();
+    const eventsTotal = await ctx.db.query("events").take(20_000);
 
     return {
       vertical: "altar_decor" as const,

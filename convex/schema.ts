@@ -1,6 +1,33 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+// ── CENTRAL DE COMUNICAÇÕES ─────────────────────────────────────────────────
+// Os validadores vivem em convex/lib/central/validadores.ts — fonte única,
+// importada também pelas queries, mutations e actions da Central. Duplicá-los
+// aqui criaria a chance de o schema e as funções divergirem em silêncio.
+import {
+  categoriaValidator as categoriaCentral,
+  channelValidator as channel,
+  departamentoValidator as departamentoCentral,
+  desfechoValidator as desfechoDeIntegracao,
+  direcaoValidator as direcaoDeMensagem,
+  nivelDeAutonomiaValidator as nivelDeAutonomia,
+  prioridadeValidator as prioridadeCentral,
+  propostaValidator as propostaDeAprovacao,
+  severidadeValidator as severidadeDeSinal,
+  statusDeAprovacaoValidator as statusDeAprovacao,
+  statusDeConversaValidator as statusDeConversa,
+  statusDeEntregaValidator as statusDeEntrega,
+  statusDeSinalValidator as statusDeSinal,
+  statusDeTrabalhoValidator as statusDeTrabalho,
+  tipoDeContatoValidator as tipoDeContato,
+  tipoDeMensagemValidator as tipoDeMensagemCentral,
+  tipoDeSinalValidator as tipoDeSinal,
+  tipoDeTrabalhoValidator as tipoDeTrabalho,
+  verticalValidator as vertical,
+} from "./lib/central/validadores";
+
+
 // ─── Enum-like validators (mirror the unions used in the function args/frontend) ──
 const eventType = v.union(
   v.literal("wedding"),
@@ -213,6 +240,7 @@ const briefingFields = {
   emergencyContact: v.optional(v.string()),
   otherNotes: v.optional(v.string()),
 } as const;
+
 
 export default defineSchema({
   // Usuários — modelo por-usuário (Arquitetura A). Assinatura vive no próprio usuário.
@@ -635,6 +663,11 @@ export default defineSchema({
       v.literal("trial_expiring"),
       v.literal("purchase_pending"),
       v.literal("checklist_incomplete"),
+      // ── Central de Comunicações (administrativo) ─────────────────────────
+      // Alargar a união é ADITIVO: nenhum registro existente precisa mudar.
+      // Só chegam a administradores, e só a partir da Central.
+      v.literal("central_aprovacao"),
+      v.literal("central_escalado"),
     ),
     title: v.string(),
     body: v.string(),
@@ -681,7 +714,24 @@ export default defineSchema({
         v.literal("descartado"),
       ),
     ),
-  }).index("by_email", ["email"]),
+    /**
+     * Telefone em E.164 canônico, derivado de `whatsapp`.
+     *
+     * Existe porque `whatsapp` é TEXTO LIVRE — "(11) 9 9999-9999", "11999999999"
+     * e "+55 11 99999-9999" são o mesmo aparelho e nenhum casa com o outro por
+     * comparação de string. A Central precisa responder "quem é este número?"
+     * por ÍNDICE; sem este campo seria varredura da tabela inteira a cada
+     * mensagem recebida.
+     *
+     * AUSENTE = registro anterior a este campo, ou telefone que não normaliza
+     * (lib/central/telefone.ts devolve null). Não houve backfill e nenhum
+     * número é inventado — ausente apenas significa "não indexado", nunca
+     * "pessoa diferente".
+     */
+    whatsappE164: v.optional(v.string()),
+  })
+    .index("by_email", ["email"])
+    .index("by_whatsapp_e164", ["whatsappE164"]),
 
   // ── CATÁLOGO CENTRAL DE FORNECEDORES ──────────────────────────────────────
   // "Este fornecedor pertence ao catálogo desta empresa."
@@ -1115,4 +1165,323 @@ export default defineSchema({
   })
     .index("by_event", ["eventId"])
     .index("by_event_version", ["eventId", "generationVersion"]),
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // CENTRAL DE COMUNICAÇÕES ALTAR
+  //
+  // Operação do SaaS ALTAR — NÃO é dado de cliente da decoradora.
+  //
+  // ── A FRONTEIRA QUE NÃO PODE SER CRUZADA ─────────────────────────────────
+  //   `leads`        = clientes DA DECORADORA (noiva, aniversariante). Tem
+  //                    `userId` e é isolado por empresa. A Central NUNCA toca.
+  //   `landingLeads` = interessados NO ALTAR. Sem tenant, só admin.
+  //   `users`        = assinantes do ALTAR.
+  //
+  // O número comercial do ALTAR fala com interessados e assinantes. Todas as
+  // tabelas abaixo são administrativas e vivem atrás de `requireAdmin`, ao
+  // lado de `landingLeads` e `asaasWebhookEvents`.
+  //
+  // ── CANAL É ATRIBUTO, NÃO DOMÍNIO ────────────────────────────────────────
+  // Nenhuma tabela, campo ou índice se chama "whatsapp". O WhatsApp é o valor
+  // `channel: "whatsapp"`. Instagram, e-mail e chat entram sem schema novo.
+  //
+  // ── `vertical` EM TUDO ───────────────────────────────────────────────────
+  // ALTAR Decor e ALTAR Buffet vivem em deployments separados e o Escritório
+  // 3D agrega os dois. Hoje o valor é constante por deployment; o campo entra
+  // como PRIMEIRO componente dos índices de listagem para que, se a Central
+  // um dia virar hub único, não seja preciso reescrever índice nem fazer
+  // backfill. Ver convex/lib/central/vertical.ts.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── A PESSOA DO OUTRO LADO ────────────────────────────────────────────────
+  // Memória administrativa: quem é, a que lead/assinante corresponde, e o que
+  // já se sabe dela. O VÍNCULO mora aqui, não na conversa — um telefone tem
+  // várias conversas ao longo do tempo, e duas conversas do mesmo número não
+  // podem apontar para donos diferentes.
+  adminContacts: defineTable({
+    vertical,
+    displayName: v.string(),
+    /** AUSENTE = "desconhecido". Nada é presumido sobre quem chegou. */
+    tipo: v.optional(tipoDeContato),
+    /** Interessado no ALTAR (landing). Exclusivo em relação a `userId`? Não: um
+     *  interessado que virou assinante mantém os dois. */
+    landingLeadId: v.optional(v.id("landingLeads")),
+    userId: v.optional(v.id("users")),
+    /** Como o vínculo nasceu. Automático só em casamento ÚNICO e exato. */
+    vinculoOrigem: v.optional(v.union(v.literal("automatico"), v.literal("humano"))),
+    vinculoPorUserId: v.optional(v.id("users")),
+    vinculoEm: v.optional(v.number()),
+    /** Pediu para não ser mais contatado. Bloqueia proposta de resposta. */
+    optOut: v.optional(v.boolean()),
+    optOutEm: v.optional(v.number()),
+    notas: v.optional(v.string()),
+    criadoEm: v.number(),
+    atualizadoEm: v.number(),
+  })
+    .index("by_vertical", ["vertical"])
+    .index("by_vertical_tipo", ["vertical", "tipo"])
+    .index("by_landing_lead", ["landingLeadId"])
+    .index("by_user", ["userId"]),
+
+  // ── HANDLE EXTERNO → PESSOA ───────────────────────────────────────────────
+  // É o que torna a Central multicanal de verdade: a mesma pessoa chega hoje
+  // por WhatsApp e amanhã por Instagram, e as duas apontam para UM contato.
+  // Sem esta tabela, ou se faz varredura (caro) ou se duplica a pessoa (pior).
+  //
+  // Para WhatsApp, `externalId` é o telefone em E.164 canônico
+  // (lib/central/telefone.ts). Para e-mail seria o endereço; para Instagram,
+  // o id da conta.
+  communicationIdentities: defineTable({
+    contactId: v.id("adminContacts"),
+    channel,
+    externalId: v.string(),
+    displayName: v.optional(v.string()),
+    verificadoPor: v.union(v.literal("automatico"), v.literal("humano")),
+    criadoEm: v.number(),
+  })
+    .index("by_channel_external", ["channel", "externalId"])
+    .index("by_contact", ["contactId"]),
+
+  // ── A CONVERSA ────────────────────────────────────────────────────────────
+  // Guarda O QUE VALE. O palpite da IA vive em `communicationTriage` e NUNCA
+  // sobrescreve isto sem passar pelas regras de lib/central/triagem.ts.
+  //
+  // `proximaAcao` NÃO existe aqui de propósito: virou `adminWorkItems`, que
+  // tem dono, prazo, status e sobrevive ao fim da conversa.
+  communicationConversations: defineTable({
+    vertical,
+    channel,
+    contactId: v.id("adminContacts"),
+    /** Identificador da thread no canal, quando o canal tem um. */
+    externalThreadId: v.optional(v.string()),
+    assunto: v.string(),
+    /** AUSENTE = "triagem". Conversa recém-chegada ainda não foi roteada. */
+    departamento: v.optional(departamentoCentral),
+    categoria: v.optional(categoriaCentral),
+    /** AUSENTE = "normal". Sem backfill. */
+    prioridade: v.optional(prioridadeCentral),
+    status: statusDeConversa,
+    responsavelUserId: v.optional(v.id("users")),
+    escaladaParaCeo: v.optional(v.boolean()),
+    escaladaMotivo: v.optional(v.string()),
+    escaladaEm: v.optional(v.number()),
+    ultimaMensagemEm: v.number(),
+    ultimaMensagemDirecao: direcaoDeMensagem,
+    naoLidas: v.number(),
+    /**
+     * Fim da janela em que o canal aceita resposta livre (24h no WhatsApp).
+     * AUSENTE = canal sem janela. É a quarta trava do portão de saída.
+     */
+    janelaRespostaAte: v.optional(v.number()),
+    criadaEm: v.number(),
+    atualizadaEm: v.number(),
+  })
+    .index("by_vertical_status", ["vertical", "status"])
+    .index("by_vertical_departamento_status", ["vertical", "departamento", "status"])
+    .index("by_vertical_ultimaMensagem", ["vertical", "ultimaMensagemEm"])
+    .index("by_responsavel_status", ["responsavelUserId", "status"])
+    .index("by_contact", ["contactId"])
+    .index("by_channel_thread", ["channel", "externalThreadId"]),
+
+  // ── A MENSAGEM, JÁ NORMALIZADA ────────────────────────────────────────────
+  // Formato único, independente do canal (lib/channels/tipos.ts). O payload
+  // cru da plataforma não é guardado: o que interessa auditar é o EVENTO
+  // recebido, e isso vive em `integrationEvents`.
+  communicationMessages: defineTable({
+    conversationId: v.id("communicationConversations"),
+    vertical,
+    channel,
+    externalMessageId: v.string(),
+    direcao: direcaoDeMensagem,
+    tipo: tipoDeMensagemCentral,
+    texto: v.optional(v.string()),
+    mediaStorageId: v.optional(v.id("_storage")),
+    mediaMime: v.optional(v.string()),
+    /** Transcrição de áudio — BLOCO 4. O campo entra agora para não migrar. */
+    transcricao: v.optional(v.string()),
+    autor: v.union(v.literal("cliente"), v.literal("altar"), v.literal("sistema")),
+    /** Quem, do lado da ALTAR, produziu a saída. */
+    enviadaPorUserId: v.optional(v.id("users")),
+    /** Aprovação que originou esta saída. Toda saída tem uma. */
+    approvalId: v.optional(v.id("adminApprovals")),
+    enviadaEm: v.number(),
+    statusEntrega: v.optional(statusDeEntrega),
+  })
+    .index("by_conversation_enviadaEm", ["conversationId", "enviadaEm"])
+    .index("by_channel_external", ["channel", "externalMessageId"]),
+
+  // ── O QUE A IA ACHOU (nunca o que vale) ───────────────────────────────────
+  // Tabela separada da conversa DE PROPÓSITO.
+  //
+  // A conversa guarda o estado real; aqui fica o palpite, com confiança e
+  // justificativa. Quando um humano corrige, os dois divergem — e `divergiu`,
+  // acumulado ao longo de semanas, é o ÚNICO dado honesto para decidir se a
+  // IA pode ganhar autonomia na Fase 2. Sem ele, liberar envio automático
+  // seria chute.
+  communicationTriage: defineTable({
+    conversationId: v.id("communicationConversations"),
+    messageId: v.optional(v.id("communicationMessages")),
+    vertical,
+    channel,
+    departamentoSugerido: departamentoCentral,
+    categoriaSugerida: categoriaCentral,
+    prioridadeSugerida: prioridadeCentral,
+    escalarCeoSugerido: v.boolean(),
+    /** 0 a 1. Abaixo de CONFIANCA_MINIMA a conversa sobe para o CEO. */
+    confianca: v.number(),
+    resumo: v.string(),
+    sinais: v.array(v.string()),
+    respostaSugerida: v.optional(v.string()),
+    modelo: v.string(),
+    promptVersao: v.string(),
+    aplicada: v.boolean(),
+    aplicadaPor: v.optional(v.union(v.literal("auto"), v.literal("humano"))),
+    /** Um humano mudou o que a IA propôs. Ver lib/central/triagem.ts. */
+    divergiu: v.optional(v.boolean()),
+    criadaEm: v.number(),
+  })
+    .index("by_conversation", ["conversationId"])
+    .index("by_vertical_criadaEm", ["vertical", "criadaEm"]),
+
+  // ── A OPERAÇÃO ────────────────────────────────────────────────────────────
+  // Follow-up, demonstração, onboarding, suporte, contato de cobrança.
+  //
+  // Existe como entidade própria (e não como campo de texto na conversa)
+  // porque uma tarefa tem dono, prazo e status, aparece em lista por
+  // responsável, e SOBREVIVE ao fim da conversa. Além disso nem toda tarefa
+  // nasce de conversa: um follow-up de trial nasce do calendário.
+  adminWorkItems: defineTable({
+    vertical,
+    tipo: tipoDeTrabalho,
+    titulo: v.string(),
+    descricao: v.optional(v.string()),
+    prioridade: v.optional(prioridadeCentral),
+    status: statusDeTrabalho,
+    contactId: v.optional(v.id("adminContacts")),
+    conversationId: v.optional(v.id("communicationConversations")),
+    landingLeadId: v.optional(v.id("landingLeads")),
+    userId: v.optional(v.id("users")),
+    responsavelUserId: v.optional(v.id("users")),
+    /** Dia civil "AAAA-MM-DD" — nunca instante. Ver lib/central/prazos.ts. */
+    venceEm: v.optional(v.string()),
+    concluidoEm: v.optional(v.number()),
+    criadoPor: v.union(v.literal("ia"), v.literal("humano"), v.literal("sistema")),
+    criadoPorUserId: v.optional(v.id("users")),
+    criadoEm: v.number(),
+    atualizadoEm: v.number(),
+  })
+    .index("by_vertical_status", ["vertical", "status"])
+    .index("by_responsavel_status", ["responsavelUserId", "status"])
+    .index("by_vertical_vence", ["vertical", "venceEm"])
+    .index("by_conversation", ["conversationId"])
+    .index("by_contact", ["contactId"]),
+
+  // ── A FILA DO MATHEUS ─────────────────────────────────────────────────────
+  // Generalizada de propósito: `proposta` é união discriminada. A Fase 1
+  // implementa só `mensagem_saida`, mas a Fase 2 vai querer propor "abrir
+  // tarefa", "vincular contato", "registrar sinal" — e isso entra sem
+  // migração nenhuma.
+  //
+  // NENHUMA saída externa existe fora daqui. Ver lib/central/autonomia.ts.
+  adminApprovals: defineTable({
+    vertical,
+    conversationId: v.optional(v.id("communicationConversations")),
+    contactId: v.optional(v.id("adminContacts")),
+    workItemId: v.optional(v.id("adminWorkItems")),
+    triageId: v.optional(v.id("communicationTriage")),
+    proposta: propostaDeAprovacao,
+    /** Texto final quando o Matheus editou antes de aprovar. */
+    textoAprovado: v.optional(v.string()),
+    status: statusDeAprovacao,
+    geradoPor: v.union(v.literal("ia"), v.literal("humano")),
+    modelo: v.optional(v.string()),
+    /** Aprovação sem autor não é aprovação — é a segunda trava do portão. */
+    decididoPorUserId: v.optional(v.id("users")),
+    decididoEm: v.optional(v.number()),
+    recusaMotivo: v.optional(v.string()),
+    executadaEm: v.optional(v.number()),
+    execucaoErro: v.optional(v.string()),
+    resultadoExternalMessageId: v.optional(v.string()),
+    criadoEm: v.number(),
+    /** AUSENTE = TTL padrão a partir de `criadoEm` (lib/central/prazos.ts). */
+    expiraEm: v.optional(v.number()),
+  })
+    .index("by_vertical_status", ["vertical", "status"])
+    .index("by_status_criadoEm", ["status", "criadoEm"])
+    .index("by_conversation", ["conversationId"]),
+
+  // ── OUVIDORIA → PRODUTO ───────────────────────────────────────────────────
+  // NÃO é espelho da conversa. Tem ciclo de vida próprio que SOBREVIVE a ela
+  // (o atendimento fecha hoje; o bug segue aberto em Produto por semanas) e,
+  // principalmente, tem `ocorrencias`: nove pessoas pedindo a mesma coisa
+  // viram UM sinal com peso 9, e é isso que prioriza roadmap. Uma query
+  // agregadora sobre conversas nunca produziria esse número.
+  //
+  // O merge é HUMANO na Fase 1: a IA sugere, não funde. Fundir errado apaga
+  // o pedido de um cliente.
+  customerVoiceSignals: defineTable({
+    vertical,
+    tipo: tipoDeSinal,
+    titulo: v.string(),
+    descricao: v.string(),
+    severidade: v.optional(severidadeDeSinal),
+    status: statusDeSinal,
+    channel: v.optional(channel),
+    conversationId: v.optional(v.id("communicationConversations")),
+    contactId: v.optional(v.id("adminContacts")),
+    userId: v.optional(v.id("users")),
+    /** Quantas vezes o mesmo pedido chegou. Começa em 1. */
+    ocorrencias: v.number(),
+    ultimoRelatoEm: v.number(),
+    registradoPor: v.union(v.literal("ia"), v.literal("humano")),
+    registradoPorUserId: v.optional(v.id("users")),
+    criadoEm: v.number(),
+    atualizadoEm: v.number(),
+  })
+    .index("by_vertical_tipo", ["vertical", "tipo"])
+    .index("by_vertical_status", ["vertical", "status"])
+    .index("by_vertical_ocorrencias", ["vertical", "ocorrencias"])
+    .index("by_conversation", ["conversationId"]),
+
+  // ── IDEMPOTÊNCIA E AUDITORIA DAS INTEGRAÇÕES ──────────────────────────────
+  // Mesmo molde de `asaasWebhookEvents`, que nasceu de um caso real: um
+  // pagamento confirmado não ativou a assinatura e não havia COMO saber se o
+  // aviso tinha chegado.
+  //
+  // `asaasWebhookEvents` NÃO é migrada para cá no BLOCO 1 — está no caminho
+  // do dinheiro e acabou de ser endurecida. As duas convivem.
+  integrationEvents: defineTable({
+    vertical,
+    /** "meta_cloud", "mock", ... — quem entregou. */
+    provider: v.string(),
+    channel: v.optional(channel),
+    event: v.string(),
+    /** Segunda chegada da mesma chave NÃO reprocessa. */
+    dedupKey: v.string(),
+    receivedAt: v.number(),
+    outcome: desfechoDeIntegracao,
+    externalMessageId: v.optional(v.string()),
+    conversationId: v.optional(v.id("communicationConversations")),
+    erro: v.optional(v.string()),
+    latenciaMs: v.optional(v.number()),
+  })
+    .index("by_dedup_key", ["dedupKey"])
+    .index("by_provider_receivedAt", ["provider", "receivedAt"])
+    .index("by_vertical_outcome", ["vertical", "outcome"]),
+
+  // ── POLÍTICA DE AUTONOMIA (preparada, inerte na Fase 1) ───────────────────
+  // Um documento por (vertical, canal, departamento). AUSENTE = "sugestao",
+  // o mais restritivo que ainda é útil — nenhum backfill.
+  //
+  // Na Fase 1 `podeEnviarSemAprovacao` devolve `false` para TODOS os níveis,
+  // inclusive "autonomo": gravar o nível aqui não liga envio nenhum. A tabela
+  // existe para que a Fase 2 seja mudança de DADO, não reescrita de código.
+  adminAutonomyPolicy: defineTable({
+    vertical,
+    channel,
+    departamento: departamentoCentral,
+    nivel: nivelDeAutonomia,
+    alteradoPorUserId: v.id("users"),
+    alteradoEm: v.number(),
+  }).index("by_vertical_channel_departamento", ["vertical", "channel", "departamento"]),
 });

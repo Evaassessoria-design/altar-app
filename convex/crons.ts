@@ -24,4 +24,19 @@ crons.daily(
   {},
 );
 
+// Varredura da Central de Comunicações.
+//
+// Uma proposta de resposta parada perde a validade junto com a janela de 24h
+// do canal que a motivou: aprovar depois disso produziria uma mensagem que o
+// WhatsApp já não aceita. Marcar `expirada` mantém a fila do Matheus com o
+// que ainda é decidível — e o registro do que não foi decidido a tempo.
+//
+// NÃO envia nada, NÃO cobra nada e NÃO altera conversa. Só a fila.
+crons.daily(
+  "varredura da central de comunicacoes",
+  { hourUTC: 7, minuteUTC: 30 },
+  internal.adminApprovals.varreduraDiaria,
+  {},
+);
+
 export default crons;

@@ -2,7 +2,8 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import type { QueryCtx, MutationCtx } from "./_generated/server.d.ts";
-import { getOptionalUser, requireUser } from "./lib/identity";
+import { getOptionalUser } from "./lib/identity";
+import { requireAdmin } from "./lib/adminGuard";
 import { effectiveSubscriptionStatus, resolveAccess } from "./lib/access";
 import { deleteUserDataCascade } from "./lib/cascade";
 import { ACTIVE_WINDOWS, isActiveWithin } from "./lib/presence";
@@ -10,13 +11,11 @@ import { deleteBetterAuthAccount } from "./lib/authAccount";
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────
 
-async function requireAdmin(ctx: QueryCtx | MutationCtx) {
-  const user = await requireUser(ctx);
-  if (user.role !== "admin") {
-    throw new ConvexError({ code: "FORBIDDEN", message: "Acesso restrito a administradores" });
-  }
-  return user;
-}
+// `requireAdmin` mudou de casa para lib/adminGuard.ts — sem mudar de regra.
+// A Central de Comunicações precisa do MESMO guarda, e duas cópias
+// divergiriam no dia em que uma delas fosse ajustada. Reexportado aqui para
+// que nada que já importava de `admin` quebre.
+export { requireAdmin };
 
 // ─── Queries ──────────────────────────────────────────────────────────────
 

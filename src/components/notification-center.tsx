@@ -2,7 +2,16 @@ import { useQuery, useMutation } from "convex/react";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
-import { Bell, X, CheckCheck, Calendar, CreditCard, ShoppingBag, ClipboardList } from "lucide-react";
+import {
+  Bell,
+  X,
+  CheckCheck,
+  Calendar,
+  CreditCard,
+  ShoppingBag,
+  ClipboardList,
+  MessageSquare,
+} from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
@@ -10,7 +19,16 @@ import { cn } from "@/lib/utils.ts";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-type NotifType = "event_soon" | "trial_expiring" | "purchase_pending" | "checklist_incomplete";
+// Espelha a união de `notifications.type` no schema. Os dois tipos da Central
+// de Comunicacoes so chegam a administradores, mas o centro de notificacoes e
+// um so — precisa saber desenha-los.
+type NotifType =
+  | "event_soon"
+  | "trial_expiring"
+  | "purchase_pending"
+  | "checklist_incomplete"
+  | "central_aprovacao"
+  | "central_escalado";
 
 function notifIcon(type: NotifType) {
   const cls = "size-4 flex-shrink-0";
@@ -19,6 +37,8 @@ function notifIcon(type: NotifType) {
     case "trial_expiring": return <CreditCard className={cn(cls, "text-amber-500")} />;
     case "purchase_pending": return <ShoppingBag className={cn(cls, "text-blue-500")} />;
     case "checklist_incomplete": return <ClipboardList className={cn(cls, "text-orange-500")} />;
+    case "central_aprovacao": return <MessageSquare className={cn(cls, "text-emerald-500")} />;
+    case "central_escalado": return <MessageSquare className={cn(cls, "text-red-500")} />;
   }
 }
 
@@ -28,6 +48,8 @@ function notifBg(type: NotifType) {
     case "trial_expiring": return "bg-amber-50 dark:bg-amber-900/20";
     case "purchase_pending": return "bg-blue-50 dark:bg-blue-900/20";
     case "checklist_incomplete": return "bg-orange-50 dark:bg-orange-900/20";
+    case "central_aprovacao": return "bg-emerald-50 dark:bg-emerald-900/20";
+    case "central_escalado": return "bg-red-50 dark:bg-red-900/20";
   }
 }
 

@@ -57,8 +57,17 @@ const SEM_GUARDA_JUSTIFICADO: Record<string, string> = {
   "leadDocuments.generateUploadUrl": "URL de upload sem vínculo com tenant",
 };
 
-/** Módulos tocados ou recém-expostos nesta rodada e na anterior. */
+/** Módulos tocados ou recém-expostos nesta rodada e nas anteriores. */
 const MODULOS = [
+  // ── Central de Comunicações ──────────────────────────────────────────────
+  // Operação do SaaS ALTAR, não dado de decoradora. O guarda de posse aqui é
+  // `requireAdmin`: estas funções leem conversas do número comercial da
+  // ALTAR, interessados da landing e assinantes — nunca o funil de clientes
+  // de ninguém. Registrar os módulos aqui é o que faz esta trava vigiá-los.
+  "communications",
+  "adminApprovals",
+  "adminWorkItems",
+  "customerVoice",
   "supplierCatalog",
   "contracts",
   "team",

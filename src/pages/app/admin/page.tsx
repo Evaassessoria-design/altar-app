@@ -58,6 +58,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.tsx";
 import { Input } from "@/components/ui/input.tsx";
+import { CentralDeComunicacoes } from "./_components/central-de-comunicacoes.tsx";
 import { Label } from "@/components/ui/label.tsx";
 
 // Linha da listagem: o backend já anexa `access` (resolveAccess) e `eventCount`.
@@ -557,6 +558,10 @@ export default function AdminPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Central de Comunicações — operação do número comercial do ALTAR.
+          O Escritório 3D só LÊ estes números; a decisão acontece aqui. */}
+      <CentralDeComunicacoes />
 
       {/* Avisos do Asaas — a caixa-preta que faltava. */}
       <AvisosDoAsaas />

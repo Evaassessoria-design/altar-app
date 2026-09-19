@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ehFalhaDeCarregamentoDeTela } from "./falha-de-tela.ts";
 
@@ -29,5 +30,60 @@ describe("falha de carregamento de tela", () => {
 
   it("a detecção não depende de maiúsculas", () => {
     expect(ehFalhaDeCarregamentoDeTela(new Error("FAILED TO FETCH DYNAMICALLY IMPORTED MODULE"))).toBe(true);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// O NOME DA VARIÁVEL DE AMBIENTE NÃO É ASSUNTO DA DECORADORA
+//
+// Sem chave de IA configurada, a tela dizia à cliente:
+//
+//   "Verifique se a chave de IA (ALTAR_AI_API_KEY) está configurada no Convex."
+//
+// Ela não tem acesso ao Convex, não sabe o que é uma variável de ambiente e
+// não pode fazer nada com essa frase. Numa demonstração é pior ainda: é a
+// única mensagem em toda a reunião que parece um defeito.
+//
+// A regra do repositório já existia ("nenhuma mensagem de erro técnica exposta
+// a quem usa" — README §6); estas três telas não a cumpriam.
+//
+// A Central é a EXCEÇÃO DELIBERADA e não entra na lista: ela é operada pelo
+// administrador do SaaS, que é justamente quem mexe nas variáveis. Lá, nomear
+// a variável é ajuda, não vazamento.
+// ═════════════════════════════════════════════════════════════════════════════
+
+const TELAS_DA_DECORADORA = [
+  "src/pages/app/events/[id]/_components/contract-import-dialog.tsx",
+  "src/pages/app/events/[id]/_components/layout-analysis-dialog.tsx",
+  "src/pages/app/events/[id]/planta/page.tsx",
+  "src/pages/app/compras/page.tsx",
+  "src/pages/app/financeiro/page.tsx",
+  "src/pages/app/acervo/page.tsx",
+];
+
+/** Vocabulário que só existe para quem opera o deployment. */
+const VOCABULARIO_DE_OPERADOR = [
+  /ALTAR_[A-Z_]+/,
+  /variáveis de ambiente/i,
+  /\bno Convex\b/,
+  /ConvexError/,
+  /process\.env/,
+];
+
+describe("a tela da decoradora não fala de variável de ambiente", () => {
+  it.each(TELAS_DA_DECORADORA)("%s não expõe vocabulário de operador", (arquivo) => {
+    const fonte = readFileSync(arquivo, "utf-8");
+    // Só o que a pessoa LÊ: texto entre aspas dentro de JSX e de strings.
+    const textos = fonte.match(/"[^"\n]{20,200}"/g) ?? [];
+    const jsx = fonte.match(/>\s*[A-ZÀ-Ú][^<>{}\n]{20,200}</g) ?? [];
+
+    for (const trecho of [...textos, ...jsx]) {
+      for (const padrao of VOCABULARIO_DE_OPERADOR) {
+        expect(
+          padrao.test(trecho),
+          `${arquivo}: texto visível cita ${padrao}.\nTrecho: ${trecho.trim()}`,
+        ).toBe(false);
+      }
+    }
   });
 });

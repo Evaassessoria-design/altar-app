@@ -1,4 +1,5 @@
 import { describe, expect, it, afterEach } from "vitest";
+import { readFileSync } from "node:fs";
 import { convexTest } from "convex-test";
 import schema from "./schema";
 import { modules } from "./test.setup";
@@ -601,5 +602,170 @@ describe("a história do demo fecha", () => {
         expect(fornecedores, l.description).toContain(empresa);
       }
     });
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// O ROTEIRO COMERCIAL CITA NÚMEROS. ELES TÊM DE SER OS DO SISTEMA.
+//
+// `docs/demo-comercial.md` manda dizer, em voz alta, numa reunião: "precisa de
+// 186 hastes", "faltam exatamente 30 guardanapos", "o contrato é de
+// R$ 186.500". Se alguém mexer no seed e esquecer do roteiro, ninguém descobre
+// — até o dia em que a tela mostrar outro número enquanto a frase já saiu da
+// boca de quem está vendendo.
+//
+// Este teste lê o DOCUMENTO e confere cada número contra o que o seed grava e
+// contra o MESMO consolidador que a tela usa. É a única forma de um arquivo de
+// markdown envelhecer com barulho em vez de em silêncio.
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("o roteiro comercial não mente sobre o demo", () => {
+  const roteiro = readFileSync("docs/demo-comercial.md", "utf-8");
+  const prontidao = readFileSync("docs/prontidao-comercial.md", "utf-8");
+
+  it("o casamento do roteiro é o casamento do seed", () => {
+    expect(roteiro).toContain(DEMO_WEDDING.event.name);
+    expect(roteiro).toContain("180 convidados");
+    expect(DEMO_WEDDING.briefing.guestCount).toBe("180");
+    // 10/10/2026, escrito por extenso no roteiro.
+    expect(DEMO_WEDDING.event.date).toBe("2026-10-10");
+    expect(roteiro).toMatch(/10 de outubro de 2026/);
+    // O contrato, com o separador de milhar que a tela usa.
+    expect(DEMO_WEDDING.event.budget).toBe(186_500);
+    expect(roteiro).toContain("R$ 186.500,00");
+    expect(roteiro).toContain(DEMO_WEDDING.event.location);
+  });
+
+  it("as quantidades ditas em voz alta são as que o consolidador calcula", async () => {
+    const t = convexTest(schema, modules);
+    await ambienteDemo(t);
+    await t.mutation(seed, {});
+
+    const itens = await t.run(async (ctx) => ctx.db.query("assemblyItems").collect());
+    const linhas = consolidarMateriais(
+      itens.map((i) => ({
+        _id: i._id,
+        nome: i.name,
+        quantidade: i.quantity,
+        area: i.area,
+        ambiente: i.ambiente,
+        projectScope: i.projectScope,
+        receita: i.receita,
+      })),
+      ehObrigacaoDeMontagem,
+    );
+    const de = (nome: string) => linhas.find((l) => l.nome === nome)!;
+
+    // "Precisa 186 haste · Providenciar 205 haste"
+    expect(roteiro).toContain("186");
+    expect(de("Rosa branca importada").necessario).toBe(186);
+    expect(roteiro).toContain("205");
+    expect(de("Rosa branca importada").sugeridoOperacional).toBe(205);
+
+    // "Precisa 114 · Providenciar 120", e a compra de 120.
+    expect(roteiro).toContain("114");
+    expect(de("Vela pilar 20cm").necessario).toBe(114);
+    expect(de("Vela pilar 20cm").sugeridoOperacional).toBe(120);
+
+    // "a mesa posta precisa de 180 guardanapos"
+    expect(de("Guardanapo de linho verde-oliva").necessario).toBe(180);
+  });
+
+  it("o déficit de 30 guardanapos é 30 no banco", async () => {
+    // É o ponto alto do roteiro: "a compra aberta é de exatamente trinta".
+    const t = convexTest(schema, modules);
+    await ambienteDemo(t);
+    await t.mutation(seed, {});
+
+    await t.run(async (ctx) => {
+      const item = (await ctx.db.query("collectionItems").collect()).find(
+        (a) => a.nome === "Guardanapo de linho verde-oliva",
+      )!;
+      const reservado = (await ctx.db.query("collectionReservations").collect())
+        .filter((r) => r.collectionItemId === item._id)
+        .reduce((s, r) => s + r.quantidade, 0);
+
+      expect(reservado - item.quantidadeTotal).toBe(30);
+      expect(item.quantidadeTotal).toBe(150);
+
+      const compra = (await ctx.db.query("purchaseItems").collect()).find(
+        (c) => c.name === "Guardanapo de linho verde-oliva",
+      );
+      expect(compra?.quantity).toBe(30);
+    });
+
+    expect(roteiro).toContain("150");
+    expect(roteiro).toMatch(/Faltam 30 un/);
+  });
+
+  it("os totais do topo da ficha técnica conferem", async () => {
+    const t = convexTest(schema, modules);
+    await ambienteDemo(t);
+    await t.mutation(seed, {});
+
+    const itens = await t.run(async (ctx) => ctx.db.query("assemblyItems").collect());
+    const linhas = consolidarMateriais(
+      itens.map((i) => ({
+        _id: i._id,
+        nome: i.name,
+        quantidade: i.quantity,
+        area: i.area,
+        ambiente: i.ambiente,
+        projectScope: i.projectScope,
+        receita: i.receita,
+      })),
+      ehObrigacaoDeMontagem,
+    );
+
+    // "13 materiais, 4 composições" — 13 porque o castiçal está no catálogo e
+    // no acervo, mas não entra em receita nenhuma. A tela conta as LINHAS do
+    // consolidado, não o catálogo.
+    expect(linhas).toHaveLength(13);
+    expect(roteiro).toContain("13 materiais");
+    expect(DEMO_WEDDING.compositions).toHaveLength(4);
+    expect(roteiro).toContain("4 composições");
+  });
+
+  it("o financeiro citado é o que o seed lança", () => {
+    const soma = (tipo: "income" | "expense", pago: boolean) =>
+      DEMO_WEDDING.transactions
+        .filter((l) => l.type === tipo && l.isPaid === pago)
+        .reduce((s, l) => s + l.amount, 0);
+
+    expect(soma("income", true)).toBe(143_000);
+    expect(roteiro).toContain("R$ 143.000,00");
+    expect(soma("expense", true)).toBe(67_000);
+    expect(roteiro).toContain("R$ 67.000,00");
+    expect(soma("income", false)).toBe(43_500);
+    expect(roteiro).toContain("R$ 43.500,00");
+  });
+
+  it("os dois documentos comerciais existem e se citam", () => {
+    expect(roteiro).toContain("docs/prontidao-comercial.md");
+    expect(prontidao.length).toBeGreaterThan(2000);
+    // As quatro classificações que o Matheus consulta no meio da reunião.
+    for (const rotulo of ["PRONTO", "PRONTO COM RESSALVA", "NÃO MOSTRAR AINDA", "FUTURO"]) {
+      expect(prontidao).toContain(rotulo);
+    }
+  });
+
+  it("o roteiro manda NÃO abrir o que não é produto da decoradora", () => {
+    // O pior acidente possível numa reunião é abrir o Painel Admin e mostrar a
+    // conta de outra cliente.
+    for (const proibido of ["Painel Admin", "Central"]) {
+      expect(roteiro).toContain(proibido);
+      expect(prontidao).toContain(proibido);
+    }
+    expect(prontidao).toContain("NÃO MOSTRAR AINDA");
+  });
+
+  it("nenhum dos dois documentos promete o que a landing deixou de prometer", () => {
+    // As cinco afirmações removidas da landing não podem reaparecer aqui.
+    for (const doc of [roteiro, prontidao]) {
+      expect(doc).not.toMatch(/preenche o briefing automaticamente/i);
+      expect(doc).not.toMatch(/notifique a equipe/i);
+      expect(doc).not.toMatch(/anexe pedidos/i);
+      expect(doc).not.toMatch(/Kanban com \d+ etapas/i);
+    }
   });
 });

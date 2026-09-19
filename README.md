@@ -114,6 +114,11 @@ ALTAR_DEMO                               ← só no projeto de demonstração
 | Assinatura e cobrança | `convex/asaas.ts`, `asaasWebhook.ts` |
 | Central de Comunicações | `convex/communications*.ts`, `adminApprovals.ts`, `adminWorkItems.ts`, `customerVoice.ts` — veja `docs/central-comunicacoes.md` |
 | Ponte do Escritório 3D (somente leitura) | `convex/officeBridgeHttp.ts`, `officeCentralHttp.ts` |
+| Seed de demonstração (Marina & Gabriel) | `convex/demo.ts`, `lib/demoData.ts`, `lib/demoGuard.ts` — três travas: `ALTAR_DEMO=1`, recusa em banco com sinal de produção, idempotência |
+
+**Para a reunião comercial**: `docs/demo-comercial.md` (roteiro de 7 e 20 min,
+perguntas frequentes, checklist pré-Meet) e `docs/prontidao-comercial.md` (o
+que pode e o que não pode ser mostrado hoje).
 
 ---
 

@@ -212,12 +212,10 @@ export default function PlantaPage() {
           <AlertTriangle className="size-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
           <div className="text-sm">
             <p className="font-medium text-amber-900 dark:text-amber-200">
-              Provedor de imagem não configurado para este ambiente.
+              A geração de planta está indisponível neste ambiente.
             </p>
             <p className="text-amber-800/80 dark:text-amber-300/80 mt-0.5">
-              Upload, interpretação e revisão funcionam normalmente. A geração da planta
-              fica indisponível até o provedor ser definido nas variáveis de ambiente do
-              Convex.
+              Enviar o croqui, interpretar e revisar continuam funcionando normalmente.
             </p>
           </div>
         </div>

@@ -45,7 +45,9 @@ Datado de 19/09/2026. Quando divergir do código, o código está certo.
   tolerância de inadimplência e paywall aplicado no servidor
 
 **Documentos**
-- Seis geradores de PDF com a identidade visual da empresa da decoradora
+- Cinco geradores de PDF com a identidade visual da empresa da decoradora:
+  resumo do evento, orçamento, ficha técnica, caderno de montagem e folha de
+  carregamento
 
 **Operação do SaaS**
 - Painel administrativo: contas, acesso, métricas, avisos do Asaas
@@ -79,8 +81,12 @@ Funções que existem, são testadas e ninguém consegue chamar pelo aplicativo:
 
 - Catálogo de materiais: `materials.update` e `setArchived` (criar só acontece
   dentro do diálogo de receita; não há tela de materiais)
-- Biblioteca de composições: `create`, `update`, `duplicate`, `setArchived`
-- Acervo: `reservar` manual e `disponibilidade`
+- Biblioteca de composições: `create`, `update`, `duplicate`, `setArchived` — o
+  caminho que EXISTE na tela é outro: `fichaTecnica.salvarNaBiblioteca` salva a
+  receita do item, e `compositions.list` a aplica. Falta a manutenção: renomear,
+  editar e arquivar uma composição já salva
+- Acervo: `disponibilidade` (a reserva manual e a gerada da ficha TÊM tela, em
+  `/eventos/:id/acervo`)
 - Ficha técnica: `limparReceita` e `desvincularCompra`
 - Compras: `unregisterCost`
 - Notificações: `generateMyAlerts`
@@ -99,6 +105,18 @@ Funções que existem, são testadas e ninguém consegue chamar pelo aplicativo:
 - **Envio externo pela Central.** O número comercial não está integrado; o
   portão de saída recusa por construção.
 - **Aplicativo nativo.** É um PWA.
+
+---
+
+## Para vender
+
+Duas páginas escritas para a reunião, e não para o código:
+
+- `docs/demo-comercial.md` — roteiro de 7 e de 20 minutos, com o que clicar, o
+  que dizer, o que NÃO abrir, as perguntas que aparecem e o checklist de 10
+  minutos antes do Meet.
+- `docs/prontidao-comercial.md` — a matriz do que está PRONTO, PRONTO COM
+  RESSALVA, NÃO MOSTRAR AINDA e FUTURO, recurso por recurso.
 
 ---
 

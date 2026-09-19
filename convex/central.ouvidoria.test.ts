@@ -291,6 +291,89 @@ describe("filtros e recorrência", () => {
     expect(descartado?.descricao).toContain("Fundido em");
   });
 
+  it("o mesmo sinal não pode ser fundido duas vezes — a contagem dobraria", async () => {
+    // Fundir A em B e, depois, A em C somava as ocorrências de A OUTRA VEZ.
+    // Três pessoas pedindo viravam seis, e a Ouvidoria passava a priorizar
+    // roadmap com gente que não existe.
+    const t = convexTest(schema, modules);
+    const admin = await autenticarComoAdmin(t);
+
+    const ids = await t.run(async (ctx) => {
+      const base = {
+        vertical: "altar_decor" as const,
+        tipo: "funcionalidade" as const,
+        status: "novo" as const,
+        descricao: "x",
+        ultimoRelatoEm: AGORA,
+        registradoPor: "humano" as const,
+        criadoEm: AGORA,
+        atualizadoEm: AGORA,
+      };
+      return {
+        a: await ctx.db.insert("customerVoiceSignals", { ...base, titulo: "A", ocorrencias: 3 }),
+        b: await ctx.db.insert("customerVoiceSignals", { ...base, titulo: "B", ocorrencias: 1 }),
+        c: await ctx.db.insert("customerVoiceSignals", { ...base, titulo: "C", ocorrencias: 1 }),
+      };
+    });
+
+    await admin.mutation(api.customerVoice.fundir, {
+      manterId: ids.b as Id<"customerVoiceSignals">,
+      descartarId: ids.a as Id<"customerVoiceSignals">,
+    });
+
+    await expect(
+      admin.mutation(api.customerVoice.fundir, {
+        manterId: ids.c as Id<"customerVoiceSignals">,
+        descartarId: ids.a as Id<"customerVoiceSignals">,
+      }),
+    ).rejects.toThrow(/já foi fundido|descartado/i);
+
+    const [b, c] = await t.run(async (ctx) => [
+      await ctx.db.get(ids.b),
+      await ctx.db.get(ids.c),
+    ]);
+    expect(b?.ocorrencias).toBe(4);
+    expect(c?.ocorrencias).toBe(1);
+  });
+
+  it("não se funde PARA DENTRO de um sinal descartado", async () => {
+    // Absorver relatos para um sinal que ninguém mais lê é esconder o pedido.
+    const t = convexTest(schema, modules);
+    const admin = await autenticarComoAdmin(t);
+
+    const ids = await t.run(async (ctx) => {
+      const base = {
+        vertical: "altar_decor" as const,
+        tipo: "bug" as const,
+        descricao: "x",
+        ultimoRelatoEm: AGORA,
+        registradoPor: "humano" as const,
+        criadoEm: AGORA,
+        atualizadoEm: AGORA,
+        ocorrencias: 1,
+      };
+      return {
+        morto: await ctx.db.insert("customerVoiceSignals", {
+          ...base,
+          titulo: "Descartado",
+          status: "descartado",
+        }),
+        vivo: await ctx.db.insert("customerVoiceSignals", {
+          ...base,
+          titulo: "Vivo",
+          status: "novo",
+        }),
+      };
+    });
+
+    await expect(
+      admin.mutation(api.customerVoice.fundir, {
+        manterId: ids.morto as Id<"customerVoiceSignals">,
+        descartarId: ids.vivo as Id<"customerVoiceSignals">,
+      }),
+    ).rejects.toThrow(/descartado/i);
+  });
+
   it("fundir um sinal com ele mesmo é recusado", async () => {
     const t = convexTest(schema, modules);
     const admin = await autenticarComoAdmin(t);

@@ -4,7 +4,7 @@ import { ConvexError } from "convex/values";
 import type { QueryCtx, MutationCtx } from "./_generated/server.d.ts";
 import { getOptionalUser } from "./lib/identity";
 import { requireAdmin } from "./lib/adminGuard";
-import { effectiveSubscriptionStatus, resolveAccess } from "./lib/access";
+import { ALTAR_ADMIN_ROLE, effectiveSubscriptionStatus, resolveAccess } from "./lib/access";
 import { deleteUserDataCascade } from "./lib/cascade";
 import { ACTIVE_WINDOWS, isActiveWithin } from "./lib/presence";
 import { deleteBetterAuthAccount } from "./lib/authAccount";
@@ -155,9 +155,11 @@ export const listarOperadores = query({
   args: {},
   handler: async (ctx) => {
     await requireAdmin(ctx);
-    const users = await ctx.db.query("users").take(1_000);
+    const users = await ctx.db
+      .query("users")
+      .withIndex("by_role", (q) => q.eq("role", ALTAR_ADMIN_ROLE))
+      .collect();
     return users
-      .filter((u) => u.role === "admin")
       .map((u) => ({ _id: u._id, name: u.name, email: u.email }))
       .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   },

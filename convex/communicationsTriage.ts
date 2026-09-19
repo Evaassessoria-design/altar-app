@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { ALTAR_ADMIN_ROLE } from "./lib/access";
 import { atualizarBuscaDaConversa } from "./communications";
 import {
   categoriaValidator,
@@ -174,10 +175,13 @@ export const aplicarTriagem = internalMutation({
 
     // ── Aviso aos administradores ───────────────────────────────────────────
     if (args.escalar || approvalId) {
+      // Por ÍNDICE, e não por varredura com teto: com o teto de 500 linhas, um
+      // administrador cadastrado depois dos 500 primeiros assinantes parava de
+      // receber aviso de escalada — e ninguém ficaria sabendo disso.
       const admins = await ctx.db
         .query("users")
-        .take(500)
-        .then((lista) => lista.filter((u) => u.role === "admin"));
+        .withIndex("by_role", (q) => q.eq("role", ALTAR_ADMIN_ROLE))
+        .collect();
 
       for (const admin of admins) {
         await ctx.db.insert("notifications", {

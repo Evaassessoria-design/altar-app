@@ -303,6 +303,11 @@ export default defineSchema({
     .index("by_email", ["email"])
     .index("by_asaas_customer", ["asaasCustomerId"])
     .index("by_asaas_subscription", ["asaasSubscriptionId"])
+    // Quem OPERA o ALTAR. Sem este índice, achar os administradores era varrer
+    // a tabela de assinantes e filtrar na memória — com um teto de 500 ou 1.000
+    // linhas que, passado o milésimo cadastro, deixaria administradores de fora
+    // do aviso da Central em silêncio.
+    .index("by_role", ["role"])
     // Busca por nome na hora de vincular um contato da Central a um assinante.
     // Índice de LEITURA sobre um campo que já existe: nenhum campo novo,
     // nenhum backfill e nada do caminho de cobrança é tocado.

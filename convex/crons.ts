@@ -4,10 +4,13 @@ import { internal } from "./_generated/api";
 const crons = cronJobs();
 
 // Generate daily alerts every day at 8am UTC (5am BRT)
+// Começa no primeiro lote; a própria varredura agenda os seguintes até o fim
+// da base (convex/notifications.ts).
 crons.daily(
   "generate daily notifications",
   { hourUTC: 8, minuteUTC: 0 },
   internal.notifications.generateDailyAlerts,
+  {},
 );
 
 // Confere diariamente as contas que têm cliente no Asaas e ainda não constam

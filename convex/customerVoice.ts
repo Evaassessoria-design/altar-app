@@ -324,6 +324,26 @@ export const fundir = mutation({
       throw new ConvexError({ code: "NOT_FOUND", message: "Sinal não encontrado" });
     }
 
+    // ── O MESMO SINAL NÃO É FUNDIDO DUAS VEZES ──────────────────────────────
+    // Fundir A em B e, depois, A em C somava as ocorrências de A DE NOVO: o
+    // pedido de três pessoas virava seis, e o número que prioriza o roadmap
+    // passava a contar gente que não existe. Um sinal já descartado não tem
+    // mais peso para doar.
+    if (descartar.status === "descartado") {
+      throw new ConvexError({
+        code: "INVALID",
+        message: "Este sinal já foi fundido ou descartado — as ocorrências dele já foram contadas.",
+      });
+    }
+    // O outro lado da mesma regra: absorver ocorrências para dentro de um sinal
+    // descartado esconderia o relato num lugar que ninguém lê.
+    if (manter.status === "descartado") {
+      throw new ConvexError({
+        code: "INVALID",
+        message: "O sinal que permanece não pode estar descartado.",
+      });
+    }
+
     const agora = Date.now();
     await ctx.db.patch(args.manterId, {
       ocorrencias: manter.ocorrencias + descartar.ocorrencias,

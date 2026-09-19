@@ -64,10 +64,25 @@ export function ehIndivisivel(valor: string | undefined | null): boolean {
   return unidade ? !unidade.decimal : false;
 }
 
-/** Abreviação para a tela: "185 haste", "2,5 m". */
+/**
+ * Abreviação para a tela: "185 haste", "2,5 m", "10 maços".
+ *
+ * Os valores GRAVADOS são slugs sem acento ("maco", "duzia", "m2") — é isso
+ * que faz a chave de deduplicação sobreviver a quem digita com e sem acento.
+ * Mas slug não é palavra: a Ficha Técnica mandava providenciar "10 maco", e a
+ * tela de acervo dizia "12 duzia".
+ *
+ * O que não tiver grafia própria volta como veio — nada é inventado aqui.
+ */
+const GRAFIA_DA_UNIDADE: Readonly<Record<string, string>> = {
+  m2: "m²",
+  maco: "maço",
+  duzia: "dúzia",
+};
+
 export function abreviarUnidade(valor: string | undefined | null): string {
   if (!valor) return "";
-  return valor === "m2" ? "m²" : valor;
+  return GRAFIA_DA_UNIDADE[valor] ?? valor;
 }
 
 // ── TIPO DE MATERIAL ────────────────────────────────────────────────────────

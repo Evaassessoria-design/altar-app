@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { TIPOS_DE_MATERIAL, UNIDADES } from "./materiais";
+import { TIPOS_DE_MATERIAL, UNIDADES, abreviarUnidade } from "./materiais";
 import {
   coberturaDaLinha,
   consolidarMateriais,
@@ -444,6 +444,56 @@ describe("o consolidado é DERIVADO — nenhum total é gravado", () => {
     );
     for (const campo of ["totalNecessario", "totalConsolidado", "quantidadeTotal", "necessarioTotal"]) {
       expect(daFicha, `campo redundante ${campo} nas tabelas da ficha`).not.toContain(campo);
+    }
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SLUG NÃO É PALAVRA
+//
+// Os valores de unidade são gravados sem acento ("maco", "duzia") de propósito:
+// é o que faz a chave de deduplicação do catálogo sobreviver a quem digita com
+// e sem acento. O erro foi mandar esse slug direto para a tela — a Ficha
+// Técnica dizia "Providenciar 10 maco", e o acervo, "12 duzia".
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("a unidade chega à tela escrita em português", () => {
+  it("dá acento ao que é gravado sem acento", () => {
+    expect(abreviarUnidade("maco")).toBe("maço");
+    expect(abreviarUnidade("duzia")).toBe("dúzia");
+    expect(abreviarUnidade("m2")).toBe("m²");
+  });
+
+  it("o que já está certo continua como está", () => {
+    for (const unidade of ["un", "haste", "caixa", "pacote", "rolo", "m", "kg", "l"]) {
+      expect(abreviarUnidade(unidade)).toBe(unidade);
+    }
+  });
+
+  it("não inventa grafia para o que não conhece", () => {
+    // Valor corrompido volta como veio: melhor mostrar o estranho do que
+    // exibir com confiança uma palavra que ninguém cadastrou.
+    expect(abreviarUnidade("galao")).toBe("galao");
+    expect(abreviarUnidade("")).toBe("");
+    expect(abreviarUnidade(undefined)).toBe("");
+    expect(abreviarUnidade(null)).toBe("");
+  });
+
+  it("nenhuma unidade nova volta a vazar slug para a tela", () => {
+    // A regra, exata: quando o slug é só o rótulo SEM ACENTO (maco → Maço),
+    // a tela tem de mostrar a palavra acentuada. Quando o slug é abreviação de
+    // verdade (un, kg, m2), ele não é palavra nenhuma e a regra não se aplica —
+    // "kg" está certo e "quilo" seria pior.
+    const semAcento = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+    for (const u of UNIDADES) {
+      const primeiraPalavra = u.rotulo.toLowerCase().split(" ")[0];
+      if (semAcento(primeiraPalavra) !== u.valor) continue;
+
+      expect(
+        abreviarUnidade(u.valor),
+        `"${u.valor}" é o rótulo "${u.rotulo}" sem acento e chegou à tela cru`,
+      ).toBe(primeiraPalavra);
     }
   });
 });

@@ -55,3 +55,80 @@ describe("telas operacionais funcionam no celular", () => {
     expect(/<select\b/.test(blocos[0])).toBe(true);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRAVA: botão de texto também é botão.
+//
+// Um `<button>` sem fundo, só com `text-xs`, tem a altura da linha — 16px. No
+// desktop é irrelevante, porque o mouse acerta 16px. No celular, que é onde a
+// decoradora opera, 16px é metade do que um polegar alcança com segurança.
+//
+// Dois estavam assim quando este teste foi escrito, e os dois importam:
+//   · "Liberar reserva" — APAGA a reserva do evento, sem desfazer;
+//   · "Adicionar" da Equipe do Evento — o único caminho para escalar alguém.
+//
+// A regra: botão de texto em tela operacional carrega `min-h-9` (36px). O
+// `sm:min-h-0` ao lado preserva a densidade do desktop — a correção é para o
+// polegar, não um redesign.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TELAS_COM_BOTAO_DE_TEXTO = [
+  "src/pages/app/events/[id]/acervo/page.tsx",
+  "src/pages/app/events/[id]/page.tsx",
+];
+
+/** `className="..."` de cada `<button>` do arquivo. */
+function classesDosBotoes(fonte: string): string[] {
+  const classes: string[] = [];
+  const re = /<button\b([\s\S]{0,700}?)>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(fonte)) !== null) {
+    const cls = m[1].match(/className=\{?["'`]([^"'`]*)["'`]/);
+    if (cls) classes.push(cls[1]);
+  }
+  return classes;
+}
+
+describe("botão de texto tem alvo de toque no celular", () => {
+  it.each(TELAS_COM_BOTAO_DE_TEXTO)("%s dá altura aos botões sem fundo", (arquivo) => {
+    const fonte = readFileSync(arquivo, "utf-8");
+    for (const classe of classesDosBotoes(fonte)) {
+      // Botão de texto: sem fundo próprio, só tipografia pequena e sublinhado.
+      const ehBotaoDeTexto = classe.includes("text-xs") && classe.includes("hover:underline");
+      if (!ehBotaoDeTexto) continue;
+      expect(
+        classe,
+        `${arquivo}: botão de texto sem alvo de toque no celular.\nclassName: ${classe}`,
+      ).toContain("min-h-9");
+    }
+  });
+
+  it("o teste enxerga um botão de texto sem altura", () => {
+    // Contraprova: um regex quebrado faria este teste passar sempre.
+    const ruim = '<button className="text-xs text-primary hover:underline">Liberar</button>';
+    const [classe] = classesDosBotoes(ruim);
+    expect(classe).toBe("text-xs text-primary hover:underline");
+    expect(classe).not.toContain("min-h-9");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRAVA: liberar reserva apaga, então pergunta antes.
+//
+// Liberar devolve as peças ao acervo e APAGA a reserva do evento. Não há
+// desfazer, e o botão fica encostado nos campos de "Saiu" e "Voltou", que são
+// usados com pressa no dia da montagem. Arquivar um item do acervo já pedia
+// confirmação; esta ação, que custa mais, não pedia nenhuma.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("ação destrutiva do acervo pergunta antes", () => {
+  it("liberar uma reserva pede confirmação", () => {
+    const fonte = readFileSync("src/pages/app/events/[id]/acervo/page.tsx", "utf-8");
+    const inicio = fonte.indexOf("Liberar a reserva de");
+    expect(inicio, "a confirmação de liberar reserva sumiu").toBeGreaterThan(-1);
+
+    // A confirmação tem de vir ANTES da mutation, não depois dela.
+    const trecho = fonte.slice(Math.max(0, inicio - 600), inicio);
+    expect(trecho).toContain("window.confirm");
+  });
+});

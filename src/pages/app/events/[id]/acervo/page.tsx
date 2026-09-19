@@ -238,7 +238,7 @@ export default function AcervoDoEventoPage() {
                         item: r.item!,
                         quantidade: r.faltaVoltar,
                       })}
-                      className="mt-1 text-xs text-muted-foreground hover:text-destructive hover:underline cursor-pointer"
+                      className="mt-1 inline-flex items-center min-h-9 sm:min-h-0 text-xs text-muted-foreground hover:text-destructive hover:underline cursor-pointer"
                     >
                       Dar baixa no acervo
                     </button>
@@ -249,11 +249,23 @@ export default function AcervoDoEventoPage() {
               {(r.saiu ?? 0) === 0 && (
                 <button
                   onClick={() => {
+                    // Liberar APAGA a reserva: as peças voltam a ficar
+                    // disponíveis para outro evento e não há desfazer. É a
+                    // mesma confirmação que arquivar um item do acervo pede.
+                    if (
+                      !window.confirm(
+                        `Liberar a reserva de ${r.quantidade} "${r.item?.nome ?? "item removido"}"? As peças voltam para o acervo e a reserva deste evento é apagada.`,
+                      )
+                    )
+                      return;
                     void liberar({ id: r._id })
                       .then(() => toast.success("Reserva liberada."))
                       .catch(comErro);
                   }}
-                  className="mt-2 text-xs text-muted-foreground hover:text-destructive hover:underline cursor-pointer"
+                  // `min-h-9` só no celular: era um alvo de 16px de altura para
+                  // uma ação destrutiva, numa tela usada no galpão, com o
+                  // polegar. No desktop a densidade continua a mesma.
+                  className="mt-2 inline-flex items-center min-h-9 sm:min-h-0 text-xs text-muted-foreground hover:text-destructive hover:underline cursor-pointer"
                 >
                   Liberar reserva
                 </button>

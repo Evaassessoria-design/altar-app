@@ -35,25 +35,25 @@ const features = [
     icon: Sparkles,
     title: "Inteligência Artificial",
     description:
-      "Faça upload do contrato e a IA preenche o briefing automaticamente. Gere plantas baixas profissionais.",
+      "Envie o contrato e a IA lê e propõe o preenchimento do briefing — nada entra sem a sua confirmação. Gere plantas baixas a partir do croqui.",
   },
   {
     icon: CheckSquare,
     title: "Checklist de Carregamento",
     description:
-      "Controle cada item do pré e pós-evento com fotos, evitando perdas e esquecimentos.",
+      "Confira item por item no pré e no pós-evento, e leve a folha de carregamento e o caderno de montagem impressos para o galpão.",
   },
   {
     icon: ShoppingCart,
     title: "Lista de Compras",
     description:
-      "Organize compras por categoria, fornecedor e status. Anexe pedidos em PDF ou imagem.",
+      "Organize por categoria, fornecedor, responsável e prazo, com o panorama da semana e o vínculo com o livro-caixa.",
   },
   {
     icon: Users,
     title: "Gestão de Equipe",
     description:
-      "Escale funcionários por evento com funções, horários e contatos. Notifique a equipe com um toque.",
+      "Escale a equipe por evento com função, horário e contato — e a agenda do dia mostra quem chega a que horas.",
   },
   {
     icon: BarChart3,
@@ -65,7 +65,7 @@ const features = [
     icon: Flower2,
     title: "Funil de Vendas",
     description:
-      "Kanban com 4 etapas: Contato Inicial, Orçamento Enviado, Contratado e Descartado.",
+      "Kanban com sete estágios, do primeiro contato ao fechamento. Proposta e contrato ficam no lead e sobrevivem à conversão em evento.",
   },
 ];
 

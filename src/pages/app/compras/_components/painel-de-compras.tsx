@@ -179,7 +179,7 @@ export function PainelDeCompras() {
             key={f}
             onClick={() => setSituacao(f)}
             className={cn(
-              "px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer",
+              "inline-flex items-center justify-center min-h-9 sm:min-h-0 px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer",
               situacao === f
                 ? "bg-primary text-primary-foreground"
                 : "bg-card border border-border text-muted-foreground hover:text-foreground",

@@ -231,7 +231,7 @@ export default function OrcamentoPage() {
     return (
       <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-4">
         <Skeleton className="h-8 w-40" />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
         </div>
         <Skeleton className="h-64 rounded-xl" />
@@ -290,7 +290,7 @@ export default function OrcamentoPage() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <SummaryCard
           label="Receita Orçada"
           value={brl(summary.quotedIncome)}
@@ -350,7 +350,10 @@ export default function OrcamentoPage() {
             const max = Math.max(quoted, real, 1);
             return (
               <div key={label} className="space-y-2">
-                <div className="flex justify-between text-xs text-muted-foreground">
+                {/* `gap-2`: sem folga, `justify-between` encosta os dois spans
+                    quando o segundo ocupa a largura toda, e a tela lia
+                    "ReceitaOrçado: R$ 186.500,00" — duas palavras coladas. */}
+                <div className="flex flex-wrap justify-between gap-x-2 text-xs text-muted-foreground">
                   <span>{label}</span>
                   <span>Orçado: {brl(quoted)} · Real: {brl(real)}</span>
                 </div>

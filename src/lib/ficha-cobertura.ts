@@ -1,4 +1,4 @@
-import type { SituacaoDaCobertura } from "@/convex/lib/fichaTecnica.ts";
+import { quantidadeLimpa, type SituacaoDaCobertura } from "@/convex/lib/fichaTecnica.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // O QUE A LINHA DA FICHA TÉCNICA MOSTRA — e o que ela se recusa a mostrar.
@@ -76,6 +76,22 @@ export function resumoVisivel(cobertura: CoberturaLida, sugerido: number): Resum
   const acervoDesconhecido = cobertura.situacao === "acervo_nao_informado";
   const doAcervo = cobertura.doAcervo;
 
+  // ── DOIS NÚMEROS PARA A MESMA COISA ────────────────────────────────────────
+  // `cobertura.faltam` é medido contra `alvo`, que é o sugerido CRU. A tela,
+  // porém, anuncia o sugerido OPERACIONAL — o arredondado pela unidade, que é
+  // o que ela de fato vai providenciar.
+  //
+  // Com 48 hastes de necessidade e 10% de margem, a linha dizia:
+  //     "Providenciar 53 haste · Falta 52,8 haste"
+  // Dois números para a mesma coisa, e um deles uma quantidade que não existe:
+  // não se compra 0,8 de haste. É a regra que este módulo já aplica em
+  // `sugeridoOperacional` — a falta só não a obedecia.
+  //
+  // A falta passa a ser medida contra o MESMO alvo que a tela anuncia. Nunca
+  // cria falta onde o backend não viu: o sugerido operacional é sempre maior
+  // ou igual ao cru, e `mostrarFaltam` continua obedecendo à situação.
+  const faltam = quantidadeLimpa(Math.max(0, sugerido - cobertura.providenciado));
+
   return {
     necessario: cobertura.necessario,
     sugerido,
@@ -88,7 +104,7 @@ export function resumoVisivel(cobertura: CoberturaLida, sugerido: number): Resum
     mostrarProvidenciado: cobertura.providenciado > 0,
     doAcervo,
     mostrarOrigemAcervo: typeof doAcervo === "number" && doAcervo > 0,
-    faltam: cobertura.faltam,
+    faltam,
     mostrarFaltam: cobertura.faltam > 0 && FALTA_E_VERDADE.includes(cobertura.situacao),
     acervoDesconhecido,
   };

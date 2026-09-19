@@ -327,13 +327,13 @@ export default function FinanceiroPage() {
 
       {/* Summary cards */}
       {summary === undefined ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-24 rounded-xl" />
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <SummaryCard
             label="Receitas"
             value={summary.totalIncome}
@@ -394,7 +394,7 @@ export default function FinanceiroPage() {
                 key={f}
                 onClick={() => setFilter(f)}
                 className={cn(
-                  "px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer",
+                  "inline-flex items-center justify-center min-h-9 sm:min-h-0 px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer",
                   filter === f
                     ? "bg-primary text-primary-foreground"
                     : "bg-card border border-border text-muted-foreground hover:text-foreground",

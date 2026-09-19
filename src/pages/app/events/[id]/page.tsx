@@ -761,7 +761,9 @@ export default function EventDetailsPage() {
           </h2>
           <button
             onClick={() => setAddingTeamMember(true)}
-            className="text-xs text-primary hover:underline cursor-pointer flex items-center gap-1"
+            // Único caminho para escalar alguém neste evento, e no celular
+            // era um alvo de 16px — a altura da linha de texto.
+            className="text-xs text-primary hover:underline cursor-pointer inline-flex items-center gap-1 min-h-9 sm:min-h-0"
           >
             <Plus className="size-3.5" /> Adicionar
           </button>

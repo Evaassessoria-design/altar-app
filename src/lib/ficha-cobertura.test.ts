@@ -155,3 +155,65 @@ describe("a apresentação NÃO recalcula nada", () => {
     expect(r.faltam).toBe(14);
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// "PROVIDENCIAR 53 · FALTA 52,8" — DOIS NÚMEROS PARA A MESMA COISA
+//
+// Encontrado na demonstração, com a astromélia: 48 hastes de necessidade, 10%
+// de margem, nada comprado. A tela anunciava o alvo arredondado (53, porque
+// não existe 0,8 de haste) e, na linha seguinte, dizia que faltavam 52,8.
+//
+// Quem lê não conclui "é arredondamento": conclui que o sistema não sabe
+// contar. E essa é a tela que existe justamente para provar que ele sabe.
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("a falta é medida contra o alvo que a tela anuncia", () => {
+  const astromelia = {
+    necessario: 48,
+    alvo: 52.8, // 48 + 10%, cru
+    providenciado: 0,
+    doAcervo: null,
+    faltam: 52.8, // o que o backend devolve
+    situacao: "sem_providencia" as const,
+  };
+
+  it("não exibe uma quantidade que não existe na unidade", () => {
+    // 53 é o sugerido operacional: hastes são indivisíveis.
+    const r = resumoVisivel(astromelia, 53);
+    expect(r.sugerido).toBe(53);
+    expect(r.faltam).toBe(53);
+    expect(r.mostrarFaltam).toBe(true);
+    // O defeito, explicitamente: os dois rótulos falam do mesmo alvo.
+    expect(r.faltam).toBe(r.sugerido);
+  });
+
+  it("desconta o que já foi providenciado, inclusive o do acervo", () => {
+    const r = resumoVisivel(
+      { ...astromelia, providenciado: 20, doAcervo: 20, faltam: 32.8, situacao: "parcial" },
+      53,
+    );
+    expect(r.faltam).toBe(33);
+    expect(r.providenciado).toBe(20);
+  });
+
+  it("unidade decimal continua com a fração — metro aceita 0,6", () => {
+    // A regra é da UNIDADE, não do arredondamento por gosto: 39,6 m de fita é
+    // uma quantidade legítima e não vira 40 por conta própria.
+    const r = resumoVisivel(
+      { necessario: 36, alvo: 39.6, providenciado: 0, doAcervo: null, faltam: 39.6, situacao: "sem_providencia" },
+      39.6,
+    );
+    expect(r.faltam).toBeCloseTo(39.6, 3);
+  });
+
+  it("nunca inventa falta onde o backend não viu nenhuma", () => {
+    // Coberto é coberto: o arredondamento do alvo não pode ressuscitar uma
+    // pendência que já foi resolvida.
+    const r = resumoVisivel(
+      { necessario: 48, alvo: 52.8, providenciado: 53, doAcervo: null, faltam: 0, situacao: "coberto" },
+      53,
+    );
+    expect(r.mostrarFaltam).toBe(false);
+    expect(r.faltam).toBe(0);
+  });
+});

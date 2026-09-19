@@ -142,6 +142,27 @@ export const getStats = query({
   },
 });
 
+/**
+ * Quem pode ser RESPONSÁVEL por uma conversa ou tarefa da Central.
+ *
+ * São os administradores — quem opera o SaaS. Existe separada de `listUsers`
+ * de propósito: aquela devolve o cadastro inteiro de todos os assinantes
+ * (inclusive estado de cobrança) para alimentar o painel de contas, e a
+ * Central precisa apenas de nome e id de um punhado de pessoas. Um seletor de
+ * responsável não tem por que carregar a base de clientes.
+ */
+export const listarOperadores = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
+    const users = await ctx.db.query("users").take(1_000);
+    return users
+      .filter((u) => u.role === "admin")
+      .map((u) => ({ _id: u._id, name: u.name, email: u.email }))
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  },
+});
+
 export const listUsers = query({
   args: {},
   handler: async (ctx) => {

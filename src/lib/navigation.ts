@@ -67,6 +67,7 @@ export const MORE_MENU_ITEMS = [
  */
 export const ROTAS_SEM_MENU: Readonly<Record<string, string>> = {
   "/admin": "só aparece para administradores",
+  "/central": "operação do SaaS — só administradores, alcançada pelo Painel Admin",
   "/paywall": "destino de redirecionamento, não de navegação",
   "/eventos/:id": "acessada pelo card do evento",
   "/eventos/:id/briefing": "acessada de dentro do evento",

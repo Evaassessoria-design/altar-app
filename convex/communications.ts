@@ -1,12 +1,20 @@
 import { v, ConvexError } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
+import type { Expression, FilterBuilder, NamedTableInfo } from "convex/server";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import type { Doc, Id } from "./_generated/dataModel";
+import type { DataModel, Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireAdmin } from "./lib/adminGuard";
 import { verticalDoAmbiente } from "./lib/central/vertical";
-import { normalizarE164, variantesDeBusca, casarContato, mascarar } from "./lib/central/telefone";
+import {
+  normalizarE164,
+  variantesDeBusca,
+  casarContato,
+  formatarBr,
+} from "./lib/central/telefone";
 import { fimDaJanela, estaSemResposta } from "./lib/central/prazos";
+import { termoDeBusca, textoDeBusca } from "./lib/central/busca";
 import {
   categoriaValidator,
   channelValidator,
@@ -33,6 +41,52 @@ const LIMITE_VARREDURA_USERS = 2_000;
 
 /** Mensagens carregadas por vez no histórico de uma conversa. */
 const PAGINA_DE_MENSAGENS = 100;
+
+/** Teto de candidatos devolvidos por busca ao vincular um contato. */
+const LIMITE_DE_CANDIDATOS = 20;
+
+/** Conversas reparadas por chamada de `repararIndiceDeBusca`. */
+const LOTE_DE_REPARO = 200;
+
+/** Teto da nota interna. Anotação, não dossiê. */
+const LIMITE_DE_NOTAS = 4_000;
+
+// ─── Texto de busca da conversa (derivado) ───────────────────────────────────
+
+/**
+ * Recalcula `buscaTexto` a partir das fontes que valem.
+ *
+ * Exportada porque a triagem também muda o assunto da conversa
+ * (`communicationsTriage.aplicarTriagem`), e um texto de busca que só é
+ * escrito na criação envelhece na primeira reclassificação: a pessoa
+ * procuraria pelo assunto que está vendo na tela e não acharia nada.
+ *
+ * Nunca lança e nunca é obrigatória para a operação — é índice, não verdade.
+ */
+export async function atualizarBuscaDaConversa(
+  ctx: MutationCtx,
+  conversationId: Id<"communicationConversations">,
+): Promise<void> {
+  const conversa = await ctx.db.get(conversationId);
+  if (!conversa) return;
+
+  const contato = await ctx.db.get(conversa.contactId);
+  const identidades = await ctx.db
+    .query("communicationIdentities")
+    .withIndex("by_contact", (q) => q.eq("contactId", conversa.contactId))
+    .take(10);
+
+  const novo = textoDeBusca([
+    conversa.assunto,
+    contato?.displayName,
+    ...identidades.map((i) => i.externalId),
+    ...identidades.map((i) => i.displayName),
+  ]);
+
+  if (novo !== (conversa.buscaTexto ?? "")) {
+    await ctx.db.patch(conversationId, { buscaTexto: novo });
+  }
+}
 
 // ─── Ingestão ────────────────────────────────────────────────────────────────
 
@@ -279,6 +333,11 @@ export const registrarEntrada = internalMutation({
         enviadaEm: mensagem.enviadaEm,
       });
 
+      // O texto de busca é derivado do que ACABOU de ser gravado (assunto,
+      // nome do contato e handles). Calculado aqui, dentro da mesma
+      // transação, a conversa já nasce encontrável.
+      await atualizarBuscaDaConversa(ctx, conversationId);
+
       await ctx.db.insert("integrationEvents", {
         vertical: args.vertical,
         provider: args.provider,
@@ -427,55 +486,197 @@ function resumirConversa({ conversa, contato }: ConversaComContato) {
   };
 }
 
+type Conversa = Doc<"communicationConversations">;
+type FiltroDaConversa = FilterBuilder<NamedTableInfo<DataModel, "communicationConversations">>;
+
+type FiltrosDaCaixa = {
+  departamento?: Conversa["departamento"];
+  status?: Conversa["status"];
+  prioridade?: Conversa["prioridade"];
+  canal?: Conversa["channel"];
+  responsavelUserId?: Id<"users">;
+  apenasEscaladas?: boolean;
+};
+
+/**
+ * Traduz os filtros da tela em UMA condição de consulta.
+ *
+ * Escrita uma vez e usada nos dois caminhos (busca e listagem) de propósito:
+ * duas cópias divergiriam, e o dia em que divergissem o mesmo filtro passaria
+ * a dizer coisas diferentes conforme houvesse ou não texto na caixa de busca.
+ */
+function refinarConversas(
+  q: FiltroDaConversa,
+  filtros: FiltrosDaCaixa,
+  vertical: Conversa["vertical"],
+): Expression<boolean> {
+  const condicoes: Expression<boolean>[] = [];
+
+  if (filtros.status) condicoes.push(q.eq(q.field("status"), filtros.status));
+  if (filtros.canal) condicoes.push(q.eq(q.field("channel"), filtros.canal));
+
+  // Campo ausente É o valor padrão — ver o comentário da query.
+  if (filtros.departamento) {
+    condicoes.push(
+      filtros.departamento === "triagem"
+        ? q.or(
+            q.eq(q.field("departamento"), filtros.departamento),
+            q.eq(q.field("departamento"), undefined),
+          )
+        : q.eq(q.field("departamento"), filtros.departamento),
+    );
+  }
+  if (filtros.prioridade) {
+    condicoes.push(
+      filtros.prioridade === "normal"
+        ? q.or(
+            q.eq(q.field("prioridade"), filtros.prioridade),
+            q.eq(q.field("prioridade"), undefined),
+          )
+        : q.eq(q.field("prioridade"), filtros.prioridade),
+    );
+  }
+  if (filtros.responsavelUserId) {
+    condicoes.push(q.eq(q.field("responsavelUserId"), filtros.responsavelUserId));
+  }
+  if (filtros.apenasEscaladas) {
+    condicoes.push(q.eq(q.field("escaladaParaCeo"), true));
+  }
+
+  // Sem filtro nenhum, a condição precisa ser verdadeira para todas as linhas
+  // do índice — que já está preso a esta vertical.
+  return condicoes.length === 0 ? q.eq(q.field("vertical"), vertical) : q.and(...condicoes);
+}
+
+/**
+ * CAIXA DE ENTRADA — paginada, filtrada e buscável.
+ *
+ * ── POR QUE OS FILTROS SÃO APLICADOS NA CONSULTA, E NÃO NA PÁGINA ───────────
+ * Filtrar em memória o resultado de um `take(50)` devolve "as conversas
+ * urgentes ENTRE as 50 mais recentes" — que não é o que a tela promete. Quem
+ * opera lê aquilo como "há 3 urgentes" e vai embora tranquilo enquanto a
+ * quarta, mais antiga, está fora da janela.
+ *
+ * Aqui o filtro entra na própria consulta e a paginação percorre TODO o
+ * conjunto: uma página pode vir menor, e `isDone` continua dizendo a verdade.
+ *
+ * ── DEFAULT AUSENTE ─────────────────────────────────────────────────────────
+ * `departamento` ausente significa "triagem" e `prioridade` ausente significa
+ * "normal" (schema). Filtrar por esses dois valores precisa, portanto,
+ * alcançar também os documentos em que o campo não existe — senão a conversa
+ * recém-chegada, que é justamente a que está em triagem, seria a única a não
+ * aparecer no filtro "Triagem".
+ */
 export const listarConversas = query({
   args: {
+    paginationOpts: paginationOptsValidator,
     departamento: v.optional(departamentoValidator),
     status: v.optional(statusDeConversaValidator),
+    prioridade: v.optional(prioridadeValidator),
+    canal: v.optional(channelValidator),
+    responsavelUserId: v.optional(v.id("users")),
     apenasEscaladas: v.optional(v.boolean()),
-    limite: v.optional(v.number()),
+    busca: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
     const vertical = verticalDoAmbiente();
-    const limite = Math.min(args.limite ?? 50, 200);
+    const termo = termoDeBusca(args.busca);
 
-    let conversas: Doc<"communicationConversations">[];
+    const paginado = termo
+      ? await ctx.db
+          .query("communicationConversations")
+          .withSearchIndex("search_busca", (q) => {
+            const base = q.search("buscaTexto", termo).eq("vertical", vertical);
+            const comStatus = args.status ? base.eq("status", args.status) : base;
+            return args.canal ? comStatus.eq("channel", args.canal) : comStatus;
+          })
+          // `status` e `canal` já entraram pelo índice de busca acima.
+          .filter((q) =>
+            refinarConversas(
+              q,
+              {
+                departamento: args.departamento,
+                prioridade: args.prioridade,
+                responsavelUserId: args.responsavelUserId,
+                apenasEscaladas: args.apenasEscaladas,
+              },
+              vertical,
+            ),
+          )
+          .paginate(args.paginationOpts)
+      : await ctx.db
+          .query("communicationConversations")
+          .withIndex("by_vertical_ultimaMensagem", (q) => q.eq("vertical", vertical))
+          .order("desc")
+          .filter((q) =>
+            refinarConversas(
+              q,
+              {
+                status: args.status,
+                canal: args.canal,
+                departamento: args.departamento,
+                prioridade: args.prioridade,
+                responsavelUserId: args.responsavelUserId,
+                apenasEscaladas: args.apenasEscaladas,
+              },
+              vertical,
+            ),
+          )
+          .paginate(args.paginationOpts);
 
-    if (args.departamento) {
-      conversas = await ctx.db
-        .query("communicationConversations")
-        .withIndex("by_vertical_departamento_status", (q) =>
-          args.status
-            ? q
-                .eq("vertical", vertical)
-                .eq("departamento", args.departamento)
-                .eq("status", args.status)
-            : q.eq("vertical", vertical).eq("departamento", args.departamento),
-        )
-        .order("desc")
-        .take(limite);
-    } else if (args.status) {
-      conversas = await ctx.db
-        .query("communicationConversations")
-        .withIndex("by_vertical_status", (q) =>
-          q.eq("vertical", vertical).eq("status", args.status!),
-        )
-        .order("desc")
-        .take(limite);
-    } else {
-      conversas = await ctx.db
-        .query("communicationConversations")
-        .withIndex("by_vertical_ultimaMensagem", (q) => q.eq("vertical", vertical))
-        .order("desc")
-        .take(limite);
+    const comContato = await anexarContatos(ctx, paginado.page);
+
+    return {
+      ...paginado,
+      page: comContato.map(resumirConversa),
+      // A busca ordena por RELEVÂNCIA; a lista normal, por recência. Dizer
+      // isso à tela evita a pergunta "por que a ordem mudou?".
+      ordenadoPor: termo ? ("relevancia" as const) : ("recencia" as const),
+    };
+  },
+});
+
+/**
+ * HISTÓRICO COMPLETO da conversa, do mais recente para o mais antigo.
+ *
+ * Separado de `abrirConversa` porque o cabeçalho da conversa (contato,
+ * classificação, tarefas) é UM documento e as mensagens são MUITAS: carregar
+ * as duas coisas juntas obrigaria a escolher entre truncar o histórico ou
+ * recarregar o cabeçalho a cada "ver mais antigas".
+ */
+export const listarMensagens = query({
+  args: {
+    conversationId: v.id("communicationConversations"),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+
+    const conversa = await ctx.db.get(args.conversationId);
+    if (!conversa) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Conversa não encontrada" });
     }
 
-    if (args.apenasEscaladas) {
-      conversas = conversas.filter((c) => c.escaladaParaCeo === true);
-    }
+    const paginado = await ctx.db
+      .query("communicationMessages")
+      .withIndex("by_conversation_enviadaEm", (q) => q.eq("conversationId", conversa._id))
+      .order("desc")
+      .paginate(args.paginationOpts);
 
-    const comContato = await anexarContatos(ctx, conversas);
-    return comContato.map(resumirConversa);
+    return {
+      ...paginado,
+      page: paginado.page.map((m) => ({
+        _id: m._id,
+        direcao: m.direcao,
+        tipo: m.tipo,
+        texto: m.texto,
+        autor: m.autor,
+        enviadaEm: m.enviadaEm,
+        statusEntrega: m.statusEntrega,
+        enviadaPorUserId: m.enviadaPorUserId,
+      })),
+    };
   },
 });
 
@@ -536,8 +737,12 @@ export const abrirConversa = query({
             landingLeadId: contato.landingLeadId,
             userId: contato.userId,
             vinculoOrigem: contato.vinculoOrigem,
+            vinculoEm: contato.vinculoEm,
+            vinculoRemovidoEm: contato.vinculoRemovidoEm,
             optOut: contato.optOut ?? false,
             notas: contato.notas,
+            notasAtualizadasEm: contato.notasAtualizadasEm,
+            notasAtualizadasPorUserId: contato.notasAtualizadasPorUserId,
             identidades: identidades.map((i) => ({
               channel: i.channel,
               externalId: i.externalId,
@@ -896,5 +1101,248 @@ export const sugerirVinculos = query({
       })),
       assinantes: assinantes.map((u) => ({ _id: u._id, name: u.name, email: u.email })),
     };
+  },
+});
+
+// ─── Notas internas do contato ───────────────────────────────────────────────
+
+/**
+ * NOTAS INTERNAS — o que a operação sabe sobre a pessoa.
+ *
+ * "Já pediu demonstração duas vezes e sumiu", "é sócia da outra empresa",
+ * "prefere áudio". Informação que não cabe em campo nenhum e que hoje mora na
+ * cabeça de quem atendeu — e some quando essa pessoa não está.
+ *
+ * Só admin escreve e só admin lê: a nota NUNCA entra em proposta de resposta,
+ * nunca é enviada a ninguém e não aparece no Escritório 3D, que é somente
+ * leitura de agregados. Gravamos AUTOR e DATA porque uma anotação sem origem,
+ * meses depois, não se sabe se ainda vale.
+ *
+ * Texto vazio APAGA a nota (e o registro de autoria junto): quem limpou
+ * decidiu que aquilo não valia mais, e manter o rastro de uma nota inexistente
+ * só confundiria.
+ */
+export const definirNotas = mutation({
+  args: {
+    contactId: v.id("adminContacts"),
+    notas: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const admin = await requireAdmin(ctx);
+
+    const contato = await ctx.db.get(args.contactId);
+    if (!contato) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Contato não encontrado" });
+    }
+
+    const texto = args.notas.trim().slice(0, LIMITE_DE_NOTAS);
+    const agora = Date.now();
+
+    await ctx.db.patch(args.contactId, {
+      notas: texto.length > 0 ? texto : undefined,
+      notasAtualizadasEm: texto.length > 0 ? agora : undefined,
+      notasAtualizadasPorUserId: texto.length > 0 ? admin._id : undefined,
+      atualizadoEm: agora,
+    });
+
+    return { salvo: texto.length > 0 };
+  },
+});
+
+// ─── Vínculo manual: desfazer ────────────────────────────────────────────────
+
+/**
+ * Desfaz o vínculo de um contato com interessado e/ou assinante.
+ *
+ * É o par que faltava de `vincularContato`. Sem ele, um vínculo errado —
+ * telefone reaproveitado, homônimo, engano de clique — ficava para sempre, e
+ * a conversa de uma pessoa aparecia na ficha de outra.
+ *
+ * O contato NÃO é apagado e as conversas NÃO se movem: só o vínculo cai. O
+ * tipo volta a "desconhecido" quando não sobra nenhum lado, porque afirmar
+ * "assinante" sem vínculo seria afirmar o que já não se sabe.
+ */
+export const desvincularContato = mutation({
+  args: {
+    contactId: v.id("adminContacts"),
+    removerInteressado: v.optional(v.boolean()),
+    removerAssinante: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const admin = await requireAdmin(ctx);
+
+    const contato = await ctx.db.get(args.contactId);
+    if (!contato) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Contato não encontrado" });
+    }
+
+    // Sem alvo explícito, desfaz os dois — é o que "desvincular" significa
+    // quando a tela não ofereceu escolha.
+    const removerInteressado = args.removerInteressado ?? args.removerAssinante === undefined;
+    const removerAssinante = args.removerAssinante ?? args.removerInteressado === undefined;
+
+    const landingLeadId = removerInteressado ? undefined : contato.landingLeadId;
+    const userId = removerAssinante ? undefined : contato.userId;
+
+    if (landingLeadId === contato.landingLeadId && userId === contato.userId) {
+      return { removido: false };
+    }
+
+    const agora = Date.now();
+    await ctx.db.patch(args.contactId, {
+      landingLeadId,
+      userId,
+      tipo: userId ? "assinante" : landingLeadId ? "interessado" : "desconhecido",
+      // A origem do vínculo que SOBROU continua valendo; quando não sobra
+      // nenhum, ela também cai — não há vínculo de que falar.
+      vinculoOrigem: userId || landingLeadId ? contato.vinculoOrigem : undefined,
+      vinculoPorUserId: userId || landingLeadId ? contato.vinculoPorUserId : undefined,
+      vinculoEm: userId || landingLeadId ? contato.vinculoEm : undefined,
+      vinculoRemovidoEm: agora,
+      vinculoRemovidoPorUserId: admin._id,
+      atualizadoEm: agora,
+    });
+
+    return { removido: true };
+  },
+});
+
+// ─── Vínculo manual: encontrar quem vincular ─────────────────────────────────
+
+/**
+ * Candidatos a vínculo por TEXTO — nome, e-mail ou telefone.
+ *
+ * `sugerirVinculos` responde "o que a máquina achou e não quis decidir"; esta
+ * responde "quem eu, humano, estou procurando". São perguntas diferentes: a
+ * pessoa que escreveu de um número novo não aparece em nenhuma sugestão
+ * automática, e é justamente ela que precisa ser encontrada pelo nome.
+ *
+ * Busca por índice em três frentes, sem varrer tabela: telefone normalizado
+ * (índice exato), e-mail (índice exato) e nome (índice de busca).
+ */
+export const buscarCandidatosDeVinculo = query({
+  args: { termo: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+
+    const bruto = args.termo.trim();
+    const termo = termoDeBusca(bruto);
+    if (!termo) return { interessados: [], assinantes: [] };
+
+    const emailProcurado = bruto.includes("@") ? bruto.toLowerCase() : null;
+    const telefone = normalizarE164(bruto);
+    const variantes = telefone ? variantesDeBusca(telefone) : [];
+
+    // ── Interessados (landing) ────────────────────────────────────────────
+    const interessados: Doc<"landingLeads">[] = [];
+    const guardarInteressado = (lead: Doc<"landingLeads">) => {
+      if (!interessados.some((l) => l._id === lead._id)) interessados.push(lead);
+    };
+
+    for (const variante of variantes) {
+      const achados = await ctx.db
+        .query("landingLeads")
+        .withIndex("by_whatsapp_e164", (q) => q.eq("whatsappE164", variante))
+        .take(LIMITE_DE_CANDIDATOS);
+      achados.forEach(guardarInteressado);
+    }
+
+    if (emailProcurado) {
+      const achados = await ctx.db
+        .query("landingLeads")
+        .withIndex("by_email", (q) => q.eq("email", emailProcurado))
+        .take(LIMITE_DE_CANDIDATOS);
+      achados.forEach(guardarInteressado);
+    }
+
+    const porNomeLead = await ctx.db
+      .query("landingLeads")
+      .withSearchIndex("search_nome", (q) => q.search("name", termo))
+      .take(LIMITE_DE_CANDIDATOS);
+    porNomeLead.forEach(guardarInteressado);
+
+    // ── Assinantes ────────────────────────────────────────────────────────
+    const assinantes: Doc<"users">[] = [];
+    const guardarAssinante = (usuario: Doc<"users">) => {
+      if (!assinantes.some((u) => u._id === usuario._id)) assinantes.push(usuario);
+    };
+
+    if (emailProcurado) {
+      const achado = await ctx.db
+        .query("users")
+        .withIndex("by_email", (q) => q.eq("email", emailProcurado))
+        .first();
+      if (achado) guardarAssinante(achado);
+    }
+
+    const porNomeUser = await ctx.db
+      .query("users")
+      .withSearchIndex("search_name", (q) => q.search("name", termo))
+      .take(LIMITE_DE_CANDIDATOS);
+    porNomeUser.forEach(guardarAssinante);
+
+    if (variantes.length > 0) {
+      // Telefone de assinante não tem índice — a varredura limitada é o mesmo
+      // caminho que `sugerirVinculos` já usa, e só acontece quando o termo
+      // digitado É um telefone.
+      const usuarios = await ctx.db.query("users").take(LIMITE_VARREDURA_USERS);
+      usuarios
+        .filter((u) => {
+          const doUsuario = normalizarE164(u.phone);
+          return doUsuario !== null && variantes.includes(doUsuario);
+        })
+        .forEach(guardarAssinante);
+    }
+
+    return {
+      interessados: interessados.slice(0, LIMITE_DE_CANDIDATOS).map((l) => ({
+        _id: l._id,
+        name: l.name,
+        email: l.email,
+        intent: l.intent,
+        status: l.status ?? ("novo" as const),
+        telefone: formatarBr(l.whatsappE164),
+      })),
+      // Só o que identifica a pessoa. Nada de estado de cobrança: a Central
+      // classifica assunto de cobrança, nunca lê a assinatura de ninguém.
+      assinantes: assinantes.slice(0, LIMITE_DE_CANDIDATOS).map((u) => ({
+        _id: u._id,
+        name: u.name,
+        email: u.email,
+        telefone: formatarBr(u.phone),
+      })),
+    };
+  },
+});
+
+// ─── Manutenção do índice de busca ───────────────────────────────────────────
+
+/**
+ * Preenche `buscaTexto` das conversas anteriores ao campo.
+ *
+ * Interna, idempotente e em lote: roda quantas vezes for preciso, e devolve
+ * quantas ainda faltam. Não é migração de dado — nenhuma informação nova é
+ * inventada, só o texto DERIVADO do que já está gravado. Uma conversa sem este
+ * campo continua aparecendo na lista e nas métricas; o que ela não faz é
+ * aparecer na BUSCA.
+ */
+export const repararIndiceDeBusca = internalMutation({
+  args: { limite: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const vertical = verticalDoAmbiente();
+    const limite = Math.min(args.limite ?? LOTE_DE_REPARO, LOTE_DE_REPARO);
+
+    const conversas = await ctx.db
+      .query("communicationConversations")
+      .withIndex("by_vertical_ultimaMensagem", (q) => q.eq("vertical", vertical))
+      .order("desc")
+      .filter((q) => q.eq(q.field("buscaTexto"), undefined))
+      .take(limite);
+
+    for (const conversa of conversas) {
+      await atualizarBuscaDaConversa(ctx, conversa._id);
+    }
+
+    return { reparadas: conversas.length };
   },
 });

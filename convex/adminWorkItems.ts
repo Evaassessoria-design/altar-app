@@ -1,6 +1,7 @@
 import { v, ConvexError } from "convex/values";
+import type { Expression, FilterBuilder, NamedTableInfo } from "convex/server";
 import { internalMutation, mutation, query } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
+import type { DataModel, Doc } from "./_generated/dataModel";
 import { requireAdmin } from "./lib/adminGuard";
 import { verticalDoAmbiente } from "./lib/central/vertical";
 import { diaCivil, diaCivilEmDias, trabalhoVenceHoje, trabalhoVencido } from "./lib/central/prazos";
@@ -72,9 +73,23 @@ export const abrirPelaTriagem = internalMutation({
   },
 });
 
+/**
+ * Lista de tarefas da operação, com filtros aplicados NA CONSULTA.
+ *
+ * `apenasVencidos` filtrava a página depois de carregada — ou seja, devolvia
+ * "as vencidas ENTRE as 100 mais recentes". Quem lê a tela entende "estas são
+ * as vencidas" e vai dormir tranquilo com a centésima primeira em atraso. A
+ * condição agora entra na consulta, e a regra de vencimento é a mesma de
+ * `lib/central/prazos.ts`: sem data não há atraso, e tarefa concluída ou
+ * cancelada nunca está vencida.
+ */
 export const listar = query({
   args: {
     status: v.optional(statusDeTrabalhoValidator),
+    tipo: v.optional(tipoDeTrabalhoValidator),
+    responsavelUserId: v.optional(v.id("users")),
+    contactId: v.optional(v.id("adminContacts")),
+    conversationId: v.optional(v.id("communicationConversations")),
     apenasVencidos: v.optional(v.boolean()),
     limite: v.optional(v.number()),
   },
@@ -82,24 +97,49 @@ export const listar = query({
     await requireAdmin(ctx);
     const vertical = verticalDoAmbiente();
     const hoje = diaCivil(Date.now());
+    const limite = Math.min(args.limite ?? 100, 300);
 
-    let itens: Doc<"adminWorkItems">[];
-    if (args.status) {
-      itens = await ctx.db
-        .query("adminWorkItems")
-        .withIndex("by_vertical_status", (q) =>
-          q.eq("vertical", vertical).eq("status", args.status!),
-        )
-        .order("desc")
-        .take(Math.min(args.limite ?? 100, 300));
-    } else {
-      itens = await ctx.db
-        .query("adminWorkItems")
-        .withIndex("by_vertical_vence", (q) => q.eq("vertical", vertical))
-        .take(Math.min(args.limite ?? 100, 300));
-    }
+    const refinar = (
+      q: FilterBuilder<NamedTableInfo<DataModel, "adminWorkItems">>,
+    ): Expression<boolean> => {
+      const condicoes: Expression<boolean>[] = [];
+      if (args.tipo) condicoes.push(q.eq(q.field("tipo"), args.tipo));
+      if (args.responsavelUserId) {
+        condicoes.push(q.eq(q.field("responsavelUserId"), args.responsavelUserId));
+      }
+      if (args.contactId) condicoes.push(q.eq(q.field("contactId"), args.contactId));
+      if (args.conversationId) {
+        condicoes.push(q.eq(q.field("conversationId"), args.conversationId));
+      }
+      if (args.apenasVencidos) {
+        condicoes.push(
+          q.and(
+            q.neq(q.field("venceEm"), undefined),
+            q.lt(q.field("venceEm"), hoje),
+            q.neq(q.field("status"), "concluido"),
+            q.neq(q.field("status"), "cancelado"),
+          ),
+        );
+      }
+      return condicoes.length === 0 ? q.eq(q.field("vertical"), vertical) : q.and(...condicoes);
+    };
 
-    const comEstado = itens.map((t) => ({
+    const itens: Doc<"adminWorkItems">[] = args.status
+      ? await ctx.db
+          .query("adminWorkItems")
+          .withIndex("by_vertical_status", (q) =>
+            q.eq("vertical", vertical).eq("status", args.status!),
+          )
+          .order("desc")
+          .filter(refinar)
+          .take(limite)
+      : await ctx.db
+          .query("adminWorkItems")
+          .withIndex("by_vertical_vence", (q) => q.eq("vertical", vertical))
+          .filter(refinar)
+          .take(limite);
+
+    return itens.map((t) => ({
       _id: t._id,
       tipo: t.tipo,
       titulo: t.titulo,
@@ -114,9 +154,8 @@ export const listar = query({
       responsavelUserId: t.responsavelUserId,
       criadoPor: t.criadoPor,
       criadoEm: t.criadoEm,
+      concluidoEm: t.concluidoEm,
     }));
-
-    return args.apenasVencidos ? comEstado.filter((t) => t.vencido) : comEstado;
   },
 });
 
@@ -158,6 +197,13 @@ export const criar = mutation({
   },
 });
 
+/**
+ * Muda o andamento da tarefa.
+ *
+ * `limparResponsavel` e `limparVencimento` existem porque `undefined` em
+ * argumento significa "não mexa neste campo" — sem eles, tirar o dono de uma
+ * tarefa atribuída por engano seria impossível pela tela.
+ */
 export const atualizar = mutation({
   args: {
     workItemId: v.id("adminWorkItems"),
@@ -165,6 +211,8 @@ export const atualizar = mutation({
     prioridade: v.optional(prioridadeValidator),
     venceEm: v.optional(v.string()),
     responsavelUserId: v.optional(v.id("users")),
+    limparResponsavel: v.optional(v.boolean()),
+    limparVencimento: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
@@ -174,12 +222,19 @@ export const atualizar = mutation({
     }
 
     const agora = Date.now();
+    const status = args.status ?? item.status;
+
     await ctx.db.patch(args.workItemId, {
-      status: args.status ?? item.status,
+      status,
       prioridade: args.prioridade ?? item.prioridade,
-      venceEm: args.venceEm ?? item.venceEm,
-      responsavelUserId: args.responsavelUserId ?? item.responsavelUserId,
-      concluidoEm: args.status === "concluido" ? agora : item.concluidoEm,
+      venceEm: args.limparVencimento ? undefined : (args.venceEm ?? item.venceEm),
+      responsavelUserId: args.limparResponsavel
+        ? undefined
+        : (args.responsavelUserId ?? item.responsavelUserId),
+      // Reabrir uma tarefa apaga a data de conclusão: manter a antiga diria
+      // que ela foi concluída e continua aberta ao mesmo tempo.
+      concluidoEm:
+        status === "concluido" ? (item.concluidoEm ?? agora) : undefined,
       atualizadoEm: agora,
     });
   },

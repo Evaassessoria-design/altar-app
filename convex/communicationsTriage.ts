@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { atualizarBuscaDaConversa } from "./communications";
 import {
   categoriaValidator,
   departamentoValidator,
@@ -101,6 +102,11 @@ export const aplicarTriagem = internalMutation({
         status: args.escalar ? "escalada_ceo" : conversa.status,
         atualizadaEm: args.agora,
       });
+
+      // A triagem pode REESCREVER o assunto da conversa. O texto de busca é
+      // derivado dele: sem recalcular aqui, a caixa de entrada procuraria
+      // pelo assunto antigo — o que ninguém está vendo na tela.
+      await atualizarBuscaDaConversa(ctx, args.conversationId);
     }
 
     // ── Tarefa da operação ──────────────────────────────────────────────────

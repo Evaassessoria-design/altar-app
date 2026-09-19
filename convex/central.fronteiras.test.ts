@@ -29,6 +29,7 @@ const MODULOS_DA_CENTRAL = [
 const LIBS_DA_CENTRAL = [
   "lib/adminGuard",
   "lib/central/autonomia",
+  "lib/central/busca",
   "lib/central/prazos",
   "lib/central/telefone",
   "lib/central/triagem",
@@ -245,6 +246,68 @@ describe("os validadores não divergem das regras", () => {
     // A Central inteira usa os validadores importados; declarar uma união
     // solta aqui reabriria a porta da divergência.
     expect(schema).toContain('from "./lib/central/validadores"');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A MESA DE OPERAÇÃO (a tela) obedece às mesmas fronteiras
+//
+// O BLOCO 2 tirou a Central de dentro do Painel Admin e deu a ela uma rota
+// própria, com caixa de entrada, fila, tarefas e Ouvidoria. Uma tela nova é
+// exatamente onde a fronteira volta a ser cruzada sem querer: basta alguém
+// achar útil "mostrar também os leads do evento".
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("a tela da Central não alcança o outro lado da linha", () => {
+  const DIRETORIO = "src/pages/app/central";
+
+  function telasDaCentral(): string[] {
+    const arquivos: string[] = [];
+    const visitar = (dir: string) => {
+      for (const entrada of readdirSync(dir, { withFileTypes: true })) {
+        const caminho = `${dir}/${entrada.name}`;
+        if (entrada.isDirectory()) visitar(caminho);
+        else if (entrada.name.endsWith(".tsx") || entrada.name.endsWith(".ts")) {
+          arquivos.push(caminho);
+        }
+      }
+    };
+    visitar(DIRETORIO);
+    return arquivos;
+  }
+
+  it("existe tela e ela está coberta por estas travas", () => {
+    expect(telasDaCentral().length).toBeGreaterThan(0);
+  });
+
+  it.each(telasDaCentral())("%s não consulta o funil das decoradoras", (arquivo) => {
+    const codigo = semComentarios(readFileSync(arquivo, "utf-8"));
+    for (const proibido of ["api.funil", "api.events", "api.financeiro", "api.purchases"]) {
+      expect(codigo.includes(proibido), `${arquivo} usa ${proibido}`).toBe(false);
+    }
+  });
+
+  it.each(telasDaCentral())("%s não toca no caminho do dinheiro", (arquivo) => {
+    const codigo = semComentarios(readFileSync(arquivo, "utf-8"));
+    for (const padrao of [/api\.asaas/, /subscriptionStatus/, /createCheckoutSession/]) {
+      expect(padrao.test(codigo), `${arquivo} referencia cobrança`).toBe(false);
+    }
+  });
+
+  it.each(telasDaCentral())("%s não conhece a porta de saída", (arquivo) => {
+    const codigo = semComentarios(readFileSync(arquivo, "utf-8"));
+    // Enviar não é uma ação da tela: o que existe é APROVAR, e quem decide se
+    // sai é o outbox, atrás do portão.
+    for (const proibido of ["communicationsOutbox", "prepararEnvio", "executarAprovacao"]) {
+      expect(codigo.includes(proibido), `${arquivo} fala em envio`).toBe(false);
+    }
+  });
+
+  it("a rota é declarada como exceção de menu — nunca some do mapa", () => {
+    const navegacao = readFileSync("src/lib/navigation.ts", "utf-8");
+    const app = readFileSync("src/App.tsx", "utf-8");
+    expect(app).toContain('path="/central"');
+    expect(navegacao).toContain('"/central"');
   });
 });
 

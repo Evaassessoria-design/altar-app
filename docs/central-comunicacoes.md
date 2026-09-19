@@ -205,3 +205,102 @@ humano corrige a classificação, `divergiu` é marcado.
 
 O acúmulo de `divergiu = false` ao longo de semanas é o **único dado honesto**
 para decidir a Fase 2. Sem ele, liberar autonomia seria chute.
+
+---
+
+# Central de Comunicações — BLOCO 2 (operação)
+
+O BLOCO 1 entregou o caminho: recebe, triava, propõe, registra. **Nada disso era
+operável**: a tela existia como uma seção do Painel Admin com indicadores, a
+fila e uma conversa somente leitura. Catorze funções de backend — listar,
+classificar, atribuir, escalar, vincular, tarefas, Ouvidoria — não tinham como
+ser chamadas por ninguém.
+
+O BLOCO 2 é a mesa de operação: rota própria `/central`, admin-only.
+
+## 1. O que a tela mostra, e o que ela pode afirmar
+
+```
+/central
+ ├── Caixa de entrada   lista · conversa · ficha do contato (3 colunas)
+ ├── Fila de aprovação  pendentes + histórico de decisões + portão de saída
+ ├── Tarefas            vencidas · hoje · próximas · sem prazo · encerradas
+ └── Ouvidoria          sinais, recorrência, fusão e Voz do Cliente → Produto
+```
+
+**A regra que atravessa tudo: filtro é do BANCO, nunca da página.**
+
+Filtrar em memória o resultado de um `take(50)` devolve "as urgentes ENTRE as
+50 mais recentes". Quem lê entende "as urgentes", e a quinquagésima primeira
+fica sem resposta. Por isso:
+
+| Consulta | Como filtra |
+|---|---|
+| `communications.listarConversas` | `.filter()` na consulta + `.paginate()` |
+| `adminWorkItems.listar` | idem — `apenasVencidos` deixou de filtrar a página |
+| `customerVoice.listar` | idem, com severidade |
+
+O mesmo vale para o que a tela **escreve**: `descreverResultado`
+(`src/lib/central-inbox.ts`) diz "25 carregadas (há mais)" enquanto existir
+próxima página, e nunca "25 conversas".
+
+## 2. Busca
+
+Índice de busca nativo do Convex sobre `communicationConversations.buscaTexto`,
+com `vertical`, `status` e `channel` como campos de filtro.
+
+`buscaTexto` é **derivado** (assunto + nome do contato + handles, normalizados
+em `lib/central/busca.ts`) e é mantido em três pontos: no recebimento, quando a
+triagem reescreve o assunto, e por `repararIndiceDeBusca` — interna, idempotente
+e em lote — para as conversas anteriores ao campo. Perder esse campo tira a
+conversa da BUSCA, nunca da operação.
+
+Vincular contato busca por índice em três frentes: telefone normalizado
+(`by_whatsapp_e164`), e-mail (`by_email`) e nome (índices de busca em
+`landingLeads.name` e `users.name` — campos que já existiam, sem backfill).
+
+## 3. Campo ausente É o valor padrão
+
+`departamento` ausente significa "triagem"; `prioridade` ausente significa
+"normal". Filtrar por esses dois valores alcança também os documentos em que o
+campo não existe — senão a conversa recém-chegada, que é justamente a que está
+em triagem, seria a única a sumir do filtro "Triagem".
+
+## 4. Notas internas
+
+`adminContacts.notas`, com `notasAtualizadasEm` e `notasAtualizadasPorUserId`.
+Só admin lê e escreve. **Não** entram em proposta de resposta, **não** existem
+no payload do Escritório 3D e **não** saem da operação. Texto vazio apaga a
+nota e a autoria junto.
+
+## 5. Vínculo com desfazer
+
+`vincularContato` ganhou o par que faltava: `desvincularContato`, com
+`vinculoRemovidoEm` e `vinculoRemovidoPorUserId`. Um vínculo errado — telefone
+reaproveitado, homônimo, clique trocado — deixou de ser permanente. O contato
+não é apagado e as conversas não se movem; só o vínculo cai, e o tipo volta a
+"desconhecido" quando não sobra nenhum lado.
+
+## 6. O que NÃO mudou
+
+- **Envio externo continua desligado.** Nenhuma função nova toca o outbox, o
+  portão ou `ALTAR_CENTRAL_ENVIO_HABILITADO`. Aprovar registra a decisão e
+  termina em `aprovada` — nunca `executada`.
+- **Zero mensagem automática e zero chamada real ao canal.**
+- **`/office/central/painel` e `/office-snapshot` intactos**, payload congelado.
+  Os indicadores da tela leem a MESMA query (`communications.painel`) — três
+  telas, um número só.
+- **Nada do caminho do dinheiro.** `central.fronteiras.test.ts` passou a cobrir
+  também a tela: nenhum arquivo de `src/pages/app/central` pode citar
+  `api.asaas`, `subscriptionStatus`, `api.funil`, `api.events` ou o outbox.
+- **`leads` continua do outro lado da linha.** A busca de candidatos consulta
+  `landingLeads` e `users`; uma noiva com o mesmo nome no funil de uma
+  decoradora não aparece (verificado em `central.vinculo.test.ts`).
+
+## 7. Sessão autenticada nos testes
+
+`convex/test.auth.ts` substitui SÓ a tradução "sessão → usuário do Better Auth",
+que vive num componente que o convex-test não registra. `requireUser`,
+`requireAdmin` e o índice `by_better_auth_id` continuam sendo os de verdade — e
+cada arquivo de teste da Central verifica que uma decoradora (`role: "user"`) é
+barrada em tudo.

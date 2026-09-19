@@ -135,6 +135,13 @@ export const listarPendentes = query({
   },
 });
 
+/**
+ * HISTÓRICO DE DECISÕES — o que já foi aprovado, editado, recusado ou expirou.
+ *
+ * A fila mostra o que falta decidir; esta responde "o que eu decidi, e o que
+ * aconteceu depois". Traz o AUTOR pelo nome: uma decisão registrada só por id
+ * de usuário não é auditoria, é um enigma.
+ */
 export const listarPorStatus = query({
   args: { status: statusDeAprovacaoValidator, limite: v.optional(v.number()) },
   handler: async (ctx, args) => {
@@ -148,17 +155,29 @@ export const listarPorStatus = query({
       .order("desc")
       .take(Math.min(args.limite ?? 50, 200));
 
-    return itens.map((a) => ({
-      _id: a._id,
-      proposta: a.proposta,
-      textoAprovado: a.textoAprovado,
-      status: a.status,
-      decididoEm: a.decididoEm,
-      recusaMotivo: a.recusaMotivo,
-      execucaoErro: a.execucaoErro,
-      conversationId: a.conversationId,
-      criadoEm: a.criadoEm,
-    }));
+    return Promise.all(
+      itens.map(async (a) => {
+        const decisor = a.decididoPorUserId ? await ctx.db.get(a.decididoPorUserId) : null;
+        const conversa = a.conversationId ? await ctx.db.get(a.conversationId) : null;
+        const contato = conversa ? await ctx.db.get(conversa.contactId) : null;
+
+        return {
+          _id: a._id,
+          proposta: a.proposta,
+          textoAprovado: a.textoAprovado,
+          status: a.status,
+          decididoEm: a.decididoEm,
+          decididoPor: decisor?.name ?? null,
+          recusaMotivo: a.recusaMotivo,
+          execucaoErro: a.execucaoErro,
+          executadaEm: a.executadaEm,
+          conversationId: a.conversationId,
+          assunto: conversa?.assunto ?? null,
+          contatoNome: contato?.displayName ?? null,
+          criadoEm: a.criadoEm,
+        };
+      }),
+    );
   },
 });
 

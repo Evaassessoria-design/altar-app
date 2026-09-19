@@ -302,7 +302,11 @@ export default defineSchema({
     .index("by_better_auth_id", ["betterAuthId"])
     .index("by_email", ["email"])
     .index("by_asaas_customer", ["asaasCustomerId"])
-    .index("by_asaas_subscription", ["asaasSubscriptionId"]),
+    .index("by_asaas_subscription", ["asaasSubscriptionId"])
+    // Busca por nome na hora de vincular um contato da Central a um assinante.
+    // Índice de LEITURA sobre um campo que já existe: nenhum campo novo,
+    // nenhum backfill e nada do caminho de cobrança é tocado.
+    .searchIndex("search_name", { searchField: "name" }),
 
   // ── REGISTRO DOS AVISOS DO ASAAS ─────────────────────────────────────────
   //
@@ -731,7 +735,11 @@ export default defineSchema({
     whatsappE164: v.optional(v.string()),
   })
     .index("by_email", ["email"])
-    .index("by_whatsapp_e164", ["whatsappE164"]),
+    .index("by_whatsapp_e164", ["whatsappE164"])
+    // Vincular um contato da Central a um interessado exige achá-lo pelo NOME
+    // quando o telefone não casa (pessoa que escreveu de outro aparelho).
+    // Índice sobre um campo que já existe — sem backfill.
+    .searchIndex("search_nome", { searchField: "name" }),
 
   // ── CATÁLOGO CENTRAL DE FORNECEDORES ──────────────────────────────────────
   // "Este fornecedor pertence ao catálogo desta empresa."
@@ -1211,17 +1219,43 @@ export default defineSchema({
     vinculoOrigem: v.optional(v.union(v.literal("automatico"), v.literal("humano"))),
     vinculoPorUserId: v.optional(v.id("users")),
     vinculoEm: v.optional(v.number()),
+    /**
+     * Vínculo DESFEITO por um humano, com autor e data.
+     *
+     * Vincular sem poder desvincular é pior do que não vincular: o engano fica
+     * gravado para sempre e a conversa de uma pessoa aparece na ficha de
+     * outra. A remoção é registrada em vez de apagada — quem desfez e quando
+     * é exatamente o que se precisa saber depois.
+     */
+    vinculoRemovidoEm: v.optional(v.number()),
+    vinculoRemovidoPorUserId: v.optional(v.id("users")),
     /** Pediu para não ser mais contatado. Bloqueia proposta de resposta. */
     optOut: v.optional(v.boolean()),
     optOutEm: v.optional(v.number()),
+    /**
+     * NOTAS INTERNAS — memória administrativa sobre a pessoa.
+     *
+     * Só admin lê e escreve, e nunca sai da operação do SaaS: não vai para o
+     * Escritório 3D, não entra em proposta de resposta e não é visível a
+     * ninguém de fora do Painel. Por isso o autor e a data são gravados: uma
+     * anotação sem origem, meses depois, não se sabe se ainda vale.
+     */
     notas: v.optional(v.string()),
+    notasAtualizadasEm: v.optional(v.number()),
+    notasAtualizadasPorUserId: v.optional(v.id("users")),
     criadoEm: v.number(),
     atualizadoEm: v.number(),
   })
     .index("by_vertical", ["vertical"])
     .index("by_vertical_tipo", ["vertical", "tipo"])
     .index("by_landing_lead", ["landingLeadId"])
-    .index("by_user", ["userId"]),
+    .index("by_user", ["userId"])
+    // Busca por nome na hora de vincular um contato solto. `displayName` já
+    // existe em todo registro — nenhum campo novo, nenhum backfill.
+    .searchIndex("search_nome", {
+      searchField: "displayName",
+      filterFields: ["vertical", "tipo"],
+    }),
 
   // ── HANDLE EXTERNO → PESSOA ───────────────────────────────────────────────
   // É o que torna a Central multicanal de verdade: a mesma pessoa chega hoje
@@ -1273,6 +1307,19 @@ export default defineSchema({
      * AUSENTE = canal sem janela. É a quarta trava do portão de saída.
      */
     janelaRespostaAte: v.optional(v.number()),
+    /**
+     * Texto DERIVADO para a busca da caixa de entrada: assunto + nome do
+     * contato + handles do canal, normalizados (lib/central/busca.ts).
+     *
+     * Existe porque um índice de busca enxerga um campo de um documento, e a
+     * pergunta real ("quem é a Helena?", "de quem é este número?") atravessa
+     * três tabelas. Nunca é autoridade sobre nada: perder este campo tira a
+     * conversa da BUSCA, não da operação.
+     *
+     * AUSENTE = conversa anterior a este campo. `repararIndiceDeBusca`
+     * (interna, idempotente) preenche as antigas; as novas já nascem com ele.
+     */
+    buscaTexto: v.optional(v.string()),
     criadaEm: v.number(),
     atualizadaEm: v.number(),
   })
@@ -1281,7 +1328,14 @@ export default defineSchema({
     .index("by_vertical_ultimaMensagem", ["vertical", "ultimaMensagemEm"])
     .index("by_responsavel_status", ["responsavelUserId", "status"])
     .index("by_contact", ["contactId"])
-    .index("by_channel_thread", ["channel", "externalThreadId"]),
+    .index("by_channel_thread", ["channel", "externalThreadId"])
+    // `vertical` como filtro do índice de busca pelo mesmo motivo que é o
+    // primeiro componente de todo índice de listagem: o dia em que Decor e
+    // Buffet dividirem deployment, a busca já está particionada.
+    .searchIndex("search_busca", {
+      searchField: "buscaTexto",
+      filterFields: ["vertical", "status", "channel"],
+    }),
 
   // ── A MENSAGEM, JÁ NORMALIZADA ────────────────────────────────────────────
   // Formato único, independente do canal (lib/channels/tipos.ts). O payload

@@ -56,6 +56,7 @@ import type * as lib_attention from "../lib/attention.js";
 import type * as lib_authAccount from "../lib/authAccount.js";
 import type * as lib_cascade from "../lib/cascade.js";
 import type * as lib_central_autonomia from "../lib/central/autonomia.js";
+import type * as lib_central_busca from "../lib/central/busca.js";
 import type * as lib_central_prazos from "../lib/central/prazos.js";
 import type * as lib_central_telefone from "../lib/central/telefone.js";
 import type * as lib_central_triagem from "../lib/central/triagem.js";
@@ -158,6 +159,7 @@ declare const fullApi: ApiFromModules<{
   "lib/authAccount": typeof lib_authAccount;
   "lib/cascade": typeof lib_cascade;
   "lib/central/autonomia": typeof lib_central_autonomia;
+  "lib/central/busca": typeof lib_central_busca;
   "lib/central/prazos": typeof lib_central_prazos;
   "lib/central/telefone": typeof lib_central_telefone;
   "lib/central/triagem": typeof lib_central_triagem;

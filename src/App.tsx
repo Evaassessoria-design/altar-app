@@ -47,6 +47,7 @@ const ComprasPage = lazy(() => import("./pages/app/compras/page.tsx"));
 const FinanceiroPage = lazy(() => import("./pages/app/financeiro/page.tsx"));
 const FunilPage = lazy(() => import("./pages/app/funil/page.tsx"));
 const AdminPage = lazy(() => import("./pages/app/admin/page.tsx"));
+const CentralPage = lazy(() => import("./pages/app/central/page.tsx"));
 const PaywallPage = lazy(() => import("./pages/app/paywall/page.tsx"));
 const ResetPasswordPage = lazy(() => import("./pages/auth/ResetPassword.tsx"));
 
@@ -132,6 +133,7 @@ function AppRoutes() {
         <Route path="/financeiro" element={<FinanceiroPage />} />
         <Route path="/funil" element={<FunilPage />} />
         <Route path="/admin" element={<AdminPage />} />
+        <Route path="/central" element={<CentralPage />} />
         <Route path="/configuracoes" element={<ConfiguracoesPage />} />
       </Route>
 

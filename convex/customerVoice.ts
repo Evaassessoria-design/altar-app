@@ -1,5 +1,7 @@
 import { v, ConvexError } from "convex/values";
+import type { Expression, FilterBuilder, NamedTableInfo } from "convex/server";
 import { internalMutation, mutation, query } from "./_generated/server";
+import type { DataModel, Doc } from "./_generated/dataModel";
 import { requireAdmin } from "./lib/adminGuard";
 import { verticalDoAmbiente } from "./lib/central/vertical";
 import {
@@ -83,6 +85,7 @@ export const listar = query({
   args: {
     tipo: v.optional(tipoDeSinalValidator),
     status: v.optional(statusDeSinalValidator),
+    severidade: v.optional(severidadeValidator),
     limite: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -90,11 +93,25 @@ export const listar = query({
     const vertical = verticalDoAmbiente();
     const limite = Math.min(args.limite ?? 100, 300);
 
+    // Filtros que não couberam no índice escolhido entram na CONSULTA, nunca
+    // na página já carregada: "3 bugs críticos entre os 100 mais recentes" não
+    // é a resposta que a tela promete.
+    const refinar = (
+      q: FilterBuilder<NamedTableInfo<DataModel, "customerVoiceSignals">>,
+    ): Expression<boolean> => {
+      const condicoes: Expression<boolean>[] = [];
+      if (args.tipo) condicoes.push(q.eq(q.field("tipo"), args.tipo));
+      if (args.status) condicoes.push(q.eq(q.field("status"), args.status));
+      if (args.severidade) condicoes.push(q.eq(q.field("severidade"), args.severidade));
+      return condicoes.length === 0 ? q.eq(q.field("vertical"), vertical) : q.and(...condicoes);
+    };
+
     const sinais = args.tipo
       ? await ctx.db
           .query("customerVoiceSignals")
           .withIndex("by_vertical_tipo", (q) => q.eq("vertical", vertical).eq("tipo", args.tipo!))
           .order("desc")
+          .filter(refinar)
           .take(limite)
       : args.status
         ? await ctx.db
@@ -103,11 +120,13 @@ export const listar = query({
               q.eq("vertical", vertical).eq("status", args.status!),
             )
             .order("desc")
+            .filter(refinar)
             .take(limite)
         : await ctx.db
             .query("customerVoiceSignals")
             .withIndex("by_vertical_ocorrencias", (q) => q.eq("vertical", vertical))
             .order("desc")
+            .filter(refinar)
             .take(limite);
 
     return sinais.map((s) => ({
@@ -120,9 +139,93 @@ export const listar = query({
       ocorrencias: s.ocorrencias,
       ultimoRelatoEm: s.ultimoRelatoEm,
       conversationId: s.conversationId,
+      contactId: s.contactId,
       registradoPor: s.registradoPor,
       criadoEm: s.criadoEm,
     }));
+  },
+});
+
+/**
+ * REGISTRO HUMANO de um sinal — a Ouvidoria pela mão de quem atendeu.
+ *
+ * Até aqui só a IA registrava, e isso deixava de fora exatamente o caso mais
+ * valioso: a pessoa que LEU a conversa e entendeu que aquilo era um bug, não
+ * uma dúvida. Também cobre o sinal que nasce fora de conversa nenhuma —
+ * reunião, ligação, e-mail.
+ *
+ * Quando já existe um sinal DO MESMO TIPO para a mesma conversa, isto conta
+ * uma OCORRÊNCIA em vez de criar um segundo: a mesma pessoa relatando o mesmo
+ * problema duas vezes não são dois problemas. Fundir os de conversas
+ * diferentes continua sendo decisão humana explícita (`fundir`).
+ */
+export const registrar = mutation({
+  args: {
+    tipo: tipoDeSinalValidator,
+    titulo: v.string(),
+    descricao: v.string(),
+    severidade: v.optional(severidadeValidator),
+    conversationId: v.optional(v.id("communicationConversations")),
+    contactId: v.optional(v.id("adminContacts")),
+  },
+  handler: async (ctx, args) => {
+    const admin = await requireAdmin(ctx);
+
+    const titulo = args.titulo.trim();
+    if (!titulo) {
+      throw new ConvexError({ code: "INVALID", message: "O sinal precisa de um título" });
+    }
+
+    const agora = Date.now();
+    const vertical = verticalDoAmbiente();
+
+    let channel: Doc<"customerVoiceSignals">["channel"];
+    let contactId = args.contactId;
+
+    if (args.conversationId) {
+      const conversa = await ctx.db.get(args.conversationId);
+      if (!conversa) {
+        throw new ConvexError({ code: "NOT_FOUND", message: "Conversa não encontrada" });
+      }
+      channel = conversa.channel;
+      contactId = contactId ?? conversa.contactId;
+
+      const existentes = await ctx.db
+        .query("customerVoiceSignals")
+        .withIndex("by_conversation", (q) => q.eq("conversationId", args.conversationId))
+        .collect();
+      const mesmo = existentes.find((s) => s.tipo === args.tipo);
+      if (mesmo) {
+        await ctx.db.patch(mesmo._id, {
+          ocorrencias: mesmo.ocorrencias + 1,
+          ultimoRelatoEm: agora,
+          // A severidade informada por gente vale mais que a que a IA supôs.
+          severidade: args.severidade ?? mesmo.severidade,
+          atualizadoEm: agora,
+        });
+        return { signalId: mesmo._id, criado: false };
+      }
+    }
+
+    const signalId = await ctx.db.insert("customerVoiceSignals", {
+      vertical,
+      tipo: args.tipo,
+      titulo: titulo.slice(0, 160),
+      descricao: args.descricao.trim().slice(0, 4_000),
+      severidade: args.severidade,
+      status: "novo",
+      channel,
+      conversationId: args.conversationId,
+      contactId,
+      ocorrencias: 1,
+      ultimoRelatoEm: agora,
+      registradoPor: "humano",
+      registradoPorUserId: admin._id,
+      criadoEm: agora,
+      atualizadoEm: agora,
+    });
+
+    return { signalId, criado: true };
   },
 });
 

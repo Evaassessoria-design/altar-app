@@ -272,12 +272,27 @@ describe("expiração da fila", () => {
   });
 
   it("proposta recente continua pendente", async () => {
+    // BOMBA-RELÓGIO CORRIGIDA: este teste media um cenário com data FIXA
+    // (`AGORA`, 18/09/2026) contra o relógio REAL (`Date.now()`). Passou no dia
+    // em que foi escrito e passou a falhar às 12:00 UTC do dia seguinte, quando
+    // o TTL de 24h da aprovação venceu — a suíte inteira do repositório ficou
+    // vermelha sem que uma linha de produção mudasse.
+    //
+    // Cenário congelado se confere com o relógio DELE. O caso oposto — a
+    // proposta velha de verdade — está no teste acima, que monta as linhas
+    // relativas ao instante que usa para conferir.
     const t = convexTest(schema, modules);
-    const agora = Date.now();
     await montarCenario(t, { statusDaAprovacao: "pendente" });
 
-    const r = await t.mutation(internal.adminApprovals.expirarPendentes, { agora });
+    const r = await t.mutation(internal.adminApprovals.expirarPendentes, { agora: AGORA });
     expect(r.expiradas).toBe(0);
+
+    // E uma hora antes de vencer ainda é "recente": a fronteira é o TTL, não
+    // a coincidência de o teste rodar logo depois de montar o cenário.
+    const quaseVencendo = await t.mutation(internal.adminApprovals.expirarPendentes, {
+      agora: AGORA + 23 * 3_600_000,
+    });
+    expect(quaseVencendo.expiradas).toBe(0);
   });
 });
 

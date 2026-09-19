@@ -1,12 +1,27 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getOwnedEvent, requireEventOwner, requireIdentity, requireUser } from "./lib/identity";
+import { requireActiveAccess } from "./lib/accessGuard";
 
 // Generate upload URL for photo
+/**
+ * Autorização de upload de foto da galeria.
+ *
+ * Exige ACESSO ATIVO, e não apenas sessão. `lib/accessGuard.ts` sempre disse
+ * que a guarda vale para "criar evento novo, enviar arquivos e todas as ações
+ * de IA" — mas só o evento e a IA estavam cobertos. Como as funções do Convex
+ * são chamáveis direto do navegador, uma conta com trial vencido, cancelada ou
+ * bloqueada por inadimplência continuava conseguindo subir arquivo, e storage
+ * é cobrado.
+ *
+ * Isto NÃO tranca o acesso aos próprios dados: ler, editar e exportar o que já
+ * existe segue liberado para quem está bloqueado — inclusive a logo da empresa
+ * (`users.generateLogoUploadUrl`), que é o caminho de volta para pagar.
+ */
 export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
-    await requireIdentity(ctx);
+    await requireActiveAccess(ctx);
     return await ctx.storage.generateUploadUrl();
   },
 });

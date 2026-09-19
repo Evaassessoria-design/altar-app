@@ -220,7 +220,20 @@ export async function syncAuthenticatedUser(ctx: MutationCtx) {
       .query("users")
       .withIndex("by_email", (q) => q.eq("email", email))
       .first();
-    if (byEmail) {
+
+    // ── SÓ ADOTA UMA LINHA QUE NÃO TEM DONO ────────────────────────────────
+    // Vincular por e-mail existe para a MIGRAÇÃO: a linha antiga, criada antes
+    // do Better Auth, não tem `betterAuthId` e precisa reencontrar a dona sem
+    // perder eventos, financeiro e tudo o que pende de `userId`.
+    //
+    // Uma linha que JÁ está vinculada a outra conta de login não pode ser
+    // adotada por cima. A verificação de e-mail está desligada nesta fase
+    // (`convex/auth.ts`), então um e-mail digitado não prova nada — e sem esta
+    // condição, quem chegasse com o mesmo endereço herdaria a conta alheia.
+    //
+    // Mesma regra que `getOptionalUser` já aplicava na leitura; agora as duas
+    // não podem mais divergir.
+    if (byEmail && byEmail.betterAuthId === undefined) {
       await ctx.db.patch(byEmail._id, { betterAuthId });
       return byEmail._id;
     }

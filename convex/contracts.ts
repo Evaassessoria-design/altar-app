@@ -2,6 +2,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { getOwnedEvent, requireEventOwner, requireIdentity } from "./lib/identity";
+import { requireActiveAccess } from "./lib/accessGuard";
 
 const documentKind = v.union(
   v.literal("contract"),
@@ -14,10 +15,24 @@ const documentKind = v.union(
 // Documentos sem `kind` são contratos legados (dado anterior à multi-documento).
 const effectiveKind = (kind?: string) => kind ?? "contract";
 
+/**
+ * Autorização de upload de documento do evento.
+ *
+ * Exige ACESSO ATIVO, e não apenas sessão. `lib/accessGuard.ts` sempre disse
+ * que a guarda vale para "criar evento novo, enviar arquivos e todas as ações
+ * de IA" — mas só o evento e a IA estavam cobertos. Como as funções do Convex
+ * são chamáveis direto do navegador, uma conta com trial vencido, cancelada ou
+ * bloqueada por inadimplência continuava conseguindo subir arquivo, e storage
+ * é cobrado.
+ *
+ * Isto NÃO tranca o acesso aos próprios dados: ler, editar e exportar o que já
+ * existe segue liberado para quem está bloqueado — inclusive a logo da empresa
+ * (`users.generateLogoUploadUrl`), que é o caminho de volta para pagar.
+ */
 export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
-    await requireIdentity(ctx);
+    await requireActiveAccess(ctx);
     return ctx.storage.generateUploadUrl();
   },
 });

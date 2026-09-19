@@ -192,6 +192,131 @@ export const seed = internalMutation({
       });
     }
 
+    // ── Catálogo de materiais ────────────────────────────────────────────────
+    // Entra DEPOIS dos fornecedores porque alguns materiais apontam para um
+    // fornecedor preferencial — e o id só existe a partir daqui.
+    const materialIds = new Map<string, Id<"materials">>();
+    for (const m of d.materials) {
+      const materialId = await ctx.db.insert("materials", {
+        userId,
+        nome: m.nome,
+        searchName: normalizeName(m.nome),
+        unidade: m.unidade,
+        categoria: m.categoria,
+        tipo: m.tipo,
+        custoReferencia: m.custoReferencia,
+        margemPercentual: "margemPercentual" in m ? m.margemPercentual : undefined,
+        supplierId: "supplier" in m ? supplierIds.get(m.supplier as string) : undefined,
+        updatedAt: agora,
+      });
+      materialIds.set(m.nome, materialId);
+    }
+
+    /**
+     * Uma linha de receita, com o material do catálogo resolvido.
+     *
+     * A cópia de `unidade`, `tipo`, `categoria`, `custoReferencia` e
+     * `margemPercentual` NÃO é redundância: é o snapshot que o schema exige.
+     * A receita tem de continuar legível depois que o material for editado ou
+     * arquivado — senão um evento executado mudaria sozinho.
+     */
+    const linhaDaReceita = (componente: { material: string; quantidade: number }) => {
+      const material = d.materials.find((m) => m.nome === componente.material);
+      if (!material) {
+        throw new ConvexError({
+          code: "DEMO_RECEITA_INVALIDA",
+          message: `A receita cita "${componente.material}", que não está no catálogo do demo.`,
+        });
+      }
+      return {
+        materialId: materialIds.get(material.nome),
+        nome: material.nome,
+        unidade: material.unidade,
+        quantidade: componente.quantidade,
+        tipo: material.tipo,
+        categoria: material.categoria,
+        custoReferencia: material.custoReferencia,
+        margemPercentual: "margemPercentual" in material ? material.margemPercentual : undefined,
+      };
+    };
+
+    // ── Biblioteca de composições ────────────────────────────────────────────
+    const compositionIds = new Map<string, Id<"compositions">>();
+    for (const c of d.compositions) {
+      const compositionId = await ctx.db.insert("compositions", {
+        userId,
+        nome: c.nome,
+        searchName: normalizeName(c.nome),
+        categoria: c.categoria,
+        notes: c.notes,
+        receita: c.receita.map(linhaDaReceita),
+        updatedAt: agora,
+      });
+      compositionIds.set(c.nome, compositionId);
+    }
+
+    // ── Acervo ───────────────────────────────────────────────────────────────
+    const collectionIds = new Map<string, Id<"collectionItems">>();
+    for (const item of d.collection) {
+      const collectionItemId = await ctx.db.insert("collectionItems", {
+        userId,
+        nome: item.nome,
+        searchName: normalizeName(item.nome),
+        unidade: item.unidade,
+        quantidadeTotal: item.quantidadeTotal,
+        categoria: item.categoria,
+        materialId: "material" in item ? materialIds.get(item.material as string) : undefined,
+        notes: "notes" in item ? (item.notes as string) : undefined,
+        updatedAt: agora,
+      });
+      collectionIds.set(item.nome, collectionItemId);
+    }
+
+    /** O item de acervo referido pelo nome — erra alto em vez de gravar torto. */
+    const acervoPorNome = (nome: string): Id<"collectionItems"> => {
+      const id = collectionIds.get(nome);
+      if (!id) {
+        throw new ConvexError({
+          code: "DEMO_ACERVO_INVALIDO",
+          message: `"${nome}" não está no acervo do demo.`,
+        });
+      }
+      return id;
+    };
+
+    for (const r of d.reservations) {
+      await ctx.db.insert("collectionReservations", {
+        userId,
+        collectionItemId: acervoPorNome(r.item),
+        eventId,
+        quantidade: r.quantidade,
+        inicio: d.reservationWindow.inicio,
+        fim: d.reservationWindow.fim,
+        origem: r.origem,
+        materialId:
+          r.origem === "ficha" ? materialIds.get(r.item) : undefined,
+        necessidadeTecnica: "necessidadeTecnica" in r ? r.necessidadeTecnica : undefined,
+        notes: "notes" in r ? (r.notes as string) : undefined,
+        updatedAt: agora,
+      });
+    }
+
+    // Histórico: a data é o `_creationTime` do Convex, carimbo do servidor. Por
+    // isso os ajustes aparecem com a data em que o seed rodou, e não uma data
+    // inventada — o acervo não afirma um passado que não existiu.
+    for (const a of d.adjustments) {
+      await ctx.db.insert("collectionAdjustments", {
+        userId,
+        collectionItemId: acervoPorNome(a.item),
+        tipo: a.tipo,
+        delta: a.delta,
+        quantidadeAntes: a.quantidadeAntes,
+        quantidadeDepois: a.quantidadeDepois,
+        motivo: a.motivo,
+        eventId: a.doEvento ? eventId : undefined,
+      });
+    }
+
     // ── Equipe e escala ──────────────────────────────────────────────────────
     for (const p of d.team) {
       const teamMemberId = await ctx.db.insert("teamMembers", {
@@ -236,6 +361,11 @@ export const seed = internalMutation({
         supplier: c.supplier,
         unitPrice: c.unitPrice,
         isPurchased: c.isPurchased,
+        notes: "notes" in c ? (c.notes as string) : undefined,
+        // O vínculo com a Ficha Técnica. Só nas compras que de fato nasceram de
+        // uma necessidade consolidada — é ele que torna gerar de novo idempotente.
+        materialId: "material" in c ? materialIds.get(c.material as string) : undefined,
+        necessidadeTecnica: "necessidadeTecnica" in c ? c.necessidadeTecnica : undefined,
         order: i,
       });
     }
@@ -268,6 +398,18 @@ export const seed = internalMutation({
       });
     }
 
+    /** A receita mestre, copiada. Ver o comentário no laço abaixo. */
+    const composicaoDe = (nome: string) => {
+      const composicao = d.compositions.find((c) => c.nome === nome);
+      if (!composicao) {
+        throw new ConvexError({
+          code: "DEMO_COMPOSICAO_INVALIDA",
+          message: `O item de montagem cita a composição "${nome}", que não existe no demo.`,
+        });
+      }
+      return composicao.receita.map(linhaDaReceita);
+    };
+
     // ── Carregamento / Caderno de Montagem ───────────────────────────────────
     // Campos de foto ficam VAZIOS de propósito: você sobe as imagens depois,
     // pela própria interface.
@@ -287,6 +429,12 @@ export const seed = internalMutation({
         includeInAssemblyReport: true,
         checkOnAssembly: a.checkOnAssembly,
         visibility: a.visibility,
+        // SNAPSHOT, não referência: a receita é COPIADA da biblioteca.
+        // `compositionId` é só procedência ("veio do Arco de oliveiras") —
+        // nenhuma leitura busca a receita por ele, senão deixaria de ser
+        // snapshot e editar a biblioteca recalcularia o evento em silêncio.
+        receita: "composicao" in a ? composicaoDe(a.composicao as string) : undefined,
+        compositionId: "composicao" in a ? compositionIds.get(a.composicao as string) : undefined,
         createdAt: agora,
         updatedAt: agora,
       });
@@ -315,6 +463,11 @@ export const seed = internalMutation({
       eventId,
       resumo: {
         fornecedores: d.suppliers.length,
+        materiais: d.materials.length,
+        composicoes: d.compositions.length,
+        acervo: d.collection.length,
+        reservas: d.reservations.length,
+        ajustesDeAcervo: d.adjustments.length,
         equipe: d.team.length,
         checklist: d.checklist.length,
         compras: d.purchases.length,

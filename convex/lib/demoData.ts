@@ -81,7 +81,7 @@ export const DEMO_WEDDING = {
     bouquetStyle: "Buquê cascata desestruturado",
     boutonniere: "Ramo de oliveira com botão de rosa branca",
     flowerSupplier: "Flores de Aurora",
-    flowerBudget: "R$ 24.000",
+    flowerBudget: "R$ 34.000",
 
     // Bolo e doces
     cakeSupplier: "Doces da Vila",
@@ -103,6 +103,95 @@ export const DEMO_WEDDING = {
       "Primeira dança logo após o jantar. Surpresa: coral entra durante a valsa.",
     specialRequests: "Cantinho para os avós, longe da caixa de som",
   },
+
+  // ── CATÁLOGO DE MATERIAIS ────────────────────────────────────────────────
+  // O vocabulário técnico da empresa: do que as peças são feitas. É o que faz
+  // a Ficha Técnica sair do papel — sem catálogo, "arranjo baixo" é só um nome.
+  //
+  // `tipo` responde UMA pergunta: o que acontece com isto depois do evento?
+  // É ele que decide se a necessidade vira COMPRA (consumível, compra para o
+  // evento) ou RESERVA DE ACERVO (acervo próprio, locação). Ver lib/materiais.ts.
+  //
+  // `margemPercentual` é a folga que a decoradora já fazia de cabeça: flor
+  // quebra no transporte, fita sobra no recorte. Só nos materiais que de fato
+  // se perdem — reservar 10% a mais de sousplat não faz sentido nenhum.
+  materials: [
+    { nome: "Rosa branca importada", unidade: "haste" as const, tipo: "consumivel" as const, categoria: "Flores", custoReferencia: 6.9, margemPercentual: 10, supplier: "Flores de Aurora" },
+    { nome: "Lisianthus branco", unidade: "haste" as const, tipo: "consumivel" as const, categoria: "Flores", custoReferencia: 5.4, margemPercentual: 10, supplier: "Flores de Aurora" },
+    { nome: "Astromélia creme", unidade: "haste" as const, tipo: "consumivel" as const, categoria: "Flores", custoReferencia: 3.8, margemPercentual: 10, supplier: "Flores de Aurora" },
+    { nome: "Eucalipto cinerea", unidade: "maco" as const, tipo: "consumivel" as const, categoria: "Folhagens", custoReferencia: 18, margemPercentual: 8, supplier: "Flores de Aurora" },
+    { nome: "Ramo de oliveira", unidade: "maco" as const, tipo: "consumivel" as const, categoria: "Folhagens", custoReferencia: 22, margemPercentual: 8, supplier: "Flores de Aurora" },
+    { nome: "Espuma floral", unidade: "un" as const, tipo: "consumivel" as const, categoria: "Insumos florais", custoReferencia: 7.5, margemPercentual: 10 },
+    { nome: "Vela pilar 20cm", unidade: "un" as const, tipo: "consumivel" as const, categoria: "Decoração", custoReferencia: 12.9, margemPercentual: 5 },
+    { nome: "Fita de cetim dourada", unidade: "m" as const, tipo: "consumivel" as const, categoria: "Papelaria", custoReferencia: 3.5, margemPercentual: 10 },
+    { nome: "Anel de guardanapo folha", unidade: "un" as const, tipo: "compra_especifica" as const, categoria: "Mesa posta", custoReferencia: 8.4 },
+    // Acervo próprio: NÃO entra na lista de compras por padrão — ela já os tem.
+    { nome: "Vaso de vidro âmbar 18cm", unidade: "un" as const, tipo: "reutilizavel" as const, categoria: "Vidro", custoReferencia: 26 },
+    { nome: "Castiçal de vidro 25cm", unidade: "un" as const, tipo: "reutilizavel" as const, categoria: "Vidro", custoReferencia: 34 },
+    { nome: "Sousplat dourado", unidade: "un" as const, tipo: "reutilizavel" as const, categoria: "Mesa posta", custoReferencia: 18 },
+    { nome: "Guardanapo de linho verde-oliva", unidade: "un" as const, tipo: "reutilizavel" as const, categoria: "Têxtil", custoReferencia: 14 },
+    // Locação: volta para o fornecedor, não para o galpão.
+    { nome: "Estrutura curva de ferro 2,4m", unidade: "un" as const, tipo: "locacao" as const, categoria: "Estruturas", custoReferencia: 480, supplier: "Mobiliário Casa Rara" },
+  ],
+
+  // ── BIBLIOTECA DE COMPOSIÇÕES ────────────────────────────────────────────
+  // As receitas que a decoradora reaproveita de evento em evento. Aplicá-las
+  // num evento COPIA a receita para o item de montagem (snapshot): mudar a
+  // receita mestre amanhã não pode recalcular, em silêncio, um evento que já
+  // foi executado.
+  //
+  // `material` casa por NOME com o catálogo acima — o seed resolve o id.
+  compositions: [
+    {
+      nome: "Centro de mesa — eucalipto e velas",
+      categoria: "Arranjos",
+      notes: "Vaso âmbar baixo, para não bloquear a conversa na mesa redonda.",
+      receita: [
+        { material: "Rosa branca importada", quantidade: 5 },
+        { material: "Eucalipto cinerea", quantidade: 0.5 },
+        { material: "Vela pilar 20cm", quantidade: 5 },
+        { material: "Vaso de vidro âmbar 18cm", quantidade: 1 },
+        { material: "Espuma floral", quantidade: 1 },
+        { material: "Fita de cetim dourada", quantidade: 1 },
+      ],
+    },
+    {
+      nome: "Arranjo baixo do corredor",
+      categoria: "Arranjos",
+      notes: "A cada duas fileiras de cadeiras, dos dois lados do tapete.",
+      receita: [
+        { material: "Rosa branca importada", quantidade: 3 },
+        { material: "Astromélia creme", quantidade: 4 },
+        { material: "Ramo de oliveira", quantidade: 0.25 },
+        { material: "Vela pilar 20cm", quantidade: 2 },
+        { material: "Vaso de vidro âmbar 18cm", quantidade: 1 },
+        { material: "Espuma floral", quantidade: 1 },
+        { material: "Fita de cetim dourada", quantidade: 0.5 },
+      ],
+    },
+    {
+      nome: "Arco de oliveiras",
+      categoria: "Estruturas",
+      notes: "Assimétrico: volume no canto superior esquerdo e pé à direita.",
+      receita: [
+        { material: "Estrutura curva de ferro 2,4m", quantidade: 1 },
+        { material: "Ramo de oliveira", quantidade: 24 },
+        { material: "Rosa branca importada", quantidade: 60 },
+        { material: "Lisianthus branco", quantidade: 40 },
+        { material: "Fita de cetim dourada", quantidade: 12 },
+      ],
+    },
+    {
+      nome: "Mesa posta — linho e dourado",
+      categoria: "Mesa posta",
+      notes: "Receita POR COUVERT. Multiplicada pelo número de convidados.",
+      receita: [
+        { material: "Sousplat dourado", quantidade: 1 },
+        { material: "Guardanapo de linho verde-oliva", quantidade: 1 },
+        { material: "Anel de guardanapo folha", quantidade: 1 },
+      ],
+    },
+  ],
 
   // ── Fornecedores — deliberadamente em estágios diferentes ─────────────────
   suppliers: [
@@ -144,7 +233,7 @@ export const DEMO_WEDDING = {
       city: "São Roque",
       state: "SP",
       differentials: "Cultivo próprio de oliveiras e eucalipto",
-      commercialInfo: "R$ 24.000 fechado · 50% na reserva",
+      commercialInfo: "R$ 34.000 fechado · 50% na reserva",
       status: "confirmado" as const,
       nextAction: "Definir data da prévia do arranjo",
       alignments: [
@@ -265,14 +354,26 @@ export const DEMO_WEDDING = {
   ],
 
   // ── Compras — parcialmente concluídas ────────────────────────────────────
+  // As compras com `material` nasceram da Ficha Técnica: `necessidadeTecnica` é
+  // o carimbo da necessidade consolidada NO MOMENTO da geração, e é ele que
+  // permite a tela dizer "a ficha mudou desde então" sem reescrever nada.
+  // Note que necessidade ≠ compra, de propósito: a ficha pede 114 velas, a
+  // sugestão com margem dá 120, e foi 120 que ela comprou.
   purchases: [
-    { name: "Velas pilar 20cm", category: "Decoração", quantity: 120, unit: "un", supplier: "Casa das Velas", unitPrice: 12.9, isPurchased: true },
-    { name: "Fita de cetim dourada", category: "Papelaria", quantity: 40, unit: "m", supplier: "Armarinho Central", unitPrice: 3.5, isPurchased: true },
-    { name: "Anéis de guardanapo folha", category: "Mesa posta", quantity: 180, unit: "un", supplier: "Ateliê Folha", unitPrice: 8.4, isPurchased: false },
-    { name: "Guardanapos de linho", category: "Têxtil", quantity: 180, unit: "un", supplier: "Linhos do Vale", unitPrice: 14.0, isPurchased: false },
+    { name: "Vela pilar 20cm", category: "Decoração", quantity: 120, unit: "un", supplier: "Casa das Velas", unitPrice: 12.9, isPurchased: true, material: "Vela pilar 20cm", necessidadeTecnica: 114 },
+    { name: "Fita de cetim dourada", category: "Papelaria", quantity: 40, unit: "m", supplier: "Armarinho Central", unitPrice: 3.5, isPurchased: true, material: "Fita de cetim dourada", necessidadeTecnica: 36 },
+    { name: "Anel de guardanapo folha", category: "Mesa posta", quantity: 180, unit: "un", supplier: "Ateliê Folha", unitPrice: 8.4, isPurchased: false, material: "Anel de guardanapo folha", necessidadeTecnica: 180 },
+    { name: "Guardanapo de linho verde-oliva", category: "Têxtil", quantity: 30, unit: "un", supplier: "Linhos do Vale", unitPrice: 14.0, isPurchased: false,
+      // 30, não 180: o acervo tem 150 e a mesa posta precisa de 180. A compra
+      // fecha exatamente o buraco que a reserva de acervo deixou visível.
+      material: "Guardanapo de linho verde-oliva", necessidadeTecnica: 180 },
     { name: "Placas de identificação de mesa", category: "Papelaria", quantity: 18, unit: "un", supplier: "Ateliê Folha", unitPrice: 22.0, isPurchased: true },
     { name: "Almofadas verdes do lounge", category: "Têxtil", quantity: 24, unit: "un", supplier: "Linhos do Vale", unitPrice: 48.0, isPurchased: false },
-    { name: "Vasos de vidro âmbar", category: "Decoração", quantity: 60, unit: "un", supplier: "Casa das Velas", unitPrice: 26.0, isPurchased: true },
+    { name: "Vasos de vidro âmbar", category: "Decoração", quantity: 60, unit: "un", supplier: "Casa das Velas", unitPrice: 26.0, isPurchased: true,
+      // Sem vínculo com a ficha DE PROPÓSITO: foi compra de ACERVO, não
+      // necessidade deste evento. Entraram no galpão (ver `adjustments`) e
+      // de lá 30 foram reservados para o casamento.
+      notes: "Reposição de acervo — entraram no galpão em setembro." },
   ],
 
   // ── Orçamento do evento ──────────────────────────────────────────────────
@@ -306,7 +407,7 @@ export const DEMO_WEDDING = {
     { type: "income" as const, category: "Saldo", description: "3ª parcela", amount: 43_500, date: "2026-09-10", isPaid: true },
     { type: "income" as const, category: "Saldo", description: "Parcela final", amount: 43_500, date: "2026-10-05", isPaid: false },
     { type: "expense" as const, category: "Flores", description: "Flores de Aurora — 50% do pedido", amount: 17_000, date: "2026-08-05", isPaid: true },
-    { type: "expense" as const, category: "Móveis", description: "Mobiliário Bela Casa — locação", amount: 21_400, date: "2026-08-18", isPaid: true },
+    { type: "expense" as const, category: "Móveis", description: "Mobiliário Casa Rara — locação", amount: 21_400, date: "2026-08-18", isPaid: true },
     { type: "expense" as const, category: "Materiais", description: "Estrutura do arco e painéis", amount: 12_800, date: "2026-08-22", isPaid: true },
     { type: "expense" as const, category: "Tecidos", description: "Toalhas, trilhos e guardanapos", amount: 9_600, date: "2026-09-02", isPaid: true },
     { type: "expense" as const, category: "Transporte", description: "Frete da montagem (ida e volta)", amount: 3_800, date: "2026-09-12", isPaid: true },
@@ -318,18 +419,61 @@ export const DEMO_WEDDING = {
   // ── Carregamento / Caderno de Montagem ───────────────────────────────────
   // `area` casa com as chaves de BRIEFING_AREAS (src/lib/briefing-areas.ts).
   assembly: [
-    { area: "ceremony", name: "Arco de oliveiras", model: "Estrutura curva 2,4m", quantity: 1, unit: "un", supplierName: "Flores de Aurora", ambiente: "Jardim das oliveiras", notes: "Montar até as 13h — foto dos noivos às 15h", checkOnAssembly: true, visibility: "equipe" as const },
+    { area: "ceremony", name: "Arco de oliveiras", model: "Estrutura curva 2,4m", quantity: 1, unit: "un", supplierName: "Flores de Aurora", ambiente: "Jardim das oliveiras", notes: "Montar até as 13h — foto dos noivos às 15h", checkOnAssembly: true, visibility: "equipe" as const, composicao: "Arco de oliveiras" },
     { area: "ceremony", name: "Tapete de linho cru", quantity: 1, unit: "un", supplierName: "Mobiliário Casa Rara", ambiente: "Jardim das oliveiras", checkOnAssembly: true, visibility: "equipe" as const },
-    { area: "ceremony", name: "Arranjos baixos do corredor", quantity: 12, unit: "un", supplierName: "Flores de Aurora", ambiente: "Jardim das oliveiras", checkOnAssembly: true, visibility: "cliente" as const },
+    { area: "ceremony", name: "Arranjos baixos do corredor", quantity: 12, unit: "un", supplierName: "Flores de Aurora", ambiente: "Jardim das oliveiras", checkOnAssembly: true, visibility: "cliente" as const, composicao: "Arranjo baixo do corredor" },
     { area: "party", name: "Mesa redonda 1,80m", model: "Madeira maciça", quantity: 18, unit: "un", supplierName: "Mobiliário Casa Rara", ambiente: "Salão de vidro", checkOnAssembly: true, visibility: "equipe" as const },
     { area: "party", name: "Cadeira Tiffany dourada", model: "Assento de linho", quantity: 180, unit: "un", supplierName: "Mobiliário Casa Rara", ambiente: "Salão de vidro", notes: "Conferir 6 reservas", checkOnAssembly: true, visibility: "equipe" as const },
-    { area: "party", name: "Centro de mesa — eucalipto e velas", quantity: 18, unit: "un", supplierName: "Flores de Aurora", ambiente: "Salão de vidro", checkOnAssembly: true, visibility: "cliente" as const },
+    { area: "party", name: "Centro de mesa — eucalipto e velas", quantity: 18, unit: "un", supplierName: "Flores de Aurora", ambiente: "Salão de vidro", checkOnAssembly: true, visibility: "cliente" as const, composicao: "Centro de mesa — eucalipto e velas" },
     { area: "furniture", name: "Sofá de vime do lounge", quantity: 4, unit: "un", supplierName: "Mobiliário Casa Rara", ambiente: "Lounge do jardim", checkOnAssembly: true, visibility: "equipe" as const },
     { area: "furniture", name: "Tapete natural do lounge", quantity: 2, unit: "un", supplierName: "Mobiliário Casa Rara", ambiente: "Lounge do jardim", checkOnAssembly: false, visibility: "equipe" as const },
     { area: "furniture", name: "Aparador do livro de assinaturas", model: "Madeira antiga", quantity: 1, unit: "un", supplierName: "Mobiliário Casa Rara", ambiente: "Entrada", checkOnAssembly: true, visibility: "cliente" as const },
     { area: "lighting", name: "Varal de luz cruzado", quantity: 120, unit: "m", supplierName: "Som & Luz Meridiano", ambiente: "Salão de vidro", notes: "Depende do fechamento da proposta", checkOnAssembly: false, visibility: "interno" as const },
     { area: "lighting", name: "Spots âmbar do jardim", quantity: 24, unit: "un", supplierName: "Som & Luz Meridiano", ambiente: "Jardim das oliveiras", checkOnAssembly: false, visibility: "interno" as const },
+    // Receita POR COUVERT: quantidade 180 é o número de convidados, e é o
+    // que transforma "1 sousplat" em "180 sousplats" no consolidado.
+    { area: "party", name: "Mesa posta — linho, sousplat e guardanapo", quantity: 180, unit: "un", ambiente: "Salão de vidro", checkOnAssembly: true, visibility: "equipe" as const, composicao: "Mesa posta — linho e dourado" },
     { area: "cake", name: "Mesa do bolo — vidro e madeira", quantity: 1, unit: "un", supplierName: "Doces da Vila", ambiente: "Salão de vidro", checkOnAssembly: true, visibility: "cliente" as const },
+  ],
+
+  // ── ACERVO — O QUE A EMPRESA POSSUI ──────────────────────────────────────
+  // Contagem por QUANTIDADE, nunca por peça numerada. `quantidadeTotal` é o
+  // único número cadastrado: reservado, disponível e "falta voltar" são todos
+  // derivados (lib/acervo.ts).
+  //
+  // Os números são escolhidos para a demonstração mostrar o produto fazendo o
+  // trabalho, e não uma vitrine onde tudo fecha: há 150 guardanapos e a mesa
+  // posta precisa de 180. O déficit de 30 aparece sozinho na reserva — e é
+  // exatamente a compra de 30 que está na lista.
+  collection: [
+    { nome: "Vaso de vidro âmbar 18cm", unidade: "un" as const, quantidadeTotal: 58, categoria: "Vidro", material: "Vaso de vidro âmbar 18cm" },
+    { nome: "Castiçal de vidro 25cm", unidade: "un" as const, quantidadeTotal: 36, categoria: "Vidro", material: "Castiçal de vidro 25cm" },
+    { nome: "Sousplat dourado", unidade: "un" as const, quantidadeTotal: 200, categoria: "Mesa posta", material: "Sousplat dourado" },
+    { nome: "Guardanapo de linho verde-oliva", unidade: "un" as const, quantidadeTotal: 150, categoria: "Têxtil", material: "Guardanapo de linho verde-oliva", notes: "Lavagem especializada — 5 dias entre eventos." },
+    { nome: "Tapete natural 2x3m", unidade: "un" as const, quantidadeTotal: 6, categoria: "Têxtil" },
+  ],
+
+  // ── Reservas do acervo para este casamento ───────────────────────────────
+  // Janela operacional inclusiva: sai na véspera, volta no dia seguinte.
+  // Nada saiu ainda (`saiu`/`voltou` ausentes) porque o evento está no futuro —
+  // inventar uma saída seria descrever uma operação que não aconteceu.
+  reservations: [
+    { item: "Vaso de vidro âmbar 18cm", quantidade: 30, origem: "ficha" as const, necessidadeTecnica: 30 },
+    { item: "Sousplat dourado", quantidade: 180, origem: "ficha" as const, necessidadeTecnica: 180 },
+    { item: "Guardanapo de linho verde-oliva", quantidade: 180, origem: "ficha" as const, necessidadeTecnica: 180, notes: "Faltam 30 — compra aberta com Linhos do Vale." },
+    { item: "Castiçal de vidro 25cm", quantidade: 24, origem: "manual" as const, notes: "Pedido da noiva depois do briefing: castiçais no lounge." },
+    { item: "Tapete natural 2x3m", quantidade: 2, origem: "manual" as const },
+  ],
+
+  /** Janela da reserva — véspera da montagem até o dia seguinte à desmontagem. */
+  reservationWindow: { inicio: "2026-10-09", fim: "2026-10-11" },
+
+  // ── Histórico do acervo ──────────────────────────────────────────────────
+  // AUDITORIA, não fonte de verdade: explica como o estoque chegou onde está.
+  // Aplicados em ordem, fecham em `quantidadeTotal` — 0 → 60 → 58.
+  adjustments: [
+    { item: "Vaso de vidro âmbar 18cm", tipo: "entrada" as const, delta: 60, quantidadeAntes: 0, quantidadeDepois: 60, motivo: "Compra para o casamento Marina & Gabriel", doEvento: true },
+    { item: "Vaso de vidro âmbar 18cm", tipo: "quebra" as const, delta: -2, quantidadeAntes: 60, quantidadeDepois: 58, motivo: "Duas peças trincadas na conferência de recebimento", doEvento: true },
   ],
 
   // ── Funil — o casal já convertido, mais volume nas outras colunas ────────

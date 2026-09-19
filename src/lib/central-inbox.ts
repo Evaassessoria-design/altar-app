@@ -232,6 +232,28 @@ export function rotuloDaJanela(
   return { texto: `Janela fecha em ${minutos} min`, encerrada: false };
 }
 
+// ─── Datas de prazo ──────────────────────────────────────────────────────────
+
+/**
+ * "AAAA-MM-DD" como se lê em português: "10/09/2026".
+ *
+ * O prazo é gravado em DIA CIVIL, texto, justamente para não passar por fuso
+ * nenhum (lib/central/prazos.ts). Então a conversão aqui é TEXTUAL também —
+ * criar um `Date` para formatar reintroduziria o fuso que o campo existe para
+ * evitar, e a tarefa que vence dia 10 apareceria como dia 9 para quem está a
+ * oeste de Greenwich.
+ *
+ * Valor fora do formato volta como veio: inventar uma data seria pior do que
+ * mostrar o texto cru.
+ */
+export function formatarDiaCivil(dia: string | undefined | null): string {
+  if (!dia) return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dia.trim());
+  if (!m) return dia;
+  const [, ano, mes, diaDoMes] = m;
+  return `${diaDoMes}/${mes}/${ano}`;
+}
+
 // ─── Tarefas ─────────────────────────────────────────────────────────────────
 
 export type TarefaAgrupavel = {

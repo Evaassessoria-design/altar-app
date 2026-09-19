@@ -76,7 +76,7 @@ export function EstadoDoEnvio({ painel }: { painel: Painel }) {
 export function Indicadores({ painel }: { painel: Painel }) {
   if (painel === undefined) {
     return (
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
         {Array.from({ length: 5 }).map((_, i) => (
           <Skeleton key={i} className="h-16 w-full" />
         ))}
@@ -94,7 +94,10 @@ export function Indicadores({ painel }: { painel: Painel }) {
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      {/* Cinco cartões só cabem lado a lado em tela larga. Em tablet, `md`
+          espremia "Novos contatos 24h" em três linhas e desalinhava a fileira
+          inteira. */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
         {cartoes.map(({ rotulo, valor, icone: Icone }) => (
           <div key={rotulo} className="rounded-lg border border-border bg-card px-3 py-2">
             <p className="text-xs text-muted-foreground flex items-center gap-1.5">

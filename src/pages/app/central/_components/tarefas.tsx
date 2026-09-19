@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { AlertTriangle, CalendarClock, Check, Plus, X } from "lucide-react";
 import {
   agruparTarefas,
+  formatarDiaCivil,
   OPCOES_DE_STATUS_DE_TRABALHO,
   OPCOES_DE_TIPO_DE_TRABALHO,
   ROTULO_DO_STATUS_DE_TRABALHO,
@@ -291,7 +292,7 @@ function ItemDaTarefa({
           <p className="text-xs text-muted-foreground">
             {ROTULO_DO_TIPO_DE_TRABALHO[tarefa.tipo as TipoDeTrabalho] ?? tarefa.tipo} ·{" "}
             {ROTULO_DO_STATUS_DE_TRABALHO[tarefa.status as StatusDeTrabalho]}
-            {tarefa.venceEm ? ` · vence ${tarefa.venceEm}` : " · sem prazo"}
+            {tarefa.venceEm ? ` · vence ${formatarDiaCivil(tarefa.venceEm)}` : " · sem prazo"}
             {tarefa.criadoPor === "ia" ? " · sugerida pela IA" : ""}
           </p>
         </div>

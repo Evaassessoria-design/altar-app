@@ -21,6 +21,7 @@ import { BadgeCheck, Link2, Link2Off, ListTodo, Megaphone, NotebookPen } from "l
 import { formatTimestampComHora } from "@/lib/safe-date.ts";
 import { estadoDoVinculo } from "@/lib/central-vinculo.ts";
 import {
+  formatarDiaCivil,
   OPCOES_DE_SEVERIDADE,
   OPCOES_DE_TIPO_DE_SINAL,
   OPCOES_DE_TIPO_DE_TRABALHO,
@@ -358,7 +359,7 @@ function TarefasDaConversa({
                 {" "}
                 · {ROTULO_DO_TIPO_DE_TRABALHO[t.tipo as TipoDeTrabalho] ?? t.tipo} ·{" "}
                 {ROTULO_DO_STATUS_DE_TRABALHO[t.status as StatusDeTrabalho] ?? t.status}
-                {t.venceEm ? ` · vence ${t.venceEm}` : ""}
+                {t.venceEm ? ` · vence ${formatarDiaCivil(t.venceEm)}` : ""}
               </span>
             </li>
           ))}

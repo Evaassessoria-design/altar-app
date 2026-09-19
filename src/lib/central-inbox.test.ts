@@ -5,6 +5,7 @@ import {
   contarFiltrosAtivos,
   descreverResultado,
   emOrdemCronologica,
+  formatarDiaCivil,
   OPCOES_DE_CANAL,
   OPCOES_DE_STATUS,
   ROTULO_DO_CANAL,
@@ -182,5 +183,29 @@ describe("rótulos", () => {
     for (const opcao of OPCOES_DE_CANAL) {
       expect(ROTULO_DO_CANAL[opcao.valor]).toBeTruthy();
     }
+  });
+});
+
+describe("prazo em português", () => {
+  it("AAAA-MM-DD vira DD/MM/AAAA", () => {
+    expect(formatarDiaCivil("2026-09-10")).toBe("10/09/2026");
+    expect(formatarDiaCivil("2026-12-31")).toBe("31/12/2026");
+  });
+
+  it("converte por TEXTO — sem Date, sem fuso", () => {
+    // Um `new Date("2026-01-01")` em UTC vira 31/12 para quem está a oeste de
+    // Greenwich. A tarefa que vence dia 1º apareceria como vencida no dia 31.
+    expect(formatarDiaCivil("2026-01-01")).toBe("01/01/2026");
+  });
+
+  it("ausente não vira data nenhuma", () => {
+    expect(formatarDiaCivil(undefined)).toBe("");
+    expect(formatarDiaCivil(null)).toBe("");
+    expect(formatarDiaCivil("")).toBe("");
+  });
+
+  it("valor fora do formato volta como veio, em vez de virar invenção", () => {
+    expect(formatarDiaCivil("amanhã")).toBe("amanhã");
+    expect(formatarDiaCivil("10/09/2026")).toBe("10/09/2026");
   });
 });

@@ -52,7 +52,7 @@ import {
 const MENSAGENS_POR_PAGINA = 50;
 
 const CLASSE_DO_SELECT =
-  "h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring";
+  "h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring";
 
 function erroLegivel(erro: unknown): string {
   if (erro instanceof ConvexError) {
@@ -280,7 +280,11 @@ function AcoesDaConversa({
 
   return (
     <div className="px-4 py-3 border-b border-border bg-muted/30">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+      {/* Duas colunas, e não quatro: com quatro `select` lado a lado o rótulo
+          selecionado vira "Demonstraç…" e a pessoa deixa de enxergar como a
+          conversa está classificada — que é a informação que a barra existe
+          para mostrar. */}
+      <div className="grid grid-cols-2 gap-2">
         <select
           aria-label="Departamento da conversa"
           className={CLASSE_DO_SELECT}

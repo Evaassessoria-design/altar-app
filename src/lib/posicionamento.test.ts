@@ -21,6 +21,7 @@ import { ehPapelConhecido, opcoesDePapel, PAPEIS_DA_EQUIPE } from "./team-roles"
 
 const LANDING = readFileSync("src/pages/Index.tsx", "utf-8");
 const INDEX_HTML = readFileSync("index.html", "utf-8");
+const MANIFESTO = readFileSync("public/site.webmanifest", "utf-8");
 
 describe("a landing não se posiciona como sistema de assessoria", () => {
   it("não se descreve como assessoria nem wedding planner", () => {
@@ -125,5 +126,22 @@ describe("papel já gravado não é perdido", () => {
     for (const papel of ["Apoio", "Coordenação", "Florista", "Montagem", "Produção"]) {
       expect(ehPapelConhecido(papel), papel).toBe(true);
     }
+  });
+});
+
+describe("o manifesto do PWA fala a mesma língua do produto", () => {
+  // O manifesto é o que aparece quando a decoradora instala o ALTAR no
+  // telefone. Ele dizia "cerimonialistas e organizadores de eventos" — o
+  // posicionamento que a landing e o index.html abandonaram — e nenhum teste
+  // olhava para ele. O nome na tela inicial do celular não pode contradizer o
+  // produto.
+  it("não se descreve como assessoria ou cerimonial", () => {
+    for (const termo of [/cerimonialista/i, /assessoria/i, /wedding planner/i]) {
+      expect(MANIFESTO, `manifesto cita ${termo}`).not.toMatch(termo);
+    }
+  });
+
+  it("diz para quem o produto é", () => {
+    expect(MANIFESTO.toLowerCase()).toContain("decora");
   });
 });

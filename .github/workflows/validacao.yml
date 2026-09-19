@@ -1,0 +1,73 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# VALIDAÇÃO — o que qualquer pessoa rodaria antes de abrir um PR
+#
+# O ALTAR tem 2.600 testes e, até aqui, nada os executava sozinho: passar ou
+# não passar dependia de alguém lembrar de rodar `pnpm test` antes de empurrar.
+#
+# ── O QUE ESTE FLUXO NÃO FAZ, DE PROPÓSITO ──────────────────────────────────
+#   · não publica nada (nem DEV, nem PROD);
+#   · não fala com o Convex — não há deployment nem chave aqui;
+#   · não usa `secrets`;
+#   · não escreve em banco nenhum;
+#   · não publica pacote.
+#
+# É leitura e verificação. Se um dia precisar de segredo para rodar, alguma
+# coisa saiu do lugar.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Validação
+
+on:
+  push:
+    branches-ignore:
+      - "gh-pages"
+  pull_request:
+
+# Um push novo cancela a validação anterior do mesmo ramo: não adianta gastar
+# runner conferindo um commit que já foi substituído.
+concurrency:
+  group: validacao-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Instalar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # `--frozen-lockfile`: a validação testa o que está no lockfile, e não uma
+      # resolução nova que ninguém revisou.
+      - name: Dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Testes
+        run: pnpm test
+
+      # Dois projetos de TypeScript, conferidos separadamente: o app e as
+      # funções do Convex têm tsconfig e runtime diferentes.
+      - name: TypeScript — aplicativo
+        run: npx tsc -p tsconfig.app.json --noEmit
+
+      - name: TypeScript — Convex
+        run: npx tsc -p convex/tsconfig.json --noEmit
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build

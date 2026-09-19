@@ -1,3 +1,20 @@
+> ## ⚠ DOCUMENTO HISTÓRICO — a decisão foi OUTRA
+>
+> Este levantamento recomendava a **Opção B**: uma tabela `fichasTecnicas`
+> ligada ao item de montagem, restrita à pergunta da operação (tempo, equipe,
+> peso, volume).
+>
+> **Não foi o que se construiu.** A Ficha Técnica nasceu como
+> `materials` + `compositions` + `assemblyItems.receita` (snapshot), focada na
+> pergunta do CUSTO e do INSUMO — do que a peça é feita — e não na do esforço
+> de montagem. Peso, volume, tempo e equipe continuam não existindo.
+>
+> O documento segue aqui porque o raciocínio que levou à decisão continua
+> valendo (o precedente do catálogo de fornecedores, os sete consumidores de
+> `assemblyItems`, o risco do cadastro que ninguém preenche). Leia como
+> registro de como se pensou, nunca como descrição do que existe — para isso,
+> veja `ROADMAP.md`.
+
 # Ficha Técnica — auditoria arquitetural
 
 > **Este documento não implementa nada.** É o levantamento pedido antes de

@@ -395,3 +395,59 @@ describe("a procedência de uma receita da biblioteca", () => {
     expect(await biblioteca(t, donaId)).toHaveLength(2);
   });
 });
+
+// ═════════════════════════════════════ ID DE OUTRA EMPRESA NÃO ABRE NADA
+
+describe("a manutenção da biblioteca é só da dona", () => {
+  it("renomear a composição de outra empresa responde NOT_FOUND", async () => {
+    const { t, dona, outra, daOutra, outraId } = await cenario();
+    await outra.mutation(api.fichaTecnica.salvarNaBiblioteca, { id: daOutra });
+    const [alheia] = await biblioteca(t, outraId);
+    await expect(
+      dona.mutation(api.compositions.update, { id: alheia._id, nome: "Minha agora" }),
+    ).rejects.toThrow(/não encontrada/i);
+    const [depois] = await biblioteca(t, outraId);
+    expect(depois.nome).toBe("Arranjo da outra");
+  });
+
+  it("arquivar a composição de outra empresa responde NOT_FOUND", async () => {
+    const { t, dona, outra, daOutra, outraId } = await cenario();
+    await outra.mutation(api.fichaTecnica.salvarNaBiblioteca, { id: daOutra });
+    const [alheia] = await biblioteca(t, outraId);
+    await expect(
+      dona.mutation(api.compositions.setArchived, { id: alheia._id, archived: true }),
+    ).rejects.toThrow(/não encontrada/i);
+    const [depois] = await biblioteca(t, outraId);
+    expect(depois.archived).toBeUndefined();
+  });
+
+  it("substituir não alcança a composição de outra empresa pelo nome igual", async () => {
+    // As duas chamam a receita de "Arranjo baixo". A busca é por
+    // (userId, searchName): se fosse só pelo nome, autorizar a substituição
+    // escreveria por cima da biblioteca alheia.
+    const { t, dona, outra, itemA, daOutra, donaId, outraId } = await cenario();
+    await t.run(async (ctx: MutationCtx) => {
+      await ctx.db.patch(daOutra, { name: "Arranjo baixo" });
+    });
+    await outra.mutation(api.fichaTecnica.salvarNaBiblioteca, { id: daOutra });
+    await dona.mutation(api.fichaTecnica.salvarNaBiblioteca, {
+      id: itemA, substituirExistente: true,
+    });
+    expect(await biblioteca(t, donaId)).toHaveLength(1);
+    const [alheia] = await biblioteca(t, outraId);
+    expect(alheia.receita[0].nome).toBe("Flor qualquer");
+  });
+
+  it("`ondeEUsada` não devolve evento de outra empresa nem que o vínculo aponte para lá", async () => {
+    // Vínculo cruzado só nasce de dado corrompido — e é exatamente quando a
+    // conferência de dono precisa estar lá.
+    const { t, dona, itemA, daOutra, donaId } = await cenario();
+    await dona.mutation(api.fichaTecnica.salvarNaBiblioteca, { id: itemA });
+    const [minha] = await biblioteca(t, donaId);
+    await t.run(async (ctx: MutationCtx) => {
+      await ctx.db.patch(daOutra, { compositionId: minha._id });
+    });
+    const r = await dona.query(api.compositions.ondeEUsada, { id: minha._id });
+    expect(r!.eventos.map((e) => e.nome)).toEqual(["Marina & Gabriel"]);
+  });
+});

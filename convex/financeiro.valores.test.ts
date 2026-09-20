@@ -292,3 +292,64 @@ describe("o orçamento do evento, a compra e o item de orçamento", () => {
     expect(resumo.quotedIncome).toBe(10000);
   });
 });
+
+// ═════════════════════════════════════ ID DE OUTRA EMPRESA NÃO MOVE DINHEIRO
+
+describe("o lançamento de outra empresa é intocável", () => {
+  async function comDuas() {
+    const { t, dona, eventId } = await cenario();
+    const outra = await autenticarComo(t, {
+      nome: "Outra", email: "outra@ex.com", role: "user", subject: "auth|outra",
+    });
+    const id = await dona.mutation(api.financeiro.addTransaction, {
+      ...lancamento, amount: 1500,
+    });
+    return { t, dona, outra, eventId, id };
+  }
+
+  it("editar responde NOT_FOUND e não muda o valor", async () => {
+    const { t, outra, id } = await comDuas();
+    await expect(
+      outra.mutation(api.financeiro.updateTransaction, { id, amount: 1 }),
+    ).rejects.toThrow(/não encontrado/i);
+    const tx = await t.run(async (ctx: MutationCtx) => ctx.db.get(id));
+    expect(tx!.amount).toBe(1500);
+  });
+
+  it("marcar como pago responde NOT_FOUND", async () => {
+    const { t, outra, id } = await comDuas();
+    await expect(
+      outra.mutation(api.financeiro.togglePaid, { id }),
+    ).rejects.toThrow(/não encontrado/i);
+    const tx = await t.run(async (ctx: MutationCtx) => ctx.db.get(id));
+    expect(tx!.isPaid).toBe(true);
+  });
+
+  it("apagar responde NOT_FOUND e o lançamento continua lá", async () => {
+    const { t, outra, id } = await comDuas();
+    await expect(
+      outra.mutation(api.financeiro.deleteTransaction, { id }),
+    ).rejects.toThrow(/não encontrado/i);
+    expect(await t.run(async (ctx: MutationCtx) => ctx.db.get(id))).not.toBeNull();
+  });
+
+  it("criar lançamento no evento de outra empresa responde NOT_FOUND", async () => {
+    // O caminho pelo `eventId`: `requireEventOwner` é quem barra.
+    const { outra, eventId } = await comDuas();
+    await expect(
+      outra.mutation(api.financeiro.addTransaction, {
+        ...lancamento, amount: 100, eventId,
+      }),
+    ).rejects.toThrow(/não encontrado/i);
+  });
+
+  it("contas a receber no evento de outra empresa responde NOT_FOUND", async () => {
+    const { outra, eventId } = await comDuas();
+    await expect(
+      outra.mutation(api.financeiro.createReceivablesFromContract, {
+        eventId,
+        entries: [{ description: "Sinal", amount: 5000, date: "2026-09-10" }],
+      }),
+    ).rejects.toThrow(/não encontrado/i);
+  });
+});

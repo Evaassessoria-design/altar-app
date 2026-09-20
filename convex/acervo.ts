@@ -66,6 +66,7 @@ export const listItems = query({
     ]);
 
     const visiveis = args.incluirArquivados ? itens : itens.filter((i) => !i.archived);
+    const hoje = new Date().toISOString().slice(0, 10);
     // Contagem por item numa passada — nada de uma consulta por item.
     const porItem = new Map<string, typeof reservas>();
     for (const r of reservas) {
@@ -87,7 +88,9 @@ export const listItems = query({
           // a tela do evento usa. Não é "disponível agora" — é a resposta à
           // pergunta que não precisa de janela: existe algum dia em que o
           // prometido passa do que eu tenho?
-          pico: picoDeReservas(item.quantidadeTotal, minhas),
+          // `hoje` para o pico ignorar reserva que já terminou: déficit no
+          // passado não tem mais conserto, e vira ruído permanente na lista.
+          pico: picoDeReservas(item.quantidadeTotal, minhas, hoje),
         };
       })
       .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));

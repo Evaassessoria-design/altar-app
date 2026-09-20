@@ -216,7 +216,9 @@ export function deficitDaReserva(pretendido: number, disponivel: number): number
  * ── POR QUE O PICO ESTÁ SEMPRE NO INÍCIO DE ALGUMA RESERVA ──────────────────
  * A soma de intervalos só cresce quando um intervalo começa. Entre dois
  * inícios ela é constante ou cai. Basta então conferir os dias de início — não
- * há necessidade de varrer o calendário dia a dia.
+ * há necessidade de varrer o calendário dia a dia. Com `hoje`, o começo que
+ * ficou para trás entra pela data de hoje: a janela ainda corre, mas o dia
+ * dela já passou.
  *
  * Datas são dia civil "AAAA-MM-DD" e comparam como texto, inclusivas nas duas
  * pontas, exatamente como `janelasConflitam` já as trata.
@@ -233,30 +235,58 @@ export type PicoDeReservas = {
 export function picoDeReservas(
   total: number,
   reservas: readonly ReservaParaCalculo[],
+  hoje?: string,
 ): PicoDeReservas {
-  if (reservas.length === 0) {
+  // ── RESERVA QUE JÁ TERMINOU NÃO É MAIS FALTA ──────────────────────────────
+  // Um evento de outubro do ano passado que prometeu 180 de um acervo de 150
+  // teve um déficit REAL na época, e ele foi resolvido — alugando, comprando,
+  // ou passando aperto. Continuar anunciando "faltam 30 em 09/10/2025" é um
+  // alarme sobre algo que não tem mais conserto, e depois de uma temporada
+  // vira ruído permanente na lista.
+  //
+  // O que aconteceu de fato com as peças está em `saiu` e `voltou`, não aqui.
+  //
+  // `hoje` ausente considera TODAS as janelas — é o comportamento puro, para
+  // quem quiser o histórico. Quem pergunta "o que vai faltar?" passa a data.
+  // Normaliza ANTES de filtrar: uma janela gravada ao contrário ("de 11/10 a
+  // 09/10") tem `fim` menor que `inicio`, e filtrar pelo campo cru deixaria
+  // escapar justamente o dado corrompido que o resto do módulo já trata.
+  const janelas = reservas
+    .map((r) => ({
+      ...normalizarJanela({ inicio: r.inicio, fim: r.fim }),
+      quantidade: r.quantidade,
+    }))
+    .filter((j) => hoje === undefined || j.fim >= hoje);
+
+  if (janelas.length === 0) {
     return { pico: 0, deficit: 0, dia: null };
   }
 
-  const janelas = reservas.map((r) => ({
-    ...normalizarJanela({ inicio: r.inicio, fim: r.fim }),
-    quantidade: r.quantidade,
-  }));
+  // Uma janela que COMEÇOU antes de hoje e ainda não terminou continua
+  // pesando — mas o dia dela já passou. Anunciar "faltam 30 em 01/10/2025"
+  // manda a decoradora resolver uma data que não existe mais; o aperto é
+  // hoje. Por isso o dia candidato é o começo da janela ou hoje, o que for
+  // mais tarde. Toda janela que sobrou do filtro alcança hoje, então a soma
+  // continua sendo lida num dia que ela de fato cobre.
+  const candidatos = [
+    ...new Set(janelas.map((j) => (hoje !== undefined && j.inicio < hoje ? hoje : j.inicio))),
+  ].sort();
 
   let pico = 0;
   let dia: string | null = null;
 
-  for (const candidato of janelas) {
+  // Em ordem de data, e não na ordem em que o banco devolveu: com `>`, o
+  // empate fica com o dia mais cedo, que é o que a decoradora precisa
+  // resolver primeiro.
+  for (const candidato of candidatos) {
     const soma = quantidadeLimpa(
       janelas
-        .filter((j) => j.inicio <= candidato.inicio && candidato.inicio <= j.fim)
+        .filter((j) => j.inicio <= candidato && candidato <= j.fim)
         .reduce((s, j) => s + j.quantidade, 0),
     );
-    // `>` e não `>=`: empate fica com o dia mais cedo, que é o que a
-    // decoradora precisa resolver primeiro.
     if (soma > pico) {
       pico = soma;
-      dia = candidato.inicio;
+      dia = candidato;
     }
   }
 

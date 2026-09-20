@@ -526,3 +526,122 @@ describe("o pico de reservas simultâneas", () => {
     expect(r.dia).toBe("2026-10-01");
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DÉFICIT NO PASSADO NÃO É DÉFICIT
+//
+// A primeira versão de `picoDeReservas` olhava TODAS as reservas do item. Um
+// evento de outubro do ano passado que prometeu 180 de um acervo de 150 teve
+// um déficit real na época — e ele foi resolvido, alugando, comprando ou
+// passando aperto. Continuar anunciando "faltam 30 em 09/10/2025" é alarme
+// sobre o que não tem mais conserto, e depois de uma temporada vira ruído
+// permanente na lista do acervo.
+//
+// O que de fato aconteceu com as peças está em `saiu` e `voltou`.
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("o pico só olha o que ainda vai acontecer", () => {
+  const reserva = (id: string, quantidade: number, inicio: string, fim: string) => ({
+    _id: id,
+    eventId: `evento-${id}`,
+    quantidade,
+    inicio,
+    fim,
+  });
+
+  const HOJE = "2026-09-20";
+
+  it("reserva encerrada não gera déficit", () => {
+    const r = picoDeReservas(150, [reserva("a", 180, "2025-10-09", "2025-10-11")], HOJE);
+    expect(r).toEqual({ pico: 0, deficit: 0, dia: null });
+  });
+
+  it("reserva futura continua gerando", () => {
+    const r = picoDeReservas(150, [reserva("a", 180, "2026-10-09", "2026-10-11")], HOJE);
+    expect(r.deficit).toBe(30);
+  });
+
+  it("reserva EM CURSO conta — ela termina hoje, as peças ainda estão fora", () => {
+    // A janela é inclusiva nas duas pontas em todo o módulo; aqui não é
+    // diferente. Descartar o que termina hoje esconderia a devolução de hoje.
+    const r = picoDeReservas(150, [reserva("a", 180, "2026-09-18", HOJE)], HOJE);
+    expect(r.deficit).toBe(30);
+  });
+
+  it("passado não soma com futuro para inflar o pico", () => {
+    // Sem o corte, estas duas somariam 200 e acusariam um déficit de 50 que
+    // nunca existiu: elas nem se sobrepõem.
+    const r = picoDeReservas(
+      150,
+      [
+        reserva("velha", 100, "2025-10-01", "2025-10-03"),
+        reserva("nova", 100, "2026-10-01", "2026-10-03"),
+      ],
+      HOJE,
+    );
+    expect(r.pico).toBe(100);
+    expect(r.deficit).toBe(0);
+    expect(r.dia).toBe("2026-10-01");
+  });
+
+  it("janela invertida é normalizada ANTES do corte", () => {
+    // O defeito que isto tranca: filtrar pelo campo cru deixaria escapar
+    // justamente o dado corrompido que o resto do módulo trata. Gravada como
+    // "de 11/10/2026 a 09/10/2026", ela é futura — e precisa contar.
+    const r = picoDeReservas(10, [reserva("a", 16, "2026-10-11", "2026-10-09")], HOJE);
+    expect(r.deficit).toBe(6);
+    expect(r.dia).toBe("2026-10-09");
+  });
+
+  it("sem `hoje`, olha o histórico inteiro — é o comportamento puro", () => {
+    // Quem quiser o pico histórico continua podendo pedi-lo.
+    const r = picoDeReservas(150, [reserva("a", 180, "2025-10-09", "2025-10-11")]);
+    expect(r.deficit).toBe(30);
+  });
+
+  it("reserva em curso desde o ano passado aponta HOJE, não a data em que começou", () => {
+    // O item está fora AGORA, e prometido além do que existe. O aperto é real
+    // — mas mandar resolver "01/10/2025" é mandar resolver uma data que não
+    // existe mais. O dia é o começo da janela ou hoje, o que for mais tarde.
+    const r = picoDeReservas(150, [reserva("a", 180, "2025-10-01", "2026-12-01")], HOJE);
+    expect(r.deficit).toBe(30);
+    expect(r.dia).toBe(HOJE);
+  });
+
+  it("a soma no dia de hoje junta as janelas que o atravessam", () => {
+    // Duas janelas que começaram em datas diferentes e ainda correm: o pico
+    // precisa somar as duas, e num dia que as duas cobrem.
+    const r = picoDeReservas(
+      150,
+      [
+        reserva("a", 100, "2025-10-01", "2026-12-01"),
+        reserva("b", 100, "2026-01-05", "2026-11-01"),
+      ],
+      HOJE,
+    );
+    expect(r.pico).toBe(200);
+    expect(r.dia).toBe(HOJE);
+  });
+
+  it("empate de pico fica com a data mais cedo, e não com a ordem do banco", () => {
+    // O banco devolve na ordem que quiser. Sem ordenar os candidatos, o
+    // empate ficava com quem viesse primeiro no array — a tela mandava
+    // resolver dezembro antes de outubro.
+    const r = picoDeReservas(
+      10,
+      [
+        reserva("dezembro", 16, "2026-12-01", "2026-12-03"),
+        reserva("outubro", 16, "2026-10-01", "2026-10-03"),
+      ],
+      HOJE,
+    );
+    expect(r.pico).toBe(16);
+    expect(r.dia).toBe("2026-10-01");
+  });
+
+  it("todas as reservas no passado devolvem o mesmo que nenhuma reserva", () => {
+    const vazio = picoDeReservas(40, [], HOJE);
+    const sovelhas = picoDeReservas(40, [reserva("a", 99, "2024-01-01", "2024-01-02")], HOJE);
+    expect(sovelhas).toEqual(vazio);
+  });
+});

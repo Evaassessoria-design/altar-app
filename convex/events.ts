@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { normalizarDataDeEvento } from "./lib/dataDeEvento";
+import { emCentavos, motivoDoValorInvalido } from "./lib/dinheiro";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { requireTeamMember, requireUser } from "./lib/identity";
@@ -76,6 +77,20 @@ export const get = query({
   },
 });
 
+/**
+ * O orçamento do evento, conferido.
+ *
+ * É a base da margem. `parseFloat("1.500,00")` é 1.5, e um `NaN` aqui faz a
+ * comparação com o realizado virar `NaN` — a decoradora lê "R$ NaN" onde
+ * deveria ler quanto sobrou. Ver lib/dinheiro.ts.
+ */
+function orcamentoConferido(valor: number | undefined): number | undefined {
+  if (valor === undefined) return undefined;
+  const motivo = motivoDoValorInvalido(valor);
+  if (motivo) throw new ConvexError({ code: "VALOR_INVALIDO", message: `Orçamento: ${motivo}` });
+  return emCentavos(valor);
+}
+
 export const create = mutation({
   args: {
     name: v.string(),
@@ -95,7 +110,12 @@ export const create = mutation({
     // Formato canonico (convex/lib/dataDeEvento.ts): so o dia, ou dia e hora.
     // Qualquer outra forma e recusada aqui em vez de entrar calada no banco.
     const date = normalizarDataDeEvento(args.date);
-    return ctx.db.insert("events", { userId: user._id, ...args, date });
+    return ctx.db.insert("events", {
+      userId: user._id,
+      ...args,
+      budget: orcamentoConferido(args.budget),
+      date,
+    });
   },
 });
 
@@ -132,6 +152,7 @@ export const update = mutation({
     // passa pela mesma porta da criacao — editar nao pode ser a brecha por
     // onde um terceiro formato entra.
     if (fields.date !== undefined) fields.date = normalizarDataDeEvento(fields.date);
+    if (fields.budget !== undefined) fields.budget = orcamentoConferido(fields.budget);
     await ctx.db.patch(id, comCarimbo(limparCampos(fields)));
   },
 });

@@ -45,6 +45,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ConvexError } from "convex/values";
 import { cn } from "@/lib/utils.ts";
+import { valorDigitado } from "@/lib/valor-digitado.ts";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
@@ -175,7 +176,9 @@ function LeadDialog({
             </div>
             <div className="space-y-1.5">
               <Label>Orçamento (R$)</Label>
-              <Input type="number" placeholder="0,00" {...register("budget")} />
+              {/* `inputMode="decimal"`: com `type="number"`, o que o campo
+                  devolve para "1.500,00" depende do navegador. */}
+              <Input inputMode="decimal" placeholder="1.500,00" {...register("budget")} />
             </div>
           </div>
 
@@ -632,12 +635,31 @@ export default function FunilPage() {
   const [dragging, setDragging] = useState<Doc<"leads"> | null>(null);
   const [dragOverStage, setDragOverStage] = useState<Stage | null>(null);
 
+  /**
+   * O orçamento do lead, ou `null` quando não dá para ler.
+   *
+   * `parseFloat("1.500,00")` é 1.5 — o orçamento de mil e quinhentos entrava
+   * como um e cinquenta, e é por esse número que a decoradora prioriza o
+   * funil. Ver `src/lib/valor-digitado.ts`.
+   */
+  const orcamentoDoLead = (texto: string | undefined): number | null | "erro" => {
+    if (!texto?.trim()) return null;
+    const valor = valorDigitado(texto);
+    if (valor === null || valor < 0) return "erro";
+    return valor;
+  };
+
   const handleCreate = async (values: LeadFormValues, responsibleId?: string) => {
+    const budget = orcamentoDoLead(values.budget);
+    if (budget === "erro") {
+      toast.error("Orçamento não reconhecido. Ex.: 1.500,00");
+      return;
+    }
     try {
       await createLead({
         ...values,
         responsibleId: responsibleId as Id<"teamMembers"> | undefined,
-        budget: values.budget ? parseFloat(values.budget) : undefined,
+        budget: budget ?? undefined,
         stage: values.stage as Stage,
         eventType: values.eventType || undefined,
         eventDate: values.eventDate || undefined,
@@ -652,6 +674,11 @@ export default function FunilPage() {
 
   const handleEdit = async (values: LeadFormValues, responsibleId?: string) => {
     if (!editing) return;
+    const budget = orcamentoDoLead(values.budget);
+    if (budget === "erro") {
+      toast.error("Orçamento não reconhecido. Ex.: 1.500,00");
+      return;
+    }
     try {
       // Edição é substituição: `null` limpa o campo. Com `undefined`, o pedido
       // era descartado no transporte e o valor antigo permanecia.
@@ -660,7 +687,7 @@ export default function FunilPage() {
         ...values,
         // `null` limpa o vínculo quando a decoradora escolhe "Ninguém definido".
         responsibleId: (responsibleId ?? null) as Id<"teamMembers"> | null,
-        budget: values.budget ? parseFloat(values.budget) : null,
+        budget,
         stage: values.stage as Stage,
         eventType: values.eventType || null,
         eventDate: values.eventDate || null,

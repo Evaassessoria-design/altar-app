@@ -29,6 +29,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ConvexError } from "convex/values";
 import { cn } from "@/lib/utils.ts";
+import { paraOCampo, valorDigitado } from "@/lib/valor-digitado.ts";
 import { formatEventDayOnly, hojeDateKey } from "@/lib/event-date.ts";
 import { StatusSelect } from "@/components/status-select.tsx";
 import { ResponsavelInline, ResponsavelSelect } from "@/components/responsavel-select.tsx";
@@ -220,7 +221,7 @@ function PurchaseDialog({
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1.5">
               <Label>Qtde</Label>
-              <Input type="number" placeholder="10" {...register("quantity")} />
+              <Input inputMode="decimal" placeholder="10" {...register("quantity")} />
             </div>
             <div className="space-y-1.5">
               <Label>Unidade</Label>
@@ -228,7 +229,7 @@ function PurchaseDialog({
             </div>
             <div className="space-y-1.5">
               <Label>Preço unit.</Label>
-              <Input type="number" step="0.01" placeholder="0,00" {...register("unitPrice")} />
+              <Input inputMode="decimal" placeholder="1.500,00" {...register("unitPrice")} />
             </div>
           </div>
 
@@ -524,22 +525,45 @@ function ComprasContent() {
     }
   };
 
+  /**
+   * Lê os dois números do formulário, ou avisa e devolve `null`.
+   *
+   * `parseFloat("1.500,00")` é 1.5 — o preço de mil e quinhentos entrava como
+   * um e cinquenta, e a compra alimenta o custo do evento e a margem. Ver
+   * `src/lib/valor-digitado.ts`.
+   */
+  const numerosDaCompra = (values: PurchaseFormValues) => {
+    const quantity = values.quantity ? valorDigitado(values.quantity) : undefined;
+    const unitPrice = values.unitPrice ? valorDigitado(values.unitPrice) : undefined;
+    if (quantity === null || (quantity !== undefined && quantity < 0)) {
+      toast.error("Quantidade não reconhecida.");
+      return null;
+    }
+    if (unitPrice === null || (unitPrice !== undefined && unitPrice < 0)) {
+      toast.error("Preço não reconhecido. Ex.: 1.500,00");
+      return null;
+    }
+    return { quantity, unitPrice };
+  };
+
   const handleAdd = async (
     values: PurchaseFormValues,
     supplierId?: string,
     responsibleId?: string,
   ) => {
     if (!addingToEvent) return;
+    const numeros = numerosDaCompra(values);
+    if (!numeros) return;
     try {
       await addPurchase({
         eventId: addingToEvent,
         name: values.name,
         category: values.category || undefined,
-        quantity: values.quantity ? parseFloat(values.quantity) : undefined,
+        quantity: numeros.quantity,
         unit: values.unit || undefined,
         supplier: values.supplier || undefined,
         supplierId: supplierId as Id<"suppliers"> | undefined,
-        unitPrice: values.unitPrice ? parseFloat(values.unitPrice) : undefined,
+        unitPrice: numeros.unitPrice,
         notes: values.notes || undefined,
         responsible: values.responsible || undefined,
         responsibleId: responsibleId as Id<"teamMembers"> | undefined,
@@ -558,6 +582,8 @@ function ComprasContent() {
     responsibleId?: string,
   ) => {
     if (!editing) return;
+    const numeros = numerosDaCompra(values);
+    if (!numeros) return;
     try {
       // Edição é substituição: campo esvaziado no formulário precisa sumir do
       // item. `null` é o pedido de limpar — `undefined` não chegaria ao servidor.
@@ -565,12 +591,12 @@ function ComprasContent() {
         id: editing._id,
         name: values.name,
         category: values.category || null,
-        quantity: values.quantity ? parseFloat(values.quantity) : null,
+        quantity: numeros.quantity ?? null,
         unit: values.unit || null,
         supplier: values.supplier || null,
         // `null` limpa o vínculo quando a decoradora digitou outro nome.
         supplierId: (supplierId ?? null) as Id<"suppliers"> | null,
-        unitPrice: values.unitPrice ? parseFloat(values.unitPrice) : null,
+        unitPrice: numeros.unitPrice ?? null,
         notes: values.notes || null,
         responsible: values.responsible || null,
         // `null` limpa o vínculo quando a decoradora escolhe "Ninguém definido".
@@ -693,7 +719,8 @@ function ComprasContent() {
             quantity: editing.quantity?.toString(),
             unit: editing.unit,
             supplier: editing.supplier,
-            unitPrice: editing.unitPrice?.toString(),
+            // Na escrita daqui: "1.500,00".
+            unitPrice: editing.unitPrice === undefined ? undefined : paraOCampo(editing.unitPrice),
             notes: editing.notes,
             responsible: editing.responsible,
             dueDate: editing.dueDate,

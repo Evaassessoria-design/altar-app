@@ -25,6 +25,7 @@ import {
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils.ts";
+import { paraOCampo, valorDigitado } from "@/lib/valor-digitado.ts";
 import {
   Dialog,
   DialogContent,
@@ -149,7 +150,8 @@ export default function OrcamentoPage() {
       description: item.description,
       category: item.category,
       quantity: item.quantity.toString(),
-      unitPrice: item.unitPrice.toString(),
+      // Na escrita daqui: "1.500,00".
+      unitPrice: paraOCampo(item.unitPrice),
       type: item.type,
       notes: item.notes ?? "",
     });
@@ -163,8 +165,26 @@ export default function OrcamentoPage() {
     }
     setSaving(true);
     try {
-      const qty = parseFloat(form.quantity) || 1;
-      const price = parseFloat(form.unitPrice.replace(",", ".")) || 0;
+      // `parseFloat("1.500,00")` é 1.5, e o `.replace(",", ".")` de antes só
+      // piorava: virava "1.500.00". Um item de mil e quinhentos entrava como
+      // um e cinquenta, no orçamento que vai para a cliente. Ver
+      // `src/lib/valor-digitado.ts`.
+      const price = valorDigitado(form.unitPrice);
+      if (price === null || price < 0) {
+        toast.error("Valor unitário não reconhecido. Ex.: 1.500,00");
+        setSaving(false);
+        return;
+      }
+      // `|| 1` transformava quantidade ZERO em um item de uma unidade, e
+      // quantidade ilegível também. Ausente continua valendo 1 — é o padrão
+      // que o formulário sempre teve; ilegível agora é erro.
+      const quantidadeLida = form.quantity.trim() ? valorDigitado(form.quantity) : 1;
+      if (quantidadeLida === null || quantidadeLida < 0) {
+        toast.error("Quantidade não reconhecida.");
+        setSaving(false);
+        return;
+      }
+      const qty = quantidadeLida;
       if (editingId) {
         await updateItem({
           id: editingId,
@@ -559,7 +579,8 @@ export default function OrcamentoPage() {
               <div className="space-y-1.5">
                 <Label>Valor Unitário (R$) *</Label>
                 <Input
-                  placeholder="0,00"
+                  inputMode="decimal"
+                  placeholder="1.500,00"
                   value={form.unitPrice}
                   onChange={(e) => setForm((f) => ({ ...f, unitPrice: e.target.value }))}
                 />
@@ -568,7 +589,10 @@ export default function OrcamentoPage() {
 
             {form.quantity && form.unitPrice && (
               <p className="text-xs text-muted-foreground text-right">
-                Total: <strong>{brl((parseFloat(form.quantity) || 0) * (parseFloat(form.unitPrice.replace(",", ".")) || 0))}</strong>
+                Total:{" "}
+                <strong>
+                  {brl((valorDigitado(form.quantity) ?? 0) * (valorDigitado(form.unitPrice) ?? 0))}
+                </strong>
               </p>
             )}
 

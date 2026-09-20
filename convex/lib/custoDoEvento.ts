@@ -40,6 +40,8 @@
 // é melhor do que "Margem 37,42%" com metade das compras de fora.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { emCentavos, somaEmDinheiro } from "./dinheiro";
+
 export type CompraParaCusto = {
   unitPrice?: number;
   quantity?: number;
@@ -192,10 +194,16 @@ export function custoDoEvento(
   lancamentos: readonly LancamentoParaCusto[],
   compras: readonly CompraParaCusto[],
 ): CustoDoEvento {
+  // `somaEmDinheiro` e não `reduce` cru: um lançamento com `NaN` gravado antes
+  // da trava do Financeiro (ver lib/dinheiro.ts) faria receita, custo, saldo e
+  // margem virarem `NaN` de uma vez — e a tela afirmaria "R$ NaN" com a mesma
+  // confiança com que afirma qualquer outro número.
   const soma = (tipo: string, apenasPagos: boolean) =>
-    lancamentos
-      .filter((t) => t.type === tipo && (!apenasPagos || t.isPaid))
-      .reduce((s, t) => s + t.amount, 0);
+    somaEmDinheiro(
+      lancamentos
+        .filter((t) => t.type === tipo && (!apenasPagos || t.isPaid))
+        .map((t) => t.amount),
+    );
 
   const receita = soma("income", false);
   const custoLancado = soma("expense", false);
@@ -216,7 +224,7 @@ export function custoDoEvento(
     else if (foraDoLivro(c)) pendentesDeLancamento.push(c);
   }
 
-  const custoForaDoLivro = pendentesDeLancamento.reduce((s, c) => s + valorDaCompra(c), 0);
+  const custoForaDoLivro = somaEmDinheiro(pendentesDeLancamento.map((c) => valorDaCompra(c)));
 
   // Completo = o livro conhece o custo E o vínculo não está mentindo em
   // nenhuma das quatro formas. Basta uma para a margem se calar.
@@ -233,14 +241,14 @@ export function custoDoEvento(
     recebido: soma("income", true),
     custoLancado,
     custoPago,
-    saldoAPagar: custoLancado - custoPago,
+    saldoAPagar: emCentavos(custoLancado - custoPago),
     custoForaDoLivro,
     comprasForaDoLivro: pendentesDeLancamento.length,
     comprasComVinculoQuebrado: quebrados.length,
     comprasCanceladasComLancamento: canceladasComDespesa.length,
     comprasComValorDivergente: divergentes.length,
     completo,
-    margem: podeCalcularMargem ? receita - custoLancado : null,
+    margem: podeCalcularMargem ? emCentavos(receita - custoLancado) : null,
     margemPercentual: podeCalcularMargem
       ? Math.round(((receita - custoLancado) / receita) * 100)
       : null,

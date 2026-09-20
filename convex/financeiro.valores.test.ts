@@ -196,3 +196,99 @@ describe("as somas da tela", () => {
     expect(await outra.query(api.financeiro.listTransactions, {})).toHaveLength(0);
   });
 });
+
+// ═══════════════════════════════ A MESMA TRAVA NAS OUTRAS PORTAS DO DINHEIRO
+
+describe("o orçamento do evento, a compra e o item de orçamento", () => {
+  it("compra com preço NaN é recusada", async () => {
+    // `unitPrice * quantity` da compra alimenta o custo do evento e a margem.
+    const { dona, eventId } = await cenario();
+    await expect(
+      dona.mutation(api.purchases.addPurchase, {
+        eventId, name: "Rosa branca", unitPrice: NaN, quantity: 200,
+      }),
+    ).rejects.toThrow(/Preço unitário/);
+  });
+
+  it("compra com quantidade negativa é recusada", async () => {
+    const { dona, eventId } = await cenario();
+    await expect(
+      dona.mutation(api.purchases.addPurchase, {
+        eventId, name: "Rosa branca", unitPrice: 4.2, quantity: -10,
+      }),
+    ).rejects.toThrow(/Quantidade/);
+  });
+
+  it("editar a compra confere também", async () => {
+    const { dona, eventId } = await cenario();
+    const id = await dona.mutation(api.purchases.addPurchase, {
+      eventId, name: "Rosa branca", unitPrice: 4.2, quantity: 200,
+    });
+    await expect(
+      dona.mutation(api.purchases.updatePurchase, { id, unitPrice: NaN }),
+    ).rejects.toThrow();
+  });
+
+  it("apagar o preço continua possível — `null` é limpar, não um valor ruim", async () => {
+    // A trava não pode atrapalhar a limpeza: o formulário de edição é
+    // substituição, e campo esvaziado tem de sumir.
+    const { t, dona, eventId } = await cenario();
+    const id = await dona.mutation(api.purchases.addPurchase, {
+      eventId, name: "Rosa branca", unitPrice: 4.2, quantity: 200,
+    });
+    await dona.mutation(api.purchases.updatePurchase, { id, unitPrice: null });
+    const item = await t.run(async (ctx: MutationCtx) => ctx.db.get(id));
+    expect(item!.unitPrice).toBeUndefined();
+  });
+
+  it("item de orçamento com valor unitário NaN é recusado", async () => {
+    const { dona, eventId } = await cenario();
+    await expect(
+      dona.mutation(api.orcamento.addItem, {
+        eventId, description: "Decoração da cerimônia", category: "Flores",
+        quantity: 1, unitPrice: NaN, type: "income",
+      }),
+    ).rejects.toThrow(/Valor unitário/);
+  });
+
+  it("evento com orçamento NaN é recusado na criação", async () => {
+    const { dona } = await cenario();
+    await expect(
+      dona.mutation(api.events.create, {
+        name: "Novo", type: "wedding", date: "2027-01-10",
+        location: "L", clientName: "C", status: "planning", budget: NaN,
+      }),
+    ).rejects.toThrow(/Orçamento/);
+  });
+
+  it("evento sem orçamento continua podendo ser criado", async () => {
+    // A trava vale para o valor ruim, não para a ausência: orçamento é campo
+    // opcional e a maior parte dos eventos nasce sem ele.
+    const { dona } = await cenario();
+    const id = await dona.mutation(api.events.create, {
+      name: "Sem orçamento", type: "wedding", date: "2027-01-10",
+      location: "L", clientName: "C", status: "planning",
+    });
+    expect(id).toBeTruthy();
+  });
+
+  it("o resumo do orçamento resiste a um item podre gravado antes", async () => {
+    const { t, dona, eventId } = await cenario();
+    await dona.mutation(api.orcamento.addItem, {
+      eventId, description: "Decoração", category: "Flores",
+      quantity: 1, unitPrice: 10000, type: "income",
+    });
+    await t.run(async (ctx: MutationCtx) => {
+      const donaId = (await ctx.db
+        .query("users")
+        .withIndex("by_better_auth_id", (q) => q.eq("betterAuthId", "auth|dona"))
+        .unique())!._id;
+      await ctx.db.insert("budgetItems", {
+        userId: donaId, eventId, description: "Linha podre", category: "Flores",
+        quantity: 1, unitPrice: NaN, type: "income", order: 99,
+      });
+    });
+    const resumo = await dona.query(api.orcamento.getSummary, { eventId });
+    expect(resumo.quotedIncome).toBe(10000);
+  });
+});

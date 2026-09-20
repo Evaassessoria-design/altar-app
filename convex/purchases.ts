@@ -8,6 +8,7 @@ import {
   type PurchaseStatus,
 } from "./lib/purchaseStatus";
 import { limparCampos } from "./lib/limparCampos";
+import { emCentavos, motivoDoValorInvalido } from "./lib/dinheiro";
 import { comCarimbo } from "./lib/ultimaAtualizacao";
 import { dataDoDia } from "./lib/dataDoDia";
 import { valorDaCompra } from "./lib/custoDoEvento";
@@ -88,6 +89,20 @@ export const listPanorama = query({
   },
 });
 
+/**
+ * Recusa quantidade ou preço que não podem ser gravados.
+ *
+ * A tela mandava `parseFloat(campo)`, e `parseFloat` devolve `NaN` para o que
+ * não começa com número. Um `NaN` aqui vai para o custo do evento e para a
+ * margem — e contamina as duas somas inteiras, não só a própria linha. Ver
+ * lib/dinheiro.ts.
+ */
+function exigirNumeroDaCompra(valor: number | null | undefined, campo: string) {
+  if (valor === null || valor === undefined) return;
+  const motivo = motivoDoValorInvalido(valor);
+  if (motivo) throw new ConvexError({ code: "VALOR_INVALIDO", message: `${campo}: ${motivo}` });
+}
+
 export const addPurchase = mutation({
   args: {
     eventId: v.id("events"),
@@ -108,6 +123,8 @@ export const addPurchase = mutation({
   handler: async (ctx, args) => {
     const { user } = await requireEventOwner(ctx, args.eventId);
     await requireTeamMember(ctx, user._id, args.responsibleId);
+    exigirNumeroDaCompra(args.quantity, "Quantidade");
+    exigirNumeroDaCompra(args.unitPrice, "Preço unitário");
     // Fornecedor do catálogo tem que ser da MESMA empresa — senão daria para
     // pendurar o fornecedor de outra decoradora num item seu.
     if (args.supplierId) {
@@ -125,6 +142,8 @@ export const addPurchase = mutation({
     const status: PurchaseStatus = args.status ?? "necessidade";
     return ctx.db.insert("purchaseItems", {
       ...args,
+      quantity: args.quantity === undefined ? undefined : emCentavos(args.quantity),
+      unitPrice: args.unitPrice === undefined ? undefined : emCentavos(args.unitPrice),
       status,
       userId: user._id,
       // Coerência desde o cadastro: as duas informações nunca divergem.
@@ -267,7 +286,11 @@ export const updatePurchase = mutation({
         throw new ConvexError({ code: "NOT_FOUND", message: "Fornecedor não encontrado" });
       }
     }
+    exigirNumeroDaCompra(args.quantity, "Quantidade");
+    exigirNumeroDaCompra(args.unitPrice, "Preço unitário");
     const { id, ...fields } = args;
+    if (typeof fields.quantity === "number") fields.quantity = emCentavos(fields.quantity);
+    if (typeof fields.unitPrice === "number") fields.unitPrice = emCentavos(fields.unitPrice);
     const limpos = limparCampos(fields);
     // Mudar a situação reajusta `isPurchased` junto. Sem isso, um item
     // "recebido" poderia continuar contando como pendente no Resumo

@@ -21,6 +21,8 @@ import {
   SelectValue,
 } from "@/components/ui/select.tsx";
 import type { Doc } from "@/convex/_generated/dataModel.d.ts";
+import { toast } from "sonner";
+import { valorDigitado } from "@/lib/valor-digitado.ts";
 import {
   ERRO_TIPO_OBRIGATORIO,
   EVENT_TYPES,
@@ -93,9 +95,17 @@ export default function EventFormDialog({ open, onClose, onSubmit, defaultValues
 
   const handleFormSubmit = async (values: EventFormValues) => {
     const { budget: budgetStr, ...rest } = values;
+    // `parseFloat("1.500,00")` é 1.5. O orçamento do evento é a base da margem
+    // — errado para menos, ele faz a decoradora achar que está no prejuízo.
+    // Ver `src/lib/valor-digitado.ts`.
+    const budget = budgetStr?.trim() ? valorDigitado(budgetStr) : undefined;
+    if (budget === null || (budget !== undefined && budget < 0)) {
+      toast.error("Orçamento não reconhecido. Ex.: 1.500,00");
+      return;
+    }
     await onSubmit({
       ...rest,
-      ...(budgetStr ? { budget: parseFloat(budgetStr) } : {}),
+      ...(budget !== undefined ? { budget } : {}),
     });
     handleClose();
   };
@@ -195,7 +205,7 @@ export default function EventFormDialog({ open, onClose, onSubmit, defaultValues
 
           <div className="space-y-1.5">
             <Label htmlFor="budget">Orçamento (R$)</Label>
-            <Input id="budget" type="number" step="0.01" placeholder="0,00" {...register("budget")} />
+            <Input id="budget" inputMode="decimal" placeholder="1.500,00" {...register("budget")} />
           </div>
 
           <div className="space-y-1.5">

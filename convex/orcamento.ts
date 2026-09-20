@@ -2,6 +2,7 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { getOwnedEvent, requireEventOwner, requireUser } from "./lib/identity";
+import { emCentavos, motivoDoValorInvalido, somaEmDinheiro } from "./lib/dinheiro";
 
 export const listItems = query({
   args: { eventId: v.id("events") },
@@ -18,6 +19,19 @@ export const listItems = query({
   },
 });
 
+/**
+ * Recusa o número que não pode ser gravado, com o recado que a tela mostra.
+ *
+ * A tela mandava `parseFloat(campo)`, e `parseFloat` devolve `NaN` para o que
+ * não começa com número. Um `NaN` num item do orçamento contamina o total
+ * cotado, o comparativo com o real e a margem — todos de uma vez, e sem dizer
+ * qual linha causou. Ver lib/dinheiro.ts.
+ */
+function exigirNumero(valor: number, campo: string) {
+  const motivo = motivoDoValorInvalido(valor);
+  if (motivo) throw new ConvexError({ code: "VALOR_INVALIDO", message: `${campo}: ${motivo}` });
+}
+
 export const getSummary = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
@@ -29,12 +43,15 @@ export const getSummary = query({
       .collect()
       .then((items) => items.filter((i) => i.userId === user._id));
 
-    const quotedIncome = budgetItems
-      .filter((i) => i.type === "income")
-      .reduce((s, i) => s + i.quantity * i.unitPrice, 0);
-    const quotedExpense = budgetItems
-      .filter((i) => i.type === "expense")
-      .reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+    // `somaEmDinheiro` em vez de `reduce` cru: a sobra de ponto flutuante, e a
+    // linha que já esteja com `NaN` gravado de antes — ela estragaria o
+    // orçamento inteiro, e não só a própria linha.
+    const cotado = (tipo: "income" | "expense") =>
+      somaEmDinheiro(
+        budgetItems.filter((i) => i.type === tipo).map((i) => emCentavos(i.quantity * i.unitPrice)),
+      );
+    const quotedIncome = cotado("income");
+    const quotedExpense = cotado("expense");
 
     // Real costs from purchases
     const purchases = await ctx.db
@@ -42,9 +59,8 @@ export const getSummary = query({
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
       .collect()
       .then((items) => items.filter((i) => i.userId === user._id));
-    const realPurchases = purchases.reduce(
-      (s, p) => s + (p.unitPrice ?? 0) * (p.quantity ?? 1),
-      0,
+    const realPurchases = somaEmDinheiro(
+      purchases.map((p) => emCentavos((p.unitPrice ?? 0) * (p.quantity ?? 1))),
     );
 
     // Real financials from transactions
@@ -53,23 +69,27 @@ export const getSummary = query({
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
       .collect()
       .then((items) => items.filter((i) => i.userId === user._id && i.isPaid));
-    const realIncome = transactions
-      .filter((t) => t.type === "income")
-      .reduce((s, t) => s + t.amount, 0);
-    const realExpense = transactions
-      .filter((t) => t.type === "expense")
-      .reduce((s, t) => s + t.amount, 0);
+    const realIncome = somaEmDinheiro(
+      transactions.filter((t) => t.type === "income").map((t) => t.amount),
+    );
+    const realExpense = somaEmDinheiro(
+      transactions.filter((t) => t.type === "expense").map((t) => t.amount),
+    );
 
-    const totalRealExpense = realExpense + realPurchases;
-    const estimatedBudget = event.budget ?? 0;
-    const profit = realIncome - totalRealExpense;
-    const margin = realIncome > 0 ? (profit / realIncome) * 100 : 0;
+    const totalRealExpense = somaEmDinheiro([realExpense, realPurchases]);
+    // `event.budget` vem de um formulário e pode estar podre de antes. Zero é
+    // o que a tela já tratava como "não informado".
+    const estimatedBudget = Number.isFinite(event.budget) ? (event.budget as number) : 0;
+    const profit = emCentavos(realIncome - totalRealExpense);
+    // A margem é percentual, não dinheiro: uma casa decimal basta, e sem
+    // arredondar ela chegava à tela com dezesseis.
+    const margin = realIncome > 0 ? Math.round((profit / realIncome) * 1000) / 10 : 0;
 
     return {
       estimatedBudget,
       quotedIncome,
       quotedExpense,
-      quotedProfit: quotedIncome - quotedExpense,
+      quotedProfit: emCentavos(quotedIncome - quotedExpense),
       realIncome,
       realExpense: totalRealExpense,
       profit,
@@ -91,6 +111,8 @@ export const addItem = mutation({
   },
   handler: async (ctx, args) => {
     const { user } = await requireEventOwner(ctx, args.eventId);
+    exigirNumero(args.quantity, "Quantidade");
+    exigirNumero(args.unitPrice, "Valor unitário");
     const items = await ctx.db
       .query("budgetItems")
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
@@ -116,6 +138,8 @@ export const updateItem = mutation({
     if (!item || item.userId !== user._id)
       throw new ConvexError({ message: "Item não encontrado", code: "NOT_FOUND" });
     const { id, ...fields } = args;
+    if (fields.quantity !== undefined) exigirNumero(fields.quantity, "Quantidade");
+    if (fields.unitPrice !== undefined) exigirNumero(fields.unitPrice, "Valor unitário");
     await ctx.db.patch(id, fields);
   },
 });

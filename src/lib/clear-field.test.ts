@@ -43,10 +43,20 @@ describe("Compras — o formulário de edição é substituição", () => {
     ["notes", "values.notes || null"],
     ["responsible", "values.responsible || null"],
     ["dueDate", "values.dueDate || null"],
-    ["quantity", "values.quantity ? parseFloat(values.quantity) : null"],
-    ["unitPrice", "values.unitPrice ? parseFloat(values.unitPrice) : null"],
   ])("esvaziar %s apaga o valor", (_campo, trecho) => {
     expect(edicao).toContain(trecho);
+  });
+
+  it("esvaziar quantidade e preço também apaga", () => {
+    // Os dois deixaram de ser `parseFloat` no lugar — "1.500,00" virava 1.5
+    // (ver src/lib/valor-digitado.ts) — e passaram por um leitor comum. O que
+    // NÃO pode mudar é o fim da linha: campo vazio vira `null`, e não
+    // `undefined`, que o Convex descarta no transporte.
+    expect(edicao).toContain("quantity: numeros.quantity ?? null");
+    expect(edicao).toContain("unitPrice: numeros.unitPrice ?? null");
+    const leitor = COMPRAS.slice(COMPRAS.indexOf("const numerosDaCompra"));
+    expect(leitor).toContain("values.quantity ? valorDigitado(values.quantity) : undefined");
+    expect(leitor).toContain("values.unitPrice ? valorDigitado(values.unitPrice) : undefined");
   });
 
   it("nenhum campo da edição continua mandando undefined", () => {
@@ -66,13 +76,21 @@ describe("Funil — edição de lead", () => {
   const edicao = FUNIL.slice(FUNIL.indexOf("const handleEdit"));
 
   it.each([
-    ["budget", "values.budget ? parseFloat(values.budget) : null"],
     ["eventType", "values.eventType || null"],
     ["eventDate", "values.eventDate || null"],
     ["clientPhone", "values.clientPhone || null"],
     ["notes", "values.notes || null"],
   ])("esvaziar %s apaga o valor", (_campo, trecho) => {
     expect(edicao).toContain(trecho);
+  });
+
+  it("esvaziar o orçamento apaga o valor", () => {
+    // `orcamentoDoLead` devolve `null` para campo vazio e a string "erro" para
+    // o que não dá para ler — o que não pode é o campo vazio virar
+    // `undefined`, que o Convex descarta no transporte.
+    expect(edicao).toContain("budget,");
+    const leitor = FUNIL.slice(FUNIL.indexOf("const orcamentoDoLead"));
+    expect(leitor).toContain('if (!texto?.trim()) return null;');
   });
 
   it("nenhum campo da edição continua mandando undefined", () => {

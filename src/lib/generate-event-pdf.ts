@@ -393,5 +393,8 @@ export function generateEventPDF(data: EventReportData): void {
 
   // ── Save ──────────────────────────────────────────────────────────────────
   const safeName = event.name.replace(/[^a-zA-Z0-9\u00C0-\u024F ]/g, "").trim().replace(/\s+/g, "-");
-  entregarPdf(doc, `altar-relatorio-${safeName}.pdf`);
+  // "interno" no nome do arquivo não é detalhe: este relatório traz compras,
+  // valores, equipe e o briefing inteiro na audiência "interno". Um arquivo
+  // chamado só "relatorio" é o que acaba anexado num WhatsApp para a cliente.
+  entregarPdf(doc, `altar-relatorio-interno-${safeName}.pdf`);
 }

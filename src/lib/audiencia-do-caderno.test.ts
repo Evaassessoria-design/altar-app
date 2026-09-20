@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   AUDIENCIAS,
   AUDIENCIA_PADRAO,
+  campoDoItemVisivelPara,
   opcaoDaAudiencia,
 } from "./audiencia-do-caderno.ts";
 import { itemVisibleTo, resolveAreasForAudience, type Audience } from "./briefing-areas.ts";
@@ -139,5 +140,77 @@ describe("a tela pergunta em vez de decidir", () => {
   it("o nome do arquivo carrega a audiência", () => {
     const gerador = readFileSync("src/lib/generate-assembly-pdf.ts", "utf-8");
     expect(gerador).toContain("opcaoDaAudiencia(audience).sufixo");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// O CADERNO DA CLIENTE NÃO LEVA O QUE NÃO É DELA
+//
+// `itemVisibleTo` decide se o ITEM aparece. Não basta: um item contratado
+// aparece para a cliente e ia levando junto o FORNECEDOR — o contato comercial
+// da decoradora — e a OBSERVAÇÃO, que é a nota que ela escreve para a própria
+// equipe ("pedir 10 a mais, sempre chega peça quebrada").
+//
+// Enquanto o caderno só era gerado para a equipe, nada disso chegava à
+// cliente. O seletor de audiência abriu a porta.
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("campo a campo, por audiência", () => {
+  it("a cliente não lê o fornecedor", () => {
+    expect(campoDoItemVisivelPara("supplierName", "cliente")).toBe(false);
+  });
+
+  it("a cliente não lê a observação interna", () => {
+    expect(campoDoItemVisivelPara("notes", "cliente")).toBe(false);
+  });
+
+  it("a equipe lê os dois — é o trabalho dela", () => {
+    // Trava ao contrário: esconder da equipe a observação de montagem e quem
+    // entrega a peça é esconder justamente a instrução.
+    expect(campoDoItemVisivelPara("supplierName", "equipe")).toBe(true);
+    expect(campoDoItemVisivelPara("notes", "equipe")).toBe(true);
+  });
+
+  it("o uso interno lê tudo", () => {
+    expect(campoDoItemVisivelPara("supplierName", "interno")).toBe(true);
+    expect(campoDoItemVisivelPara("notes", "interno")).toBe(true);
+  });
+});
+
+describe("o gerador do caderno obedece", () => {
+  const fonte = readFileSync("src/lib/generate-assembly-pdf.ts", "utf-8");
+
+  it("fornecedor e observação passam pela regra antes de entrar no PDF", () => {
+    expect(fonte).toContain('campoDoItemVisivelPara("supplierName", audience)');
+    expect(fonte).toContain('campoDoItemVisivelPara("notes", audience)');
+  });
+
+  it("nenhum valor em dinheiro entra no caderno, em audiência nenhuma", () => {
+    // O caderno é documento de montagem. Preço na mão de quem monta é
+    // vazamento comercial — a mesma regra da Folha de Carregamento e da Ficha.
+    const semComentarios = fonte
+      .split("\n")
+      .filter((l) => {
+        const t = l.trim();
+        return !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*");
+      })
+      .join("\n");
+    expect(semComentarios).not.toMatch(/custo|preco|preço|valorTotal|toLocaleString.*BRL/i);
+  });
+});
+
+describe("o relatório completo do evento se anuncia como interno", () => {
+  it("o nome do arquivo diz que é interno", () => {
+    // Ele traz compras, valores, equipe e o briefing inteiro na audiência
+    // "interno". Um arquivo chamado só "relatorio" é o que acaba anexado num
+    // WhatsApp para a cliente.
+    const fonte = readFileSync("src/lib/generate-event-pdf.ts", "utf-8");
+    expect(fonte).toContain("altar-relatorio-interno-");
+    expect(fonte).toContain('resolveAreasForAudience');
+  });
+
+  it("e o botão que o gera também", () => {
+    const tela = readFileSync("src/pages/app/events/[id]/page.tsx", "utf-8");
+    expect(tela).toMatch(/title="Baixar relatório interno/);
   });
 });

@@ -295,7 +295,8 @@ export default function EventDetailsPage() {
             <button
               onClick={() => void handleDownloadPDF()}
               disabled={pdfGenerating}
-              title="Baixar relatório em PDF"
+              title="Baixar relatório interno do evento (PDF) — traz compras, valores e equipe"
+              aria-label="Baixar relatório interno do evento em PDF"
               className="p-2 rounded-lg hover:bg-accent transition-colors cursor-pointer text-muted-foreground disabled:opacity-50"
             >
               {pdfGenerating ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}

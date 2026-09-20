@@ -1,6 +1,6 @@
 import jsPDF from "jspdf";
 import { entregarPdf } from "./pdf-delivery.ts";
-import { opcaoDaAudiencia } from "./audiencia-do-caderno.ts";
+import { campoDoItemVisivelPara, opcaoDaAudiencia } from "./audiencia-do-caderno.ts";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { Doc } from "@/convex/_generated/dataModel.d.ts";
@@ -307,8 +307,15 @@ export async function generateAssemblyPDF(data: AssemblyReportData): Promise<voi
         const detailPairs: [string, string][] = [];
         if (item.model?.trim()) detailPairs.push(["Modelo", item.model.trim()]);
         if (item.ambiente?.trim()) detailPairs.push(["Ambiente", item.ambiente.trim()]);
-        if (item.supplierName?.trim()) detailPairs.push(["Fornecedor", item.supplierName.trim()]);
-        if (item.notes?.trim()) detailPairs.push(["Obs.", item.notes.trim()]);
+        // Fornecedor e observação NÃO vão no caderno da cliente: um é o
+        // contato comercial da decoradora, o outro é a nota que ela escreve
+        // para a própria equipe. Ver `audiencia-do-caderno.ts`.
+        if (item.supplierName?.trim() && campoDoItemVisivelPara("supplierName", audience)) {
+          detailPairs.push(["Fornecedor", item.supplierName.trim()]);
+        }
+        if (item.notes?.trim() && campoDoItemVisivelPara("notes", audience)) {
+          detailPairs.push(["Obs.", item.notes.trim()]);
+        }
 
         const blockH = Math.max(
           // +4 da miniatura, +3.4 do rótulo abaixo dela.

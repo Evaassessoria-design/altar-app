@@ -122,6 +122,71 @@ export const list = query({
   },
 });
 
+/**
+ * Onde esta composição foi aplicada.
+ *
+ * ── POR QUE ISTO PRECISA EXISTIR ────────────────────────────────────────────
+ * Renomear ou arquivar uma receita da biblioteca é uma decisão que se toma
+ * sabendo o que ela já serviu. "Arranjo baixo" pode ser de um casamento só ou
+ * de doze — e a resposta muda o que se faz com ela.
+ *
+ * ── O QUE ISTO NÃO SIGNIFICA ────────────────────────────────────────────────
+ * "Usada em" é PROCEDÊNCIA, não dependência. O item de montagem guarda o
+ * SNAPSHOT da receita; arquivar ou renomear a composição não muda nenhum dos
+ * eventos listados aqui. A lista existe para a decoradora reconhecer a receita
+ * ("ah, é a das mesas da Marina"), não para avisar de um estrago.
+ *
+ * Pagina: uma receita muito usada não pode virar uma varredura silenciosa, e a
+ * tela precisa poder dizer "e há mais" em vez de mentir um total.
+ */
+const LIMITE_DE_USOS = 25;
+
+export const ondeEUsada = query({
+  args: { id: v.id("compositions") },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const composicao = await ctx.db.get(args.id);
+    // Id de outra conta responde como inexistente — confirmar que existe já
+    // seria contar algo sobre a biblioteca alheia.
+    if (!composicao || composicao.userId !== user._id) return null;
+
+    const encontrados = await ctx.db
+      .query("assemblyItems")
+      .withIndex("by_composition", (q) => q.eq("compositionId", args.id))
+      .take(LIMITE_DE_USOS + 1);
+    // O índice é só por composição. O dono é conferido aqui, e não por
+    // confiança na integridade do vínculo.
+    const itens = encontrados.filter((i) => i.userId === user._id);
+    const temMais = itens.length > LIMITE_DE_USOS;
+
+    const eventos = new Map<string, { eventId: Id<"events">; nome: string; data: string; itens: string[] }>();
+    for (const item of itens.slice(0, LIMITE_DE_USOS)) {
+      const existente = eventos.get(item.eventId);
+      if (existente) {
+        existente.itens.push(item.name);
+        continue;
+      }
+      const evento = await ctx.db.get(item.eventId);
+      if (!evento || evento.userId !== user._id) continue;
+      eventos.set(item.eventId, {
+        eventId: item.eventId,
+        nome: evento.name,
+        data: evento.date,
+        itens: [item.name],
+      });
+    }
+
+    return {
+      nome: composicao.nome,
+      archived: composicao.archived === true,
+      materiais: composicao.receita.length,
+      eventos: [...eventos.values()].sort((a, b) => b.data.localeCompare(a.data)),
+      /** Há mais usos do que os listados. A tela precisa dizer isso. */
+      temMais,
+    };
+  },
+});
+
 export const create = mutation({
   args: {
     nome: v.string(),

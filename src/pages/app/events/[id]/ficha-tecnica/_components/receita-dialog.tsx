@@ -18,6 +18,7 @@ import { Plus, Trash2, Loader2, BookMarked, Pencil } from "lucide-react";
 import { TIPOS_DE_MATERIAL, UNIDADES, aceitaDecimal, normalizeName } from "@/convex/lib/materiais.ts";
 import { necessidadeDoComponente, quantidadeTexto } from "@/convex/lib/fichaTecnica.ts";
 import { MaterialDialog, type MaterialEditavel } from "./material-dialog.tsx";
+import { ComposicaoDialog } from "./composicao-dialog.tsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RECEITA DE UM ITEM
@@ -61,6 +62,7 @@ export function ReceitaDialog({
   const [salvando, setSalvando] = useState(false);
   const [salvandoNaBiblioteca, setSalvandoNaBiblioteca] = useState(false);
   const [editandoMaterial, setEditandoMaterial] = useState<MaterialEditavel | null>(null);
+  const [editandoComposicao, setEditandoComposicao] = useState(false);
   const [carregada, setCarregada] = useState(false);
 
   // Carrega a receita existente uma vez por abertura — reabrir o diálogo não
@@ -246,6 +248,20 @@ export function ReceitaDialog({
           </div>
         )}
 
+        {/* A biblioteca era de mão única: enchia por aqui e não tinha onde ser
+            corrigida. Um nome digitado errado ficava no menu para sempre. O
+            atalho aparece só quando ESTE item veio da biblioteca ou foi
+            guardado nela — é a receita que ela tem na mão. */}
+        {item?.compositionId && (
+          <button
+            type="button"
+            onClick={() => setEditandoComposicao(true)}
+            className="-mt-1 self-start text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground cursor-pointer"
+          >
+            Renomear ou arquivar esta receita na biblioteca
+          </button>
+        )}
+
         <div className="space-y-2">
           {linhas.map((linha, i) => (
             <div key={i} className="border border-border rounded-lg p-2.5 space-y-2">
@@ -422,6 +438,10 @@ export function ReceitaDialog({
         </DialogFooter>
       </DialogContent>
       <MaterialDialog material={editandoMaterial} onClose={() => setEditandoMaterial(null)} />
+      <ComposicaoDialog
+        compositionId={editandoComposicao ? (item?.compositionId ?? null) : null}
+        onClose={() => setEditandoComposicao(false)}
+      />
     </Dialog>
   );
 }

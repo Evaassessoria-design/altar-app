@@ -281,3 +281,117 @@ describe("o que a biblioteca copia", () => {
     expect(guardada.receita[0].quantidade).toBe(5);
   });
 });
+
+// ═════════════════════════════════════ ONDE ESTA RECEITA JÁ FOI USADA
+
+describe("a procedência de uma receita da biblioteca", () => {
+  it("lista os eventos que a aplicaram, do mais recente para o mais antigo", async () => {
+    const { t, dona, itemA, itemB, donaId } = await cenario();
+    await dona.mutation(api.fichaTecnica.salvarNaBiblioteca, { id: itemA });
+    const [composicao] = await biblioteca(t, donaId);
+    await t.run(async (ctx: MutationCtx) => {
+      await ctx.db.patch(itemB, { compositionId: composicao._id });
+    });
+
+    const r = await dona.query(api.compositions.ondeEUsada, { id: composicao._id });
+    expect(r!.eventos.map((e) => e.nome)).toEqual(["Ana & Pedro", "Marina & Gabriel"]);
+    expect(r!.eventos[1].itens).toEqual(["Arranjo baixo"]);
+    expect(r!.temMais).toBe(false);
+    expect(r!.materiais).toBe(1);
+  });
+
+  it("receita guardada e ainda não aplicada não inventa uso", async () => {
+    // O item que a ORIGINOU aponta para ela — e isso é um uso de verdade.
+    // O que não pode é a lista trazer evento que nunca a aplicou.
+    const { t, dona, itemA, donaId } = await cenario();
+    await dona.mutation(api.fichaTecnica.salvarNaBiblioteca, { id: itemA });
+    const [composicao] = await biblioteca(t, donaId);
+    const r = await dona.query(api.compositions.ondeEUsada, { id: composicao._id });
+    expect(r!.eventos).toHaveLength(1);
+    expect(r!.eventos[0].nome).toBe("Marina & Gabriel");
+  });
+
+  it("dois itens do MESMO evento aparecem numa linha só", async () => {
+    const { t, dona, itemA, donaId, rosa } = await cenario();
+    await dona.mutation(api.fichaTecnica.salvarNaBiblioteca, { id: itemA });
+    const [composicao] = await biblioteca(t, donaId);
+    await t.run(async (ctx: MutationCtx) => {
+      const item = (await ctx.db.get(itemA))!;
+      await ctx.db.insert("assemblyItems", {
+        userId: item.userId, eventId: item.eventId, area: "ceremony", order: 9,
+        name: "Arranjo do altar", quantity: 2, compositionId: composicao._id,
+        includeInAssemblyReport: true, checkOnAssembly: true, visibility: "interno",
+        createdAt: NOW, updatedAt: NOW,
+        receita: [{ materialId: rosa, nome: "Rosa branca", unidade: "haste", quantidade: 5 }],
+      });
+    });
+    const r = await dona.query(api.compositions.ondeEUsada, { id: composicao._id });
+    expect(r!.eventos).toHaveLength(1);
+    expect(r!.eventos[0].itens).toEqual(["Arranjo baixo", "Arranjo do altar"]);
+  });
+
+  it("acima do limite a resposta AVISA que há mais — não mente um total", async () => {
+    const { t, dona, itemA, donaId, rosa } = await cenario();
+    await dona.mutation(api.fichaTecnica.salvarNaBiblioteca, { id: itemA });
+    const [composicao] = await biblioteca(t, donaId);
+    await t.run(async (ctx: MutationCtx) => {
+      const item = (await ctx.db.get(itemA))!;
+      for (let i = 0; i < 30; i++) {
+        const eventId = await ctx.db.insert("events", {
+          userId: item.userId, name: `Evento ${i}`, type: "wedding",
+          date: `2027-0${(i % 9) + 1}-10`, location: "L", clientName: "C", status: "confirmed",
+        });
+        await ctx.db.insert("assemblyItems", {
+          userId: item.userId, eventId, area: "tables", order: i, name: "Arranjo baixo",
+          quantity: 1, compositionId: composicao._id, includeInAssemblyReport: true,
+          checkOnAssembly: true, visibility: "interno", createdAt: NOW, updatedAt: NOW,
+          receita: [{ materialId: rosa, nome: "Rosa branca", unidade: "haste", quantidade: 5 }],
+        });
+      }
+    });
+    const r = await dona.query(api.compositions.ondeEUsada, { id: composicao._id });
+    expect(r!.temMais).toBe(true);
+    expect(r!.eventos.length).toBeLessThanOrEqual(25);
+  });
+
+  it("a composição de outra empresa responde como inexistente", async () => {
+    // Confirmar que o id existe já contaria algo sobre a biblioteca alheia.
+    const { t, dona, outra, daOutra, outraId } = await cenario();
+    await outra.mutation(api.fichaTecnica.salvarNaBiblioteca, { id: daOutra });
+    const [alheia] = await biblioteca(t, outraId);
+    expect(await dona.query(api.compositions.ondeEUsada, { id: alheia._id })).toBeNull();
+  });
+
+  it("arquivar a receita NÃO muda o item de montagem que a usou", async () => {
+    // A regra do snapshot, do lado da manutenção: a biblioteca some do menu e
+    // o evento continua montável.
+    const { t, dona, itemA, donaId } = await cenario();
+    await dona.mutation(api.fichaTecnica.salvarNaBiblioteca, { id: itemA });
+    const [composicao] = await biblioteca(t, donaId);
+    await dona.mutation(api.compositions.setArchived, { id: composicao._id, archived: true });
+    const item = await t.run(async (ctx: MutationCtx) => ctx.db.get(itemA));
+    expect(item!.receita![0].quantidade).toBe(5);
+    expect(item!.compositionId).toBe(composicao._id);
+  });
+
+  it("renomear na biblioteca NÃO renomeia o item do evento", async () => {
+    const { t, dona, itemA, donaId } = await cenario();
+    await dona.mutation(api.fichaTecnica.salvarNaBiblioteca, { id: itemA });
+    const [composicao] = await biblioteca(t, donaId);
+    await dona.mutation(api.compositions.update, { id: composicao._id, nome: "Arranjo mesa baixa" });
+    const item = await t.run(async (ctx: MutationCtx) => ctx.db.get(itemA));
+    expect(item!.name).toBe("Arranjo baixo");
+  });
+
+  it("e a busca acompanha o nome novo — senão a colisão deixa de funcionar", async () => {
+    const { t, dona, itemA, donaId } = await cenario();
+    await dona.mutation(api.fichaTecnica.salvarNaBiblioteca, { id: itemA });
+    const [composicao] = await biblioteca(t, donaId);
+    await dona.mutation(api.compositions.update, { id: composicao._id, nome: "Arranjo mesa baixa" });
+    // Com o searchName parado no nome antigo, guardar "Arranjo baixo" de novo
+    // colidiria com uma entrada que já não se chama assim.
+    const r = await dona.mutation(api.fichaTecnica.salvarNaBiblioteca, { id: itemA });
+    expect(r.atualizada).toBe(false);
+    expect(await biblioteca(t, donaId)).toHaveLength(2);
+  });
+});

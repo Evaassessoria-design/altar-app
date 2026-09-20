@@ -15,7 +15,7 @@ import {
 import { toast } from "sonner";
 import { ConvexError } from "convex/values";
 import { Plus, Trash2, Loader2, BookMarked, Pencil } from "lucide-react";
-import { TIPOS_DE_MATERIAL, UNIDADES, aceitaDecimal } from "@/convex/lib/materiais.ts";
+import { TIPOS_DE_MATERIAL, UNIDADES, aceitaDecimal, normalizeName } from "@/convex/lib/materiais.ts";
 import { necessidadeDoComponente, quantidadeTexto } from "@/convex/lib/fichaTecnica.ts";
 import { MaterialDialog, type MaterialEditavel } from "./material-dialog.tsx";
 
@@ -97,7 +97,15 @@ export function ReceitaDialog({
     alterar(i, { materialId: m._id, nome: m.nome, unidade: m.unidade, tipo: m.tipo });
   };
 
-  const salvar = async () => {
+  /**
+   * Grava a ficha e diz se deu certo. Sem toast e sem fechar o diálogo.
+   *
+   * Existe separado porque "Salvar na biblioteca" também precisa dela: a
+   * mutation da biblioteca copia `item.receita`, que é a versão GRAVADA. Sem
+   * gravar antes, uma linha recém-digitada ia embora e a tela dizia
+   * "Receita salva na biblioteca" mesmo assim.
+   */
+  const gravarFicha = async (): Promise<boolean> => {
     const preenchidas = linhas.filter((l) => l.nome.trim());
     setSalvando(true);
     try {
@@ -110,7 +118,7 @@ export function ReceitaDialog({
         if (!Number.isFinite(quantidade) || quantidade < 0) {
           toast.error(`Quantidade inválida em "${l.nome}".`);
           setSalvando(false);
-          return;
+          return false;
         }
         let materialId = l.materialId;
         if (!materialId) {
@@ -129,14 +137,63 @@ export function ReceitaDialog({
         });
       }
       await setReceita({ id: itemId, receita: resolvidas });
-      toast.success("Ficha técnica salva.");
-      onClose();
+      return true;
     } catch (e) {
       toast.error(
         e instanceof ConvexError ? (e.data as { message: string }).message : "Não foi possível salvar.",
       );
+      return false;
     } finally {
       setSalvando(false);
+    }
+  };
+
+  const salvar = async () => {
+    if (!(await gravarFicha())) return;
+    toast.success("Ficha técnica salva.");
+    onClose();
+  };
+
+  /**
+   * Manda a receita para a biblioteca, para os próximos eventos.
+   *
+   * Pergunta antes de escrever por cima. Duas decoradoras chamam o arranjo da
+   * mesa de "Arranjo baixo"; sobrescrever em silêncio apagaria a receita de um
+   * evento anterior, e a biblioteca não tem lixeira.
+   */
+  const enviarParaBiblioteca = async () => {
+    if (salvandoNaBiblioteca) return;
+    const nome = (item?.name ?? "").trim();
+    const igual = (composicoes ?? []).find((c) => normalizeName(c.nome) === normalizeName(nome));
+    if (
+      igual &&
+      !window.confirm(
+        `Já existe "${igual.nome}" na biblioteca, com ${igual.receita.length} ` +
+          `${igual.receita.length === 1 ? "material" : "materiais"}. ` +
+          "Substituir a receita dela por esta? Os eventos já montados não mudam.",
+      )
+    ) {
+      return;
+    }
+    setSalvandoNaBiblioteca(true);
+    // Grava a ficha primeiro: é dela que a biblioteca copia.
+    if (!(await gravarFicha())) {
+      setSalvandoNaBiblioteca(false);
+      return;
+    }
+    try {
+      const r = await salvarNaBiblioteca({ id: itemId, substituirExistente: Boolean(igual) });
+      toast.success(
+        r.atualizada ? `"${nome}" atualizada na biblioteca.` : "Receita salva na biblioteca.",
+      );
+    } catch (e) {
+      toast.error(
+        e instanceof ConvexError
+          ? (e.data as { message: string }).message
+          : "Não foi possível salvar na biblioteca.",
+      );
+    } finally {
+      setSalvandoNaBiblioteca(false);
     }
   };
 
@@ -334,25 +391,25 @@ export function ReceitaDialog({
         </Button>
 
         <DialogFooter className="gap-2 sm:gap-2">
-          {(item?.receita?.length ?? 0) > 0 && (
+          {/* Aparece com o que está NA TELA, e não só com o que já foi
+              gravado: a receita recém-digitada é justamente a que vale a pena
+              guardar, e exigir salvar-fechar-reabrir antes fazia a biblioteca
+              parecer não existir. */}
+          {linhas.some((l) => l.nome.trim()) && (
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              disabled={salvandoNaBiblioteca}
-              onClick={() => {
-                // Sem esta trava, dois toques criavam DUAS composicoes iguais
-                // na biblioteca: a mutation faz `insert`, nao upsert.
-                if (salvandoNaBiblioteca) return;
-                setSalvandoNaBiblioteca(true);
-                void salvarNaBiblioteca({ id: itemId })
-                  .then(() => toast.success("Receita salva na biblioteca."))
-                  .catch(() => toast.error("Não foi possível salvar na biblioteca."))
-                  .finally(() => setSalvandoNaBiblioteca(false));
-              }}
+              disabled={salvandoNaBiblioteca || salvando}
+              onClick={() => void enviarParaBiblioteca()}
               className="cursor-pointer gap-1.5 mr-auto"
             >
-              <BookMarked className="size-4" /> Salvar na biblioteca
+              {salvandoNaBiblioteca ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <BookMarked className="size-4" />
+              )}
+              Salvar na biblioteca
             </Button>
           )}
           <Button type="button" variant="ghost" onClick={onClose} className="cursor-pointer">

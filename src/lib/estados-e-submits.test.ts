@@ -69,11 +69,15 @@ describe("botão de ação não dispara duas vezes", () => {
   });
 
   it("o botão que grava na biblioteca trava enquanto grava", () => {
-    // A mutation faz `insert`, não upsert: dois toques criavam DUAS
-    // composições iguais na biblioteca central.
+    // Dois toques mandavam a mesma receita duas vezes. Hoje o servidor também
+    // recusa a segunda (ver a trava da biblioteca, mais abaixo), mas o botão
+    // continua sendo a primeira defesa — e a única que evita o recado de erro.
     const c = codigoDe("src/pages/app/events/[id]/ficha-tecnica/_components/receita-dialog.tsx");
     expect(c).toContain("salvandoNaBiblioteca");
-    expect(c).toMatch(/disabled=\{salvandoNaBiblioteca\}/);
+    // A condição pode crescer (gravar a ficha antes também trava o botão); o
+    // que não pode é o estado sumir do `disabled`.
+    expect(c).toMatch(/disabled=\{[^}]*salvandoNaBiblioteca[^}]*\}/);
+    expect(c).toContain("if (salvandoNaBiblioteca) return;");
   });
 
   it("o envio de arquivo trava por ref, não só por estado", () => {
@@ -112,5 +116,59 @@ describe("erro não leva junto o que a pessoa digitou", () => {
     const corpo = c.slice(i, i + 700);
     // O fechamento vem ANTES do catch, ou seja, dentro do caminho de sucesso.
     expect(corpo.indexOf("setEditingCaption(null)")).toBeLessThan(corpo.indexOf("} catch"));
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRAVA — "SALVAR NA BIBLIOTECA" GUARDA O QUE ESTÁ NA TELA
+//
+// O defeito: o botão chamava `salvarNaBiblioteca`, e essa mutation copia
+// `item.receita` — a versão GRAVADA. Quem editava as quantidades e clicava em
+// "Salvar na biblioteca" antes de "Salvar ficha" mandava a receita ANTIGA para
+// a biblioteca, e lia "Receita salva na biblioteca" como confirmação.
+//
+// O botão também só aparecia quando já existia receita gravada, então a
+// receita recém-digitada — justamente a que vale guardar — exigia salvar,
+// fechar e reabrir antes.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("a biblioteca recebe o que está na tela", () => {
+  const RECEITA = "src/pages/app/events/[id]/ficha-tecnica/_components/receita-dialog.tsx";
+  const fonte = readFileSync(RECEITA, "utf-8");
+
+  it("grava a ficha ANTES de mandar para a biblioteca", () => {
+    const bloco = fonte.slice(
+      fonte.indexOf("const enviarParaBiblioteca"),
+      fonte.indexOf("salvarNaBiblioteca({ id: itemId"),
+    );
+    expect(bloco, "manda sem gravar").toContain("await gravarFicha()");
+  });
+
+  it("o botão aparece pelo que está digitado, não pelo que já foi gravado", () => {
+    expect(fonte).toContain("linhas.some((l) => l.nome.trim())");
+    expect(fonte).not.toContain("(item?.receita?.length ?? 0) > 0 && (");
+  });
+
+  it("pergunta antes de escrever por cima de uma receita da biblioteca", () => {
+    // A biblioteca não tem lixeira: substituir em silêncio apagaria a receita
+    // de um evento anterior com o mesmo apelido.
+    const bloco = fonte.slice(
+      fonte.indexOf("const enviarParaBiblioteca"),
+      fonte.indexOf("setSalvandoNaBiblioteca(true)"),
+    );
+    expect(bloco).toContain("window.confirm");
+    expect(bloco).toContain("normalizeName");
+  });
+
+  it("e o servidor recusa a colisão mesmo se a tela não perguntar", () => {
+    // A pergunta é conveniência. A trava é do servidor.
+    const backend = readFileSync("convex/fichaTecnica.ts", "utf-8");
+    const bloco = backend.slice(
+      backend.indexOf("export const salvarNaBiblioteca"),
+      backend.indexOf("\nexport ", backend.indexOf("export const salvarNaBiblioteca") + 1),
+    );
+    expect(bloco).toContain('withIndex("by_user_search"');
+    expect(bloco).toContain("JA_EXISTE");
+    expect(bloco).toContain("if (!args.substituirExistente)");
   });
 });

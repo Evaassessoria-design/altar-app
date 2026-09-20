@@ -252,9 +252,31 @@ export const limparReceita = mutation({
  *
  * Povoar a biblioteca a partir de trabalho já feito, em vez de exigir um
  * formulário em branco — foi assim que o catálogo de fornecedores encheu.
+ *
+ * ── O DEFEITO QUE A CONFERÊNCIA DE NOME CORRIGE ─────────────────────────────
+ * A mutation fazia `insert`, sempre. "Arranjo baixo clássico" salvo a partir
+ * de três eventos virava três entradas de mesmo nome na biblioteca, e o menu
+ * de escolha da ficha passava a oferecer três linhas idênticas — nenhuma
+ * delas distinguível das outras. O catálogo de materiais e o acervo já
+ * tratavam isso: colide por nome normalizado, e nunca em silêncio.
+ *
+ * Aqui a colisão é RECUSADA por padrão. Quem chama decide o que fazer, porque
+ * as duas saídas são legítimas e o sistema não tem como escolher: pode ser a
+ * mesma receita sendo atualizada, ou dois arranjos diferentes com o mesmo
+ * apelido. Sobrescrever sozinho apagaria a receita de alguém.
  */
 export const salvarNaBiblioteca = mutation({
-  args: { id: v.id("assemblyItems"), nome: v.optional(v.string()) },
+  args: {
+    id: v.id("assemblyItems"),
+    nome: v.optional(v.string()),
+    /**
+     * Autoriza atualizar a composição de mesmo nome que já existe.
+     *
+     * Ausente ou `false` = a colisão vira erro `JA_EXISTE`, com o nome no
+     * recado, para a tela poder perguntar antes.
+     */
+    substituirExistente: v.optional(v.boolean()),
+  },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const item = await ctx.db.get(args.id);
@@ -265,16 +287,41 @@ export const salvarNaBiblioteca = mutation({
 
     const nome = args.nome?.trim() || item.name;
     const { normalizeName } = await import("./lib/materiais");
+    const searchName = normalizeName(nome);
+    const receita = item.receita.map((c) => ({ ...c }));
+
+    // Arquivadas entram na busca de propósito: deixar passar criaria uma
+    // segunda entrada com o mesmo nome da que está guardada, e reativar a
+    // antiga depois traria a confusão de volta.
+    const existente = await ctx.db
+      .query("compositions")
+      .withIndex("by_user_search", (q) => q.eq("userId", user._id).eq("searchName", searchName))
+      .first();
+
+    if (existente) {
+      if (!args.substituirExistente) {
+        throw new ConvexError({
+          code: "JA_EXISTE",
+          message: `Já existe "${existente.nome}" na biblioteca.`,
+        });
+      }
+      // Atualizar a biblioteca NÃO mexe em evento nenhum: os itens de montagem
+      // guardam o snapshot da receita (ver convex/compositions.ts).
+      await ctx.db.patch(existente._id, comCarimbo({ nome, receita, archived: undefined }));
+      await ctx.db.patch(args.id, comCarimbo({ compositionId: existente._id }));
+      return { compositionId: existente._id, atualizada: true };
+    }
+
     const compositionId = await ctx.db.insert("compositions", {
       userId: user._id,
       nome,
-      searchName: normalizeName(nome),
-      receita: item.receita.map((c) => ({ ...c })),
+      searchName,
+      receita,
       updatedAt: new Date().toISOString(),
     });
     // Registra a procedência nos dois sentidos, sem criar dependência de leitura.
     await ctx.db.patch(args.id, comCarimbo({ compositionId }));
-    return { compositionId };
+    return { compositionId, atualizada: false };
   },
 });
 

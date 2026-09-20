@@ -69,8 +69,20 @@ variável de ambiente.
 | **Produção** | `mellow-goose-539` | **só recebe release revisado. Nunca rode script, seed ou experimento aqui.** |
 
 Antes de qualquer `convex deploy`, `convex env set` ou `convex run`, **confirme
-o deployment alvo**. O script de homologação (`scripts/homologacao-central.sh`)
-se recusa a rodar contra produção — mas a checagem no seu terminal vem antes.
+o deployment alvo**. O script de homologação se recusa a rodar contra produção
+— mas a checagem no seu terminal vem antes.
+
+A homologação da Central roda igual nos dois sistemas, porque é o mesmo Node:
+
+```bash
+node scripts/homologacao/central.mjs      # Linux, macOS
+pwsh scripts/homologacao-central.ps1      # Windows
+./scripts/homologacao-central.sh          # casca, para os dedos que já sabem
+```
+
+As travas (não tocar produção, não rodar com envio externo ligado, exigir
+`mock`, token só do ambiente) vivem em `scripts/homologacao/travas.mjs`, são
+funções puras e têm teste próprio (`npx vitest run --project scripts`).
 
 Variáveis de ambiente usadas pelo backend (só os NOMES; os valores vivem no
 Convex e em lugar nenhum do repositório):

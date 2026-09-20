@@ -39,6 +39,19 @@ export default defineConfig({
         },
       },
       {
+        // Os scripts de homologação. Rodam em Node puro porque é assim que são
+        // executados de verdade — e porque as travas que eles carregam (não
+        // tocar produção, não rodar com envio externo ligado) são a única
+        // coisa entre um comando errado e dados fictícios no banco de
+        // clientes reais.
+        extends: true,
+        test: {
+          name: "scripts",
+          environment: "node",
+          include: ["scripts/**/*.test.mjs"],
+        },
+      },
+      {
         extends: true,
         plugins: [react()],
         test: {

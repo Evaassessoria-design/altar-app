@@ -883,6 +883,79 @@ export const painelInterno = internalQuery({
   handler: async (ctx, args) => montarPainel(ctx, args.agora),
 });
 
+/**
+ * O que o gateway acabou de criar para estes telefones?
+ *
+ * Existe para o script de homologação (`scripts/homologacao/`) descobrir a
+ * conversa e a última mensagem de cada cenário sem inventar id nenhum.
+ *
+ * ── POR QUE UMA CONSULTA, E NÃO UM EXPORT ───────────────────────────────────
+ * A versão anterior do script baixava um `convex export` e o descompactava com
+ * `unzip`. Funcionava no Linux e falhava no Windows, onde `unzip` não existe —
+ * e a homologação é feita no computador de quem vende, que é Windows.
+ *
+ * Somente LEITURA e `internalQuery`: inalcançável pelo aplicativo, incapaz de
+ * escrever. Devolve apenas identificadores e o mínimo para decidir o que ainda
+ * falta triar — nenhum texto de mensagem, nenhum dado de contato.
+ */
+export const conversasPorIdentidade = internalQuery({
+  args: { externalIds: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const encontrados = [];
+
+    for (const externalId of args.externalIds) {
+      const identidade = await ctx.db
+        .query("communicationIdentities")
+        .withIndex("by_channel_external", (q) =>
+          q.eq("channel", "whatsapp").eq("externalId", externalId),
+        )
+        .first();
+
+      if (!identidade) {
+        encontrados.push({ externalId, encontrada: false as const });
+        continue;
+      }
+
+      // A mais recente do contato: um cenário reenviado cria mensagem na mesma
+      // conversa, não outra, mas o contato pode ter histórico anterior.
+      const conversas = await ctx.db
+        .query("communicationConversations")
+        .withIndex("by_contact", (q) => q.eq("contactId", identidade.contactId))
+        .collect();
+      const conversa = conversas.sort((a, b) => b.ultimaMensagemEm - a.ultimaMensagemEm)[0];
+
+      if (!conversa) {
+        encontrados.push({ externalId, encontrada: false as const });
+        continue;
+      }
+
+      const ultimaMensagem = await ctx.db
+        .query("communicationMessages")
+        .withIndex("by_conversation_enviadaEm", (q) => q.eq("conversationId", conversa._id))
+        .order("desc")
+        .first();
+
+      // Já triada = não triar de novo. Sem isto, cada execução empilharia uma
+      // proposta de resposta na fila de aprovação do Matheus.
+      const triagem = await ctx.db
+        .query("communicationTriage")
+        .withIndex("by_conversation", (q) => q.eq("conversationId", conversa._id))
+        .first();
+
+      encontrados.push({
+        externalId,
+        encontrada: true as const,
+        conversationId: conversa._id,
+        vertical: conversa.vertical,
+        messageId: ultimaMensagem?._id,
+        jaTriada: triagem !== null,
+      });
+    }
+
+    return encontrados;
+  },
+});
+
 // ─── Edição administrativa ───────────────────────────────────────────────────
 
 async function conversaExistente(ctx: MutationCtx, id: Id<"communicationConversations">) {

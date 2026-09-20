@@ -14,9 +14,10 @@ import {
 } from "@/components/ui/dialog.tsx";
 import { toast } from "sonner";
 import { ConvexError } from "convex/values";
-import { Plus, Trash2, Loader2, BookMarked } from "lucide-react";
+import { Plus, Trash2, Loader2, BookMarked, Pencil } from "lucide-react";
 import { TIPOS_DE_MATERIAL, UNIDADES, aceitaDecimal } from "@/convex/lib/materiais.ts";
 import { necessidadeDoComponente, quantidadeTexto } from "@/convex/lib/fichaTecnica.ts";
+import { MaterialDialog, type MaterialEditavel } from "./material-dialog.tsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RECEITA DE UM ITEM
@@ -59,6 +60,7 @@ export function ReceitaDialog({
   const [linhas, setLinhas] = useState<Linha[]>([]);
   const [salvando, setSalvando] = useState(false);
   const [salvandoNaBiblioteca, setSalvandoNaBiblioteca] = useState(false);
+  const [editandoMaterial, setEditandoMaterial] = useState<MaterialEditavel | null>(null);
   const [carregada, setCarregada] = useState(false);
 
   // Carrega a receita existente uma vez por abertura — reabrir o diálogo não
@@ -209,6 +211,21 @@ export function ReceitaDialog({
                     ))}
                   </select>
                 </div>
+                {/* Só aparece com material do catálogo escolhido: uma linha
+                    digitada à mão ainda não é material, e não há o que editar. */}
+                {linha.materialId && (
+                  <button
+                    onClick={() => {
+                      const m = (materiais ?? []).find((x) => x._id === linha.materialId);
+                      if (m) setEditandoMaterial(m);
+                    }}
+                    aria-label={`Editar o material ${linha.nome}`}
+                    title="Corrigir este material no catálogo"
+                    className="mt-5 p-2 rounded-lg hover:bg-accent text-muted-foreground cursor-pointer"
+                  >
+                    <Pencil className="size-4" />
+                  </button>
+                )}
                 <button
                   onClick={() => setLinhas((a) => a.filter((_, idx) => idx !== i))}
                   aria-label={`Remover ${linha.nome || "linha"}`}
@@ -347,6 +364,7 @@ export function ReceitaDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+      <MaterialDialog material={editandoMaterial} onClose={() => setEditandoMaterial(null)} />
     </Dialog>
   );
 }

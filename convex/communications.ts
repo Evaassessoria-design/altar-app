@@ -793,6 +793,16 @@ export const abrirConversa = query({
 });
 
 /**
+ * Tetos das varreduras do painel.
+ *
+ * Não são paginação: o painel CONTA, e contar exige ver tudo. São o limite a
+ * partir do qual ele para de conseguir contar — e passa a dizer isso em vez de
+ * afirmar o número que viu.
+ */
+const LIMITE_DE_CONVERSAS_DO_PAINEL = 1_000;
+const LIMITE_DE_CONTATOS_DO_PAINEL = 200;
+
+/**
  * Indicadores da Central.
  *
  * Mesma função alimenta o Painel Admin e — via ponte somente leitura — a sala
@@ -806,7 +816,7 @@ export async function montarPainel(ctx: QueryCtx, agora: number) {
     .query("communicationConversations")
     .withIndex("by_vertical_ultimaMensagem", (q) => q.eq("vertical", vertical))
     .order("desc")
-    .take(1_000);
+    .take(LIMITE_DE_CONVERSAS_DO_PAINEL);
 
   const vivas = conversas.filter((c) => c.status !== "resolvida" && c.status !== "arquivada");
 
@@ -846,7 +856,7 @@ export async function montarPainel(ctx: QueryCtx, agora: number) {
     .query("adminContacts")
     .withIndex("by_vertical", (q) => q.eq("vertical", vertical))
     .order("desc")
-    .take(200);
+    .take(LIMITE_DE_CONTATOS_DO_PAINEL);
 
   return {
     vertical,
@@ -866,6 +876,18 @@ export async function montarPainel(ctx: QueryCtx, agora: number) {
     },
     envioExterno:
       process.env.ALTAR_CENTRAL_ENVIO_HABILITADO?.trim() === "true" ? "ligado" : "desligado",
+    /**
+     * A contagem viu TUDO, ou parou no limite da varredura?
+     *
+     * Os números deste painel saem de duas varreduras com teto. Enquanto a
+     * Central couber nelas, o teto não muda nada. No dia em que não couber, os
+     * cartões passariam a mostrar um número MENOR que o real, com a mesma cara
+     * de certeza — e "Conversas abertas: 1000" seria uma afirmação que a
+     * consulta não pode sustentar. A tela precisa poder dizer isso.
+     */
+    amostraParcial:
+      conversas.length >= LIMITE_DE_CONVERSAS_DO_PAINEL ||
+      contatosRecentes.length >= LIMITE_DE_CONTATOS_DO_PAINEL,
   };
 }
 

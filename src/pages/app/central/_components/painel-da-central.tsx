@@ -21,8 +21,12 @@ import { ROTULO_DO_DEPARTAMENTO, type Departamento } from "@/lib/central-fila.ts
 // (`communications.painel`), e por isso não existe a chance de a sala 3D e o
 // Painel Admin discordarem sobre quantas conversas estão abertas.
 //
-// O 3D continua SOMENTE LEITURA e com o payload congelado: nenhum indicador
-// novo foi acrescentado ao contrato dele por causa desta tela.
+// O 3D continua SOMENTE LEITURA, e nenhum indicador novo foi acrescentado ao
+// contrato dele por causa desta tela. A única coisa que entrou depois foi
+// `amostraParcial` — um booleano que diz se a contagem viu tudo. Ele vale para
+// os DOIS consumidores pelo mesmo motivo: um número menor que o real, exibido
+// com cara de certeza, engana igual na sala 3D e no Painel. E não carrega nome,
+// telefone nem conteúdo, que é a disciplina da ponte.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type Painel = ReturnType<typeof useQuery<typeof api.communications.painel>>;
@@ -107,6 +111,17 @@ export function Indicadores({ painel }: { painel: Painel }) {
           </div>
         ))}
       </div>
+
+      {/* O painel CONTA, e contar exige ver tudo. As duas varreduras têm
+          teto; enquanto a Central couber nele, nada muda. No dia em que não
+          couber, os cartões mostrariam um número MENOR que o real com a mesma
+          cara de certeza — e é melhor dizer que a conta parou. */}
+      {painel.amostraParcial && (
+        <p className="text-xs text-amber-700 dark:text-amber-400">
+          A Central passou do tamanho que esta contagem alcança: os números acima
+          consideram só as conversas e os contatos mais recentes. Há mais.
+        </p>
+      )}
 
       <div className="rounded-lg border border-border bg-card px-4 py-3">
         <p className="text-xs text-muted-foreground mb-2">Por departamento</p>

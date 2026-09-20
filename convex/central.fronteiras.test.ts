@@ -396,3 +396,55 @@ describe("a consulta de apoio à homologação", () => {
     expect(bloco).not.toContain('query("leads")');
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// O PAINEL DA CENTRAL CONTA — E DIZ QUANDO NÃO CONSEGUE CONTAR
+//
+// Os cartões ("Conversas abertas", "Não lidas", "Novos contatos 24h") saem de
+// duas varreduras com teto: mil conversas e duzentos contatos. Enquanto a
+// Central couber nelas, o teto não muda nada.
+//
+// No dia em que não couber, os cartões passariam a mostrar um número MENOR que
+// o real, com a mesma cara de certeza. "Conversas abertas: 1000" seria uma
+// afirmação que a consulta não pode sustentar — e quem opera a Central tomaria
+// decisão de fila sobre um número truncado.
+//
+// É a regra de sempre do repositório: a tela não afirma o que não sabe.
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("o painel não afirma um número que não conseguiu contar", () => {
+  const FONTE = readFileSync("convex/communications.ts", "utf-8");
+  const painel = FONTE.slice(
+    FONTE.indexOf("export async function montarPainel"),
+    FONTE.indexOf("export const painel = query"),
+  );
+
+  it("os tetos das varreduras são nomeados, não números soltos", () => {
+    expect(painel).toContain("take(LIMITE_DE_CONVERSAS_DO_PAINEL)");
+    expect(painel).toContain("take(LIMITE_DE_CONTATOS_DO_PAINEL)");
+  });
+
+  it("a resposta declara quando a contagem parou no teto", () => {
+    expect(painel).toContain("amostraParcial:");
+    expect(painel).toContain("conversas.length >= LIMITE_DE_CONVERSAS_DO_PAINEL");
+    expect(painel).toContain("contatosRecentes.length >= LIMITE_DE_CONTATOS_DO_PAINEL");
+  });
+
+  it("a tela mostra o aviso — o campo sozinho não protege ninguém", () => {
+    const tela = readFileSync(
+      "src/pages/app/central/_components/painel-da-central.tsx",
+      "utf-8",
+    );
+    expect(tela).toContain("painel.amostraParcial &&");
+    expect(tela).toMatch(/Há mais/i);
+  });
+
+  it("e o aviso NÃO leva nome, telefone nem conteúdo para a ponte do 3D", () => {
+    // A ponte entrega este mesmo payload. Um booleano de contagem é a única
+    // coisa que entrou; a disciplina de não carregar dado pessoal continua.
+    const retorno = painel.slice(painel.lastIndexOf("  return {"));
+    for (const proibido of ["displayName", "telefone", "texto", "body", "email"]) {
+      expect(retorno, proibido).not.toMatch(new RegExp(`${proibido}\\s*:`));
+    }
+  });
+});

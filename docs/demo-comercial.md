@@ -14,6 +14,13 @@ já se fez.
 > escrito que não existe. Ver `docs/prontidao-comercial.md` para a matriz
 > completa do que pode e do que não pode ser mostrado.
 
+> **O demo tem data.** O evento de Marina & Gabriel é **10/10/2026**, e a
+> janela de acervo vai de 09 a 11/10. O alerta de déficit da lista geral do
+> acervo ("faltam 30 guardanapos") olha só para o que **ainda vai acontecer** —
+> déficit de evento passado não tem mais conserto e sairia da tela como ruído
+> permanente. Depois de 11/10/2026, portanto, esse cartão deixa de aparecer no
+> demo: rode a semente de novo com datas à frente antes da reunião.
+
 ---
 
 ## 1. Antes de abrir o Meet
@@ -506,13 +513,18 @@ saem **em papel** — é essa a resposta do produto para o galpão sem sinal.
 ### Sobre materiais e acervo
 
 **"Tenho uma tela para gerenciar meu catálogo de materiais?"**
-Parcialmente. Um material é cadastrado de dentro da receita, e a partir daí é
-reaproveitado em todas as outras. **Editar ou arquivar** um material depois
-disso: ainda não implementado — é uma tela que ainda não existe.
+Parcialmente. O material é cadastrado de dentro da receita, e a partir daí é
+reaproveitado em todas as outras — e **corrigido de lá também**: o lápis ao
+lado do material abre nome, categoria, tipo, custo, margem e arquivar. O que
+não existe é uma **tela de catálogo no menu**, para revisar a lista inteira
+antes da temporada: ainda não implementado.
 
 **"E a biblioteca de composições, eu edito?"**
-Salvar uma receita na biblioteca e aplicar uma receita salva: funciona hoje.
-Renomear, editar ou arquivar uma composição já salva: ainda não implementado.
+Salvar, aplicar, **renomear e arquivar**: funciona hoje, tudo de dentro do
+diálogo da receita — e antes de arquivar, o ALTAR mostra em quais eventos
+aquela receita já foi usada. **Duplicar** uma composição para criar uma
+variação: ainda não implementado. Uma tela de biblioteca no menu, como a do
+catálogo: ainda não implementado.
 
 **"O acervo controla peça por peça, com etiqueta?"**
 Não, e é uma decisão. O controle é por **quantidade** — "tenho 58 vasos âmbar,

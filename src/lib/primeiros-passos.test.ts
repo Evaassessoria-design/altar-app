@@ -141,6 +141,15 @@ describe("o aviso não desenha o que não sabe", () => {
     expect(dashboard).not.toContain("onOpenOnboarding");
   });
 
+  it("com o essencial pronto, o botão é dispensar — e não o passo opcional", () => {
+    // Continuar oferecendo "Abrir equipe" a quem trabalha sozinha é um aviso
+    // que não sai, e aviso que não sai ensina a ignorar aquele pedaço da tela.
+    // O passo opcional continua clicável na lista.
+    expect(fonte).toContain("{progresso.completo ? (");
+    const depois = fonte.slice(fonte.indexOf("{progresso.completo ? ("));
+    expect(depois.slice(0, depois.indexOf(") : ("))).toContain("Dispensar");
+  });
+
   it("o modal continua existindo para a primeira entrada", () => {
     // A trava ao contrário: tirar o modal deixaria quem acabou de assinar
     // diante de um painel vazio, sem nome de estúdio e sem evento nenhum.

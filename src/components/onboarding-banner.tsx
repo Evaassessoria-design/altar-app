@@ -134,14 +134,17 @@ export function OnboardingBanner() {
           })}
         </div>
 
-        {/* O botão leva ao próximo passo pendente — o lugar onde ele acontece,
-            e não de volta ao começo de um formulário já preenchido. */}
-        {progresso.proximo && (
-          <Button asChild size="sm" className="cursor-pointer gap-1.5">
-            <Link to={progresso.proximo.destino}>{progresso.proximo.acao}</Link>
-          </Button>
-        )}
-        {progresso.completo && !progresso.proximo && (
+        {/* Enquanto falta algo EXIGIDO, o botão leva ao próximo passo — o
+            lugar onde ele acontece, e não de volta ao começo de um formulário
+            já preenchido.
+
+            Assim que o essencial está pronto, o botão vira "Dispensar", mesmo
+            com o passo opcional em aberto. Continuar oferecendo "Abrir equipe"
+            a quem trabalha sozinha é transformar o cartão num aviso que não
+            sai — e um aviso que não sai ensina a ignorar aquele pedaço da
+            tela. O passo opcional continua clicável na lista, para quem
+            quiser. */}
+        {progresso.completo ? (
           <Button
             size="sm"
             variant="secondary"
@@ -151,6 +154,12 @@ export function OnboardingBanner() {
             <Check className="size-3.5" />
             Dispensar
           </Button>
+        ) : (
+          progresso.proximo && (
+            <Button asChild size="sm" className="cursor-pointer gap-1.5">
+              <Link to={progresso.proximo.destino}>{progresso.proximo.acao}</Link>
+            </Button>
+          )
         )}
       </motion.div>
     </AnimatePresence>

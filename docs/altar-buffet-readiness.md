@@ -8,7 +8,7 @@ operação de evento, não como sistema de flor. O que é realmente específico 
 decoração é um trecho só — mas é o trecho mais valioso, e é justamente ele que
 precisa de um equivalente.
 
-Datado de 20/09/2026, conferido contra o código em `3c56d29`. Nada aqui é
+Datado de 20/09/2026, conferido contra o código em `e05863b`. Nada aqui é
 implementação: é mapa.
 
 > **Nada de ALTAR Buffet foi construído nesta rodada**, por instrução. Este
@@ -57,6 +57,10 @@ evento**, não sobre decoração.
 | **Assinatura e paywall** | `convex/asaas*.ts`, `lib/access.ts` | Cobrança é do SaaS, não da vertical. |
 | **Central de Comunicações** | `convex/communications*.ts` | Já é multicanal E multivertical por construção. |
 | **Admin** | `convex/admin.ts` | Operação do SaaS. |
+| **Leitura e validação de dinheiro** | `convex/lib/dinheiro.ts`, `src/lib/valor-digitado.ts` | "1.500,00" é mil e quinhentos em qualquer vertical, e `NaN` estraga a soma de qualquer uma. A regra não sabe o que está sendo vendido. |
+| **Audiência dos documentos** | `src/lib/audiencia-do-caderno.ts`, `briefing-areas.ts` | Interno / equipe / cliente, e agora campo a campo: fornecedor e observação interna não vão no documento do cliente. Um buffet tem exatamente a mesma separação. |
+| **Primeiros passos** | `src/lib/primeiros-passos.ts` | Configurar o estúdio e criar o primeiro evento é o começo de qualquer vertical. |
+| **Ações destrutivas e estados vazios** | `src/lib/acoes-destrutivas.test.ts`, `estados-vazios.test.ts` | São travas de comportamento, não de conteúdo: a próxima tela nasce com elas seja de flor ou de cozinha. |
 
 **Dependências**: nenhuma. **Risco**: baixo.
 
@@ -139,13 +143,13 @@ disso é sobre flor.
 | Rendimento | 1 arranjo = 1 arranjo | **1 kg rende N porções** | Não existe: falta fator de rendimento |
 | Retorno ao acervo | vaso volta | **comida não volta** | `tipo: consumivel` já cobre |
 | Segurança | — | **alergênico, ficha técnica sanitária** | Não existe, e é obrigação legal |
-| Pico de demanda | acervo por janela | **cozinha por horário** | `picoDeReservas` é análogo |
+| Pico de demanda | acervo por janela | **cozinha por horário** | `picoDeReservas` é análogo, e já corta o que ficou no passado |
 
 ### Itens
 
 | Item | Situação | Risco | Depende de |
 |---|---|---|---|
-| Cardápio como entidade | **NÃO EXISTE** | médio | decidir se é `compositions` com outro rótulo ou tabela própria |
+| Cardápio como entidade | **NÃO EXISTE** — mas a biblioteca de receitas está mais perto | médio | decidir se é `compositions` com outro rótulo ou tabela própria |
 | Rendimento (kg → porções) | **NÃO EXISTE** | médio | é um campo na receita, não uma arquitetura |
 | Restrição alimentar e alergênico | **NÃO EXISTE** | **alto** — é risco à saúde, não recurso | decisão de produto |
 | Ficha técnica sanitária | **NÃO EXISTE** | alto | legislação, fora do que o código sabe |
@@ -187,7 +191,10 @@ Do que destrava mais por menos, e sem nada que dependa de decisão não tomada.
 4. **Receita com rendimento** — um campo na linha da receita (`1 kg rende 8
    porções`) e o consolidado já multiplica certo. *Depende de: 2.*
 5. **Cardápio reaproveitável** — provavelmente `compositions` com outro rótulo,
-   não tabela nova. *Depende de: 4.*
+   não tabela nova. O ciclo da biblioteca fechou nesta rodada (guardar do
+   trabalho já feito, recusar o nome repetido, renomear, arquivar e ver onde
+   foi usada), então o que falta é o rótulo e o rendimento, não o mecanismo.
+   *Depende de: 4.*
 6. **Alergênicos e restrições** — última porque é a de maior risco e a que
    menos tolera improviso. *Depende de: decisão de produto e, provavelmente, de
    quem entenda de legislação sanitária.*
@@ -221,3 +228,31 @@ Sem contar as decisões acima, que não são trabalho de código:
 A conclusão prática: **a fundação está pronta e o diferencial não está.** Não é
 um segundo sistema; é um trecho — o mais valioso — construído de novo com o
 mesmo formato.
+
+
+---
+
+## 8. O que mudou neste mapa desde a primeira versão
+
+A rodada "primeiros clientes reais" não construiu nada de Buffet — por
+instrução — mas mexeu em peças que este mapa classifica, e três delas mudaram
+de tamanho:
+
+- **Dinheiro virou regra pura e testada.** `convex/lib/dinheiro.ts` e
+  `src/lib/valor-digitado.ts` nasceram de um defeito do Decor ("1.500,00"
+  entrava como 1,50 em cinco telas), e são **REUTILIZA DIRETO**: um buffet
+  digita dinheiro do mesmo jeito, e um `NaN` estraga a soma dele igual.
+- **A audiência dos documentos ficou mais fina.** Deixou de ser só "este item
+  aparece?" e passou a ser também "este CAMPO aparece?" — fornecedor e
+  observação interna não vão no documento da cliente. A §2 já dizia que a
+  engenharia de audiência serve inteira; ela agora serve com mais precisão, e é
+  o que a "ordem de serviço da cozinha" da §4 vai herdar.
+- **A biblioteca de composições fechou o ciclo.** Guardar a partir do trabalho
+  já feito, recusar o nome repetido, renomear, arquivar e ver onde a receita já
+  foi usada. Para o Buffet isso importa porque o cardápio é o mesmo mecanismo:
+  o que falta ali é o **rendimento** (1 kg rende N porções) e o rótulo, não a
+  estrutura.
+
+E uma que **não** mudou, de propósito: **`financeScope` continua como estava.**
+A inversão descrita na §2 é a decisão de produto mais cara deste mapa, e mexer
+nela sem a decisão produziria margem errada na tela mais sensível do produto.

@@ -7,7 +7,7 @@ Ele é a rede de segurança do roteiro em `docs/demo-comercial.md`. Antes de abr
 uma tela que não está no roteiro, consulte a matriz. Antes de prometer qualquer
 coisa, consulte a matriz.
 
-Datado de 20/09/2026 e conferido contra o código em `3c56d29`. Quando divergir, o
+Datado de 20/09/2026 e conferido contra o código em `e05863b`. Quando divergir, o
 código está certo e este arquivo está velho.
 
 ---
@@ -70,8 +70,9 @@ isso vale saber cada uma.
 | Itens de montagem por ambiente (Projeto de decoração) | **PRONTO** | |
 | Receita por item (do que a peça é feita) | **PRONTO** | Snapshot: editar a biblioteca depois não altera um evento já aprovado. |
 | Aplicar uma receita da biblioteca | **PRONTO** | |
-| Salvar uma receita na biblioteca | **PRONTO** | O ciclo fecha: escreve uma vez, reaproveita sempre. |
-| **Editar, renomear ou arquivar** uma composição salva | **FUTURO** | As funções existem no servidor, mas **não há tela**. Salvar de novo cria outra entrada. (A edição de MATERIAL já existe — ver a linha abaixo.) |
+| Salvar uma receita na biblioteca | **PRONTO** | O ciclo fecha: escreve uma vez, reaproveita sempre. Vai o que está NA TELA, e o nome repetido é recusado em vez de virar uma segunda entrada igual. |
+| **Renomear ou arquivar** uma composição salva | **PRONTO COM RESSALVA** | "Renomear ou arquivar esta receita na biblioteca", dentro do diálogo da receita, com a lista dos eventos em que ela já foi usada. Ressalva: a manutenção acontece de dentro da receita — não há tela de biblioteca no menu, como no catálogo de materiais. |
+| **Duplicar** uma composição | **FUTURO** | `compositions.duplicate` existe no servidor e não tem tela. |
 | Cadastrar material | **PRONTO COM RESSALVA** | Nasce — e agora também se corrige — de dentro do diálogo da receita. Não há tela de catálogo no menu. |
 | **Editar ou arquivar** um material | **PRONTO COM RESSALVA** | O lápis ao lado do material na receita abre nome, categoria, tipo, custo, margem e arquivar. Ressalva: não há tela de catálogo no menu para revisar a lista inteira. |
 | Consolidado de necessidade do evento | **PRONTO** | A multiplicação e a soma por material e unidade. |
@@ -170,13 +171,13 @@ impede a demonstração; todas mudam a resposta a uma pergunta que vai aparecer.
    funciona; o que não existe é o lugar para revisar a lista inteira antes da
    temporada.
 
-3. **Manutenção da biblioteca de composições.** Salvar e aplicar funcionam,
-   editar e arquivar não têm tela. Uma biblioteca que só cresce acumula lixo em
-   seis meses de uso.
+3. **Tela da biblioteca de composições.** Renomear e arquivar já existem,
+   dentro da receita. O que não existe é o lugar para revisar a biblioteca
+   inteira — é a mesma decisão da linha 2, e provavelmente a mesma tela.
 
-4. **Aviso de configuração inicial que não some.** O bloco "Configuração
-   concluída!" continua no topo do Início até alguém clicar em `Dispensar`,
-   mesmo com os três passos completos. Decidir se ele se fecha sozinho.
+4. **Aviso de primeiros passos que não some sozinho.** Com o essencial pronto
+   ele diz "Configuração concluída" e oferece **Dispensar**, mas só sai no
+   clique. Decidir se ele se fecha sozinho — é escrita sem ação de ninguém.
 
 5. **Quando ligar o envio externo da Central.** Exige número comercial
    integrado e um critério medido de acerto da IA. É decisão de fase, não de
@@ -191,7 +192,8 @@ ficha técnica, acervo, compras, financeiro, orçamento, equipe, agenda e os PDF
 
 **Mostre sabendo a ressalva:** IA (confira o ambiente antes), geração de
 compras e reservas (não acione ao vivo), e a manutenção do catálogo — material
-se corrige de dentro da receita; composição ainda não.
+e composição se corrigem de dentro da receita, e não há tela de catálogo no
+menu para revisar a lista inteira.
 
 **Não abra:** Painel Admin, Central, e qualquer botão que escreve.
 

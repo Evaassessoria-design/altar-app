@@ -12,8 +12,14 @@ Ele é diferente dos vizinhos de propósito:
 | `docs/prontidao-comercial.md` | posso mostrar numa reunião? |
 | **este** | **o que construir a seguir, e por quê** |
 
-Datado de 20/09/2026, conferido contra o código em `3c56d29`. Cada item cita a
+Datado de 20/09/2026, conferido contra o código em `e05863b`. Cada item cita a
 evidência. Onde não há evidência, não há item — nada aqui é suposição.
+
+> **O que saiu deste mapa na rodada "primeiros clientes reais" (20/09)**,
+> porque foi construído: a manutenção da biblioteca de composições e o "onde
+> esta receita foi usada" (§3 e §8.1), os dois defeitos do aviso de primeiros
+> passos (§4) e a ressalva da biblioteca (§2). Entrou no lugar uma dívida nova
+> e honesta — §6, contagem do painel da Central e custo das varreduras.
 
 > **O que saiu deste mapa na madrugada de 20/09**, porque foi construído:
 > o paywall que fechava o aplicativo inteiro (§4), o seletor de audiência do
@@ -118,11 +124,11 @@ precisa saber qual é.
 - **Dependências**: provedor de imagem
 
 ### Biblioteca de composições
-- **Evidência**: `fichaTecnica.salvarNaBiblioteca` + `compositions.list`, ambos usados em `receita-dialog.tsx:53,57`
-- **Ressalva**: salvar e aplicar funcionam; **renomear, editar e arquivar não têm tela**. Salvar de novo cria outra entrada
-- **Usuário**: em seis meses de uso a biblioteca acumula duplicatas
-- **Risco**: médio — cresce com o tempo de uso, então o cliente mais fiel sofre mais
-- **Dependências**: nenhuma
+- **Evidência**: `fichaTecnica.salvarNaBiblioteca`, `compositions.list`, `ondeEUsada`, `update`, `setArchived` — todos com caminho na tela (`receita-dialog.tsx`, `composicao-dialog.tsx`)
+- **O que mudou**: o ciclo fechou. Guardar leva o que está NA TELA (antes copiava a versão gravada, com um "salvo!" por cima), o nome repetido é recusado em vez de virar gêmea, e renomear/arquivar/ver onde foi usada têm tela
+- **Ressalva**: a manutenção acontece **de dentro da receita**, de onde a composição é escolhida. Quem quiser revisar a biblioteca inteira antes da temporada não tem por onde — é a mesma ressalva do catálogo de materiais, e a mesma decisão pendente (§7.3)
+- **Risco**: baixo (era médio: a duplicata que piorava com o tempo de uso deixou de nascer)
+- **Dependências**: §7.3, se a tela própria for adiante
 
 ### Catálogo de materiais
 - **Evidência**: `materials.create`, `update` e `setArchived` usados em `receita-dialog.tsx` e `material-dialog.tsx`
@@ -143,11 +149,11 @@ precisa saber qual é.
 O caro já está feito e testado. Falta a tela — que é o trabalho barato com o
 maior retorno por hora do repositório inteiro.
 
-### Manutenção de composições
-- **Evidência**: `compositions.update`, `duplicate`, `setArchived` — zero referências em `src/`. Salvar (`fichaTecnica.salvarNaBiblioteca`) e aplicar (`compositions.list`) já funcionam
-- **Usuário**: a biblioteca só cresce; salvar de novo cria outra entrada em vez de atualizar
-- **Risco**: médio — piora com o tempo de uso, então o cliente mais fiel sofre mais
-- **Dependências**: decidir onde mora a manutenção (ver §7.3). A edição de MATERIAL já foi entregue e serve de precedente: abre de onde o material é escolhido, sem rota nova
+### Duplicar composição
+- **Evidência**: `compositions.duplicate` — zero referências em `src/`. Renomear, arquivar e ver onde foi usada já têm tela (`composicao-dialog.tsx`)
+- **Usuário**: "Arranjo mesa convidados" → "… mesa família" exige refazer a receita a partir de um item
+- **Risco**: baixo — é conveniência, não dado preso
+- **Dependências**: nenhuma
 
 ### Desfazer vínculos da Ficha Técnica
 - **Evidência**: `fichaTecnica.limparReceita`, `fichaTecnica.desvincularCompra`, `purchases.unregisterCost` — sem caminho na tela
@@ -161,18 +167,12 @@ maior retorno por hora do repositório inteiro.
 
 A tela está lá. O caminho até o resultado tem um buraco.
 
-### Aviso de configuração inicial que não se fecha sozinho
-- **Evidência**: `src/components/onboarding-banner.tsx:21` — só some com `user.onboardingCompleted` ou clique em `Dispensar`, mesmo com os três passos concluídos
-- **Usuário**: um checklist 100% concluído permanece no topo da tela principal, treinando a pessoa a ignorar aquela região
-- **Comercial**: rouba a primeira tela da demonstração (o roteiro manda dispensar antes)
+### O aviso de primeiros passos ainda precisa de um clique para sair
+- **Evidência**: `src/lib/primeiros-passos.ts` + `onboarding-banner.tsx` — com o essencial pronto o cartão diz "Configuração concluída" e oferece **Dispensar**, mas não se fecha sozinho
+- **O que mudou**: o passo opcional deixou de reprovar (era "2 de 3", 67% para sempre), o cartão parou de afirmar "0 de 3" enquanto as consultas carregavam, e cada passo pendente leva ao lugar onde ele acontece em vez de reabrir o modal de boas-vindas no passo um com os campos em branco
+- **Usuário**: um clique a mais, uma vez
 - **Risco**: baixo
-- **Dependências**: decidir se conclui sozinho — é escrita sem ação do usuário
-
-### O passo "opcional" do onboarding não é opcional
-- **Evidência**: `onboarding-banner.tsx:37` declara `optional: true` no passo da equipe, e a propriedade **nunca é lida**; `pct` e `allDone` contam os três igualmente
-- **Usuário**: quem não tem equipe cadastrada vê 67% para sempre
-- **Risco**: baixo
-- **Dependências**: nenhuma
+- **Dependências**: decidir se conclui sozinho — é escrita sem ação do usuário, e por isso não foi feito
 
 ---
 
@@ -205,6 +205,54 @@ A tela está lá. O caminho até o resultado tem um buraco.
 - **Risco**: baixo — nascem opcionais e sem backfill, que é a convenção do repositório. Viram dívida só se forem esquecidos
 - **Dependências**: `adminAutonomyPolicy` é deliberadamente inerte — ligá-lo é mudança de fase, não de dado
 
+### O que cresce com o uso, e onde ele para
+
+Medido por leitura de código em `e05863b`, não por carga real — e é a ordem
+certa: refatorar sem número é trocar um risco conhecido por um desconhecido.
+**Nada disto foi mexido nesta rodada**, de propósito.
+
+O ALTAR faz **123 `collect()`** no backend. A esmagadora maioria é inofensiva:
+vem de um `withIndex("by_event", …)` ou `by_user`, e o teto é o tamanho de UM
+evento ou de UMA conta. O que merece atenção é o punhado que varre sem teto
+natural:
+
+| Onde | O que varre | Cresce com | Quando dói |
+|---|---|---|---|
+| `admin.getStats` (`admin.ts:72`) | `users` inteiro + `events` inteiro | **clientes do ALTAR** | primeiro a doer: é a tela que Matheus abre todo dia, e cresce com o sucesso do negócio |
+| `admin.listUsers` (`admin.ts:172`) | `users` inteiro | clientes do ALTAR | junto com o anterior |
+| `asaasWebhookLog` (`asaasWebhookLog.ts:128`) | `users` inteiro | clientes do ALTAR | por webhook recebido — é o mais caro por não ser tela |
+| `financeiro.getSummary` | `transactions` da conta | **tempo de uso** da decoradora | uma conta com três anos de lançamentos |
+| `financeiro.listTransactions` | idem, sem paginação | tempo de uso | a mesma tela, sem "carregar mais" |
+| `dashboard`, `health`, `agenda` | vários `collect()` por conta | eventos da decoradora | conta com muitos eventos abertos |
+
+E o que **já** tem teto declarado: `communications` (`take(2_000)` sobre
+`users`, nomeado), o painel da Central (mil conversas e duzentos contatos, e
+desde esta rodada ele **diz** quando parou no teto) e `admin.ts:518`
+(`take(5_000)`).
+
+**Por que não foi corrigido agora**: mudar o número de uma tela de dinheiro ou
+de um painel de gestão sem poder conferir o resultado contra um banco real é
+trocar um problema que se conhece por um que não se conhece. O ambiente desta
+rodada não alcança o Convex.
+
+**O que fazer quando doer**, em ordem de retorno:
+
+1. `admin.getStats` — contar por agregação incremental em vez de varrer, ou
+   aceitar um teto declarado e dizer na tela, como o painel da Central passou a
+   fazer.
+2. `financeiro.listTransactions` — paginar com `usePaginatedQuery`, que o
+   repositório já usa em outras listas.
+3. O `collect()` de `users` no webhook — é o único que não tem tela, e por isso
+   o único que ninguém vai reportar.
+
+### Custo por chamada (IA)
+
+Os dois recursos que gastam dinheiro por uso — importação de contrato e Planta
+Premium — já estão atrás do paywall (`lib/accessGuard.ts`) e dependem de chave
+de ambiente. Não há limite por conta nem contador de consumo: uma decoradora
+pode chamar a IA quantas vezes quiser dentro da assinatura. É aceitável no
+volume de hoje e é a primeira coisa a instrumentar se o custo aparecer.
+
 ### Homologação e demo dependem de operação manual
 - **Evidência**: `scripts/homologacao/central.mjs` e `internal.demo.seed` só rodam por quem opera o deployment
 - **Risco**: baixo, e é intencional: seed alcançável pelo aplicativo seria pior
@@ -221,7 +269,9 @@ que aparece em reunião.
    hoje. *(Ver §4.)*
 2. **Segunda pessoa na mesma empresa.** É a pergunta nº 1 das reuniões. Usuário
    adicional dentro da conta ou volta do modelo multiempresa? São projetos de
-   tamanhos muito diferentes.
+   tamanhos muito diferentes. **`docs/arquitetura-multiusuario.md`** mede os
+   dois: o que o schema já suporta, o que custaria e onde estão os riscos de
+   vazamento. É análise, não proposta.
 3. **Onde mora a manutenção de materiais e composições.** Tela própria no menu,
    ou dentro da Ficha Técnica? A primeira é mais descobrível; a segunda não
    acrescenta item de menu.
@@ -236,30 +286,21 @@ que aparece em reunião.
 
 ---
 
-## 8. PRÓXIMAS 5 ENTREGAS DE MAIOR IMPACTO
+## 8. PRÓXIMAS ENTREGAS DE MAIOR IMPACTO
 
-Ordenadas por **retorno sobre esforço**. As quatro entregas da madrugada de
-20/09 saíram desta lista porque foram feitas — paywall, audiência do caderno,
-déficit na lista de acervo e edição de material.
+Ordenadas por **retorno sobre esforço**. Saíram desta lista, porque foram
+feitas: paywall, audiência do caderno, déficit na lista de acervo e edição de
+material (madrugada de 20/09); manutenção da biblioteca de composições
+(rodada "primeiros clientes reais").
 
-### 1. Manutenção da biblioteca de composições
-- **Por quê**: é a última ressalva que piora com o tempo de uso. Salvar cria
-  entrada nova em vez de atualizar, então a biblioteca do cliente mais fiel é
-  a mais suja
-- **Esforço**: pequeno — as mutations existem, e a edição de material já deu o
-  padrão: abrir de onde a composição é escolhida, sem rota nova
-- **Risco**: baixo. O mesmo cuidado do material vale aqui: editar a biblioteca
-  não pode alcançar o snapshot de um evento
-- **Depende de**: nada
-
-### 2. Tela de catálogo (materiais e composições)
+### 1. Tela de catálogo (materiais e composições)
 - **Por quê**: corrigir de dentro da receita resolve o erro pontual; não
   resolve "quero revisar minha lista inteira antes da temporada"
 - **Esforço**: médio — uma tela de lista com busca, editar e arquivar
 - **Impacto**: retenção
 - **Depende de**: decisão §7.3
 
-### 3. Desfazer vínculos da Ficha Técnica
+### 2. Desfazer vínculos da Ficha Técnica
 - **Por quê**: `limparReceita`, `desvincularCompra` e `unregisterCost` existem
   e não têm caminho. Um vínculo errado hoje é dado preso
 - **Esforço**: pequeno
@@ -267,13 +308,13 @@ déficit na lista de acervo e edição de material.
   de liberar reserva
 - **Depende de**: nada
 
-### 4. Segunda pessoa na conta
+### 3. Segunda pessoa na conta
 - **Por quê**: é a objeção mais frequente em reunião, e a resposta é "não"
 - **Esforço**: **grande** — toca identidade, autorização e cobrança
 - **Risco**: alto. `users` é a fronteira de dados de todo o modelo
 - **Depende de**: decisão §7.2. **Não comece sem ela.**
 
-### 5. Vocabulário do ALTAR Buffet
+### 4. Vocabulário do ALTAR Buffet
 - **Por quê**: `docs/altar-buffet-readiness.md` mostra que a fundação já serve;
   o que falta primeiro é a vertical reconhecer-se na tela
 - **Esforço**: pequeno para o vocabulário; o diferencial (cadeia de produção)
@@ -293,6 +334,8 @@ Honestidade sobre o próprio alcance:
   de **leitura de código** e da homologação anterior, feita contra um backend
   Convex real. Nenhuma afirmação depende de tela vista agora.
 - **Desempenho sob volume não foi medido.** As varreduras globais paginam
-  (`convex/notifications.ts`), mas nenhuma conta grande foi testada.
+  (`convex/notifications.ts`), mas nenhuma conta grande foi testada. O que dá
+  para dizer por leitura de código está em §6 ("O que cresce com o uso"), com o
+  motivo de não ter sido corrigido.
 - **Acessibilidade foi vista só por alvo de toque.** Leitor de tela, contraste e
   navegação por teclado não foram auditados.

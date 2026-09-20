@@ -12,8 +12,14 @@ Ele é diferente dos vizinhos de propósito:
 | `docs/prontidao-comercial.md` | posso mostrar numa reunião? |
 | **este** | **o que construir a seguir, e por quê** |
 
-Datado de 20/09/2026, conferido contra o código em `8c2faeb`. Cada item cita a
+Datado de 20/09/2026, conferido contra o código em `3c56d29`. Cada item cita a
 evidência. Onde não há evidência, não há item — nada aqui é suposição.
+
+> **O que saiu deste mapa na madrugada de 20/09**, porque foi construído:
+> o paywall que fechava o aplicativo inteiro (§4), o seletor de audiência do
+> caderno de montagem (§3), o déficit de acervo na lista geral (§3) e a edição
+> de material (§2). As entradas correspondentes foram removidas em vez de
+> marcadas como feitas — um mapa do que construir não guarda o que já existe.
 
 > **Três correções feitas ao escrever este mapa.** O `ROADMAP.md` afirmava que
 > a Pasta do Evento só aceitava o contrato principal (ela aceita os cinco
@@ -77,6 +83,13 @@ Funciona, tem teste, e aguenta uma demonstração ao vivo sem preparo.
 - **Risco**: baixo
 - **Dependências**: nenhuma
 
+### Caderno de montagem em três audiências
+- **Evidência**: `src/lib/audiencia-do-caderno.ts`, `briefing/page.tsx`; a regra é `itemVisibleTo` + `resolveAreasForAudience`
+- **Usuário**: um caderno para a equipe, um para a cliente e um interno, do mesmo evento
+- **Comercial**: frase de venda pronta, e prova que `visibility` não é enfeite
+- **Risco**: baixo — a regra é aninhada e testada; visibilidade desconhecida é tratada como interna
+- **Dependências**: nenhuma
+
 ### Cinco PDFs com a identidade da empresa
 - **Evidência**: `src/lib/generate-{event,orcamento,ficha-tecnica,assembly,loading}-pdf.ts`
 - **Usuário**: leva papel para o galpão, onde não há sinal
@@ -112,10 +125,10 @@ precisa saber qual é.
 - **Dependências**: nenhuma
 
 ### Catálogo de materiais
-- **Evidência**: `materials.create` usado em `receita-dialog.tsx`; `materials.update` e `setArchived` sem nenhuma chamada na tela
-- **Ressalva**: o material nasce dentro da receita e depois não tem onde ser corrigido
-- **Risco**: médio — um erro de digitação em "Rosa branca" fica para sempre
-- **Dependências**: nenhuma
+- **Evidência**: `materials.create`, `update` e `setArchived` usados em `receita-dialog.tsx` e `material-dialog.tsx`
+- **Ressalva**: o material nasce e é corrigido de dentro da receita — **não há tela de catálogo** no menu. Quem quiser revisar a lista inteira não tem por onde
+- **Risco**: baixo (era médio: o erro de digitação agora tem conserto)
+- **Dependências**: §7.3, se a tela própria for adiante
 
 ### Central de Comunicações
 - **Evidência**: `convex/communications*.ts`, `src/pages/app/central/`, `docs/central-comunicacoes.md`
@@ -130,25 +143,11 @@ precisa saber qual é.
 O caro já está feito e testado. Falta a tela — que é o trabalho barato com o
 maior retorno por hora do repositório inteiro.
 
-### Caderno de montagem por audiência
-- **Evidência**: `src/lib/generate-assembly-pdf.ts:166,180` lê `audience` e filtra por `itemVisibleTo(i.visibility, audience)`; mas `briefing/page.tsx:143` passa **`audience: "equipe"` fixo**
-- **Usuário**: ela classifica um item como "cliente" esperando um documento para a cliente, e só a versão da equipe sai
-- **Comercial**: "um caderno para a equipe, outro para a cliente" é frase de venda pronta
-- **Risco**: **baixo** — é um seletor; a regra e o filtro já existem e já rodam
-- **Dependências**: nenhuma
-
-### Manutenção de materiais e composições
-- **Evidência**: `materials.update`, `materials.setArchived`, `compositions.update`, `duplicate`, `setArchived` — zero referências em `src/`
-- **Impacto**: resolve as duas ressalvas do §2 de uma vez
-- **Risco**: baixo
-- **Dependências**: decidir se ganha tela própria ou vive dentro da Ficha Técnica (ver §7)
-
-### Disponibilidade de acervo fora do evento
-- **Evidência**: `acervo.disponibilidade` sem uso em `src/`; a lista geral mostra só `Reservado em N eventos` (`acervo/page.tsx:244`)
-- **Usuário**: quem abre `Acervo` para planejar a semana não vê o que vai faltar — o déficit só aparece dentro do evento
-- **Comercial**: o melhor momento da demo está escondido atrás de dois cliques
-- **Risco**: baixo
-- **Dependências**: nenhuma
+### Manutenção de composições
+- **Evidência**: `compositions.update`, `duplicate`, `setArchived` — zero referências em `src/`. Salvar (`fichaTecnica.salvarNaBiblioteca`) e aplicar (`compositions.list`) já funcionam
+- **Usuário**: a biblioteca só cresce; salvar de novo cria outra entrada em vez de atualizar
+- **Risco**: médio — piora com o tempo de uso, então o cliente mais fiel sofre mais
+- **Dependências**: decidir onde mora a manutenção (ver §7.3). A edição de MATERIAL já foi entregue e serve de precedente: abre de onde o material é escolhido, sem rota nova
 
 ### Desfazer vínculos da Ficha Técnica
 - **Evidência**: `fichaTecnica.limparReceita`, `fichaTecnica.desvincularCompra`, `purchases.unregisterCost` — sem caminho na tela
@@ -174,13 +173,6 @@ A tela está lá. O caminho até o resultado tem um buraco.
 - **Usuário**: quem não tem equipe cadastrada vê 67% para sempre
 - **Risco**: baixo
 - **Dependências**: nenhuma
-
-### Assinatura vencida fecha o aplicativo inteiro
-- **Evidência**: `src/App.tsx:60-68` redireciona **todas** as rotas para `/paywall`, isentando só `/configuracoes`; `convex/lib/accessGuard.ts:22-26` diz explicitamente o contrário — "NÃO aplicada a leituras nem à edição do que a pessoa já tem… atrapalharia a exportação em PDF de um evento já pago"
-- **Usuário**: perde o acesso aos próprios dados e ao PDF de um evento que já pagou
-- **Comercial**: muda a resposta a "se eu parar de pagar, perco tudo?" — ver `docs/demo-comercial.md`
-- **Risco**: **o mais alto deste documento** — é divergência entre o que o código declara querer e o que faz, e toca LGPD
-- **Dependências**: decisão de produto (§7)
 
 ---
 
@@ -246,51 +238,49 @@ que aparece em reunião.
 
 ## 8. PRÓXIMAS 5 ENTREGAS DE MAIOR IMPACTO
 
-Ordenadas por **retorno sobre esforço**, não por tamanho. As três primeiras são
-telas para backend que já existe — o trabalho caro já foi pago.
+Ordenadas por **retorno sobre esforço**. As quatro entregas da madrugada de
+20/09 saíram desta lista porque foram feitas — paywall, audiência do caderno,
+déficit na lista de acervo e edição de material.
 
-### 1. Resolver o paywall que fecha o aplicativo
-- **Por quê**: é a única divergência do repositório entre o que o código declara
-  querer e o que faz, e a única com aresta de LGPD
-- **Esforço**: pequeno — isentar as rotas de leitura em `App.tsx`, mantendo o
-  bloqueio do servidor onde ele já está
-- **Impacto comercial**: alto. Muda a resposta a "perco tudo?" de "o aplicativo
-  fecha" para "você continua vendo o que é seu"
-- **Risco**: baixo, com teste de fronteira cobrindo criar × ler
-- **Depende de**: decisão §7.1
-
-### 2. Seletor de audiência no caderno de montagem
-- **Por quê**: o filtro, a regra e o PDF já funcionam; falta um `<select>`
-- **Esforço**: muito pequeno
-- **Impacto**: "um caderno para a equipe, outro para a cliente" vira frase de
-  venda, e o campo `visibility` deixa de ser promessa não cumprida
-- **Risco**: baixo
+### 1. Manutenção da biblioteca de composições
+- **Por quê**: é a última ressalva que piora com o tempo de uso. Salvar cria
+  entrada nova em vez de atualizar, então a biblioteca do cliente mais fiel é
+  a mais suja
+- **Esforço**: pequeno — as mutations existem, e a edição de material já deu o
+  padrão: abrir de onde a composição é escolhida, sem rota nova
+- **Risco**: baixo. O mesmo cuidado do material vale aqui: editar a biblioteca
+  não pode alcançar o snapshot de um evento
 - **Depende de**: nada
 
-### 3. Manutenção de materiais e composições
-- **Por quê**: resolve as duas maiores ressalvas do §2 de uma vez, e o problema
-  piora justamente com o cliente que mais usa
-- **Esforço**: médio — uma tela de lista com editar e arquivar
-- **Impacto**: retenção. Uma biblioteca suja é motivo de abandono no mês seis
-- **Risco**: baixo — as mutations existem e estão testadas
+### 2. Tela de catálogo (materiais e composições)
+- **Por quê**: corrigir de dentro da receita resolve o erro pontual; não
+  resolve "quero revisar minha lista inteira antes da temporada"
+- **Esforço**: médio — uma tela de lista com busca, editar e arquivar
+- **Impacto**: retenção
 - **Depende de**: decisão §7.3
 
-### 4. Déficit de acervo na lista geral
-- **Por quê**: o melhor momento da demonstração está escondido atrás de dois
-  cliques, e quem planeja a semana não o vê
-- **Esforço**: pequeno — `acervo.disponibilidade` já existe
-- **Impacto**: alto na demonstração, real no uso
-- **Risco**: baixo
+### 3. Desfazer vínculos da Ficha Técnica
+- **Por quê**: `limparReceita`, `desvincularCompra` e `unregisterCost` existem
+  e não têm caminho. Um vínculo errado hoje é dado preso
+- **Esforço**: pequeno
+- **Risco**: médio — são ações destrutivas e precisam de confirmação, como a
+  de liberar reserva
 - **Depende de**: nada
 
-### 5. Segunda pessoa na conta
-- **Por quê**: é a objeção mais frequente em reunião, e hoje a resposta é "não"
+### 4. Segunda pessoa na conta
+- **Por quê**: é a objeção mais frequente em reunião, e a resposta é "não"
 - **Esforço**: **grande** — toca identidade, autorização e cobrança
-- **Impacto**: destrava a decoradora com sócia ou secretária, que é o perfil de
-  quem paga mais
-- **Risco**: alto. `users` é a fronteira de dados de todo o modelo; uma migração
-  malfeita vaza uma empresa para outra
+- **Risco**: alto. `users` é a fronteira de dados de todo o modelo
 - **Depende de**: decisão §7.2. **Não comece sem ela.**
+
+### 5. Vocabulário do ALTAR Buffet
+- **Por quê**: `docs/altar-buffet-readiness.md` mostra que a fundação já serve;
+  o que falta primeiro é a vertical reconhecer-se na tela
+- **Esforço**: pequeno para o vocabulário; o diferencial (cadeia de produção)
+  é outra conversa
+- **Risco**: baixo no vocabulário; **médio-alto** no escopo financeiro, que
+  inverte para buffet
+- **Depende de**: as três decisões da §6 daquele documento
 
 ---
 

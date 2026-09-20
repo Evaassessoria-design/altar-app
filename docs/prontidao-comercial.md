@@ -7,7 +7,7 @@ Ele é a rede de segurança do roteiro em `docs/demo-comercial.md`. Antes de abr
 uma tela que não está no roteiro, consulte a matriz. Antes de prometer qualquer
 coisa, consulte a matriz.
 
-Datado de 19/09/2026 e conferido contra o código. Quando divergir do código, o
+Datado de 20/09/2026 e conferido contra o código em `3c56d29`. Quando divergir, o
 código está certo e este arquivo está velho.
 
 ---
@@ -71,14 +71,14 @@ isso vale saber cada uma.
 | Receita por item (do que a peça é feita) | **PRONTO** | Snapshot: editar a biblioteca depois não altera um evento já aprovado. |
 | Aplicar uma receita da biblioteca | **PRONTO** | |
 | Salvar uma receita na biblioteca | **PRONTO** | O ciclo fecha: escreve uma vez, reaproveita sempre. |
-| **Editar, renomear ou arquivar** uma composição salva | **FUTURO** | As funções existem no servidor, mas **não há tela**. Salvar de novo cria outra entrada. |
-| Cadastrar material | **PRONTO COM RESSALVA** | Nasce de dentro do diálogo da receita. Não há tela de catálogo. |
-| **Editar ou arquivar** um material | **FUTURO** | Mesma situação: função no servidor, sem tela. |
+| **Editar, renomear ou arquivar** uma composição salva | **FUTURO** | As funções existem no servidor, mas **não há tela**. Salvar de novo cria outra entrada. (A edição de MATERIAL já existe — ver a linha abaixo.) |
+| Cadastrar material | **PRONTO COM RESSALVA** | Nasce — e agora também se corrige — de dentro do diálogo da receita. Não há tela de catálogo no menu. |
+| **Editar ou arquivar** um material | **PRONTO COM RESSALVA** | O lápis ao lado do material na receita abre nome, categoria, tipo, custo, margem e arquivar. Ressalva: não há tela de catálogo no menu para revisar a lista inteira. |
 | Consolidado de necessidade do evento | **PRONTO** | A multiplicação e a soma por material e unidade. |
 | Margem de segurança por material | **PRONTO** | `necessário` e `sugerido` ficam separados de propósito. |
 | Geração de compras a partir da ficha | **PRONTO COM RESSALVA** | Idempotente. **Não acione ao vivo**: muda os números que você acabou de citar. |
 | Caderno de montagem e folha de carregamento em PDF | **PRONTO** | É a resposta do produto para o galpão sem sinal. |
-| Relatórios por audiência (cliente / equipe / interno) | **FUTURO** | O campo é gravado em cada item e nunca lido. Não prometa. |
+| Caderno de montagem por audiência (cliente / equipe / interno) | **PRONTO** | O menu pergunta para quem é o documento. A regra é aninhada: o caderno da cliente não carrega item de equipe nem interno. |
 
 ---
 
@@ -92,7 +92,7 @@ isso vale saber cada uma.
 | Déficit visível ("faltam 30, você tem 150") | **PRONTO** | O melhor momento da demonstração. |
 | Reserva gerada a partir da ficha técnica | **PRONTO COM RESSALVA** | Funciona e é idempotente. **Não acione ao vivo.** |
 | Saída, retorno e ajuste com histórico auditável | **PRONTO** | O total nunca muda sozinho: o sistema avisa e espera a decisão dela. |
-| Déficit visível na lista geral do Acervo | **FUTURO** | A lista mostra "Reservado em 1 evento", sem o conflito. O déficit só aparece dentro do evento. Se for mostrar déficit, **mostre pelo evento**. |
+| Déficit visível na lista geral do Acervo | **PRONTO** | "Faltam 30 un em 09/10 — 180 prometidos, 150 no acervo", direto na lista. Não é "disponível agora" (que exigiria janela): é o pior dia do item. |
 | Etiqueta, QR code, patrimônio individual | **FUTURO** | Decisão consciente: é ERP, e a pergunta dela não exige isso. |
 
 ---
@@ -134,7 +134,7 @@ isso vale saber cada uma.
 | Cadastro, login e recuperação de senha | **PRONTO** | E-mail e senha. |
 | Teste de 14 dias sem cartão | **PRONTO** | O número é conferido por teste contra o servidor. |
 | Assinatura, checkout e reconciliação diária | **PRONTO** | |
-| Paywall aplicado no servidor | **PRONTO COM RESSALVA** | Ver a decisão pendente nº 1, abaixo: hoje o aplicativo **fecha** quando a assinatura vence. |
+| Paywall aplicado no servidor | **PRONTO** | Bloqueia o que cria e o que custa; ler, editar e baixar o que já existe continua. Um aviso permanente explica e leva à assinatura. |
 | Planos, cupons, convites | **FUTURO** | Existe um preço e uma assinatura. |
 | Segunda pessoa na mesma empresa (sócia, secretária) | **FUTURO** | A conta é de uma pessoa. Esta é a pergunta nº 1 das reuniões — saiba a resposta de cor. |
 | Duas marcas na mesma conta (multiempresa) | **FUTURO** | O modelo de dados é por usuário. Uma tentativa de migrar foi revertida antes de virar produto. |
@@ -162,33 +162,23 @@ isso vale saber cada uma.
 Encontradas na auditoria e **registradas, não implementadas**. Nenhuma delas
 impede a demonstração; todas mudam a resposta a uma pergunta que vai aparecer.
 
-1. **O que acontece quando a assinatura vence.** O servidor bloqueia só o que
-   cria ou custa (criar evento, enviar arquivo, IA) e deixa ler e editar — mas
-   a tela redireciona **todas** as rotas para o paywall, deixando só
-   `Configurações`. Na prática, o aplicativo fecha. Decidir se a leitura e a
-   exportação em PDF de um evento já pago continuam abertas: é o que o próprio
-   código diz querer, e não é o que acontece.
-
-2. **Segunda pessoa na empresa.** É a pergunta mais frequente e hoje a resposta
+1. **Segunda pessoa na empresa.** É a pergunta mais frequente e hoje a resposta
    é "não". Decidir se o caminho é usuário adicional dentro da conta ou o
    retorno do modelo multiempresa — são projetos de tamanhos muito diferentes.
 
-3. **Tela do catálogo de materiais.** O material nasce dentro da receita e
-   depois não tem onde ser corrigido. As funções de editar e arquivar já
-   existem no servidor; falta a tela.
+2. **Tela do catálogo no menu.** Corrigir um material de dentro da receita já
+   funciona; o que não existe é o lugar para revisar a lista inteira antes da
+   temporada.
 
-4. **Manutenção da biblioteca de composições.** Mesma forma: salvar e aplicar
-   funcionam, editar e arquivar não têm tela. Uma biblioteca que só cresce
-   acumula lixo em seis meses de uso.
+3. **Manutenção da biblioteca de composições.** Salvar e aplicar funcionam,
+   editar e arquivar não têm tela. Uma biblioteca que só cresce acumula lixo em
+   seis meses de uso.
 
-5. **Déficit de acervo na lista geral.** O conflito só aparece dentro do
-   evento. Quem abre `Acervo` para planejar a semana não vê o que vai faltar.
-
-6. **Aviso de configuração inicial que não some.** O bloco "Configuração
+4. **Aviso de configuração inicial que não some.** O bloco "Configuração
    concluída!" continua no topo do Início até alguém clicar em `Dispensar`,
    mesmo com os três passos completos. Decidir se ele se fecha sozinho.
 
-7. **Quando ligar o envio externo da Central.** Exige número comercial
+5. **Quando ligar o envio externo da Central.** Exige número comercial
    integrado e um critério medido de acerto da IA. É decisão de fase, não de
    código.
 
@@ -200,8 +190,8 @@ impede a demonstração; todas mudam a resposta a uma pergunta que vai aparecer.
 ficha técnica, acervo, compras, financeiro, orçamento, equipe, agenda e os PDFs.
 
 **Mostre sabendo a ressalva:** IA (confira o ambiente antes), geração de
-compras e reservas (não acione ao vivo), catálogo de materiais e biblioteca de
-composições (não têm tela de manutenção).
+compras e reservas (não acione ao vivo), e a manutenção do catálogo — material
+se corrige de dentro da receita; composição ainda não.
 
 **Não abra:** Painel Admin, Central, e qualquer botão que escreve.
 

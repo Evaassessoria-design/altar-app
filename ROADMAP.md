@@ -45,6 +45,7 @@ Datado de 19/09/2026. Quando divergir do código, o código está certo.
   tolerância de inadimplência e paywall aplicado no servidor
 
 **Documentos**
+- Caderno de montagem em três audiências — equipe, cliente e uso interno
 - Cinco geradores de PDF com a identidade visual da empresa da decoradora:
   resumo do evento, orçamento, ficha técnica, caderno de montagem e folha de
   carregamento
@@ -63,10 +64,6 @@ Datado de 19/09/2026. Quando divergir do código, o código está certo.
 Preparado de propósito, sem backfill e sem custo — mas hoje invisível para quem
 usa:
 
-- **Audiência do item de montagem**: `assemblyItems.visibility` É lido — o PDF
-  do caderno de montagem filtra por ele (`generate-assembly-pdf.ts`). O que
-  falta é o SELETOR: a tela passa `audience: "equipe"` fixo, então a versão
-  para a cliente nunca chega a ser gerada.
 - **Política de autonomia da Central**: `adminAutonomyPolicy` é gravável e
   **inerte** por decisão; ligar autonomia é mudança de fase, não de dado.
 - **Transcrição de áudio**: `communicationMessages.transcricao` existe para não
@@ -78,8 +75,6 @@ usa:
 
 Funções que existem, são testadas e ninguém consegue chamar pelo aplicativo:
 
-- Catálogo de materiais: `materials.update` e `setArchived` (criar só acontece
-  dentro do diálogo de receita; não há tela de materiais)
 - Biblioteca de composições: `create`, `update`, `duplicate`, `setArchived` — o
   caminho que EXISTE na tela é outro: `fichaTecnica.salvarNaBiblioteca` salva a
   receita do item, e `compositions.list` a aplica. Falta a manutenção: renomear,

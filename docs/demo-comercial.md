@@ -395,9 +395,15 @@ aberta, e as quatro já compradas.
 | **Objetivo** | Terminar no mundo físico, que é onde o evento acontece |
 | **O que clicar** | `Questionário` → `Carga` (folha de carregamento) ou `PDF` (caderno de montagem); depois `Carregamento` nas Ações Rápidas |
 
-**O que mostrar:** o PDF gerado com a identidade visual da empresa dela, e o
-checklist de carregamento com 12 itens pré-evento, parcialmente conferido, mais
-os 4 de conferência pós-evento.
+**O que mostrar:** abra o menu do `Caderno de Montagem` — ele pergunta **para
+quem** é o documento: a equipe de montagem, a cliente ou uso interno. Gere o da
+equipe, com a identidade visual da empresa dela. Depois mostre o checklist de
+carregamento com 12 itens pré-evento, parcialmente conferido, mais os 4 de
+conferência pós-evento.
+
+> "O mesmo evento vira três documentos. O da cliente não mostra nota interna
+> nem o que ficou de fora — e isso não é um filtro que alguém precisa lembrar
+> de aplicar; está no cadastro de cada peça."
 
 **Que problema resolve:** a equipe no galpão às 7h da manhã sem sinal de
 celular.
@@ -537,11 +543,11 @@ verdade sobre o mecanismo: são **14 dias de teste**, sem cartão no cadastro, e
 a assinatura é uma só, sem planos, cupons nem convites.
 
 **"Se eu parar de pagar, perco tudo?"**
-Nada é apagado. Mas seja preciso: hoje o aplicativo **fecha** — as telas dos
-eventos param de abrir e sobram `Configurações` e a tela de assinatura, que é
-por onde ela regulariza. Voltando a assinar, tudo reaparece exatamente como
-estava. *(Manter a leitura e a exportação em PDF abertas durante o bloqueio é
-uma decisão de produto ainda pendente — ver `docs/prontidao-comercial.md`.)*
+Não, e a resposta é boa: **você continua entrando e vendo tudo o que é seu.**
+Eventos, briefings, fotos, lançamentos e os PDFs continuam acessíveis para
+consulta e download. O que fecha é o que cria — evento novo, envio de arquivo e
+as funções de IA. Um aviso no topo explica o estado e leva à assinatura.
+Voltando a assinar, tudo volta ao normal na hora.
 
 ---
 

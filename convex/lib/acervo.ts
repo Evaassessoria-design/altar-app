@@ -198,6 +198,75 @@ export function deficitDaReserva(pretendido: number, disponivel: number): number
   return quantidadeLimpa(Math.max(0, pretendido - disponivel));
 }
 
+/**
+ * O PIOR MOMENTO do acervo deste item — sem ninguém escolher uma janela.
+ *
+ * ── O PROBLEMA QUE ISTO RESOLVE ─────────────────────────────────────────────
+ * A lista geral do acervo mostrava só o total e "reservado em N eventos". O
+ * déficit — o melhor comportamento do produto — só aparecia DEPOIS de abrir um
+ * evento e olhar a reserva. Quem abria `/acervo` na segunda-feira para planejar
+ * a semana não via o que ia faltar.
+ *
+ * E `listItems` tinha razão em não mostrar "disponível agora": disponibilidade
+ * depende de uma JANELA, e um número sem data engana. Então a pergunta certa
+ * não é "quanto sobra hoje", é: **existe algum dia em que o prometido passa do
+ * que eu tenho?** Essa resposta não precisa de janela nenhuma — precisa de
+ * todas.
+ *
+ * ── POR QUE O PICO ESTÁ SEMPRE NO INÍCIO DE ALGUMA RESERVA ──────────────────
+ * A soma de intervalos só cresce quando um intervalo começa. Entre dois
+ * inícios ela é constante ou cai. Basta então conferir os dias de início — não
+ * há necessidade de varrer o calendário dia a dia.
+ *
+ * Datas são dia civil "AAAA-MM-DD" e comparam como texto, inclusivas nas duas
+ * pontas, exatamente como `janelasConflitam` já as trata.
+ */
+export type PicoDeReservas = {
+  /** Maior quantidade prometida ao mesmo tempo. */
+  pico: number;
+  /** Quanto falta no pior dia. Zero quando o acervo cobre tudo. */
+  deficit: number;
+  /** O dia em que o pico acontece. `null` quando não há reserva nenhuma. */
+  dia: string | null;
+};
+
+export function picoDeReservas(
+  total: number,
+  reservas: readonly ReservaParaCalculo[],
+): PicoDeReservas {
+  if (reservas.length === 0) {
+    return { pico: 0, deficit: 0, dia: null };
+  }
+
+  const janelas = reservas.map((r) => ({
+    ...normalizarJanela({ inicio: r.inicio, fim: r.fim }),
+    quantidade: r.quantidade,
+  }));
+
+  let pico = 0;
+  let dia: string | null = null;
+
+  for (const candidato of janelas) {
+    const soma = quantidadeLimpa(
+      janelas
+        .filter((j) => j.inicio <= candidato.inicio && candidato.inicio <= j.fim)
+        .reduce((s, j) => s + j.quantidade, 0),
+    );
+    // `>` e não `>=`: empate fica com o dia mais cedo, que é o que a
+    // decoradora precisa resolver primeiro.
+    if (soma > pico) {
+      pico = soma;
+      dia = candidato.inicio;
+    }
+  }
+
+  return {
+    pico,
+    deficit: quantidadeLimpa(Math.max(0, pico - quantidadeLimpa(total))),
+    dia,
+  };
+}
+
 // ── SAÍDA E RETORNO ─────────────────────────────────────────────────────────
 
 export type ReservaComMovimento = {

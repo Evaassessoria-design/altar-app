@@ -15,6 +15,7 @@ import {
   quantidadeFisicaValida,
   retornoPossivel,
   situacaoDaReserva,
+  picoDeReservas,
 } from "./lib/acervo";
 import { consolidarMateriais } from "./lib/fichaTecnica";
 import { agruparAcervoPorMaterial, substitutosCompativeis } from "./lib/acervo";
@@ -82,6 +83,11 @@ export const listItems = query({
           // decoradora escolhe o evento.
           reservasFuturas: minhas.length,
           eventosComReserva: new Set(minhas.map((r) => r.eventId)).size,
+          // O pior dia deste item, calculado pelo MESMO módulo de domínio que
+          // a tela do evento usa. Não é "disponível agora" — é a resposta à
+          // pergunta que não precisa de janela: existe algum dia em que o
+          // prometido passa do que eu tenho?
+          pico: picoDeReservas(item.quantidadeTotal, minhas),
         };
       })
       .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));

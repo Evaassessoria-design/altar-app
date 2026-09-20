@@ -20,6 +20,7 @@ import { ConvexError } from "convex/values";
 import { Boxes, Plus, Archive, Search, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
 import { UNIDADES, abreviarUnidade } from "@/convex/lib/materiais.ts";
+import { formatEventDayOnly } from "@/lib/event-date.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ACERVO
@@ -238,12 +239,25 @@ export default function AcervoPage() {
                     {item.quantidadeTotal} {abreviarUnidade(item.unidade)}
                     {item.categoria && ` · ${item.categoria}`}
                   </p>
-                  {/* Nunca "X disponíveis": sem uma janela, o número engana. */}
-                  {item.eventosComReserva > 0 && (
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Reservado em {item.eventosComReserva}{" "}
-                      {item.eventosComReserva === 1 ? "evento" : "eventos"}
+                  {/* Nunca "X disponíveis": sem uma janela, o número engana.
+                      O DÉFICIT, porém, não depende de janela escolhida — é a
+                      resposta a "existe algum dia em que o prometido passa do
+                      que eu tenho?", e essa pergunta o backend já responde
+                      (`picoDeReservas`). Até aqui só aparecia dentro do evento,
+                      e quem abria o acervo para planejar a semana não a via. */}
+                  {item.pico.deficit > 0 ? (
+                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                      Faltam {item.pico.deficit} {abreviarUnidade(item.unidade)} em{" "}
+                      {formatEventDayOnly(item.pico.dia!)} — {item.pico.pico} prometidos,{" "}
+                      {item.quantidadeTotal} no acervo
                     </p>
+                  ) : (
+                    item.eventosComReserva > 0 && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Reservado em {item.eventosComReserva}{" "}
+                        {item.eventosComReserva === 1 ? "evento" : "eventos"}
+                      </p>
+                    )
                   )}
                 </button>
                 {!item.archived && (

@@ -12,6 +12,7 @@ import {
   quantidadeFisicaValida,
   retornoPossivel,
   situacaoDaReserva,
+  picoDeReservas,
 } from "./acervo";
 
 const r = (
@@ -381,5 +382,147 @@ describe("janela INVERTIDA em dado corrompido", () => {
       40, [invertida], { inicio: "2026-10-10", fim: "2026-10-10" }, "evA",
     );
     expect(estado.disponivel).toBe(0);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// O PIOR DIA DO ACERVO, SEM NINGUÉM ESCOLHER UMA JANELA
+//
+// O déficit era o melhor comportamento do produto e só aparecia depois de abrir
+// um evento. Quem abria `/acervo` na segunda-feira para planejar a semana não
+// via o que ia faltar.
+//
+// `listItems` estava certo em não mostrar "disponível agora" — sem janela, esse
+// número engana. A pergunta que NÃO precisa de janela é outra: existe algum dia
+// em que o prometido passa do que eu tenho?
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("o pico de reservas simultâneas", () => {
+  const reserva = (id: string, quantidade: number, inicio: string, fim: string) => ({
+    _id: id,
+    eventId: `evento-${id}`,
+    quantidade,
+    inicio,
+    fim,
+  });
+
+  it("sem reserva nenhuma não há pico nem déficit", () => {
+    expect(picoDeReservas(40, [])).toEqual({ pico: 0, deficit: 0, dia: null });
+  });
+
+  it("estoque suficiente: pico existe, déficit é zero", () => {
+    const r = picoDeReservas(200, [reserva("a", 180, "2026-10-09", "2026-10-11")]);
+    expect(r.pico).toBe(180);
+    expect(r.deficit).toBe(0);
+    expect(r.dia).toBe("2026-10-09");
+  });
+
+  it("uma só reserva maior que o total — o caso do guardanapo", () => {
+    // 180 prometidos, 150 no galpão. Não há janela em que isso caiba.
+    const r = picoDeReservas(150, [reserva("a", 180, "2026-10-09", "2026-10-11")]);
+    expect(r.deficit).toBe(30);
+    expect(r.pico).toBe(180);
+  });
+
+  it("exatamente no limite não é déficit", () => {
+    expect(picoDeReservas(150, [reserva("a", 150, "2026-10-09", "2026-10-11")]).deficit).toBe(0);
+  });
+
+  it("duas reservas que NÃO se tocam não somam", () => {
+    // As peças voltam entre um evento e outro. Somá-las inventaria um déficit.
+    const r = picoDeReservas(
+      100,
+      [
+        reserva("a", 80, "2026-10-01", "2026-10-03"),
+        reserva("b", 80, "2026-11-01", "2026-11-03"),
+      ],
+    );
+    expect(r.pico).toBe(80);
+    expect(r.deficit).toBe(0);
+  });
+
+  it("duas reservas sobrepostas somam, e o déficit aparece", () => {
+    const r = picoDeReservas(
+      100,
+      [
+        reserva("a", 80, "2026-10-01", "2026-10-05"),
+        reserva("b", 60, "2026-10-04", "2026-10-08"),
+      ],
+    );
+    expect(r.pico).toBe(140);
+    expect(r.deficit).toBe(40);
+    // O pico começa quando a SEGUNDA entra.
+    expect(r.dia).toBe("2026-10-04");
+  });
+
+  it("janelas que só encostam nas pontas contam como sobrepostas", () => {
+    // Fim em 05 e início em 05: a peça precisa estar nos dois lugares no
+    // mesmo dia. É conflito, e é o mesmo critério de `janelasConflitam`.
+    const r = picoDeReservas(
+      100,
+      [
+        reserva("a", 60, "2026-10-01", "2026-10-05"),
+        reserva("b", 60, "2026-10-05", "2026-10-09"),
+      ],
+    );
+    expect(r.pico).toBe(120);
+    expect(r.deficit).toBe(20);
+  });
+
+  it("três sobreposições parciais: o pico é o trecho comum, não a soma total", () => {
+    const r = picoDeReservas(
+      100,
+      [
+        reserva("a", 50, "2026-10-01", "2026-10-04"),
+        reserva("b", 50, "2026-10-03", "2026-10-06"),
+        reserva("c", 50, "2026-10-05", "2026-10-08"),
+      ],
+    );
+    // a+b no dia 03, b+c no dia 05 — nunca as três juntas.
+    expect(r.pico).toBe(100);
+    expect(r.deficit).toBe(0);
+  });
+
+  it("acervo zerado: tudo que for prometido é déficit", () => {
+    const r = picoDeReservas(0, [reserva("a", 12, "2026-10-01", "2026-10-02")]);
+    expect(r.deficit).toBe(12);
+  });
+
+  it("janela invertida é normalizada antes de comparar", () => {
+    // "de 11/10 a 09/10" não pode escapar da conta por estar ao contrário.
+    const r = picoDeReservas(
+      10,
+      [
+        reserva("a", 8, "2026-10-11", "2026-10-09"),
+        reserva("b", 8, "2026-10-10", "2026-10-10"),
+      ],
+    );
+    expect(r.pico).toBe(16);
+    expect(r.deficit).toBe(6);
+  });
+
+  it("quantidade fracionária não vira dízima", () => {
+    // Metro aceita fração; 0.1+0.2 em ponto flutuante daria 0.30000000000000004.
+    const r = picoDeReservas(
+      0.25,
+      [
+        reserva("a", 0.1, "2026-10-01", "2026-10-03"),
+        reserva("b", 0.2, "2026-10-02", "2026-10-04"),
+      ],
+    );
+    expect(r.pico).toBe(0.3);
+    expect(r.deficit).toBe(0.05);
+  });
+
+  it("empate no pico fica com o dia mais cedo — é o que ela resolve primeiro", () => {
+    const r = picoDeReservas(
+      10,
+      [
+        reserva("a", 20, "2026-10-01", "2026-10-02"),
+        reserva("b", 20, "2026-12-01", "2026-12-02"),
+      ],
+    );
+    expect(r.pico).toBe(20);
+    expect(r.dia).toBe("2026-10-01");
   });
 });

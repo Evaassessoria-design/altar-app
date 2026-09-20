@@ -63,11 +63,10 @@ Datado de 19/09/2026. Quando divergir do código, o código está certo.
 Preparado de propósito, sem backfill e sem custo — mas hoje invisível para quem
 usa:
 
-- **Pasta do evento**: `contracts.kind` aceita adendo, orçamento e referência;
-  só o contrato principal tem upload na tela.
-- **Audiência do item de montagem**: `assemblyItems.visibility`
-  (interno/cliente/equipe) é gravado e nunca lido — os relatórios por audiência
-  não existem.
+- **Audiência do item de montagem**: `assemblyItems.visibility` É lido — o PDF
+  do caderno de montagem filtra por ele (`generate-assembly-pdf.ts`). O que
+  falta é o SELETOR: a tela passa `audience: "equipe"` fixo, então a versão
+  para a cliente nunca chega a ser gerada.
 - **Política de autonomia da Central**: `adminAutonomyPolicy` é gravável e
   **inerte** por decisão; ligar autonomia é mudança de fase, não de dado.
 - **Transcrição de áudio**: `communicationMessages.transcricao` existe para não
@@ -92,6 +91,9 @@ Funções que existem, são testadas e ninguém consegue chamar pelo aplicativo:
 - Notificações: `generateMyAlerts`
 - Assinatura: `asaas.getCustomerPortalUrl` (sem uso e sem guarda — ver
   "Recomendações")
+
+O mapa completo, com evidência, impacto e esforço de cada um, está em
+`docs/estado-do-produto.md`.
 
 ---
 

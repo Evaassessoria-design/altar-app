@@ -503,8 +503,9 @@ export default defineSchema({
 
   // Documentos do evento (contrato, adendo, orçamento, referência, outros).
   // `kind` ausente = contrato legado (compatibilidade com dados existentes).
-  // Preparação para "Pasta do Evento" — hoje só o contrato principal tem UI de
-  // upload; os demais tipos existem no schema para suportar a próxima etapa.
+  // A "Pasta do Evento" está COMPLETA: a tela oferece os cinco tipos
+  // (event-documents.tsx). Este comentário dizia o contrário e ficou velho —
+  // e um comentário velho faz reimplementar o que já existe.
   contracts: defineTable({
     eventId: v.id("events"),
     userId: v.id("users"),

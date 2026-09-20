@@ -331,3 +331,68 @@ describe("cobertura da auditoria", () => {
     expect(daCentral.sort()).toEqual([...MODULOS_DA_CENTRAL].sort());
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// A CONSULTA QUE A HOMOLOGAÇÃO USA NÃO PODE VIRAR UMA PORTA
+//
+// `conversasPorIdentidade` existe para o script de homologação descobrir o que
+// o gateway acabou de criar. Ela recebe TELEFONES e devolve conversas — que é
+// exatamente a forma de um vazamento, se um dia escorregar para `query`.
+//
+// Três coisas a mantêm inofensiva, e as três são verificadas aqui:
+//   · é `internalQuery` — inalcançável pelo navegador;
+//   · não escreve nada;
+//   · devolve identificadores, não conteúdo: nenhum texto de mensagem e
+//     nenhum dado do contato saem por ela.
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("a consulta de apoio à homologação", () => {
+  const fonte = readFileSync("convex/communications.ts", "utf-8");
+  const bloco = (() => {
+    const inicio = fonte.indexOf("export const conversasPorIdentidade");
+    expect(inicio, "conversasPorIdentidade sumiu").toBeGreaterThan(-1);
+    // Fecha no `});` da própria definição, na coluna zero. Cortar no próximo
+    // `export const` arrastaria os helpers não exportados que vêm no meio — e
+    // um deles escreve, o que faria este teste falhar por vizinhança.
+    const fim = fonte.indexOf("\n});", inicio);
+    return fonte.slice(inicio, fim === -1 ? undefined : fim + 4);
+  })();
+
+  it("é interna — o navegador não a alcança", () => {
+    expect(bloco).toContain("internalQuery");
+    expect(bloco).not.toMatch(/=\s*query\(/);
+  });
+
+  it("não escreve nada", () => {
+    for (const escrita of ["ctx.db.insert", "ctx.db.patch", "ctx.db.replace", "ctx.db.delete"]) {
+      expect(bloco, escrita).not.toContain(escrita);
+    }
+    expect(bloco).not.toContain("ctx.scheduler");
+  });
+
+  it("devolve identificador, nunca conteúdo", () => {
+    // O que ela pode devolver está escrito aqui. Acrescentar um campo de
+    // conteúdo — texto da mensagem, nome ou telefone do contato — quebra.
+    const permitidos = [
+      "externalId",
+      "encontrada",
+      "conversationId",
+      "vertical",
+      "messageId",
+      "jaTriada",
+    ];
+    const retorno = bloco.slice(bloco.indexOf("encontrados.push({", bloco.indexOf("encontrada: true")));
+    const campos = [...retorno.matchAll(/^\s{8}(\w+)[,:]/gm)].map((m) => m[1]);
+    for (const campo of campos) {
+      expect(permitidos, `campo novo no retorno: ${campo}`).toContain(campo);
+    }
+
+    for (const proibido of ["texto", "corpo", "displayName", "telefone", "body"]) {
+      expect(bloco, proibido).not.toMatch(new RegExp(`${proibido}\\s*:`));
+    }
+  });
+
+  it("não toca em `leads` — a fronteira da Central continua de pé", () => {
+    expect(bloco).not.toContain('query("leads")');
+  });
+});

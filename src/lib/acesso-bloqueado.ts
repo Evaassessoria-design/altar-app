@@ -29,6 +29,12 @@
 // ponto. Uma conta vencida que tente criar um evento recebe a recusa do
 // backend, com a mensagem que `accessGuard` já escreve.
 //
+// ── SÓ O BLOQUEIO MORA AQUI ─────────────────────────────────────────────────
+// Trial acabando e inadimplência DENTRO da tolerância já tinham aviso próprio
+// (`TrialBanner`, no topo do shell), com um botão que abre a cobrança direto.
+// Repetir os dois aqui daria dois avisos sobre a mesma cobrança, brigando pela
+// mesma atenção. `TrialBanner` cede a vez quando a conta está bloqueada.
+//
 // ── POR QUE UM AVISO PERMANENTE, E NÃO UM REDIRECIONAMENTO ──────────────────
 // O redirecionamento respondia "você não pode entrar". A resposta correta é
 // "você pode ver o que é seu, e para voltar a criar, regularize". O aviso não
@@ -40,7 +46,6 @@ export type DecisaoDeAcesso =
   | {
       blocked?: boolean;
       reason?: "trial_expired" | "subscription_cancelled" | "payment_overdue";
-      overdueDaysLeft?: number;
     }
   | null
   | undefined;
@@ -113,22 +118,4 @@ export function avisoDeBloqueio(acesso: DecisaoDeAcesso): AvisoDeBloqueio {
   }
   const aviso = (acesso.reason && AVISOS[acesso.reason]) || PADRAO;
   return { bloqueada: true, ...aviso };
-}
-
-/**
- * Aviso de inadimplência AINDA dentro da tolerância.
- *
- * Não é bloqueio: a conta funciona inteira. Mas avisar antes de fechar é o que
- * separa "o sistema parou" de "eu fui avisada três dias antes" — e é o dado
- * que `resolveAccess` já calcula (`overdueDaysLeft`) e ninguém exibia.
- *
- * `null` quando não se aplica, para o chamador não desenhar nada.
- */
-export function avisoDeTolerancia(acesso: DecisaoDeAcesso): string | null {
-  if (!acesso || acesso.blocked) return null;
-  const dias = acesso.overdueDaysLeft;
-  if (typeof dias !== "number" || dias <= 0) return null;
-  return dias === 1
-    ? "Seu pagamento está em atraso. Você tem 1 dia para regularizar antes que a criação de eventos seja bloqueada."
-    : `Seu pagamento está em atraso. Você tem ${dias} dias para regularizar antes que a criação de eventos seja bloqueada.`;
 }

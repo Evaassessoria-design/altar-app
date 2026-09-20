@@ -100,6 +100,11 @@ function TrialBanner() {
     trialDaysLeft <= 7;
 
   if (billingExempt) return null;
+  // Conta já BLOQUEADA tem aviso próprio (`AvisoDeAssinatura`), que diz o que
+  // ela ainda pode fazer. Dois avisos empilhados sobre a mesma cobrança —
+  // "seu teste expirou" em cima de "seu teste terminou, mas seus dados
+  // continuam aqui" — brigam pela mesma atenção e dizem menos que um só.
+  if (status?.access?.blocked) return null;
   if (!status || (!isTrialEnding && !isOverdue)) return null;
 
   const message = isOverdue

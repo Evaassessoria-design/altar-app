@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { avisoDeBloqueio, avisoDeTolerancia, podeAbrirRota } from "./acesso-bloqueado.ts";
+import { avisoDeBloqueio, podeAbrirRota } from "./acesso-bloqueado.ts";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // A CONTA VENCIDA E OS PRÓPRIOS DADOS
@@ -147,9 +147,7 @@ describe("conta liberada não vê aviso nenhum", () => {
     ["sem sessão", null],
     ["ainda carregando", undefined],
   ])("%s", (_rotulo, acesso) => {
-    const a = avisoDeBloqueio(acesso);
-    expect(a.bloqueada).toBe(false);
-    expect(avisoDeTolerancia(acesso)).toBeNull();
+    expect(avisoDeBloqueio(acesso).bloqueada).toBe(false);
   });
 
   it("carregando não pisca aviso — `undefined` é silêncio, não bloqueio", () => {
@@ -159,26 +157,20 @@ describe("conta liberada não vê aviso nenhum", () => {
   });
 });
 
-describe("a tolerância da inadimplência", () => {
-  it("avisa antes de fechar, com o número de dias que o backend calculou", () => {
-    // `overdueDaysLeft` já era calculado em `resolveAccess` e ninguém exibia.
-    expect(avisoDeTolerancia({ blocked: false, overdueDaysLeft: 5 })).toContain("5 dias");
+describe("um aviso de cobrança por vez", () => {
+  it("TrialBanner cede a vez quando a conta está bloqueada", () => {
+    // Sem isto, a conta com trial vencido lê dois avisos empilhados: "Seu
+    // período de teste expirou" (TrialBanner) em cima de "Seu período de teste
+    // terminou — seus dados continuam aqui". Dizem a mesma coisa e o segundo,
+    // que é o que traz informação nova, fica parecendo repetição.
+    const layout = readFileSync("src/pages/app/layout.tsx", "utf-8");
+    expect(layout).toContain("if (status?.access?.blocked) return null;");
   });
 
-  it("um dia é singular — não '1 dias'", () => {
-    const aviso = avisoDeTolerancia({ blocked: false, overdueDaysLeft: 1 });
-    expect(aviso).toContain("1 dia ");
-    expect(aviso).not.toContain("1 dias");
-  });
-
-  it("zero ou negativo não vira aviso", () => {
-    expect(avisoDeTolerancia({ blocked: false, overdueDaysLeft: 0 })).toBeNull();
-    expect(avisoDeTolerancia({ blocked: false, overdueDaysLeft: -3 })).toBeNull();
-  });
-
-  it("já bloqueada não mostra contagem — mostra o bloqueio", () => {
-    // Os dois avisos ao mesmo tempo se contradiriam: "você tem 3 dias" ao lado
-    // de "seu acesso foi bloqueado".
-    expect(avisoDeTolerancia({ blocked: true, overdueDaysLeft: 3 })).toBeNull();
+  it("o aviso de bloqueio não repete a contagem de tolerância", () => {
+    // A tolerância é assunto do TrialBanner, que tem o botão que abre a
+    // cobrança. Este módulo não a conhece.
+    const modulo = readFileSync("src/lib/acesso-bloqueado.ts", "utf-8");
+    expect(modulo).not.toContain("overdueDaysLeft");
   });
 });

@@ -1002,7 +1002,9 @@ export default function FornecedoresPage() {
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto">
       <Link to={`/eventos/${id}`} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground cursor-pointer mb-4">
-        <ArrowLeft className="size-4" /> Voltar ao evento
+        {/* Pelo NOME, como as outras telas do evento: com dois eventos
+            abertos em abas diferentes, "voltar ao evento" não diz qual. */}
+        <ArrowLeft className="size-4" /> {event?.name ?? "Evento"}
       </Link>
 
       <div className="mb-6">

@@ -195,7 +195,15 @@ export default function PlantaPage() {
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-5">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link to={`/eventos/${id}`} className="text-muted-foreground hover:text-foreground">
+        {/* A seta sozinha não dizia para onde levava — nem para quem lê a
+            tela, nem para quem a ouve — e o alvo de toque era do tamanho do
+            ícone. As outras telas do evento voltam pelo NOME do evento. */}
+        <Link
+          to={`/eventos/${id}`}
+          aria-label={`Voltar para ${event.name}`}
+          title={`Voltar para ${event.name}`}
+          className="-m-2 p-2 text-muted-foreground hover:text-foreground"
+        >
           <ArrowLeft className="size-5" />
         </Link>
         <div className="min-w-0">

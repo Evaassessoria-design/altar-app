@@ -350,6 +350,35 @@ export function divergenciaDaSaida(reserva: ReservaComMovimento): number {
   return quantidadeLimpa(reserva.saiu - reserva.quantidade);
 }
 
+/**
+ * A reserva ainda diz alguma coisa sobre HOJE?
+ *
+ * ── O DEFEITO QUE ISTO TRANCA ───────────────────────────────────────────────
+ * A lista do acervo contava TODAS as reservas do item e escrevia "Reservado em
+ * 3 eventos". Depois de uma temporada, os três eventos já tinham acontecido, e
+ * a frase — no presente — continuava lá, para sempre. O número crescia com o
+ * histórico e nunca descia.
+ *
+ * Duas coisas mantêm uma reserva em aberto, e a segunda é a que importa:
+ *
+ *   · a janela alcança hoje ou ainda vem (a promessa está de pé);
+ *   · saiu mais do que voltou — as peças estão FORA, e a data não muda isso.
+ *
+ * O segundo caso é o que o corte por data sozinho perderia: um evento de
+ * sábado cujas peças ninguém conferiu na segunda continua comprometendo o
+ * acervo, e é exatamente o que a decoradora precisa enxergar.
+ *
+ * A janela é normalizada antes de comparar, pelo mesmo motivo de
+ * `picoDeReservas`: dado gravado ao contrário não pode escapar do corte.
+ */
+export function reservaEmAberto(
+  reserva: ReservaParaCalculo & ReservaComMovimento,
+  hoje: string,
+): boolean {
+  if (faltaVoltar(reserva) > 0) return true;
+  return normalizarJanela({ inicio: reserva.inicio, fim: reserva.fim }).fim >= hoje;
+}
+
 // ── VALIDAÇÃO DE QUANTIDADE ─────────────────────────────────────────────────
 
 /**

@@ -13,6 +13,7 @@ import {
   retornoPossivel,
   situacaoDaReserva,
   picoDeReservas,
+  reservaEmAberto,
 } from "./acervo";
 
 const r = (
@@ -643,5 +644,61 @@ describe("o pico só olha o que ainda vai acontecer", () => {
     const vazio = picoDeReservas(40, [], HOJE);
     const sovelhas = picoDeReservas(40, [reserva("a", 99, "2024-01-01", "2024-01-02")], HOJE);
     expect(sovelhas).toEqual(vazio);
+  });
+});
+
+// ═════════════════════════════════════ "RESERVADO EM N EVENTOS" É NO PRESENTE
+
+describe("a reserva que ainda diz algo sobre hoje", () => {
+  const HOJE = "2026-09-20";
+  const res = (inicio: string, fim: string, extra: { saiu?: number; voltou?: number } = {}) => ({
+    _id: "r",
+    eventId: "e",
+    quantidade: 10,
+    inicio,
+    fim,
+    ...extra,
+  });
+
+  it("evento que já aconteceu e teve tudo conferido: fechada", () => {
+    // O defeito: a lista do acervo escrevia "Reservado em 3 eventos" sobre
+    // eventos de 2025, e o número nunca descia.
+    expect(reservaEmAberto(res("2025-10-09", "2025-10-11", { saiu: 10, voltou: 10 }), HOJE)).toBe(false);
+  });
+
+  it("evento futuro: aberta", () => {
+    expect(reservaEmAberto(res("2026-10-09", "2026-10-11"), HOJE)).toBe(true);
+  });
+
+  it("janela que termina HOJE ainda está aberta", () => {
+    // Inclusiva nas duas pontas, como o resto do módulo. É o dia do recolhimento.
+    expect(reservaEmAberto(res("2026-09-18", HOJE), HOJE)).toBe(true);
+  });
+
+  it("PEÇA QUE NÃO VOLTOU mantém a reserva aberta mesmo com a data vencida", () => {
+    // O caso que o corte por data sozinho perderia: evento de sábado, ninguém
+    // conferiu na segunda, 4 peças continuam na rua. O acervo continua
+    // comprometido, e a decoradora precisa ver isso.
+    expect(reservaEmAberto(res("2026-09-12", "2026-09-14", { saiu: 10, voltou: 6 }), HOJE)).toBe(true);
+  });
+
+  it("saiu e voltou tudo, data vencida: fechada", () => {
+    expect(reservaEmAberto(res("2026-09-12", "2026-09-14", { saiu: 10, voltou: 10 }), HOJE)).toBe(false);
+  });
+
+  it("saiu e não foi registrado retorno nenhum: aberta", () => {
+    expect(reservaEmAberto(res("2026-09-12", "2026-09-14", { saiu: 10 }), HOJE)).toBe(true);
+  });
+
+  it("reserva vencida que nunca saiu do galpão: fechada", () => {
+    // Nada foi registrado — nem saída, nem retorno. Não há peça na rua, e a
+    // data passou. Continuar contando seria contar intenção.
+    expect(reservaEmAberto(res("2026-09-12", "2026-09-14"), HOJE)).toBe(false);
+  });
+
+  it("janela gravada ao contrário é normalizada antes do corte", () => {
+    // "De 11/10/2026 a 09/10/2026" é futura. Comparar o campo cru diria que
+    // terminou — e o dado corrompido escaparia justamente do corte.
+    expect(reservaEmAberto(res("2026-10-11", "2026-10-09"), HOJE)).toBe(true);
   });
 });

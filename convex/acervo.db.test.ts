@@ -222,6 +222,20 @@ describe("as travas da FONTE — o espelho do teste não protege o código real"
     }
   });
 
+  it("a lista do acervo conta só o que ainda vale — e passa a data do dia", () => {
+    // Duas frases no PRESENTE saíam do histórico inteiro: "Faltam 30 un em
+    // 09/10/2025" e "Reservado em 3 eventos". Os eventos já tinham acontecido,
+    // os números nunca desciam, e a lista virava ruído depois de uma
+    // temporada. As duas passam pelo mesmo corte agora.
+    const c = corpo("listItems");
+    expect(c).toContain("const hoje = new Date().toISOString().slice(0, 10)");
+    expect(c, "o pico ainda olha o histórico inteiro").toContain("picoDeReservas(item.quantidadeTotal, minhas, hoje)");
+    expect(c).toContain("reservaEmAberto(r, hoje)");
+    // E o que a tela lê sai do filtrado, não do bruto.
+    expect(c).toContain("reservasFuturas: emAberto.length");
+    expect(c).toContain("eventosComReserva: new Set(emAberto.map((r) => r.eventId)).size");
+  });
+
   it("nenhuma mutation corta a reserva para caber no disponível", () => {
     // Cortar em silêncio esconderia justamente o déficit que ela precisa ver.
     const c = corpo("reservar");

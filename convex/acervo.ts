@@ -16,6 +16,7 @@ import {
   retornoPossivel,
   situacaoDaReserva,
   picoDeReservas,
+  reservaEmAberto,
 } from "./lib/acervo";
 import { consolidarMateriais } from "./lib/fichaTecnica";
 import { agruparAcervoPorMaterial, substitutosCompativeis } from "./lib/acervo";
@@ -76,14 +77,20 @@ export const listItems = query({
     return visiveis
       .map((item) => {
         const minhas = porItem.get(item._id) ?? [];
+        // "Reservado em N eventos" é uma frase no PRESENTE. Contar o histórico
+        // inteiro fazia o número só crescer: depois de uma temporada a peça
+        // aparecia reservada em eventos que já tinham acontecido e sido
+        // desmontados. `reservaEmAberto` mantém o que ainda vale — e mantém
+        // também a peça que saiu e não voltou, que a data sozinha perderia.
+        const emAberto = minhas.filter((r) => reservaEmAberto(r, hoje));
         return {
           ...item,
           // NÃO mostramos "disponível agora": disponibilidade depende de uma
           // JANELA, e um número sem data seria enganoso. A tela geral mostra o
           // total e quantas reservas existem; o número real aparece quando a
           // decoradora escolhe o evento.
-          reservasFuturas: minhas.length,
-          eventosComReserva: new Set(minhas.map((r) => r.eventId)).size,
+          reservasFuturas: emAberto.length,
+          eventosComReserva: new Set(emAberto.map((r) => r.eventId)).size,
           // O pior dia deste item, calculado pelo MESMO módulo de domínio que
           // a tela do evento usa. Não é "disponível agora" — é a resposta à
           // pergunta que não precisa de janela: existe algum dia em que o

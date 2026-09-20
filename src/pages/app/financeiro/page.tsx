@@ -60,6 +60,7 @@ import {
 } from "recharts";
 import { format } from "date-fns";
 import { formatDateInput } from "@/lib/event-date.ts";
+import { paraOCampo, valorDigitado } from "@/lib/valor-digitado.ts";
 import { ptBR } from "date-fns/locale";
 
 const INCOME_CATEGORIES = [
@@ -88,7 +89,14 @@ const txSchema = z.object({
   type: z.enum(["income", "expense"]),
   category: z.string().min(1, "Categoria obrigatória"),
   description: z.string().min(1, "Descrição obrigatória"),
-  amount: z.string().min(1, "Valor obrigatório"),
+  // Validar aqui, e não só no submit, faz o erro aparecer NO CAMPO. A regra
+  // de leitura é de `valor-digitado.ts`: "1.500,00" é mil e quinhentos, e era
+  // o jeito de digitar que `parseFloat` transformava em um real e cinquenta.
+  amount: z
+    .string()
+    .min(1, "Valor obrigatório")
+    .refine((t) => valorDigitado(t) !== null, "Valor não reconhecido. Ex.: 1.500,00")
+    .refine((t) => (valorDigitado(t) ?? -1) >= 0, "O valor não pode ser negativo"),
   date: z.string().min(1, "Data obrigatória"),
   isPaid: z.boolean(),
   notes: z.string().optional(),
@@ -187,7 +195,10 @@ function TxDialog({
 
           <div className="space-y-1.5">
             <Label>Valor (R$) *</Label>
-            <Input type="number" step="0.01" placeholder="0,00" {...register("amount")} />
+            {/* `inputMode="decimal"` e não `type="number"`: com campo
+                numérico, o que `value` devolve para "1.500,00" depende do
+                navegador e do idioma do sistema. */}
+            <Input inputMode="decimal" placeholder="1.500,00" {...register("amount")} />
             {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
           </div>
 
@@ -270,9 +281,16 @@ export default function FinanceiroPage() {
 
   const handleCreate = async (values: TxFormValues) => {
     try {
+      const amount = valorDigitado(values.amount);
+      // O zod já barrou acima; esta é a rede que impede um `NaN` de sair daqui
+      // se alguém mexer no schema. Um `NaN` gravado estraga TODAS as somas.
+      if (amount === null) {
+        toast.error("Valor não reconhecido. Ex.: 1.500,00");
+        return;
+      }
       await addTransaction({
         ...values,
-        amount: parseFloat(values.amount),
+        amount,
         notes: values.notes || undefined,
       });
       toast.success("Lançamento adicionado!");
@@ -285,10 +303,15 @@ export default function FinanceiroPage() {
   const handleEdit = async (values: TxFormValues) => {
     if (!editing) return;
     try {
+      const amount = valorDigitado(values.amount);
+      if (amount === null) {
+        toast.error("Valor não reconhecido. Ex.: 1.500,00");
+        return;
+      }
       await updateTransaction({
         id: editing._id,
         ...values,
-        amount: parseFloat(values.amount),
+        amount,
         notes: values.notes || undefined,
       });
       toast.success("Lançamento atualizado!");
@@ -507,7 +530,8 @@ export default function FinanceiroPage() {
             type: editing.type,
             category: editing.category,
             description: editing.description,
-            amount: editing.amount.toString(),
+            // Na escrita daqui: "1.500,50", e não "1500.5".
+            amount: paraOCampo(editing.amount),
             date: editing.date,
             isPaid: editing.isPaid,
             notes: editing.notes,

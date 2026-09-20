@@ -2,8 +2,15 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { requireEventOwner, requireUser } from "./lib/identity";
+import { emCentavos, motivoDoValorInvalido, somaEmDinheiro } from "./lib/dinheiro";
 
 const txType = v.union(v.literal("income"), v.literal("expense"));
+
+/** Recusa o valor que não pode ser gravado, com o recado que a tela mostra. */
+function exigirValor(valor: number) {
+  const motivo = motivoDoValorInvalido(valor);
+  if (motivo) throw new ConvexError({ code: "VALOR_INVALIDO", message: motivo });
+}
 
 export const listTransactions = query({
   args: {},
@@ -26,15 +33,16 @@ export const getSummary = query({
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .collect();
 
-    const totalIncome = txs
-      .filter((t) => t.type === "income" && t.isPaid)
-      .reduce((s, t) => s + t.amount, 0);
-    const totalExpense = txs
-      .filter((t) => t.type === "expense" && t.isPaid)
-      .reduce((s, t) => s + t.amount, 0);
-    const pendingIncome = txs
-      .filter((t) => t.type === "income" && !t.isPaid)
-      .reduce((s, t) => s + t.amount, 0);
+    // `somaEmDinheiro` em vez de `reduce` cru por dois motivos: a sobra de
+    // ponto flutuante (0.1 + 0.2), e o lançamento antigo que já esteja com
+    // `NaN` gravado — ele estragaria TODAS as somas desta tela, e não só a
+    // própria linha. Ver lib/dinheiro.ts.
+    const soma = (filtro: (t: (typeof txs)[number]) => boolean) =>
+      somaEmDinheiro(txs.filter(filtro).map((t) => t.amount));
+
+    const totalIncome = soma((t) => t.type === "income" && t.isPaid);
+    const totalExpense = soma((t) => t.type === "expense" && t.isPaid);
+    const pendingIncome = soma((t) => t.type === "income" && !t.isPaid);
 
     // Last 6 months breakdown (paid only)
     const now = new Date();
@@ -49,15 +57,19 @@ export const getSummary = query({
       const inMonth = txs.filter((t) => t.isPaid && t.date >= start && t.date <= end);
       months.push({
         label,
-        income: inMonth.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0),
-        expense: inMonth.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0),
+        income: somaEmDinheiro(
+          inMonth.filter((t) => t.type === "income").map((t) => t.amount),
+        ),
+        expense: somaEmDinheiro(
+          inMonth.filter((t) => t.type === "expense").map((t) => t.amount),
+        ),
       });
     }
 
     return {
       totalIncome,
       totalExpense,
-      profit: totalIncome - totalExpense,
+      profit: emCentavos(totalIncome - totalExpense),
       pendingIncome,
       months,
     };
@@ -81,7 +93,15 @@ export const addTransaction = mutation({
     const user = args.eventId
       ? (await requireEventOwner(ctx, args.eventId)).user
       : await requireUser(ctx);
-    return ctx.db.insert("transactions", { userId: user._id, ...args });
+    // A tela manda `parseFloat(campo)`, e `parseFloat` devolve `NaN` para
+    // qualquer coisa que não comece com número. Um `NaN` gravado aqui não
+    // estraga a própria linha: estraga toda soma do Financeiro, para sempre.
+    exigirValor(args.amount);
+    return ctx.db.insert("transactions", {
+      userId: user._id,
+      ...args,
+      amount: emCentavos(args.amount),
+    });
   },
 });
 
@@ -102,6 +122,10 @@ export const updateTransaction = mutation({
     if (!tx || tx.userId !== user._id)
       throw new ConvexError({ message: "Lançamento não encontrado", code: "NOT_FOUND" });
     const { id, ...fields } = args;
+    if (fields.amount !== undefined) {
+      exigirValor(fields.amount);
+      fields.amount = emCentavos(fields.amount);
+    }
     await ctx.db.patch(id, fields);
   },
 });
@@ -178,6 +202,11 @@ export const createReceivablesFromContract = mutation({
     if (alreadyHasContract) {
       return { created: 0, alreadyExists: true };
     }
+    // Confere TODAS as parcelas antes de gravar a primeira: metade das contas
+    // a receber criadas e a outra metade recusada deixaria o evento num estado
+    // que ninguém pediu, e a dedup acima impediria a segunda tentativa.
+    for (const e of args.entries) exigirValor(e.amount);
+
     let created = 0;
     for (const e of args.entries) {
       await ctx.db.insert("transactions", {
@@ -186,7 +215,7 @@ export const createReceivablesFromContract = mutation({
         type: "income",
         category: "Contrato",
         description: e.description,
-        amount: e.amount,
+        amount: emCentavos(e.amount),
         date: e.date,
         isPaid: false,
       });

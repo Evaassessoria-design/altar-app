@@ -8,11 +8,11 @@ import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import {
-  Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle,
+  Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle,
 } from "@/components/ui/empty.tsx";
 import { toast } from "sonner";
 import { ConvexError } from "convex/values";
-import { ArrowLeft, Boxes, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ArrowRight, Boxes, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
 import { formatEventDayOnly } from "@/lib/event-date.ts";
 import { abreviarUnidade } from "@/convex/lib/materiais.ts";
@@ -158,9 +158,16 @@ export default function AcervoDoEventoPage() {
             <EmptyTitle>Nenhuma peça reservada</EmptyTitle>
             <EmptyDescription>
               Use “Reservar da ficha” para trazer o que a Ficha Técnica precisa e que já existe no
-              seu acervo.
+              seu acervo. Se a ficha ainda não tem receita, é por lá que começa.
             </EmptyDescription>
           </EmptyHeader>
+          <EmptyContent>
+            <Button asChild size="sm" variant="outline" className="cursor-pointer">
+              <Link to={`/eventos/${id}/ficha-tecnica`}>
+                Abrir a Ficha Técnica <ArrowRight className="size-4" />
+              </Link>
+            </Button>
+          </EmptyContent>
         </Empty>
       ) : (
         <div className="space-y-3">

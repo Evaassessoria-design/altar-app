@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import {
   Empty,
+  EmptyContent,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
@@ -14,7 +15,7 @@ import {
 } from "@/components/ui/empty.tsx";
 import { toast } from "sonner";
 import { ConvexError } from "convex/values";
-import { ArrowLeft, ClipboardList, FileDown, Layers, Package, ShoppingCart } from "lucide-react";
+import { ArrowLeft, ClipboardList, FileDown, Layers, Package, ShoppingCart, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
 import { formatEventDateLong } from "@/lib/event-date.ts";
 import { labelDoAmbiente } from "@/lib/decoration-project.ts";
@@ -426,7 +427,12 @@ export default function FichaTecnicaPage() {
     }
   };
 
-  if (event === undefined || ficha === undefined) {
+  // `itensDoEvento` entra na espera junto com o resto: é dele que sai
+  // `semItens`, e decidir "está vazio" antes de a consulta responder faria a
+  // tela piscar "este evento não tem itens" em TODO carregamento. É a regra
+  // que `estados-e-submits.test.ts` já protegia — e que a primeira versão
+  // desta correção quebrou, com um `?? []`.
+  if (event === undefined || ficha === undefined || itensDoEvento === undefined) {
     return (
       <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-3">
         <Skeleton className="h-8 w-48" />
@@ -439,6 +445,12 @@ export default function FichaTecnicaPage() {
   }
 
   const temFicha = ficha.consolidado.length > 0;
+  // DOIS estados vazios diferentes, e confundi-los era o defeito: a tela dizia
+  // "abra um item do Caderno de Montagem abaixo" e, logo abaixo, "este evento
+  // ainda não tem itens". Duas mensagens que se contradizem, nenhuma com
+  // caminho — e o Caderno de Montagem mora DENTRO do Questionário, que não é
+  // um lugar que alguém adivinhe.
+  const semItens = itensDoEvento.length === 0;
 
   return (
     <div className="p-4 md:p-6 max-w-2xl mx-auto">
@@ -458,7 +470,28 @@ export default function FichaTecnicaPage() {
         </p>
       </div>
 
-      {!temFicha ? (
+      {semItens ? (
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Layers />
+            </EmptyMedia>
+            <EmptyTitle>Este evento ainda não tem itens de montagem</EmptyTitle>
+            <EmptyDescription>
+              A Ficha Técnica parte das peças do projeto — o arco, os centros de mesa, a mesa
+              posta. Cadastre-as no Questionário, em cada área, e volte aqui para dizer do que
+              cada uma é feita.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button asChild size="sm" className="cursor-pointer">
+              <Link to={`/eventos/${id}/briefing`}>
+                Abrir o Questionário <ArrowRight className="size-4" />
+              </Link>
+            </Button>
+          </EmptyContent>
+        </Empty>
+      ) : !temFicha ? (
         <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -577,7 +610,7 @@ export default function FichaTecnicaPage() {
         </div>
       )}
 
-      {(!temFicha || aba === "ambientes") && (
+      {!semItens && (!temFicha || aba === "ambientes") && (
         <div className="space-y-3">
           {porAmbiente.map(([ambiente, itens]) => (
             <div key={ambiente} className="bg-card border border-border rounded-xl overflow-hidden">
@@ -633,11 +666,6 @@ export default function FichaTecnicaPage() {
               </div>
             </div>
           ))}
-          {porAmbiente.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-6">
-              Este evento ainda não tem itens no Caderno de Montagem.
-            </p>
-          )}
         </div>
       )}
 

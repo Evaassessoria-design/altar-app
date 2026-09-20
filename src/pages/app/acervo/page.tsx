@@ -13,7 +13,7 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog.tsx";
 import {
-  Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle,
+  Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle,
 } from "@/components/ui/empty.tsx";
 import { toast } from "sonner";
 import { ConvexError } from "convex/values";
@@ -217,6 +217,13 @@ export default function AcervoPage() {
               Ficha Técnica passa a dizer quanto do que você precisa já está no galpão.
             </EmptyDescription>
           </EmptyHeader>
+          {/* O botão "Novo item" existe no topo, mas quem chega numa tela vazia
+              lê o texto do meio, não a barra de cima. */}
+          <EmptyContent>
+            <Button size="sm" onClick={() => setCriando(true)} className="cursor-pointer">
+              <Plus className="size-4 mr-1" /> Cadastrar primeira peça
+            </Button>
+          </EmptyContent>
         </Empty>
       ) : (
         <>

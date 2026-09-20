@@ -4,7 +4,8 @@ import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { toast } from "sonner";
-import { ArrowLeft, Layers, ImageOff } from "lucide-react";
+import { ArrowLeft, ArrowRight, Layers, ImageOff } from "lucide-react";
+import { Button } from "@/components/ui/button.tsx";
 import { cn } from "@/lib/utils.ts";
 import { formatEventDateLong } from "@/lib/event-date.ts";
 import { PROJECT_SCOPES, scopeMeta, AVISO_REFERENCIA, type ProjectScope } from "@/lib/photo-scope.ts";
@@ -15,6 +16,7 @@ import {
 } from "@/lib/decoration-project.ts";
 import {
   Empty,
+  EmptyContent,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
@@ -103,10 +105,20 @@ export default function ProjetoDecoracaoPage() {
             </EmptyMedia>
             <EmptyTitle>O projeto ainda não tem itens</EmptyTitle>
             <EmptyDescription>
-              Os itens de montagem cadastrados no briefing aparecem aqui, organizados por
+              Os itens de montagem cadastrados no Questionário aparecem aqui, organizados por
               ambiente. É a mesma informação — você não cadastra duas vezes.
             </EmptyDescription>
           </EmptyHeader>
+          {/* Dizer DE ONDE vêm os itens não basta: o Caderno de Montagem mora
+              dentro do Questionário, em cada área, e não é um lugar que alguém
+              adivinhe na primeira semana. */}
+          <EmptyContent>
+            <Button asChild size="sm" className="cursor-pointer">
+              <Link to={`/eventos/${id}/briefing`}>
+                Abrir o Questionário <ArrowRight className="size-4" />
+              </Link>
+            </Button>
+          </EmptyContent>
         </Empty>
       ) : (
         <div className="space-y-4">

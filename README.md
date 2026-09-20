@@ -113,7 +113,7 @@ ALTAR_DEMO                               ← só no projeto de demonstração
 | Ficha técnica (materiais, composições, receita) | `convex/fichaTecnica.ts`, `materials.ts`, `compositions.ts` |
 | Acervo (reserva, saída, retorno, ajuste) | `convex/acervo.ts` |
 | Compras e panorama | `convex/purchases.ts` |
-| Financeiro (livro-caixa) | `convex/financeiro.ts` |
+| Financeiro (livro-caixa) | `convex/financeiro.ts`, `lib/dinheiro.ts` |
 | Orçamento, galeria, planta por IA | `convex/orcamento.ts`, `gallery.ts`, `layoutRenders.ts`, `aiVisual.ts` |
 | Saúde do evento, dashboard, agenda | `convex/health.ts`, `dashboard.ts`, `agenda.ts` |
 | Notificações (com varredura diária) | `convex/notifications.ts`, `crons.ts` |
@@ -131,6 +131,11 @@ ALTAR_DEMO                               ← só no projeto de demonstração
 **Para a reunião comercial**: `docs/demo-comercial.md` (roteiro de 7 e 20 min,
 perguntas frequentes, checklist pré-Meet) e `docs/prontidao-comercial.md` (o
 que pode e o que não pode ser mostrado hoje).
+
+**Antes de decidir o que construir**: `docs/estado-do-produto.md` (o que existe,
+com que qualidade, e o que cresce com o uso). A pergunta de segunda pessoa na
+conta está medida, e só medida, em `docs/arquitetura-multiusuario.md` — ela
+**não** autoriza reintroduzir `organizationId` (ver §1).
 
 ---
 
@@ -183,6 +188,12 @@ Estas não são preferências. Cada uma existe por causa de um defeito real.
 - **A tela não afirma o que não sabe.** "25 carregadas (há mais)" enquanto
   houver próxima página; "sem prazo" em vez de inventar data; nenhuma mensagem
   de erro técnica exposta a quem usa.
+- **Número que veio de formulário é conferido no servidor.** `parseFloat`
+  devolve `NaN` para o que não começa com número, e um `NaN` gravado não
+  estraga a própria linha: estraga toda soma que a incluir, para sempre. A
+  leitura do que a pessoa digitou é de `src/lib/valor-digitado.ts` ("1.500,00"
+  é mil e quinhentos) e a trava é de `convex/lib/dinheiro.ts`. Dinheiro soma
+  por `somaEmDinheiro`, nunca por `reduce` cru — `0.1 + 0.2` não é `0.3`.
 - **Comentário explica o PORQUÊ.** O código já diz o quê. Os comentários deste
   repositório guardam a decisão e o defeito que a motivou — mantenha o padrão.
 - Português nos nomes de domínio novos; o que já está em inglês continua.
@@ -195,11 +206,13 @@ Estas não são preferências. Cada uma existe por causa de um defeito real.
 pnpm test                                   # tudo
 npx vitest run --project convex             # só backend
 npx vitest run --project frontend           # só telas e libs puras
+npx vitest run --project scripts            # só os scripts de homologação
 npx vitest run convex/central.inbox.test.ts # um arquivo
 ```
 
-Dois projetos no mesmo comando: `convex` roda em edge-runtime com
-`convex-test` (banco de verdade, em memória) e `frontend` roda em jsdom.
+Três projetos no mesmo comando: `convex` roda em edge-runtime com
+`convex-test` (banco de verdade, em memória), `frontend` roda em jsdom e
+`scripts` roda em node, para as travas da homologação.
 
 Padrões que valem a pena conhecer antes de escrever teste novo:
 

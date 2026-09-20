@@ -75,10 +75,12 @@ usa:
 
 Funções que existem, são testadas e ninguém consegue chamar pelo aplicativo:
 
-- Biblioteca de composições: `create`, `update`, `duplicate`, `setArchived` — o
-  caminho que EXISTE na tela é outro: `fichaTecnica.salvarNaBiblioteca` salva a
-  receita do item, e `compositions.list` a aplica. Falta a manutenção: renomear,
-  editar e arquivar uma composição já salva
+- Biblioteca de composições: `create` e `duplicate`. O resto do ciclo tem tela:
+  `fichaTecnica.salvarNaBiblioteca` guarda a receita do item, `compositions.list`
+  a aplica, e `update`, `setArchived` e `ondeEUsada` abrem em "Renomear ou
+  arquivar esta receita na biblioteca", dentro do diálogo da receita. `create`
+  não tem tela porque a biblioteca nasce do trabalho já feito, não de um
+  formulário em branco — é deliberado
 - Acervo: `disponibilidade` (a reserva manual e a gerada da ficha TÊM tela, em
   `/eventos/:id/acervo`)
 - Ficha técnica: `limparReceita` e `desvincularCompra`

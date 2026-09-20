@@ -58,6 +58,8 @@ type Item = {
   operationalStatus?: string;
   referencePhotoUrl?: string | null;
   contractedPhotoUrl?: string | null;
+  /** A receita da Ficha Técnica. Só para avisar o que a exclusão leva junto. */
+  receita?: unknown[];
 };
 
 export function AssemblyItemsSection({
@@ -372,7 +374,30 @@ function ItemCard({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => void onRemove({ id: item._id })}
+            onClick={() => {
+              // Excluir aqui não some só com a linha: leva junto a RECEITA
+              // (de que a Ficha Técnica depende) e as DUAS fotos, que saem do
+              // storage e não voltam. A foto de referência e a do contratado
+              // são a prova do que foi combinado com a cliente.
+              //
+              // Toda ação equivalente do aplicativo já pergunta antes —
+              // excluir evento, fornecedor, item de orçamento, documento do
+              // lead, arquivar material. Esta era a única que não perguntava,
+              // e é a que custa mais.
+              const temReceita = (item.receita?.length ?? 0) > 0;
+              const temFoto = Boolean(item.referencePhotoUrl || item.contractedPhotoUrl);
+              const perdas = [
+                temReceita && "a receita da ficha técnica",
+                temFoto && "as fotos anexadas",
+              ].filter(Boolean);
+
+              const aviso = perdas.length
+                ? `Excluir "${item.name}"? Você perde também ${perdas.join(" e ")}. Não há como desfazer.`
+                : `Excluir "${item.name}"? Não há como desfazer.`;
+
+              if (!window.confirm(aviso)) return;
+              void onRemove({ id: item._id });
+            }}
             className="cursor-pointer text-destructive gap-1.5"
           >
             <Trash2 className="size-4" /> Excluir item

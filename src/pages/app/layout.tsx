@@ -284,8 +284,12 @@ function AppLayoutInner() {
                 inferior continuam na tela enquanto o conteudo carrega. Um
                 fallback de tela cheia apagaria o menu a cada navegacao — a
                 pessoa veria o app inteiro sumir para reaparecer igual. */}
+            {/* O `Outlet` não leva mais contexto: o aviso de primeiros
+                passos deixou de reabrir o modal de boas-vindas e passou a
+                levar a cada passo no lugar onde ele acontece. O modal
+                continua sendo a primeira entrada, e só isso. */}
             <Suspense fallback={<CarregandoTela />}>
-              <Outlet context={{ onOpenOnboarding: () => setShowOnboarding(true) }} />
+              <Outlet />
             </Suspense>
           </ErrorBoundary>
         </main>

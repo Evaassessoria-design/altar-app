@@ -3,7 +3,7 @@ import { AttentionBoard } from "@/components/attention-board.tsx";
 import { api } from "@/convex/_generated/api.js";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Button } from "@/components/ui/button.tsx";
-import { Link, useNavigate, useOutletContext } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   CalendarDays,
   CheckSquare,
@@ -133,7 +133,6 @@ export default function Dashboard() {
   const createEvent = useMutation(api.events.create);
   const navigate = useNavigate();
   const [creatingEvent, setCreatingEvent] = useState(false);
-  const { onOpenOnboarding } = useOutletContext<{ onOpenOnboarding: () => void }>();
 
   const handleCreateEvent = async (values: Parameters<typeof createEvent>[0]) => {
     const id = await createEvent(values);
@@ -148,8 +147,10 @@ export default function Dashboard() {
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
-      {/* Onboarding banner */}
-      <OnboardingBanner onOpenOnboarding={onOpenOnboarding} />
+      {/* Primeiros passos. O aviso leva a cada passo pendente no lugar onde
+          ele acontece — o modal de boas-vindas continua existindo, para a
+          primeira entrada, e não é mais o único caminho de volta. */}
+      <OnboardingBanner />
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}

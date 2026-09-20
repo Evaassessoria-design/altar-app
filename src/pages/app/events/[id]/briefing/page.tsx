@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { toast } from "sonner";
-import { ArrowLeft, Save, ChevronRight, Sparkles, FileDown, Loader2, Truck } from "lucide-react";
+import { ArrowLeft, Save, ChevronRight, Sparkles, FileDown, Loader2, Truck, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
 import { BRIEFING_AREAS, type BriefingFields } from "@/lib/briefing-areas.ts";
 
@@ -38,6 +38,16 @@ async function carregarLogo(url: string | null | undefined): Promise<string | nu
 }
 import { AssemblyItemsSection } from "../_components/assembly-items-section.tsx";
 import { SuggestItemsDialog } from "../_components/suggest-items-dialog.tsx";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu.tsx";
+import { AUDIENCIAS, AUDIENCIA_PADRAO, opcaoDaAudiencia } from "@/lib/audiencia-do-caderno.ts";
+import type { Audience } from "@/lib/briefing-areas.ts";
 
 // As áreas vêm de src/lib/briefing-areas.ts — mesma definição usada pelo PDF do
 // evento e pelo Caderno de Montagem. Não redeclarar seções aqui.
@@ -127,7 +137,15 @@ export default function EventBriefingPage() {
     }
   };
 
-  const handleExport = async () => {
+  /**
+   * O caderno, para quem ele for.
+   *
+   * O gerador já filtrava por audiência — itens de montagem por
+   * `itemVisibleTo` e campos do briefing por `resolveAreasForAudience`. Esta
+   * tela chamava com `"equipe"` fixo, então a versão da cliente, que a regra
+   * sabia produzir, nunca chegava a existir.
+   */
+  const handleExport = async (audience: Audience = AUDIENCIA_PADRAO) => {
     if (!event) return;
     setExporting(true);
     try {
@@ -140,12 +158,12 @@ export default function EventBriefingPage() {
         assessoria: health?.assessoria,
         responsible: health?.responsible,
         mapUrl,
-        audience: "equipe",
+        audience,
         empresa: empresa ?? null,
         logoDataUrl: await carregarLogo(logoUrl),
         responsiblePhone: responsavelTelefone,
       });
-      toast.success("Caderno de montagem gerado!");
+      toast.success(`Caderno gerado — ${opcaoDaAudiencia(audience).rotulo.toLowerCase()}.`);
     } catch {
       toast.error("Erro ao gerar o caderno de montagem.");
     } finally {
@@ -180,21 +198,44 @@ export default function EventBriefingPage() {
                 <span className="hidden sm:inline">Criar itens do briefing</span>
                 <span className="sm:hidden">Itens</span>
               </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => void handleExport()}
-                disabled={exporting || !event}
-                className="cursor-pointer gap-1.5"
-              >
-                {exporting ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <FileDown className="size-3.5" />
-                )}
-                <span className="hidden sm:inline">Caderno de Montagem</span>
-                <span className="sm:hidden">PDF</span>
-              </Button>
+              {/* Três cadernos, um evento. O menu pergunta PARA QUEM antes de
+                  gerar, em vez de a tela decidir sozinha — e nenhum dos rótulos
+                  mostra o valor de banco ("equipe", "cliente", "interno"). */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={exporting || !event}
+                    className="cursor-pointer gap-1.5"
+                  >
+                    {exporting ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      <FileDown className="size-3.5" />
+                    )}
+                    <span className="hidden sm:inline">Caderno de Montagem</span>
+                    <span className="sm:hidden">PDF</span>
+                    <ChevronDown className="size-3.5 opacity-60" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-72">
+                  <DropdownMenuLabel>Para quem é este caderno?</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {AUDIENCIAS.map((a) => (
+                    <DropdownMenuItem
+                      key={a.valor}
+                      onSelect={() => void handleExport(a.valor)}
+                      className="cursor-pointer flex-col items-start gap-0.5 py-2"
+                    >
+                      <span className="text-sm font-medium">{a.rotulo}</span>
+                      <span className="text-xs text-muted-foreground whitespace-normal">
+                        {a.detalhe}
+                      </span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button
                 variant="secondary"
                 size="sm"

@@ -1,5 +1,6 @@
 import jsPDF from "jspdf";
 import { entregarPdf } from "./pdf-delivery.ts";
+import { opcaoDaAudiencia } from "./audiencia-do-caderno.ts";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { Doc } from "@/convex/_generated/dataModel.d.ts";
@@ -455,5 +456,8 @@ export async function generateAssemblyPDF(data: AssemblyReportData): Promise<voi
   }
 
   const safeName = event.name.replace(/[^\p{L}\p{N}]+/gu, "-").toLowerCase();
-  entregarPdf(doc, `caderno-montagem-${safeName}.pdf`);
+  // O sufixo da audiência entra no nome porque os três cadernos do MESMO evento
+  // são documentos diferentes: sem ele, gerar o da cliente sobrescreveria o da
+  // equipe na pasta de downloads, e ninguém perceberia até a hora de imprimir.
+  entregarPdf(doc, `caderno-montagem-${safeName}-${opcaoDaAudiencia(audience).sufixo}.pdf`);
 }

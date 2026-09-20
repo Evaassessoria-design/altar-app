@@ -269,9 +269,22 @@ describe("o caminho de VOLTA nunca pode ser bloqueado", () => {
     expect(block).not.toContain("requireActiveAccess");
   });
 
-  it("a navegação libera configurações e paywall mesmo bloqueada", () => {
+  it("a navegação não bloqueia NENHUMA rota por assinatura", () => {
+    // Este teste pedia uma lista de isenções — `["/configuracoes", "/paywall"]`
+    // — porque a guarda da tela redirecionava todo o resto para o paywall. Era
+    // a implementação errada de uma intenção certa: o teste vizinho ("ler e
+    // editar o que já existe continua livre") já afirmava, sobre o backend,
+    // exatamente o contrário do que a tela fazia.
+    //
+    // A guarda saiu. Não há mais o que isentar, porque não há mais o que
+    // bloquear na navegação — o que custa dinheiro é barrado no servidor, e é
+    // lá que os testes acima o verificam. A propriedade continua a mesma e
+    // ficou mais forte: a conta bloqueada alcança as próprias telas.
     const app = readFileSync(join(__dirname, "..", "src", "App.tsx"), "utf8");
-    expect(app).toContain('const exempt = ["/configuracoes", "/paywall"]');
+    expect(app).not.toContain("SubscriptionGuard");
+    expect(app).not.toMatch(/Navigate\s+to="\/paywall"/);
+    // E o paywall continua existindo como destino do aviso.
+    expect(app).toContain('path="/paywall"');
   });
 
   it("ler e editar o que já existe continua livre", () => {

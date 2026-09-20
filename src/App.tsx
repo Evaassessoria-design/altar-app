@@ -1,13 +1,11 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Route, Routes, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { DefaultProviders } from "./components/providers/default.tsx";
 import LoginPage from "./pages/auth/Login.tsx";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import AppLayout from "./pages/app/layout.tsx";
 import { useServiceWorker } from "@/hooks/use-service-worker.ts";
-import { useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api.js";
 import { Authenticated, Unauthenticated, AuthLoading } from "convex/react";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import { ErrorBoundary } from "@/components/error-boundary.tsx";
@@ -52,23 +50,31 @@ const PaywallPage = lazy(() => import("./pages/app/paywall/page.tsx"));
 const ResetPasswordPage = lazy(() => import("./pages/auth/ResetPassword.tsx"));
 
 // Guard: redirect to paywall if subscription expired
-function SubscriptionGuard({ children }: { children: React.ReactNode }) {
-  const status = useQuery(api.users.getSubscriptionStatus);
-  const location = useLocation();
-
-  // Allow access to configuracoes and paywall always
-  const exempt = ["/configuracoes", "/paywall"];
-  if (exempt.some((p) => location.pathname.startsWith(p))) return <>{children}</>;
-
-  // A decisão vem do backend (convex/lib/access.ts). O frontend não mantém mais
-  // lista de status proibidos: contas internal e beta vigente nunca são
-  // bloqueadas, e client segue exatamente a regra anterior.
-  if (status !== undefined && status !== null && status.access?.blocked) {
-    return <Navigate to="/paywall" replace />;
-  }
-
-  return <>{children}</>;
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTA VENCIDA NÃO PERDE O ACESSO AOS PRÓPRIOS DADOS.
+//
+// Esta guarda mandava TODAS as rotas para o paywall, isentando só
+// `/configuracoes`. Na prática o aplicativo fechava — e o backend declarava o
+// contrário, em comentário, desde que foi escrito:
+//
+//   "NÃO aplicada a leituras nem à edição do que a pessoa já tem. […] trancar
+//    o acesso aos próprios dados seria hostil, atrapalharia a exportação em
+//    PDF de um evento já pago e criaria problema de LGPD."
+//                                       — convex/lib/accessGuard.ts
+//
+// O bloqueio real continua onde sempre esteve e NÃO foi afrouxado: as dez
+// entradas guardadas por `requireActiveAccess` (criar evento, converter lead,
+// os seis geradores de URL de upload e as ações de IA) seguem recusando no
+// servidor, com a mensagem que o próprio guarda escreve.
+//
+// O que some é só o redirecionamento. No lugar dele, `AvisoDeAssinatura`
+// aparece em todas as telas, explica o estado e leva ao paywall — que continua
+// existindo em `/paywall`, agora como destino de um botão em vez de uma parede.
+//
+// A guarda deixa de existir como componente porque não restou decisão para ela
+// tomar: quem está autenticado entra, e o que custa dinheiro é barrado no
+// servidor.
+// ─────────────────────────────────────────────────────────────────────────────
 
 /** Espera de tela cheia — so para as rotas que NAO vivem dentro da casca. */
 function CarregandoPagina() {
@@ -107,9 +113,7 @@ function AppRoutes() {
             <Navigate to="/" replace />
           </Unauthenticated>
           <Authenticated>
-            <SubscriptionGuard>
-              <AppLayout />
-            </SubscriptionGuard>
+            <AppLayout />
           </Authenticated>
         </>
       }>

@@ -229,3 +229,127 @@ describe("o arquivo continua sendo do dono", () => {
     ).rejects.toThrow(/não encontrado|NOT_FOUND/i);
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// O OUTRO LADO DA MESMA REGRA: BLOQUEADA AINDA LÊ O QUE É DELA
+//
+// `accessGuard.ts` sempre disse que a guarda NÃO se aplica a leituras nem à
+// edição do que a conta já tem — "trancar o acesso aos próprios dados seria
+// hostil, atrapalharia a exportação em PDF de um evento já pago e criaria
+// problema de LGPD".
+//
+// A tela fazia o contrário: mandava todas as rotas para o paywall. O
+// redirecionamento saiu; estes testes impedem que a guarda venha a ocupar o
+// lugar dele, cobrindo as leituras uma a uma até ninguém perceber.
+//
+// A promessa é concreta: uma decoradora com trial vencido abre o evento que
+// cadastrou, lê o orçamento, confere a ficha técnica e gera o PDF que já era
+// dela. O que ela NÃO faz é criar coisa nova — e isso os testes acima travam.
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("conta bloqueada continua enxergando os próprios dados", () => {
+  /** Uma conta bloqueada com um evento já cadastrado, como no mundo real. */
+  async function contaBloqueadaComEvento(t: ReturnType<typeof convexTest>, estado: Estado) {
+    const sessao = await contaCom(t, estado);
+    const eventId = await t.run(async (ctx) => {
+      const user = (await ctx.db.query("users").collect()).find(
+        (u) => u.email === `${estado}@example.com`,
+      )!;
+      const eventId = await ctx.db.insert("events", {
+        userId: user._id,
+        name: "Casamento já pago",
+        type: "wedding",
+        date: "2026-12-01",
+        location: "Fazenda",
+        clientName: "Cliente",
+        status: "confirmed",
+      });
+      await ctx.db.insert("transactions", {
+        userId: user._id,
+        eventId,
+        type: "income",
+        category: "Sinal",
+        description: "Sinal do contrato",
+        amount: 10_000,
+        date: "2026-06-01",
+        isPaid: true,
+      });
+      return eventId;
+    });
+    return { sessao, eventId };
+  }
+
+  it.each(BLOQUEADAS)("%s ainda lista os eventos que cadastrou", async (estado) => {
+    const t = convexTest(schema, modules);
+    const { sessao } = await contaBloqueadaComEvento(t, estado);
+
+    const eventos = await sessao.query(api.events.list, {});
+    expect(eventos).toHaveLength(1);
+    expect(eventos[0].name).toBe("Casamento já pago");
+  });
+
+  it.each(BLOQUEADAS)("%s ainda abre o evento pelo id", async (estado) => {
+    const t = convexTest(schema, modules);
+    const { sessao, eventId } = await contaBloqueadaComEvento(t, estado);
+
+    const evento = await sessao.query(api.events.get, { id: eventId });
+    expect(evento?.name).toBe("Casamento já pago");
+  });
+
+  it.each(BLOQUEADAS)("%s ainda lê o próprio financeiro", async (estado) => {
+    // É o dado de que ela precisa para fechar o mês e para o contador — e é
+    // exatamente o que o redirecionamento tirava dela.
+    const t = convexTest(schema, modules);
+    const { sessao } = await contaBloqueadaComEvento(t, estado);
+
+    const lancamentos = await sessao.query(api.financeiro.listTransactions, {});
+    expect(lancamentos.length).toBeGreaterThan(0);
+  });
+
+  it("mas continua SEM criar evento novo — o bloqueio é o que custa", async () => {
+    const t = convexTest(schema, modules);
+    const { sessao } = await contaBloqueadaComEvento(t, "trial_vencido");
+
+    // A asserção precisa ser ESPECÍFICA: `rejects.toThrow()` sozinho passaria
+    // com um erro de validação de argumento, que não prova paywall nenhum.
+    // Foi o que aconteceu na primeira versão deste teste — faltava `status`, e
+    // ele passou verde pelo motivo errado até o TypeScript apontar.
+    await expect(
+      sessao.mutation(api.events.create, {
+        name: "Evento novo",
+        type: "wedding",
+        status: "planning",
+        date: "2027-01-01",
+        location: "X",
+        clientName: "Y",
+      }),
+    ).rejects.toThrow(/assin|teste terminou|atraso/i);
+  });
+
+  it("uma conta bloqueada não enxerga o evento de OUTRA conta", async () => {
+    // Abrir a navegação não pode afrouxar o isolamento: continua valendo que
+    // id vindo do navegador não é prova de posse.
+    const t = convexTest(schema, modules);
+    const { eventId } = await contaBloqueadaComEvento(t, "trial_vencido");
+    const invasora = await contaCom(t, "cancelada");
+
+    const roubado = await invasora.query(api.events.get, { id: eventId });
+    expect(roubado).toBeNull();
+    expect(await invasora.query(api.events.list, {})).toEqual([]);
+  });
+});
+
+describe("as leituras não podem ganhar a guarda por descuido", () => {
+  it("nenhuma query de leitura de evento exige acesso ativo", () => {
+    // Trava por leitura de código. Acrescentar `requireActiveAccess` a uma
+    // query devolveria o aplicativo ao estado anterior — sem redirecionamento,
+    // mas com tela de erro, que é pior.
+    const eventos = readFileSync("convex/events.ts", "utf-8");
+    for (const nome of ["export const list", "export const get"]) {
+      const inicio = eventos.indexOf(nome);
+      expect(inicio, nome).toBeGreaterThan(-1);
+      const bloco = eventos.slice(inicio, eventos.indexOf("\n});", inicio));
+      expect(bloco, `${nome} passou a exigir assinatura`).not.toContain("requireActiveAccess");
+    }
+  });
+});

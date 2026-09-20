@@ -40,6 +40,7 @@ import { ErrorBoundary } from "@/components/error-boundary.tsx";
 import { Suspense, useState } from "react";
 import { toast } from "sonner";
 import { ConvexError } from "convex/values";
+import { AvisoDeAssinatura } from "@/components/aviso-de-assinatura.tsx";
 
 // Rotas e rótulos vivem em src/lib/navigation.ts, conferidos por teste contra
 // as rotas de App.tsx — foi assim que `/dashboard` apareceu como tela órfã.
@@ -265,6 +266,13 @@ function AppLayoutInner() {
         </header>
 
         <main className="flex-1 overflow-y-auto pb-20 md:pb-6">
+          {/* Estado de cobrança, FORA do `Suspense` da tela: uma conta vencida
+              precisa ler o aviso mesmo enquanto o conteúdo ainda carrega, e
+              precisa vê-lo em TODAS as rotas — não só no lugar para onde um
+              redirecionamento a empurraria. */}
+          <div className="px-4 pt-4 empty:hidden md:px-6">
+            <AvisoDeAssinatura />
+          </div>
           <ErrorBoundary variant="page" resetKeys={[location.pathname]}>
             {/* A tela chega sob demanda (ver App.tsx). O limite de espera fica
                 AQUI DENTRO de proposito: a barra lateral, o topo e a barra

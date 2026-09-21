@@ -488,6 +488,56 @@ export const DEMO_WEDDING = {
     { item: "Vaso de vidro âmbar 18cm", tipo: "quebra" as const, delta: -2, quantidadeAntes: 60, quantidadeDepois: 58, motivo: "Duas peças trincadas na conferência de recebimento", doEvento: true },
   ],
 
+  // ── A PROPOSTA COMERCIAL QUE GANHOU ESTE CASAMENTO ───────────────────────
+  //
+  // É o único documento do demo escrito PARA A CLIENTE, e ele existe para
+  // mostrar a diferença entre os dois papéis que o ALTAR guarda: o Orçamento
+  // acima traz custo (107.500), lucro e margem; esta proposta traz escopo e
+  // investimento, e nada mais.
+  //
+  // ── DE ONDE VEM O NÚMERO ─────────────────────────────────────────────────
+  // NÃO foi inventado. Os cinco itens somam exatamente 186.500, que é a linha
+  // de RECEITA do orçamento (`budget`, "Projeto de decoração — contrato") e o
+  // mesmo valor de `event.budget` e do lead do casal. Um demo em que a
+  // proposta e o orçamento discordam ensinaria, na primeira tela, que os
+  // números do ALTAR não fecham.
+  //
+  // O QUE A DECOMPOSIÇÃO É: o mesmo total, apresentado por AMBIENTE — é assim
+  // que a cliente entende o que está comprando, e não por categoria de custo
+  // (flores, mobiliário, equipe), que é a leitura da decoradora.
+  //
+  // Datas FIXAS e no passado: a proposta foi enviada em junho e aceita nove
+  // dias depois, coerente com "Fechado em junho" no funil. Como está aceita,
+  // ela nunca "vence" — `estaVencida` não envelhece uma proposta decidida, e
+  // por isso o demo não apodrece com o tempo.
+  proposta: {
+    titulo: "Marina & Gabriel — projeto de decoração",
+    apresentacao:
+      `Um casamento ao ar livre que começa no fim da tarde, entre as oliveiras, ` +
+      `e termina dentro do salão de vidro com a noite inteira acesa. A paleta ` +
+      `nasce do próprio terreno — âmbar, marfim e verde-oliva — e a luz é o ` +
+      `material principal: ela muda três vezes ao longo da festa, e o projeto ` +
+      `foi desenhado para acompanhar cada uma delas.`,
+    enviadaEm: "2026-06-02T14:30:00.000Z",
+    decididaEm: "2026-06-11T18:05:00.000Z",
+    validadeAte: "2026-06-30",
+    condicoesPagamento:
+      `30% na assinatura do contrato e o saldo em 3 parcelas mensais, a ` +
+      `última até 10 dias antes do evento.`,
+    observacoes:
+      `Os valores contemplam projeto, produção, montagem e desmontagem. ` +
+      `Buffet, bebidas, som e locação do espaço são contratados diretamente ` +
+      `pelos noivos com a Fazenda Aurora.`,
+    // 24.500 + 41.000 + 62.000 + 33.500 + 25.500 = 186.500
+    itens: [
+      { descricao: "Projeto e direção de arte", detalhe: "Concepção, pranchas, visitas técnicas e acompanhamento até o dia", valor: 24_500 },
+      { descricao: "Cerimônia no jardim das oliveiras", detalhe: "Altar, caminho, cadeiras e arranjos de chão", valor: 41_000 },
+      { descricao: "Salão de vidro — mesas e mesa posta", detalhe: "180 convidados: centros, tecidos, louça e marcadores", valor: 62_000 },
+      { descricao: "Estruturas cenográficas", detalhe: "Arco, painéis e marcenaria sob medida", valor: 33_500 },
+      { descricao: "Iluminação e ambientação noturna", detalhe: "Jardim, salão e pista, com três cenas ao longo da noite", valor: 25_500 },
+    ],
+  },
+
   // ── Funil — o casal já convertido, mais volume nas outras colunas ────────
   leads: [
     { clientName: "Marina Duarte e Gabriel Rocha", clientPhone: "(11) 90001-2233", eventType: "Casamento", eventDate: "2026-10-10", budget: 186_500, stage: "contracted" as const, notes: "Fechado em junho. Indicação da Fazenda Aurora.", isMainEvent: true },

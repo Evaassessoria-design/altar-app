@@ -443,8 +443,9 @@ export const seed = internalMutation({
     // ── Funil ────────────────────────────────────────────────────────────────
     // O lead do casal já está em "contratado" e aponta para o evento — mostra o
     // fluxo completo. Os demais dão volume às outras colunas do kanban.
+    let leadDoCasal: Id<"leads"> | undefined;
     for (const [i, l] of d.leads.entries()) {
-      await ctx.db.insert("leads", {
+      const leadId = await ctx.db.insert("leads", {
         userId,
         clientName: l.clientName,
         clientPhone: l.clientPhone,
@@ -456,7 +457,47 @@ export const seed = internalMutation({
         order: i,
         convertedEventId: l.isMainEvent ? eventId : undefined,
       });
+      if (l.isMainEvent) leadDoCasal = leadId;
     }
+
+    // ── A proposta comercial que ganhou este casamento ───────────────────────
+    // Pendurada nos DOIS vínculos de propósito: nasceu da oportunidade no funil
+    // e hoje pertence ao evento. É o caminho real — e é o que faz a tela do
+    // evento e o card do funil mostrarem a mesma proposta.
+    //
+    // `versaoEnviada` é preenchida porque ela FOI enviada: sem esse registro a
+    // proposta apareceria como rascunho aceito, que é um estado que a operação
+    // não produz.
+    const p = d.proposta;
+    await ctx.db.insert("proposals", {
+      userId,
+      leadId: leadDoCasal,
+      eventId,
+      titulo: p.titulo,
+      apresentacao: p.apresentacao,
+      clienteNome: d.event.clientName,
+      eventoTipo: "Casamento",
+      eventoData: d.event.date,
+      eventoLocal: d.event.location,
+      eventoConvidados: 180,
+      itens: p.itens.map((i) => ({ ...i })),
+      condicoesPagamento: p.condicoesPagamento,
+      validadeAte: p.validadeAte,
+      observacoes: p.observacoes,
+      status: "aceita",
+      versaoEnviada: {
+        enviadaEm: p.enviadaEm,
+        titulo: p.titulo,
+        investimento: p.itens.reduce((soma, i) => soma + i.valor, 0),
+        itens: p.itens.map((i) => ({ ...i })),
+        condicoesPagamento: p.condicoesPagamento,
+        validadeAte: p.validadeAte,
+      },
+      decididaEm: p.decididaEm,
+      decididaPor: "Aurora",
+      createdAt: p.enviadaEm,
+      updatedAt: p.decididaEm,
+    });
 
     return {
       criado: true,
@@ -475,6 +516,7 @@ export const seed = internalMutation({
         lancamentos: d.transactions.length,
         montagem: d.assembly.length,
         leads: d.leads.length,
+        propostas: 1,
       },
     };
   },

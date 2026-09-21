@@ -7,6 +7,7 @@ import { internal } from "./_generated/api";
 import { DEMO_WEDDING } from "./lib/demoData";
 import { consolidarMateriais } from "./lib/fichaTecnica";
 import { ehObrigacaoDeMontagem } from "./lib/escopoDoProjeto";
+import { paraOCliente } from "./lib/propostaComercial";
 import type { Id } from "./_generated/dataModel";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -639,6 +640,69 @@ describe("a história do demo fecha", () => {
 // contra o MESMO consolidador que a tela usa. É a única forma de um arquivo de
 // markdown envelhecer com barulho em vez de em silêncio.
 // ═════════════════════════════════════════════════════════════════════════════
+
+describe("a proposta do demo fecha com o resto do demo", () => {
+  it("os itens somam exatamente a receita do orçamento e o valor do evento", async () => {
+    const t = convexTest(schema, modules);
+    await ambienteDemo(t);
+    await t.mutation(seed, {});
+
+    const proposta = await t.run(async (ctx) =>
+      (await ctx.db.query("proposals").collect())[0],
+    );
+    const soma = proposta.itens.reduce((s, i) => s + i.valor, 0);
+
+    // O número NÃO é inventado: é a linha de receita do orçamento interno,
+    // apresentada por ambiente em vez de por categoria de custo. Um demo em
+    // que a proposta e o orçamento discordam ensina, na primeira tela, que os
+    // números do ALTAR não fecham.
+    const receita = DEMO_WEDDING.budget.find((b) => b.type === "income")!;
+    expect(soma).toBe(receita.unitPrice);
+    expect(soma).toBe(DEMO_WEDDING.event.budget);
+    expect(proposta.versaoEnviada?.investimento).toBe(soma);
+  });
+
+  it("está ligada às duas pontas da cadeia — a oportunidade e o evento", async () => {
+    const t = convexTest(schema, modules);
+    await ambienteDemo(t);
+    await t.mutation(seed, {});
+
+    const { proposta, lead, evento } = await t.run(async (ctx) => {
+      const proposta = (await ctx.db.query("proposals").collect())[0];
+      const lead = proposta.leadId ? await ctx.db.get(proposta.leadId) : null;
+      const evento = proposta.eventId ? await ctx.db.get(proposta.eventId) : null;
+      return { proposta, lead, evento };
+    });
+
+    expect(lead?.clientName).toBe(DEMO_WEDDING.event.clientName);
+    expect(evento?.name).toBe(DEMO_WEDDING.event.name);
+    // Aceita e com envio registrado: rascunho aceito é um estado que a
+    // operação real não produz, e o demo não pode ensinar um estado impossível.
+    expect(proposta.status).toBe("aceita");
+    expect(proposta.versaoEnviada).toBeDefined();
+  });
+
+  it("o documento da cliente não carrega nenhum número de custo do demo", async () => {
+    const t = convexTest(schema, modules);
+    await ambienteDemo(t);
+    await t.mutation(seed, {});
+
+    const proposta = await t.run(async (ctx) =>
+      (await ctx.db.query("proposals").collect())[0],
+    );
+    const documento = JSON.stringify(
+      paraOCliente(proposta, { nome: "Estúdio Aurora" }),
+    );
+
+    // Cada despesa planejada do orçamento interno, pelo valor e pelo rótulo.
+    for (const linha of DEMO_WEDDING.budget.filter((b) => b.type === "expense")) {
+      expect(documento).not.toContain(String(linha.unitPrice));
+      expect(documento).not.toContain(linha.description);
+    }
+    // E o lucro previsto — 186.500 − 107.500.
+    expect(documento).not.toContain("79000");
+  });
+});
 
 describe("o roteiro comercial não mente sobre o demo", () => {
   const roteiro = readFileSync("docs/demo-comercial.md", "utf-8");

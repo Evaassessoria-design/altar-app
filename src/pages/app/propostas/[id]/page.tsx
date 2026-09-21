@@ -237,6 +237,49 @@ export default function PropostaPage() {
         <span className="text-lg font-semibold">{brl.format(total)}</span>
       </div>
 
+      {/* ── DE ONDE ELA VEM, E PARA ONDE ELA VAI ──────────────────────────
+          A cadeia real é LEAD → PROPOSTA → EVENTO, e esta tela era o único
+          ponto dela sem caminho de volta: aceita a proposta, a decoradora
+          tinha de lembrar sozinha de ir ao Funil criar o evento.
+
+          Aceitar NÃO cria evento. O evento nasce da conversão do lead, que
+          pede data, local e tipo; inventá-los a partir da proposta produziria
+          um evento errado em silêncio. Aqui é caminho, não automação. */}
+      {proposta.vinculo && (
+        <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+          {proposta.vinculo.tipo === "evento" ? (
+            <>
+              <span>Evento:</span>
+              <Link
+                to={`/eventos/${proposta.vinculo.id}`}
+                className="text-primary hover:underline"
+              >
+                {proposta.vinculo.nome}
+              </Link>
+            </>
+          ) : proposta.vinculo.eventoCriado ? (
+            <>
+              <span>Oportunidade de {proposta.vinculo.nome} · evento criado:</span>
+              <Link
+                to={`/eventos/${proposta.vinculo.eventoCriado}`}
+                className="text-primary hover:underline"
+              >
+                abrir
+              </Link>
+            </>
+          ) : (
+            <>
+              <span>Oportunidade de {proposta.vinculo.nome} no funil.</span>
+              {proposta.status === "aceita" && (
+                <Link to="/funil" className="text-primary hover:underline">
+                  Aceita — crie o evento pelo Funil
+                </Link>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {/* A proposta já foi enviada e mudou depois: a cliente tem outro número
           na mão, e discutir sem saber disso é o erro que este aviso evita. */}
       {proposta.versaoEnviada && (

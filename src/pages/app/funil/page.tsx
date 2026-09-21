@@ -34,10 +34,19 @@ import {
   DollarSign,
   Paperclip,
   MessageCircle,
+  FileText,
 } from "lucide-react";
 import { LeadDocumentsDialog } from "./_components/lead-documents.tsx";
 import { ResponsavelInline, ResponsavelSelect } from "@/components/responsavel-select.tsx";
 import { descreverUltimaAtualizacao } from "@/convex/lib/ultimaAtualizacao.ts";
+import { ROTULO_DO_STATUS } from "@/convex/lib/propostaComercial.ts";
+import type { FunctionReturnType } from "convex/server";
+
+// O resumo vem do servidor; o tipo é LIDO de lá, nunca redigitado aqui — um
+// campo que mude de nome passa a ser erro de compilação, e não texto errado
+// no card.
+type ResumoDeProposta =
+  FunctionReturnType<typeof api.propostas.resumoPorLead>["porLead"][string]["ultima"];
 import { descreverUltimoContato } from "@/lib/ultimo-contato.ts";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
@@ -48,7 +57,7 @@ import { cn } from "@/lib/utils.ts";
 import { valorDigitado } from "@/lib/valor-digitado.ts";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { formatEventDayOnly } from "@/lib/event-date.ts";
 // Os quatro estágios originais mantêm o mesmo id — lead já gravado continua
@@ -334,9 +343,12 @@ function LeadCard({
   onDragStart,
   onDragEnd,
   onDropBefore,
+  proposta,
 }: {
   lead: Doc<"leads">;
   isDragging: boolean;
+  /** A proposta mais recente deste lead. Ausente = ainda não há nenhuma. */
+  proposta?: { quantidade: number; ultima: ResumoDeProposta };
   onEdit: (lead: Doc<"leads">) => void;
   onDelete: (lead: Doc<"leads">) => void;
   onMoveStage: (lead: Doc<"leads">, stage: Stage) => void;
@@ -344,6 +356,9 @@ function LeadCard({
   onDragEnd: () => void;
   onDropBefore: (target: Doc<"leads">) => void;
 }) {
+  const navigate = useNavigate();
+  const criarProposta = useMutation(api.propostas.create);
+  const [criandoProposta, setCriandoProposta] = useState(false);
   const [converting, setConverting] = useState(false);
   const [documentos, setDocumentos] = useState(false);
   const [registrando, setRegistrando] = useState(false);
@@ -470,6 +485,30 @@ function LeadCard({
         <p className="text-xs text-muted-foreground italic line-clamp-2">{lead.notes}</p>
       )}
 
+      {/* A PROPOSTA DESTA NEGOCIAÇÃO.
+          O funil dizia em que estágio a conversa está, mas não o que foi
+          apresentado nem por quanto — e é essa a pergunta na hora de ligar.
+          Aqui é CONTEXTO: o número é o da proposta, não o `budget` anotado à
+          mão, e os dois podem divergir de propósito. */}
+      {proposta && (
+        <Link
+          to={`/propostas/${proposta.ultima._id}`}
+          draggable={false}
+          onClick={(e) => e.stopPropagation()}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <FileText className="size-3 flex-shrink-0" />
+          <span className="truncate">
+            {proposta.ultima.investimento.toLocaleString("pt-BR", {
+              style: "currency",
+              currency: "BRL",
+            })}{" · "}
+            {proposta.ultima.vencida ? "venceu" : ROTULO_DO_STATUS[proposta.ultima.status]}
+            {proposta.quantidade > 1 && ` · ${proposta.quantidade} propostas`}
+          </span>
+        </Link>
+      )}
+
       {/* Actions */}
       <div className="flex items-center gap-2 pt-1 border-t border-border">
         {lead.stage !== "contracted" && lead.stage !== "discarded" && nextStage && (
@@ -504,6 +543,31 @@ function LeadCard({
           >
             <MessageCircle className="size-3" />
             {registrando ? "Registrando..." : "Registrar contato"}
+          </button>
+        )}
+        {/* Uma proposta nasce COM os dados do lead — nome, tipo, data, local e
+            número de convidados são copiados. Redigitar o que já está na tela
+            é o tipo de trabalho que faz a decoradora deixar para depois. */}
+        {!proposta && (
+          <button
+            onClick={() => {
+              setCriandoProposta(true);
+              void criarProposta({ leadId: lead._id })
+                .then((id) => navigate(`/propostas/${id}`))
+                .catch((e) =>
+                  toast.error(
+                    e instanceof ConvexError
+                      ? (e.data as { message: string }).message
+                      : "Não foi possível criar a proposta.",
+                  ),
+                )
+                .finally(() => setCriandoProposta(false));
+            }}
+            disabled={criandoProposta}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline cursor-pointer disabled:opacity-50"
+          >
+            <FileText className="size-3" />
+            {criandoProposta ? "Criando..." : "Proposta"}
           </button>
         )}
         {/* Proposta e contrato ficam com o LEAD, disponíveis em qualquer
@@ -546,9 +610,12 @@ function KanbanColumn({
   onDropBefore,
   onColumnDragOver,
   onDropColumn,
+  propostas,
 }: {
   stage: typeof STAGES[number];
   leads: Doc<"leads">[];
+  /** Resumo por lead, vindo de UMA consulta feita no topo da página. */
+  propostas: Record<string, { quantidade: number; ultima: ResumoDeProposta }>;
   draggingId: Id<"leads"> | null;
   isDragOver: boolean;
   onAdd: (stage: Stage) => void;
@@ -605,6 +672,7 @@ function KanbanColumn({
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
             onDropBefore={onDropBefore}
+            proposta={propostas[lead._id]}
           />
         ))}
         {leads.length === 0 && (
@@ -625,6 +693,10 @@ function KanbanColumn({
 
 export default function FunilPage() {
   const leads = useQuery(api.funil.listLeads);
+  // UMA consulta para o quadro inteiro. Uma por card seriam tantas assinaturas
+  // reativas quantos leads abertos — custo que não aparece em teste e aparece
+  // na conta.
+  const propostas = useQuery(api.propostas.resumoPorLead, {});
   const createLead = useMutation(api.funil.createLead);
   const updateLead = useMutation(api.funil.updateLead);
   const deleteLead = useMutation(api.funil.deleteLead);
@@ -814,6 +886,7 @@ export default function FunilPage() {
               onDropBefore={handleDropBefore}
               onColumnDragOver={setDragOverStage}
               onDropColumn={handleDropColumn}
+              propostas={propostas?.porLead ?? {}}
             />
           ))}
         </div>

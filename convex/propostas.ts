@@ -105,6 +105,53 @@ export const list = query({
   },
 });
 
+/**
+ * Uma linha de proposta para CADA card do funil, numa consulta só.
+ *
+ * ── POR QUE NÃO `doLead` EM CADA CARD ───────────────────────────────────────
+ * Porque o quadro tem tantas consultas quantos leads. Com quarenta
+ * oportunidades abertas isso é quarenta assinaturas reativas para exibir uma
+ * linha de texto em cada uma — o tipo de custo que não aparece em um teste e
+ * aparece na conta.
+ *
+ * PAGINA: uma varredura global sem teto para em silêncio quando a conta
+ * cresce. Acima do limite a resposta DIZ que há mais, e a tela não afirma um
+ * total que não conferiu.
+ */
+const LIMITE_DO_QUADRO = 500;
+
+export const resumoPorLead = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    const hoje = dataDoDia();
+    const encontradas = await ctx.db
+      .query("proposals")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .take(LIMITE_DO_QUADRO + 1);
+
+    const porLead: Record<
+      string,
+      { quantidade: number; ultima: ReturnType<typeof resumir> }
+    > = {};
+    for (const p of encontradas.slice(0, LIMITE_DO_QUADRO)) {
+      if (!p.leadId) continue;
+      const atual = porLead[p.leadId];
+      const resumo = resumir(p, hoje);
+      // "Última" é a mais recente por criação: é a que vale na conversa de
+      // hoje, e é sobre ela que a decoradora vai perguntar.
+      if (!atual) {
+        porLead[p.leadId] = { quantidade: 1, ultima: resumo };
+        continue;
+      }
+      atual.quantidade += 1;
+      if (resumo.createdAt > atual.ultima.createdAt) atual.ultima = resumo;
+    }
+
+    return { porLead, temMais: encontradas.length > LIMITE_DO_QUADRO };
+  },
+});
+
 /** As propostas de um lead — para o Funil dar contexto sem virar outra tela. */
 export const doLead = query({
   args: { leadId: v.id("leads") },
@@ -152,11 +199,40 @@ export const get = query({
     const user = await requireUser(ctx);
     const proposta = await ctx.db.get(args.id);
     if (!proposta || proposta.userId !== user._id) return null;
+
+    /**
+     * De onde esta proposta pende — e o que já aconteceu lá.
+     *
+     * A cadeia real é LEAD → PROPOSTA → EVENTO, e a tela da proposta era o
+     * único ponto dela sem nenhum caminho de volta: aceita a proposta, a
+     * decoradora tinha de lembrar sozinha de ir ao Funil criar o evento.
+     *
+     * É CONTEXTO, não automação. Aceitar uma proposta NÃO cria evento: o
+     * evento nasce da conversão do lead, que pede data, local e tipo, e
+     * inventá-los a partir de uma proposta produziria um evento errado em
+     * silêncio.
+     */
+    const lead = proposta.leadId ? await ctx.db.get(proposta.leadId) : null;
+    const evento = proposta.eventId ? await ctx.db.get(proposta.eventId) : null;
+    const vinculo =
+      evento && evento.userId === user._id
+        ? { tipo: "evento" as const, id: evento._id, nome: evento.name }
+        : lead && lead.userId === user._id
+          ? {
+              tipo: "lead" as const,
+              id: lead._id,
+              nome: lead.clientName,
+              /** Ausente = a oportunidade ainda não virou evento. */
+              eventoCriado: lead.convertedEventId,
+            }
+          : null;
+
     return {
       ...proposta,
       investimento: investimentoTotal(proposta.itens),
       vencida: estaVencida(proposta.validadeAte, proposta.status, dataDoDia()),
       falta: faltaParaEnviar(proposta),
+      vinculo,
     };
   },
 });

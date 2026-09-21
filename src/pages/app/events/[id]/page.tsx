@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button.tsx";
 import { AgendaSection } from "./_components/agenda-section.tsx";
 import { OperationalSummary } from "./_components/operational-summary.tsx";
 import { EventDocuments } from "./_components/event-documents.tsx";
+import { PropostaDoEvento } from "./_components/proposta-do-evento.tsx";
 import { ResponsavelSelect } from "@/components/responsavel-select.tsx";
 import { toast } from "sonner";
 import {
@@ -401,11 +402,17 @@ export default function EventDetailsPage() {
               <DollarSign className="size-5 text-primary" />
               <div>
                 <p className="font-medium text-sm">Orçamento</p>
-                <p className="text-xs text-muted-foreground">Receitas, custos e lucro</p>
+                {/* "Uso interno" no subtítulo porque o documento gerado ali
+                    carrega custo, lucro e margem — e o erro caro é anexar o
+                    arquivo errado no WhatsApp da cliente. */}
+                <p className="text-xs text-muted-foreground">
+                  Receitas, custos e lucro · uso interno
+                </p>
               </div>
             </div>
             <ChevronRight className="size-4 text-muted-foreground" />
           </Link>
+          <PropostaDoEvento eventId={id as Id<"events">} />
           <Link
             to={`/eventos/${id}/fotos`}
             className="flex items-center justify-between px-5 py-3.5 hover:bg-accent/50 transition-colors cursor-pointer"

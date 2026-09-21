@@ -96,8 +96,13 @@ Funções que existem, são testadas e ninguém consegue chamar pelo aplicativo:
 - Assinatura: `asaas.getCustomerPortalUrl` (sem uso e sem guarda — ver
   "Recomendações")
 
-Saíram desta lista porque ganharam caminho na tela: `supplierCatalog.get`
-(em `/fornecedores/:id`, ao lado de um `panorama` novo), `acervo.reservar` e
+Saiu desta lista porque foi REMOVIDO: `supplierCatalog.get` — quando
+`/fornecedores/:id` chegou, quem respondeu foi um `panorama` novo, e o `get`
+continuou sem chamador. Query pública que ninguém chama é superfície que
+ninguém revisa. *(A rodada anterior registrou aqui que ele tinha ganhado tela;
+não tinha. A correção é esta linha.)*
+
+Saíram porque ganharam caminho na tela: `acervo.reservar` e
 `acervo.disponibilidade` ("Reservar peça", no acervo do evento),
 `fichaTecnica.desvincularCompra` (na linha da ficha) e
 `purchases.unregisterCost` (no rótulo "no financeiro", em Compras).

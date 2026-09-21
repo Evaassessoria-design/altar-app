@@ -188,8 +188,11 @@ describe("proposta de outra empresa", () => {
 
   it("as consultas por vínculo não atravessam a fronteira", async () => {
     const { dona, ids } = await cenario();
-    expect(await dona.query(api.propostas.doLead, { leadId: ids.leadAlheio })).toEqual([]);
     expect(await dona.query(api.propostas.doEvento, { eventId: ids.eventoAlheio })).toEqual([]);
+    // O resumo do quadro inteiro também não pode carregar nada da rival.
+    const { porLead } = await dona.query(api.propostas.resumoPorLead, {});
+    expect(porLead[ids.leadAlheio]).toBeUndefined();
+    expect(Object.keys(porLead)).toHaveLength(0);
   });
 });
 

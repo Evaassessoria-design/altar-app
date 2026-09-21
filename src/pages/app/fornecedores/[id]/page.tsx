@@ -26,9 +26,10 @@ import { rotuloDaSituacao } from "@/lib/supplier-status.ts";
 // Ela vai ligar para a floricultura. Antes de ligar quer saber: já trabalhei
 // com eles em quantos casamentos? quanto já comprei? ficou algo em aberto?
 //
-// A resposta existia espalhada — `supplierCatalog.get` sem nenhuma tela,
-// `listEventsForSupplier` mostrando no máximo três nomes numa linha do
-// catálogo, e as compras só alcançáveis abrindo evento por evento.
+// A resposta existia espalhada — um `get` cru que nunca teve tela (e que por
+// isso acabou removido), `listEventsForSupplier` mostrando no máximo três
+// nomes numa linha do catálogo, e as compras só alcançáveis abrindo evento
+// por evento.
 //
 // ── O QUE ESTA PÁGINA NÃO FAZ ───────────────────────────────────────────────
 // Não dá nota, não classifica, não ranqueia e não recomenda. Nada disso sai de

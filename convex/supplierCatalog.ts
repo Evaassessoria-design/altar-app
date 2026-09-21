@@ -74,15 +74,11 @@ export const list = query({
   },
 });
 
-export const get = query({
-  args: { supplierId: v.id("suppliers") },
-  handler: async (ctx, args) => {
-    const user = await requireUser(ctx);
-    const supplier = await ctx.db.get(args.supplierId);
-    if (!supplier || supplier.userId !== user._id) return null;
-    return supplier;
-  },
-});
+// `get` (o fornecedor cru, por id) foi REMOVIDO. Ele nasceu sem tela e
+// continuou sem tela: quando `/fornecedores/:id` chegou, quem responde é
+// `panorama`, que traz o fornecedor MAIS os eventos e as compras. Função
+// pública sem chamador é superfície de ataque que ninguém revisa, e o mapa do
+// produto a listava como dívida desde a primeira auditoria.
 
 /** Em quais eventos este fornecedor já foi usado. Usa o índice `by_supplier`. */
 export const listEventsForSupplier = query({

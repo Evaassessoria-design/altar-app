@@ -149,8 +149,11 @@ describe("catálogo central: consultas presas ao dono", () => {
     expect(src).not.toMatch(/query\("suppliers"\)\s*\.collect\(\)/);
   });
 
-  it("get, update e setArchived comparam o dono antes de responder", () => {
-    for (const fn of ["get", "listEventsForSupplier", "update", "setArchived"]) {
+  it("panorama, update e setArchived comparam o dono antes de responder", () => {
+    // `get` estava nesta lista e foi REMOVIDO do módulo: nasceu sem tela e
+    // continuou sem tela depois que `panorama` passou a responder pela página
+    // do fornecedor. Quem herdou a pergunta herda a guarda.
+    for (const fn of ["panorama", "listEventsForSupplier", "update", "setArchived"]) {
       const i = src.indexOf(`export const ${fn} =`);
       const proximo = src.indexOf("\nexport ", i + 1);
       const corpo = src.slice(i, proximo === -1 ? undefined : proximo);

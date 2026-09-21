@@ -128,8 +128,8 @@ export const list = query({
 /**
  * Uma linha de proposta para CADA card do funil, numa consulta só.
  *
- * ── POR QUE NÃO `doLead` EM CADA CARD ───────────────────────────────────────
- * Porque o quadro tem tantas consultas quantos leads. Com quarenta
+ * ── POR QUE NÃO UMA CONSULTA POR CARD ───────────────────────────────────────
+ * Porque o quadro teria tantas consultas quantos leads. Com quarenta
  * oportunidades abertas isso é quarenta assinaturas reativas para exibir uma
  * linha de texto em cada uma — o tipo de custo que não aparece em um teste e
  * aparece na conta.
@@ -172,23 +172,11 @@ export const resumoPorLead = query({
   },
 });
 
-/** As propostas de um lead — para o Funil dar contexto sem virar outra tela. */
-export const doLead = query({
-  args: { leadId: v.id("leads") },
-  handler: async (ctx, args) => {
-    const lead = await getOwnedLead(ctx, args.leadId);
-    if (!lead) return [];
-    const hoje = dataDoDia();
-    const propostas = await ctx.db
-      .query("proposals")
-      .withIndex("by_lead", (q) => q.eq("leadId", args.leadId))
-      .collect();
-    return propostas
-      .filter((p) => p.userId === lead.userId)
-      .map((p) => resumir(p, hoje))
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  },
-});
+// `doLead` foi REMOVIDO. Ele existiu por um dia: o Funil precisava da proposta
+// de cada card e acabou atendido por `resumoPorLead`, que responde pelo quadro
+// inteiro numa consulta só. Ficou uma query pública sem nenhum chamador — e
+// essa é a dívida que o mapa do produto chama de "backend pronto sem tela",
+// com a agravante de ninguém nunca ir conferi-la.
 
 /** As propostas de um evento. */
 export const doEvento = query({

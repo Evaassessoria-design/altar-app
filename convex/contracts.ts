@@ -2,6 +2,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { getOwnedEvent, requireEventOwner, requireIdentity } from "./lib/identity";
+import { safeDeleteFile } from "./lib/cascade";
 import { requireActiveAccess } from "./lib/accessGuard";
 
 const documentKind = v.union(
@@ -59,7 +60,10 @@ export const saveContract = mutation({
       .collect();
     for (const c of existing) {
       if (effectiveKind(c.kind) === kind) {
-        await ctx.storage.delete(c.storageId);
+        // O contrato antigo sai mesmo que o arquivo dele já não exista: sem
+        // isto, um storageId órfão trancava a SUBSTITUIÇÃO do documento, e a
+        // decoradora não conseguia subir o contrato novo.
+        await safeDeleteFile(ctx, c.storageId);
         await ctx.db.delete(c._id);
       }
     }

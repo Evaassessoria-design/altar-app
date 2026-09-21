@@ -5,6 +5,7 @@ import { getOwnedEvent, requireEventOwner, requireIdentity, requireUser, getOpti
 import { requireActiveAccess } from "./lib/accessGuard";
 import { limparCampos } from "./lib/limparCampos";
 import { exigirQuantidadeGravavel } from "./lib/numeroGravavel";
+import { safeDeleteFile } from "./lib/cascade";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Itens operacionais de montagem. Camada de dados do Caderno de Montagem.
@@ -222,8 +223,13 @@ export const setPhoto = mutation({
         : "contractedPhotoStorageId";
 
     // Troca de foto: remove o arquivo anterior para não deixar órfão no storage.
+    //
+    // `safeDeleteFile` porque o Convex lança ao apagar arquivo inexistente, e
+    // aqui isso abortava a mutation inteira: a foto NOVA não era gravada, e a
+    // decoradora via a antiga de volta depois de "trocar com sucesso". Mesma
+    // regra que `lib/cascade.ts` já escreveu.
     const previous = item[field];
-    if (previous) await ctx.storage.delete(previous);
+    if (previous) await safeDeleteFile(ctx, previous);
 
     await ctx.db.patch(args.id, {
       [field]: args.storageId,
@@ -240,9 +246,10 @@ export const remove = mutation({
     if (!item || item.userId !== user._id) {
       throw new ConvexError({ message: "Item não encontrado", code: "NOT_FOUND" });
     }
-    // As fotos pertencem exclusivamente ao item — saem junto.
-    if (item.referencePhotoStorageId) await ctx.storage.delete(item.referencePhotoStorageId);
-    if (item.contractedPhotoStorageId) await ctx.storage.delete(item.contractedPhotoStorageId);
+    // As fotos pertencem exclusivamente ao item — saem junto. O item sai de
+    // qualquer jeito: arquivo que já não existe não pode impedir a exclusão.
+    await safeDeleteFile(ctx, item.referencePhotoStorageId);
+    await safeDeleteFile(ctx, item.contractedPhotoStorageId);
     await ctx.db.delete(args.id);
   },
 });

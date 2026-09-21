@@ -3,6 +3,7 @@ import { mutation, query } from "./_generated/server";
 import { getOwnedEvent, requireEventOwner, requireIdentity, requireUser } from "./lib/identity";
 import { requireActiveAccess } from "./lib/accessGuard";
 import { chaveDoAmbiente } from "./lib/ambiente";
+import { safeDeleteFile } from "./lib/cascade";
 
 // Generate upload URL for photo
 /**
@@ -61,6 +62,14 @@ export const savePhoto = mutation({
   handler: async (ctx, args) => {
     const { user } = await requireEventOwner(ctx, args.eventId);
 
+    // Versão leve APONTANDO PARA O PRÓPRIO ORIGINAL não é versão leve: é o
+    // mesmo arquivo com dois nomes. Nenhuma tela manda isso — `gerarPreview`
+    // sempre devolve um arquivo novo —, mas as funções do Convex são
+    // chamáveis direto do navegador, e guardar o apelido faria a grade baixar
+    // o original achando que baixava a miniatura.
+    const previewStorageId =
+      args.previewStorageId === args.storageId ? undefined : args.previewStorageId;
+
     // Get current max order for this event
     const lastPhoto = await ctx.db
       .query("eventPhotos")
@@ -73,7 +82,7 @@ export const savePhoto = mutation({
       eventId: args.eventId,
       userId: user._id,
       storageId: args.storageId,
-      previewStorageId: args.previewStorageId,
+      previewStorageId,
       filename: args.filename,
       category: args.category,
       caption: args.caption,
@@ -221,10 +230,18 @@ export const deletePhoto = mutation({
       await ctx.db.patch(photo.eventId, { coverPhotoId: undefined });
     }
 
-    // Os DOIS arquivos saem: a versão leve pertence a esta foto e a mais
-    // ninguém. Deixá-la para trás seria storage órfão cobrado para sempre.
-    if (photo.previewStorageId) await ctx.storage.delete(photo.previewStorageId);
-    await ctx.storage.delete(photo.storageId);
+    // ── OS DOIS ARQUIVOS SAEM, E A LINHA SAI DE QUALQUER JEITO ───────────
+    // `safeDeleteFile` em vez de `ctx.storage.delete` porque o Convex LANÇA
+    // ao apagar arquivo inexistente ("Delete on non-existent doc") — e a
+    // mutation inteira aborta, deixando a FOTO NO BANCO. Uma foto que não
+    // pode ser apagada é pior que um arquivo órfão: o arquivo é desperdício,
+    // a linha é a tela mentindo sobre o que existe.
+    //
+    // A regra não é nova: `lib/cascade.ts` a escreveu inteira ("apagar arquivo
+    // NUNCA derruba a exclusão") e exportou o helper justamente para valer
+    // fora da cascata. Este caminho não a seguia.
+    if (photo.previewStorageId) await safeDeleteFile(ctx, photo.previewStorageId);
+    await safeDeleteFile(ctx, photo.storageId);
     await ctx.db.delete(args.id);
   },
 });

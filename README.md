@@ -108,9 +108,11 @@ ALTAR_DEMO                               ← só no projeto de demonstração
 |---|---|
 | Eventos, briefing, checklist | `convex/events.ts`, `briefing.ts` |
 | Funil comercial e documentos do lead | `convex/funil.ts`, `leadDocuments.ts` |
+| **Proposta comercial** (o documento da CLIENTE) | `convex/propostas.ts`, `lib/propostaComercial.ts` — a fronteira de audiência vive na transformação, não na tela; veja `docs/proposta-comercial.md` |
 | Fornecedores (catálogo e por evento) | `convex/supplierCatalog.ts`, `suppliers.ts` |
 | Equipe e escala | `convex/team.ts` |
 | Ficha técnica (materiais, composições, receita) | `convex/fichaTecnica.ts`, `materials.ts`, `compositions.ts` |
+| Catálogo (a mesma base, em tela própria) | `/catalogo`, `src/components/catalogo/*` — os diálogos são os MESMOS da ficha técnica, importados dos dois lugares |
 | Acervo (reserva, saída, retorno, ajuste) | `convex/acervo.ts` |
 | Compras e panorama | `convex/purchases.ts` |
 | Financeiro (livro-caixa) | `convex/financeiro.ts`, `lib/dinheiro.ts` |
@@ -163,7 +165,13 @@ Estas não são preferências. Cada uma existe por causa de um defeito real.
    sai** — aprovar registra a decisão e termina em `aprovada`, nunca `executada`.
 6. **A Central classifica cobrança; nunca a executa.** Nenhum módulo dela
    referencia Asaas, `transactions` ou `subscriptionStatus`.
-7. **Exclusão apaga mesmo.** `convex/lib/cascade.ts` é a fonte única: some a
+7. **Documento de cliente não se filtra na tela.** O que sai para a cliente é
+   CONSTRUÍDO campo a campo por `paraOCliente` (`convex/lib/propostaComercial.ts`),
+   nunca espalhado do registro do banco. Custo, margem e fornecedor não ficam
+   escondidos na renderização — eles não existem no objeto que sai. A
+   pré-visualização e o PDF consomem o MESMO objeto, e o Orçamento, que é
+   interno, diz isso no título, no rodapé e no nome do arquivo.
+8. **Exclusão apaga mesmo.** `convex/lib/cascade.ts` é a fonte única: some a
    linha, somem os filhos e somem os arquivos no storage. Tabela nova com
    `eventId` que não entrar ali quebra `cascade.test.ts`.
 

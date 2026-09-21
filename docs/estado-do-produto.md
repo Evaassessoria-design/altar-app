@@ -10,10 +10,18 @@ Ele é diferente dos vizinhos de propósito:
 | `README.md` | como o código funciona |
 | `ROADMAP.md` | o que existe |
 | `docs/prontidao-comercial.md` | posso mostrar numa reunião? |
+| `docs/proposta-comercial.md` | o que a proposta faz, e o que ela deliberadamente não faz |
 | **este** | **o que construir a seguir, e por quê** |
 
 Datado de 21/09/2026, conferido contra o código em `c0fdf39`. Cada item cita a
 evidência. Onde não há evidência, não há item — nada aqui é suposição.
+
+> **O que saiu deste mapa na rodada "camada comercial" (21/09)**, porque foi
+> construído: as TRÊS primeiras entregas da §8 — a proposta comercial (§7.0), a
+> tela de catálogo (§7.3) e a página do fornecedor (§3). A §7 perdeu duas
+> decisões pendentes, e o que entrou no lugar é uma pergunta diferente da que
+> foi resolvida: **assinatura com valor jurídico**. Hoje "aceita" é um registro
+> da decoradora, não um aceite da cliente.
 
 > **O que saiu deste mapa na rodada "beta real" (21/09)**, porque foi
 > construído: desvincular compra da ficha e desfazer o lançamento no
@@ -103,8 +111,16 @@ Funciona, tem teste, e aguenta uma demonstração ao vivo sem preparo.
 - **Risco**: baixo — a regra é aninhada e testada; visibilidade desconhecida é tratada como interna
 - **Dependências**: nenhuma
 
-### Cinco PDFs com a identidade da empresa
-- **Evidência**: `src/lib/generate-{event,orcamento,ficha-tecnica,assembly,loading}-pdf.ts`
+### Proposta comercial para a cliente
+- **Evidência**: `convex/lib/propostaComercial.ts`, `convex/propostas.ts`, `/propostas`, `src/lib/generate-proposta-pdf.ts`, `docs/proposta-comercial.md`
+- **Usuário**: o documento que fecha a venda — escopo, investimento, condições e validade, nascido do lead ou do evento sem redigitar nada
+- **Comercial**: era a ausência mais visível para quem vende. O único PDF de dinheiro era interno
+- **Risco**: baixo, e a parte sensível tem trava de desenho: `paraOCliente` constrói o documento campo a campo, então custo, margem e fornecedor não estão escondidos — estão ausentes do objeto que sai
+- **Ressalva honesta**: não envia, não assina e não cobra. "Enviada" e "aceita" são registros de decisões humanas tomadas fora do sistema, e a tela diz isso
+- **Dependências**: nenhuma
+
+### Seis PDFs com a identidade da empresa
+- **Evidência**: `src/lib/generate-{event,orcamento,ficha-tecnica,assembly,loading,proposta}-pdf.ts` — seis, desde a rodada comercial
 - **Usuário**: leva papel para o galpão, onde não há sinal
 - **Comercial**: encerra a demonstração no mundo físico
 - **Risco**: baixo
@@ -133,15 +149,15 @@ precisa saber qual é.
 ### Biblioteca de composições
 - **Evidência**: `fichaTecnica.salvarNaBiblioteca`, `compositions.list`, `ondeEUsada`, `update`, `setArchived` — todos com caminho na tela (`receita-dialog.tsx`, `composicao-dialog.tsx`)
 - **O que mudou**: o ciclo fechou. Guardar leva o que está NA TELA (antes copiava a versão gravada, com um "salvo!" por cima), o nome repetido é recusado em vez de virar gêmea, e renomear/arquivar/ver onde foi usada têm tela
-- **Ressalva**: a manutenção acontece **de dentro da receita**, de onde a composição é escolhida. Quem quiser revisar a biblioteca inteira antes da temporada não tem por onde — é a mesma ressalva do catálogo de materiais, e a mesma decisão pendente (§7.3)
+- **O que mudou na rodada comercial**: a ressalva caiu. `/catalogo` é a tela própria, com as duas abas, busca (que encontra a composição pelo NOME DO MATERIAL, não só pelo dela), filtro por categoria, arquivados sob demanda e "onde é usada" antes de arquivar. O diálogo é o MESMO da Ficha Técnica — um lugar novo, não uma cópia nova
 - **Risco**: baixo (era médio: a duplicata que piorava com o tempo de uso deixou de nascer)
-- **Dependências**: §7.3, se a tela própria for adiante
+- **Dependências**: nenhuma. A decisão §7.3 foi resolvida pela via "os dois": a manutenção existe nos dois lugares, com um diálogo só
 
 ### Catálogo de materiais
 - **Evidência**: `materials.create`, `update` e `setArchived` usados em `receita-dialog.tsx` e `material-dialog.tsx`
-- **Ressalva**: o material nasce e é corrigido de dentro da receita — **não há tela de catálogo** no menu. Quem quiser revisar a lista inteira não tem por onde
+- **O que mudou na rodada comercial**: `/catalogo` existe no menu, e `materials.ondeEUsado` responde "se eu arquivar a Rosa Avalanche, o que eu quebro?" antes de arquivar — com teto na varredura E na resposta, e `temMais` cobrindo os dois
 - **Risco**: baixo (era médio: o erro de digitação agora tem conserto)
-- **Dependências**: §7.3, se a tela própria for adiante
+- **Dependências**: nenhuma
 
 ### Central de Comunicações
 - **Evidência**: `convex/communications*.ts`, `src/pages/app/central/`, `docs/central-comunicacoes.md`
@@ -166,12 +182,6 @@ maior retorno por hora do repositório inteiro.
 - **Evidência**: `fichaTecnica.limparReceita` — zero referências em `src/`. Apagar TODAS as linhas da receita e salvar já esvazia o item; o que esta mutation faz a mais é soltar o `compositionId`
 - **Usuário**: um item que teve a receita apagada continua dizendo que veio de uma composição da biblioteca
 - **Risco**: baixo — é rastro, não número
-- **Dependências**: nenhuma
-
-### Página de um fornecedor do catálogo
-- **Evidência**: `supplierCatalog.get` e `listEventsForSupplier` — a lista e a edição têm tela; a página de UM fornecedor, com o histórico de eventos dele, não existe
-- **Usuário**: "com quantos eventos já trabalhei com a Flores de Aurora?" não tem onde ser respondido
-- **Risco**: baixo
 - **Dependências**: nenhuma
 
 ---
@@ -232,22 +242,21 @@ que ela descubra.**
 | Painel Admin e Central | Operação do SaaS, não produto dela |
 | Envio externo da Central | Portão fechado por construção — aprovar registra e não envia |
 | Segunda pessoa na conta | Não existe. A resposta honesta é "ainda não" |
+| Assinatura da proposta | A proposta existe e sai em PDF; o aceite é um registro da decoradora, não assinatura da cliente |
 
 ### DECISÃO NECESSÁRIA
 
 Cada uma trava um trabalho que **não deve ser feito sem resposta**.
 
-1. **Proposta comercial para a cliente.** O orçamento em PDF é interno. Uma
-   proposta — só honorários, sem custo e sem margem — exige decidir validade,
-   condição de pagamento e o que entra no escopo. É a ausência mais visível
-   para quem vende.
+1. **A proposta tem valor jurídico?** Hoje não, e a tela diz isso: "aceita" é
+   a decoradora registrando o que ouviu, não um aceite assinado pela cliente.
+   Ligar assinatura muda contrato, responsabilidade e provavelmente fornecedor
+   externo. *(A proposta em si deixou de ser decisão — foi construída.)*
 2. **Segunda pessoa na conta.** Medida em `docs/arquitetura-multiusuario.md`.
    Quem paga, quem convida, quem pode o quê.
-3. **Tela de catálogo no menu.** Materiais e receitas se corrigem de dentro da
-   ficha; revisar a lista inteira não tem lugar.
-4. **O aviso de primeiros passos se fecha sozinho?** É escrita sem ação de
+3. **O aviso de primeiros passos se fecha sozinho?** É escrita sem ação de
    ninguém.
-5. **Quando ligar o envio externo da Central.** Exige número comercial
+4. **Quando ligar o envio externo da Central.** Exige número comercial
    integrado e critério medido de acerto da IA.
 
 ### RISCO DE ESCALA FUTURO
@@ -353,12 +362,18 @@ volume de hoje e é a primeira coisa a instrumentar se o custo aparecer.
 Não são de código. São de negócio, e cada uma muda a resposta a uma pergunta
 que aparece em reunião.
 
-0. **Proposta comercial para a cliente.** O PDF do Orçamento é documento
-   interno — traz custo orçado, lucro e margem, e agora diz isso no título, no
-   rodapé e no nome do arquivo. Falta o documento que ELA manda: só
-   honorários, sem custo e sem margem. Não é recorte técnico deste: exige
-   decidir validade da proposta, condição de pagamento e o que entra no
-   escopo. É a ausência mais visível para quem vende.
+0. ~~**Proposta comercial para a cliente.**~~ **RESOLVIDA na rodada
+   "camada comercial"**, e é útil dizer COMO, porque a decisão de produto que
+   parecia bloquear era outra: validade, condição de pagamento e escopo não
+   foram decididos pelo ALTAR — foram deixados nas mãos da decoradora. Validade
+   é uma data que ela escolhe (e "vencida" é derivado dela, nunca gravado);
+   condição de pagamento é TEXTO LIVRE, não um formulário de parcelas; escopo é
+   o que ela escrever. Ver `docs/proposta-comercial.md`.
+
+   **O que continua pendente, e é outra pergunta**: assinatura com valor
+   jurídico. Hoje "aceita" é um registro da decoradora, não um aceite da
+   cliente, e a tela diz isso em português. Ligar assinatura muda contrato,
+   responsabilidade e provavelmente fornecedor externo.
 1. **O que acontece quando a assinatura vence.** Fechar o aplicativo inteiro ou
    manter leitura e exportação do que já foi pago? O servidor e a tela discordam
    hoje. *(Ver §4.)*
@@ -367,9 +382,12 @@ que aparece em reunião.
    tamanhos muito diferentes. **`docs/arquitetura-multiusuario.md`** mede os
    dois: o que o schema já suporta, o que custaria e onde estão os riscos de
    vazamento. É análise, não proposta.
-3. **Onde mora a manutenção de materiais e composições.** Tela própria no menu,
-   ou dentro da Ficha Técnica? A primeira é mais descobrível; a segunda não
-   acrescenta item de menu.
+3. ~~**Onde mora a manutenção de materiais e composições.**~~ **RESOLVIDA
+   pela via "os dois"**: `/catalogo` no menu para revisar a lista inteira antes
+   da temporada, e o mesmo diálogo continua abrindo de dentro da receita, de
+   onde o material é escolhido. O que não foi duplicado é o CÓDIGO — o diálogo
+   mudou de lugar (`src/components/catalogo/`) e passou a ser importado pelos
+   dois, porque duas cópias divergem na terceira correção.
 4. **Se a vertical Buffet ganha deployment próprio.** A coluna `vertical` já
    existe em toda entidade da Central para o dia em que ganhar.
 5. **Quando ligar o envio externo da Central.** Exige número comercial
@@ -387,38 +405,17 @@ Ordenadas por **retorno sobre esforço**. Saíram desta lista, porque foram
 feitas: paywall, audiência do caderno, déficit na lista de acervo e edição de
 material (madrugada de 20/09); manutenção da biblioteca de composições
 (rodada "primeiros clientes reais"); desfazer vínculos da Ficha Técnica e das
-Compras (rodada "beta real").
+Compras (rodada "beta real"); **as três primeiras desta lista — proposta
+comercial, tela de catálogo e página do fornecedor — na rodada "camada
+comercial"**.
 
-### 1. Proposta comercial para a cliente
-- **Por quê**: hoje o único PDF de dinheiro é interno. Quem vende não tem o
-  documento que fecha a venda, e o risco de mandar o errado é permanente
-- **Esforço**: pequeno no código — as linhas de receita já estão separadas das
-  de custo no orçamento
-- **Risco**: baixo tecnicamente; **a decisão é que não é técnica** (§7.0)
-- **Depende de**: decisão §7.0
-
-### 2. Tela de catálogo (materiais e composições)
-- **Por quê**: corrigir de dentro da receita resolve o erro pontual; não
-  resolve "quero revisar minha lista inteira antes da temporada"
-- **Esforço**: médio — uma tela de lista com busca, editar e arquivar
-- **Impacto**: retenção
-- **Depende de**: decisão §7.3
-
-### 3. Página de um fornecedor do catálogo
-- **Por quê**: `supplierCatalog.get` e `listEventsForSupplier` existem e não
-  têm caminho. "Com quantos eventos já trabalhei com a Flores de Aurora?" não
-  tem onde ser respondido
-- **Esforço**: pequeno — as duas consultas já devolvem tudo
-- **Risco**: baixo
-- **Depende de**: nada
-
-### 4. Segunda pessoa na conta
+### 1. Segunda pessoa na conta
 - **Por quê**: é a objeção mais frequente em reunião, e a resposta é "não"
 - **Esforço**: **grande** — toca identidade, autorização e cobrança
 - **Risco**: alto. `users` é a fronteira de dados de todo o modelo
 - **Depende de**: decisão §7.2. **Não comece sem ela.**
 
-### 5. Vocabulário do ALTAR Buffet
+### 2. Vocabulário do ALTAR Buffet
 - **Por quê**: `docs/altar-buffet-readiness.md` mostra que a fundação já serve;
   o que falta primeiro é a vertical reconhecer-se na tela
 - **Esforço**: pequeno para o vocabulário; o diferencial (cadeia de produção)

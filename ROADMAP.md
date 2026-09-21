@@ -7,7 +7,7 @@ meses (dashboard, eventos, briefing, checklist, galeria, compras, financeiro,
 IA) e dava por pronto o que nunca foi feito. Um plano que não bate com o código
 é pior do que nenhum: ele faz decidir errado.
 
-Datado de 19/09/2026. Quando divergir do código, o código está certo.
+Datado de 21/09/2026. Quando divergir do código, o código está certo.
 
 ---
 
@@ -17,6 +17,12 @@ Datado de 19/09/2026. Quando divergir do código, o código está certo.
 - Funil com sete estágios, registro de contato e follow-up
 - Documentos do lead (proposta, contrato, comprovante) — sobrevivem à conversão
 - Conversão de lead em evento, reaproveitando o que já foi digitado
+- **Proposta comercial** — o documento que vai para a CLIENTE: escopo,
+  investimento, condições e validade, nascido do lead ou do evento. Distinto do
+  Orçamento, que é interno; a fronteira entre os dois é de desenho e está
+  descrita em `docs/proposta-comercial.md`. O ALTAR não envia e não assina:
+  "enviada" e "aceita" são registros do que aconteceu fora do sistema
+- Cada card do funil mostra a proposta daquela oportunidade — valor e situação
 
 **Evento**
 - Cadastro, responsável, saúde do evento e resumo operacional
@@ -25,7 +31,8 @@ Datado de 19/09/2026. Quando divergir do código, o código está certo.
 - Importação de contrato por IA (lê e propõe; quem aplica é a pessoa)
 
 **Produção**
-- Catálogo de materiais e biblioteca de composições
+- Catálogo de materiais e biblioteca de composições, com tela própria
+  (`/catalogo`): busca, filtro por categoria, arquivados e "onde é usada"
 - Ficha técnica por item de montagem, com receita em snapshot
 - Consolidado de necessidade e geração idempotente de compras
 - Caderno de montagem e folha de carregamento, com PDFs
@@ -36,6 +43,7 @@ Datado de 19/09/2026. Quando divergir do código, o código está certo.
 
 **Fornecedores e equipe**
 - Catálogo central por empresa e vínculo por evento
+- Página de um fornecedor: eventos, compras e o que ficou em aberto
 - Equipe, escala e responsável por evento, lead e compra
 
 **Dinheiro**
@@ -46,9 +54,9 @@ Datado de 19/09/2026. Quando divergir do código, o código está certo.
 
 **Documentos**
 - Caderno de montagem em três audiências — equipe, cliente e uso interno
-- Cinco geradores de PDF com a identidade visual da empresa da decoradora:
-  resumo do evento, orçamento, ficha técnica, caderno de montagem e folha de
-  carregamento
+- Seis geradores de PDF com a identidade visual da empresa da decoradora:
+  resumo do evento, orçamento (interno, e o arquivo diz isso), ficha técnica,
+  caderno de montagem, folha de carregamento e **proposta comercial**
 
 **Operação do SaaS**
 - Painel administrativo: contas, acesso, métricas, avisos do Asaas
@@ -84,13 +92,12 @@ Funções que existem, são testadas e ninguém consegue chamar pelo aplicativo:
 - Ficha técnica: `limparReceita`. Apagar TODAS as linhas da receita e salvar já
   esvazia o item; o que `limparReceita` faz a mais é também soltar a
   procedência (`compositionId`)
-- Catálogo de fornecedores: `supplierCatalog.get` (a lista e a edição têm tela;
-  uma página de UM fornecedor não existe)
 - Notificações: `generateMyAlerts`
 - Assinatura: `asaas.getCustomerPortalUrl` (sem uso e sem guarda — ver
   "Recomendações")
 
-Saíram desta lista porque ganharam caminho na tela: `acervo.reservar` e
+Saíram desta lista porque ganharam caminho na tela: `supplierCatalog.get`
+(em `/fornecedores/:id`, ao lado de um `panorama` novo), `acervo.reservar` e
 `acervo.disponibilidade` ("Reservar peça", no acervo do evento),
 `fichaTecnica.desvincularCompra` (na linha da ficha) e
 `purchases.unregisterCost` (no rótulo "no financeiro", em Compras).
@@ -131,7 +138,12 @@ Duas páginas escritas para a reunião, e não para o código:
    integrado e critério medido de acerto da IA (`communicationTriage.divergiu`).
 2. **Se a vertical Buffet ganha deployment próprio** — a coluna `vertical` já
    existe em toda entidade da Central para o dia em que ganhar.
-3. **Se o catálogo de materiais merece tela própria** — hoje o cadastro nasce de
-   dentro da receita, e a manutenção não tem onde acontecer.
-4. **Se multiempresa volta ao mapa** — decide se `users` continua sendo a
+3. **Se multiempresa volta ao mapa** — decide se `users` continua sendo a
    fronteira de dados.
+4. **Se a proposta ganha valor jurídico** — hoje "aceita" é a decoradora
+   registrando o que ouviu, não um aceite assinado pela cliente. Assinatura
+   muda contrato, responsabilidade e provavelmente fornecedor externo.
+
+*(Saiu daqui: "se o catálogo de materiais merece tela própria". A resposta foi
+"os dois" — `/catalogo` no menu, e o mesmo diálogo continua abrindo de dentro
+da receita, com um código só.)*

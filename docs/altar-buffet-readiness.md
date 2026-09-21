@@ -272,6 +272,47 @@ várias delas mudaram de tamanho:
   o que falta ali é o **rendimento** (1 kg rende N porções) e o rótulo, não a
   estrutura.
 
+### A rodada "camada comercial" (catálogo, fornecedor 360º e proposta)
+
+Esta rodada construiu a camada que vem ANTES do evento. Nada dela é de Buffet,
+e três peças mudam de classificação neste mapa:
+
+- **Catálogo de materiais e composições em tela própria** (`/catalogo`) —
+  **REUTILIZA COM ADAPTAÇÃO**. O mecanismo é exatamente o do cardápio: um
+  insumo cadastrado uma vez, uma receita que o compõe, e a aplicação copiando a
+  receita como SNAPSHOT. O que falta para a cozinha continua sendo o que a §3
+  já dizia — **rendimento** (1 kg rende N porções), validade e lote — e não a
+  estrutura. A tela em si serve sem mudança: filtro por categoria, busca que
+  encontra a composição pelo nome do material, arquivados sob demanda e "onde
+  é usado" antes de arquivar.
+
+- **Fornecedor 360º** (`/fornecedores/:id`) — **REUTILIZA DIRETO**. "Já
+  trabalhei com eles em quantos eventos, quanto já comprei, ficou algo em
+  aberto" é a mesma pergunta para uma floricultura e para um distribuidor de
+  hortifrúti. A honestidade do total (soma o COMBINADO, não o que saiu do
+  caixa, e diz quantas compras ainda não têm preço) transplanta junto e vale
+  mais no Buffet, onde o preço do insumo varia por semana.
+
+- **A proposta comercial** (`convex/lib/propostaComercial.ts` + `/propostas`) —
+  **REUTILIZA DIRETO**, e é a peça mais transplantável desta rodada. Um buffet
+  vende exatamente assim: escopo apresentado por ambiente ou por momento do
+  serviço, investimento total, condições de pagamento, validade. A regra de
+  ouro é a mesma — `paraOCliente` constrói o documento campo a campo, e custo
+  por convidado, margem e fornecedor não estão escondidos, estão AUSENTES do
+  objeto que sai. A "ordem de serviço da cozinha" da §4 é o outro lado dessa
+  mesma fronteira, e herda o mecanismo inteiro.
+
+  O único ajuste previsível é de UNIDADE de apresentação: buffet costuma
+  apresentar **por convidado** ("R$ 320 por pessoa · 180 convidados"), e hoje o
+  item da proposta é um valor absoluto. É acréscimo de campo opcional no item,
+  não redesenho — e continua sendo decisão de produto, não de banco.
+
+- **A proposta NÃO substitui o contrato, e isso não muda no Buffet.**
+  `registrarEnvio` e `registrarDecisao` são REGISTROS de decisões humanas
+  tomadas fora do sistema. O ALTAR não envia, não assina e não cobra por aqui —
+  e a §4 continua valendo: assinatura jurídica é o que **não existe e não deve
+  ser copiado** enquanto não houver decisão de produto sobre ela.
+
 E uma que **não** mudou, de propósito: **`financeScope` continua como estava.**
 A inversão descrita na §2 é a decisão de produto mais cara deste mapa, e mexer
 nela sem a decisão produziria margem errada na tela mais sensível do produto.

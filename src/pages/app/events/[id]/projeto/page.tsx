@@ -19,6 +19,7 @@ import {
   totalDeImagens,
   type FotoDoProjeto,
 } from "@/lib/projeto-visual.ts";
+import { conceitoDoEvento, linhaDoConceito } from "@/lib/conceito-do-evento.ts";
 import { PrateleiraDeFotos } from "@/components/projeto/prateleira-de-fotos.tsx";
 import { labelDoTipoDeEvento } from "@/lib/event-types.ts";
 import {
@@ -67,6 +68,10 @@ export default function ProjetoDecoracaoPage() {
   const fotos = useQuery(api.gallery.listPhotos, { eventId });
   // A planta já existe; o que faltava era ela estar perto do projeto.
   const plantas = useQuery(api.layoutRenders.listByEvent, { eventId });
+  // O conceito do casamento JÁ ESTAVA ESCRITO no Questionário e não aparecia
+  // aqui. Só três campos deste briefing são lidos, e quem decide quais é
+  // `conceito-do-evento.ts` — a linha inteira tem campo interno dentro.
+  const briefing = useQuery(api.briefing.getBriefing, { eventId });
   const atualizar = useMutation(api.assemblyItems.update);
 
   const lista = (itens ?? []) as unknown as ItemDoProjeto[];
@@ -76,12 +81,33 @@ export default function ProjetoDecoracaoPage() {
   );
   const totalItens = lista.length;
   const totalFotos = totalDeImagens(projeto);
-  const carregando = itens === undefined || fotos === undefined;
+  // O briefing entra no carregamento junto com o resto: o conceito fica logo
+  // abaixo da capa, e aparecer depois empurraria a tela para baixo na cara de
+  // quem está olhando.
+  const carregando = itens === undefined || fotos === undefined || briefing === undefined;
+  const conceito = conceitoDoEvento(briefing);
   const vazio = totalItens === 0 && totalFotos === 0;
 
   // A planta pronta mais recente. `listByEvent` já vem da mais nova para a
   // mais antiga; render sem saída ainda está processando ou falhou.
   const planta = (plantas ?? []).find((r) => r.outputUrl) ?? null;
+
+  /**
+   * A capa ESCOLHIDA por ela, resolvida da lista que já está na memória.
+   *
+   * Nenhuma consulta nova: `listPhotos` devolve as fotos do evento inteiras,
+   * com URL, e a capa é uma delas. No dia em que essa consulta ganhar
+   * paginação, a capa pode cair fora da página carregada e precisará ser
+   * resolvida sozinha — é o único lugar onde este atalho depende daquilo.
+   *
+   * `?? null` cobre o ponteiro que sobreviveu a uma foto apagada: a Galeria
+   * limpa a capa ao excluir, mas a tela não confia nisso para desenhar. Capa
+   * que não existe é capa tipográfica, nunca quadrado quebrado.
+   */
+  const capa =
+    (event?.coverPhotoId
+      ? (fotos ?? []).find((f) => f._id === event.coverPhotoId)
+      : null) ?? null;
 
   /**
    * Quantas fotos ainda não dizem o que são.
@@ -126,20 +152,41 @@ export default function ProjetoDecoracaoPage() {
         {event?.name ?? "Evento"}
       </Link>
 
-      {/* ── CAPA ──────────────────────────────────────────────────────────
-          Tipográfica, sem imagem de capa. Escolher "a primeira foto" ou "a
-          primeira referência" como capa seria uma regra inventada em silêncio
-          — e a capa de um casamento é decisão dela, não de um `[0]`. Enquanto
-          não houver como ESCOLHER, a tela não escolhe. */}
+      {/* ── A CAPA ────────────────────────────────────────────────────────
+          Com foto escolhida, ela é a primeira coisa que os olhos encontram —
+          é a diferença entre apresentar um evento e consultar um cadastro.
+          Sem foto escolhida, a capa continua TIPOGRÁFICA: "a primeira foto"
+          seria uma regra inventada em silêncio, e a capa de um evento é
+          decisão dela. Escolhe-se em `/eventos/:id/fotos`.
+
+          O texto fica ABAIXO da imagem, nunca por cima. Texto sobre foto
+          depende do que a foto tem embaixo — céu claro, vestido branco — e
+          `brand.ts` já registra a lição no documento: um fundo claro demais
+          com texto claro em cima é pior do que não personalizar. Aqui não há
+          contraste a medir porque não há sobreposição. */}
+      {capa?.url && (
+        <div className="overflow-hidden rounded-xl bg-muted">
+          <img
+            src={capa.url}
+            alt={capa.caption?.trim() || `Capa do projeto de ${event?.name ?? "evento"}`}
+            decoding="async"
+            className="aspect-[3/2] w-full object-cover md:aspect-[2/1]"
+          />
+        </div>
+      )}
+
       <header className="space-y-1">
         <p className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
           Projeto visual
         </p>
-        <h1 className="font-serif text-2xl leading-tight md:text-3xl">
+        {/* `break-words`: o nome do evento é texto livre e pode ser longo
+            ("Maria Fernanda & Gabriel Henrique", "Confraternização Anual
+            Construtora Meridiano") num telefone de 320px. */}
+        <h1 className="font-serif text-2xl leading-tight break-words md:text-3xl">
           {event?.name ?? "Evento"}
         </h1>
         {event && (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground break-words">
             {[
               formatEventDateLong(event.date),
               labelDoTipoDeEvento(event.type),
@@ -150,6 +197,27 @@ export default function ProjetoDecoracaoPage() {
           </p>
         )}
       </header>
+
+      {/* ── O CONCEITO ────────────────────────────────────────────────────
+          Três campos que ela JÁ preencheu no Questionário e que não
+          apareciam em lugar nenhum do projeto. Campo vazio não aparece; os
+          três vazios e a seção inteira some — evento novo não tem conceito
+          escrito, e isso não é defeito. A paleta é o TEXTO dela: virar
+          amostra de cor exigiria adivinhar que verde é "verde oliva". */}
+      {conceito && (
+        <section className="space-y-2 border-l-2 border-border pl-4">
+          {linhaDoConceito(conceito) && (
+            <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+              {linhaDoConceito(conceito)}
+            </p>
+          )}
+          {conceito.atmosfera && (
+            <p className="font-serif text-base leading-relaxed text-foreground/90 whitespace-pre-line">
+              {conceito.atmosfera}
+            </p>
+          )}
+        </section>
+      )}
 
       {carregando ? (
         <div className="space-y-3">

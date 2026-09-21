@@ -60,15 +60,32 @@ describe("a tela LÊ a galeria, não guarda imagem", () => {
   });
 
   it("não sobe nem apaga foto — a Galeria é a biblioteca", () => {
+    // Olha o CÓDIGO, não os comentários: o comentário da tela explica o que a
+    // Galeria faz ao excluir, e citar o nome não é chamar a função.
     for (const proibido of ["savePhoto", "deletePhoto", "generateUploadUrl"]) {
-      expect(TELA, `a tela chama ${proibido}`).not.toContain(proibido);
+      expect(CODIGO, `a tela chama ${proibido}`).not.toContain(proibido);
     }
   });
 
-  it("quatro consultas fixas, nenhuma por ambiente", () => {
+  it("consultas FIXAS e nomeadas, nenhuma por ambiente", () => {
     // Uma consulta por ambiente seria N+1: dez ambientes, dez assinaturas
     // reativas para desenhar a mesma tela.
-    expect((TELA.match(/useQuery\(/g) ?? []).length).toBe(4);
+    //
+    // Contar chamadas era proxy frágil — o número sobe por motivo legítimo e
+    // o teste vira obstáculo. O que importa é QUAIS consultas existem: uma
+    // lista fixa, cada uma uma vez. Acrescentar consulta passa por aqui, e é
+    // para passar por aqui.
+    const chamadas = [...TELA.matchAll(/useQuery\(\s*(api\.[\w.]+)/g)].map((m) => m[1]);
+    expect(chamadas.sort()).toEqual([
+      "api.assemblyItems.listByEvent",
+      "api.briefing.getBriefing",
+      "api.events.get",
+      "api.gallery.listPhotos",
+      "api.layoutRenders.listByEvent",
+    ]);
+    // Cada uma UMA vez: repetição é o primeiro sintoma de consulta dentro de
+    // laço.
+    expect(new Set(chamadas).size).toBe(chamadas.length);
   });
 });
 
@@ -91,12 +108,31 @@ describe("inspiração, decisão e resultado nunca dividem a mesma fileira", () 
 });
 
 describe("a tela não inventa o que não sabe", () => {
-  it("não escolhe foto de capa", () => {
-    // "A primeira foto" como capa é uma regra inventada em silêncio, e a capa
-    // de um casamento é decisão dela. Enquanto não houver como ESCOLHER, a
-    // tela não escolhe.
-    // O que não pode existir é o ACESSO — `[0]` sobre uma lista de fotos.
+  it("não escolhe foto de capa — só respeita a que ELA escolheu", () => {
+    // "A primeira foto" como capa é uma regra inventada em silêncio. Agora
+    // existe como escolher (na Galeria), e a tela continua sem escolher: ela
+    // LÊ `coverPhotoId` e procura essa foto pelo id.
     expect(CODIGO).not.toMatch(/(fotos|referencias|contratadas|execucao)\s*\[0\]/);
+    expect(CODIGO).toContain("event.coverPhotoId");
+    expect(CODIGO).toContain("f._id === event.coverPhotoId");
+  });
+
+  it("e sem capa escolhida a abertura continua tipográfica", () => {
+    // Nenhum `<img` de capa fora da condição: sem foto, nenhum espaço vazio
+    // pedindo imagem.
+    expect(CODIGO).toMatch(/\{capa\?\.url && \(/);
+    expect(CODIGO).toContain("Projeto visual");
+  });
+
+  it("o texto da capa nunca fica POR CIMA da foto", () => {
+    // Texto sobre foto depende do que a foto tem embaixo — céu claro, vestido
+    // branco. `brand.ts` já registra a lição: fundo claro com texto claro é
+    // pior do que não personalizar. Aqui não há contraste a medir porque não
+    // há sobreposição.
+    const bloco = CODIGO.slice(CODIGO.indexOf("{capa?.url &&"), CODIGO.indexOf("</header>"));
+    for (const proibido of ["absolute", "gradient", "inset-0"]) {
+      expect(bloco, `a capa sobrepõe texto: ${proibido}`).not.toContain(proibido);
+    }
   });
 
   it("mostra a planta, e não deixa marcar posição nela", () => {
@@ -130,6 +166,28 @@ describe("imagem é o risco desta tela", () => {
 
   it("e a tela avisa quando o evento tem muita foto", () => {
     expect(TELA).toMatch(/totalFotos > \d+/);
+  });
+});
+
+describe("o conceito vem do Questionário, e some quando não existe", () => {
+  it("a tela não lê campo do briefing por conta própria", () => {
+    // A linha do briefing traz contato do espaço, seguro e pagamento. Quem
+    // escolhe os três campos do conceito é `conceito-do-evento.ts`.
+    expect(CODIGO).toContain("conceitoDoEvento(briefing)");
+    for (const interno of ["decorStyle", "colorPalette", "atmosphereDescription", "venueContact"]) {
+      expect(CODIGO, `a tela lê ${interno} direto`).not.toContain(interno);
+    }
+  });
+
+  it("seção inteira desaparece quando não há conceito", () => {
+    expect(CODIGO).toMatch(/\{conceito && \(/);
+  });
+
+  it("e nenhuma cor é inferida da paleta", () => {
+    const i = CODIGO.indexOf("{conceito && (");
+    const bloco = CODIGO.slice(i, i + 900);
+    expect(bloco).not.toMatch(/#[0-9a-fA-F]{3,6}/);
+    expect(bloco).not.toContain("backgroundColor");
   });
 });
 
@@ -199,7 +257,7 @@ describe("o caminho até a Galeria é direto, e continua sendo só um caminho", 
       "generateUploadUrl",
       "setScopeValue",
     ]) {
-      expect(TELA).not.toContain(proibido);
+      expect(CODIGO).not.toContain(proibido);
     }
   });
 });

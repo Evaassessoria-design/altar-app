@@ -14,6 +14,14 @@ já se fez.
 > escrito que não existe. Ver `docs/prontidao-comercial.md` para a matriz
 > completa do que pode e do que não pode ser mostrado.
 
+> **Uma conta vencida, de propósito.** O saldo da floricultura (R$ 17.000)
+> venceu em **15/09** e não foi liquidado — é o que faz o painel da manhã
+> mostrar "Venceu e não foi liquidado · 1 a pagar". A data fica no passado e
+> não envelhece. É a decoradora devendo ao fornecedor: Marina pagou as três
+> parcelas em dia, e a parcela final (05/10) está no prazo. **Não invente
+> inadimplência da cliente na demonstração** — a história é de uma operação
+> que funciona, com uma conta que passou batido.
+
 > **O demo tem data.** O evento de Marina & Gabriel é **10/10/2026**, e a
 > janela de acervo vai de 09 a 11/10. O alerta de déficit da lista geral do
 > acervo ("faltam 30 guardanapos") olha só para o que **ainda vai acontecer** —

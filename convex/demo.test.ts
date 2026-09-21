@@ -205,6 +205,27 @@ describe("o seed cria o casamento completo", () => {
       expect(lancamentos.some((l) => l.isPaid)).toBe(true);
       expect(lancamentos.some((l) => !l.isPaid)).toBe(true);
 
+      // ── O PAINEL DA MANHÃ PRECISA TER O QUE MOSTRAR ───────────────────
+      // "Venceu e não foi liquidado" é o alerta de dinheiro do Dashboard.
+      // Sem uma conta vencida na semente, a demonstração abre com o painel
+      // calado justamente nessa linha.
+      //
+      // A data é FIXA NO PASSADO: o resto da semente é ancorado no evento
+      // de 10/10/2026 e perde sentido depois dele; esta continua verdadeira
+      // em qualquer dia.
+      const vencidas = lancamentos.filter(
+        (l) => !l.isPaid && l.date < "2026-09-16" && l.type === "expense",
+      );
+      expect(vencidas.length, "nenhuma conta vencida para o painel mostrar").toBeGreaterThan(0);
+
+      // E é a decoradora devendo ao FORNECEDOR — não a cliente devendo a
+      // ela. Marina pagou as três parcelas em dia, e a narrativa depende
+      // disso: a parcela final ainda está no prazo.
+      expect(
+        lancamentos.filter((l) => !l.isPaid && l.type === "income").every((l) => l.date > "2026-09-21"),
+        "a demo não pode pintar a cliente como inadimplente",
+      ).toBe(true);
+
       // Fornecedores em estágios diferentes.
       const vinculos = await ctx.db.query("eventSuppliers").collect();
       expect(new Set(vinculos.map((v) => v.status)).size).toBeGreaterThanOrEqual(3);

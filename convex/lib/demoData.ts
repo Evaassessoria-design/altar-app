@@ -412,7 +412,19 @@ export const DEMO_WEDDING = {
     { type: "expense" as const, category: "Tecidos", description: "Toalhas, trilhos e guardanapos", amount: 9_600, date: "2026-09-02", isPaid: true },
     { type: "expense" as const, category: "Transporte", description: "Frete da montagem (ida e volta)", amount: 3_800, date: "2026-09-12", isPaid: true },
     { type: "expense" as const, category: "Materiais", description: "Materiais de consumo e insumos", amount: 2_400, date: "2026-09-12", isPaid: true },
-    { type: "expense" as const, category: "Flores", description: "Flores de Aurora — saldo", amount: 17_000, date: "2026-10-03", isPaid: false },
+    // ── A ÚNICA CONTA VENCIDA DA HISTÓRIA ────────────────────────────────
+    // O saldo da floricultura venceu em 15/09 e não foi liquidado. É o que
+    // faz o painel da manhã dizer "Venceu e não foi liquidado · 1 a pagar ·
+    // R$ 17.000" — o alerta que o produto existe para dar.
+    //
+    // Data no PASSADO de propósito: ela não envelhece. O resto da semente é
+    // ancorado no evento de 10/10/2026 e perde sentido depois dele; esta
+    // continua verdadeira em qualquer dia em que a demonstração rodar.
+    //
+    // E é a decoradora devendo ao fornecedor — não a cliente devendo a ela.
+    // Marina pagou as três parcelas em dia, e a narrativa do demo depende
+    // disso: a parcela final vence em 05/10 e ainda está no prazo.
+    { type: "expense" as const, category: "Flores", description: "Flores de Aurora — saldo do pedido", amount: 17_000, date: "2026-09-15", isPaid: false },
     { type: "expense" as const, category: "Equipe", description: "Equipe de montagem e produção", amount: 14_200, date: "2026-10-09", isPaid: false },
   ],
 

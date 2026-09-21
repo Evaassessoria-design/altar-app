@@ -18,7 +18,7 @@ import { ConvexError } from "convex/values";
 import { ArrowLeft, ClipboardList, FileDown, Layers, Package, ShoppingCart, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
 import { formatEventDateLong } from "@/lib/event-date.ts";
-import { labelDoAmbiente } from "@/lib/decoration-project.ts";
+import { agruparPorAmbiente, resolverAmbiente } from "@/lib/decoration-project.ts";
 import {
   ROTULO_DA_SITUACAO,
   necessidadeDoComponente,
@@ -327,7 +327,7 @@ function LinhaConsolidada({
           {linha.origens.map((o, i) => (
             <div key={i} className="flex items-baseline justify-between gap-2 text-xs">
               <span className="text-muted-foreground truncate">
-                {o.ambiente || labelDoAmbiente(o.area).label} · {o.composicao}
+                {resolverAmbiente(o).label} · {o.composicao}
               </span>
               <span className="whitespace-nowrap text-muted-foreground">
                 {o.unidades} × {o.porUnidade} ={" "}
@@ -361,15 +361,15 @@ export default function FichaTecnicaPage() {
   const [gerando, setGerando] = useState(false);
   const [reservando, setReservando] = useState(false);
 
-  const porAmbiente = useMemo(() => {
-    const itens = itensDoEvento ?? [];
-    const mapa = new Map<string, typeof itens>();
-    for (const item of itens) {
-      const chave = item.ambiente?.trim() || item.area;
-      mapa.set(chave, [...(mapa.get(chave) ?? []), item]);
-    }
-    return [...mapa.entries()];
-  }, [itensDoEvento]);
+  // A ficha já preferia `ambiente` sobre `area` — era a ÚNICA superfície que
+  // fazia isso, com a regra escrita à mão aqui e repetida no PDF. Agora a regra
+  // é uma só (`agruparPorAmbiente`), e com ela vêm duas coisas que a cópia
+  // local não tinha: a normalização ("Salão de vidro" e "salão de vidro" viram
+  // um bloco) e a ordem canônica das áreas.
+  const porAmbiente = useMemo(
+    () => agruparPorAmbiente(itensDoEvento ?? []),
+    [itensDoEvento],
+  );
 
   // O PDF é gerado a partir do SNAPSHOT do evento — nunca da biblioteca
   // central. Um evento de seis meses atrás imprime a receita executada.
@@ -650,13 +650,21 @@ export default function FichaTecnicaPage() {
 
       {!semItens && (!temFicha || aba === "ambientes") && (
         <div className="space-y-3">
-          {porAmbiente.map(([ambiente, itens]) => (
-            <div key={ambiente} className="bg-card border border-border rounded-xl overflow-hidden">
+          {porAmbiente.map((grupo) => (
+            <div key={grupo.key} className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="px-4 py-2 border-b border-border">
-                <p className="text-sm font-semibold">{labelDoAmbiente(ambiente).label}</p>
+                <p className="text-sm font-semibold">
+                  {grupo.emoji ? `${grupo.emoji} ` : ""}
+                  {grupo.label}
+                  {grupo.categoria && (
+                    <span className="ml-2 font-normal text-xs text-muted-foreground">
+                      {grupo.categoria}
+                    </span>
+                  )}
+                </p>
               </div>
               <div className="divide-y divide-border">
-                {itens.map((item) => (
+                {grupo.itens.map((item) => (
                   <div key={item._id} className="px-4 py-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">

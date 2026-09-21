@@ -30,7 +30,7 @@ describe("agrupamento por ambiente", () => {
       item({ _id: "c", area: "ceremony", name: "Cadeiras" }),
     ]);
     expect(folha.ambientes).toHaveLength(2);
-    const cerimonia = folha.ambientes.find((a) => a.key === "ceremony");
+    const cerimonia = folha.ambientes.find((a) => a.label === "Cerimônia");
     expect(cerimonia?.itens.map((i) => i.name)).toEqual(["Arco", "Cadeiras"]);
   });
 

@@ -47,7 +47,9 @@ describe("D) não incluso NUNCA vira obrigação de montagem", () => {
 
   it("e o Caderno APLICA a regra — não só a declara", () => {
     // O bug era exatamente este: a regra existia e o documento a ignorava.
-    expect(PDF).toContain("import { ehObrigacaoDeMontagem }");
+    // Casa com o bloco de import em qualquer formatação — o que importa é de
+    // ONDE a regra vem, não em quantas linhas ela foi escrita.
+    expect(PDF).toMatch(/import \{[^}]*\behObrigacaoDeMontagem\b[^}]*\} from "\.\/decoration-project"/);
     expect(PDF).toContain("const reportItems = visiveis.filter(ehObrigacaoDeMontagem);");
   });
 

@@ -1,3 +1,4 @@
+import { normalizeName } from "@/convex/lib/supplierIdentity.ts";
 import { BRIEFING_AREAS } from "./briefing-areas.ts";
 import { scopeMeta, type ProjectScope } from "./photo-scope.ts";
 
@@ -76,53 +77,211 @@ export function labelDoAmbiente(area: string): { label: string; emoji?: string }
 import { escopoDoItem, ehObrigacaoDeMontagem } from "@/convex/lib/escopoDoProjeto.ts";
 export { escopoDoItem, ehObrigacaoDeMontagem };
 
+// ── ONDE A DECORAÇÃO ACONTECE — A REGRA CANÔNICA ────────────────────────────
+//
+// O item guarda DOIS campos, e eles não são sinônimos:
+//
+//   area     → a CATEGORIA do briefing (`ceremony`, `cake`, `lighting`).
+//              Nasce da seção do Questionário em que o item foi cadastrado —
+//              `assembly-items-section.tsx` filtra por `i.area === area`.
+//              Nunca é digitada: é estrutura.
+//   ambiente → o NOME DO ESPAÇO, texto livre, opcional. Nasce dos dedos da
+//              decoradora ("Jardim das oliveiras", "Salão de vidro").
+//
+// A foto da galeria guarda só o segundo (`eventPhotos.ambiente`).
+//
+// ── O DEFEITO QUE ISTO CORRIGE ──────────────────────────────────────────────
+// Até aqui existiam DUAS verdades no repositório:
+//
+//   Ficha Técnica          → agrupava por `ambiente || area`
+//   Projeto / Carregamento → agrupavam só por `area`
+//   Caderno de Montagem    → agrupava só por `area`
+//
+// Então o mesmo casamento se organizava de um jeito na ficha e de outro no
+// caderno. Pior: no Projeto Visual os ITENS iam para "Cerimônia" e as FOTOS
+// do mesmo lugar iam para "Jardim das oliveiras" — dois blocos para o mesmo
+// canto do jardim, e a decoradora sem entender por quê.
+//
+// ── A REGRA ─────────────────────────────────────────────────────────────────
+// Se ela deu nome ao espaço, o nome dela manda. Se não deu, a categoria
+// traduzida serve de rótulo. A categoria NÃO some: vira `categoria` no grupo,
+// e só aparece quando acrescenta alguma coisa (ver `categoriaDoGrupo`).
+//
+// A normalização é SÓ para comparar. O rótulo exibido é sempre o texto que ela
+// digitou — "Jardim das Oliveiras" nunca vira "jardim das oliveiras" na tela.
+
+/** Grupo de itens sem área e sem ambiente. Existe para nada desaparecer. */
+export const SEM_AMBIENTE = "__sem-ambiente";
+
 /**
- * Agrupa os itens por ambiente, na ordem das áreas conhecidas, com os
- * ambientes personalizados no fim.
+ * Chave de comparação: minúscula, sem acento, espaços colapsados.
  *
- * Ambiente sem item nenhum não aparece: o projeto mostra o que existe.
+ * Só para agrupar. NUNCA para exibir, e nunca gravada por cima do texto dela.
  */
-export type GrupoDeAmbiente<T> = {
-  key: string;
+export function chaveDoAmbiente(texto: string | undefined | null): string {
+  const normalizada = normalizeName(texto);
+  // Texto que normaliza para vazio ("***") ainda é um rótulo que ela digitou:
+  // vira chave própria em vez de colidir com todos os outros no vazio.
+  return normalizada || (texto ?? "").trim().toLowerCase();
+}
+
+export type AmbienteResolvido = {
+  /** Chave normalizada — comparação e agrupamento. */
+  chave: string;
+  /** O que aparece na tela e no papel. */
   label: string;
   emoji?: string;
-  itens: T[];
+  /** A categoria de briefing de onde o item veio. Pode ser vazia. */
+  area: string;
+  /** O rótulo veio do texto DELA (e não da tradução da categoria)? */
+  doAmbiente: boolean;
 };
 
 /**
- * Agrupa QUALQUER coisa que tenha `area` por ambiente, na ordem das áreas
- * conhecidas, com os personalizados no fim.
+ * A ÚNICA função que responde "onde esta coisa acontece?".
  *
- * Genérica de propósito: o Projeto de Decoração e a Folha de Carregamento
- * olham os MESMOS itens sob ângulos diferentes. Se cada um tivesse a própria
- * ordenação, o mesmo evento apareceria com os ambientes fora de ordem entre
- * uma tela e a outra — e "Mesa do bolo" viria antes de "Cerimônia" num lugar
- * e depois no outro, sem que ninguém entendesse por quê.
+ * Serve item de montagem e foto da galeria: a foto entra aqui só com
+ * `ambiente`, o item com os dois. Quem chamar isto agrupa igual a todo mundo.
+ *
+ * Não desceu para `convex/lib/` porque depende de `BRIEFING_AREAS`, que mora
+ * em `src/`. No dia em que o backend precisar agrupar por ambiente, a lista de
+ * áreas desce primeiro — e aí esta função desce junto, inteira.
  */
-export function agruparPorAmbiente<T extends { area: string }>(
-  itens: readonly T[],
-): GrupoDeAmbiente<T>[] {
-  const porArea = new Map<string, T[]>();
-  for (const item of itens) {
-    const lista = porArea.get(item.area) ?? [];
-    lista.push(item);
-    porArea.set(item.area, lista);
+export function resolverAmbiente(item: {
+  area?: string;
+  ambiente?: string;
+}): AmbienteResolvido {
+  const area = item.area?.trim() ?? "";
+  const digitado = item.ambiente?.trim() ?? "";
+  const daArea = area ? labelDoAmbiente(area) : { label: "", emoji: undefined };
+
+  if (digitado) {
+    const chave = chaveDoAmbiente(digitado);
+    // "Cerimônia" digitado dentro da área Cerimônia é o MESMO lugar, não um
+    // ambiente novo: mantém o emoji da área e não anuncia categoria redundante.
+    const mesmoQueAArea = !!area && chave === chaveDoAmbiente(daArea.label);
+    return {
+      chave,
+      label: digitado,
+      emoji: mesmoQueAArea ? daArea.emoji : undefined,
+      area,
+      doAmbiente: !mesmoQueAArea,
+    };
   }
 
-  const ordemConhecida = BRIEFING_AREAS.map((a) => a.key);
-  const chaves = [...porArea.keys()].sort((a, b) => {
-    const ia = ordemConhecida.indexOf(a);
-    const ib = ordemConhecida.indexOf(b);
-    if (ia === -1 && ib === -1) return a.localeCompare(b, "pt-BR");
-    if (ia === -1) return 1;
-    if (ib === -1) return -1;
-    return ia - ib;
-  });
+  if (area) {
+    return {
+      chave: chaveDoAmbiente(daArea.label),
+      label: daArea.label,
+      emoji: daArea.emoji,
+      area,
+      doAmbiente: false,
+    };
+  }
 
-  return chaves.map((key) => {
-    const { label, emoji } = labelDoAmbiente(key);
-    return { key, label, emoji, itens: porArea.get(key)! };
-  });
+  // Nem área nem ambiente. Não é erro de dado que justifique sumir com o item:
+  // a folha existe para carregar o caminhão, não para cobrar cadastro.
+  return { chave: SEM_AMBIENTE, label: "Sem ambiente", area: "", doAmbiente: false };
+}
+
+export type GrupoDeAmbiente<T> = {
+  /** A chave normalizada. Estável entre telas — é o que faz a junção. */
+  key: string;
+  label: string;
+  emoji?: string;
+  /**
+   * A categoria do briefing ("Cerimônia"), quando ela ACRESCENTA informação.
+   *
+   * Ausente quando o rótulo já é a própria categoria (seria eco) e quando o
+   * bloco reúne categorias diferentes — "Salão de vidro" com itens de Festa e
+   * de Bolo não é nem uma coisa nem outra, e escolher uma seria mentir.
+   */
+  categoria?: string;
+  itens: T[];
+};
+
+type Acumulado<T> = {
+  key: string;
+  label: string;
+  emoji?: string;
+  doAmbiente: boolean;
+  /** Posição canônica: a da PRIMEIRA área do briefing que ocupa este bloco. */
+  ordem: number;
+  areas: Set<string>;
+  itens: T[];
+};
+
+function categoriaDoGrupo<T>(g: Acumulado<T>): string | undefined {
+  if (!g.doAmbiente) return undefined;
+  if (g.areas.size !== 1) return undefined;
+  const [area] = [...g.areas];
+  if (!area) return undefined;
+  return labelDoAmbiente(area).label;
+}
+
+/**
+ * Agrupa QUALQUER coisa que tenha `area` e/ou `ambiente`, pela regra canônica.
+ *
+ * Genérica de propósito: Projeto Visual, Caderno de Montagem, Ficha Técnica e
+ * Folha de Carregamento olham os MESMOS itens sob ângulos diferentes. Se cada
+ * um agrupasse do seu jeito, o mesmo evento se organizaria de quatro maneiras
+ * — e foi exatamente o que aconteceu até aqui.
+ *
+ * A ORDEM é a da categoria, não a do alfabeto: "Jardim das oliveiras" ocupa o
+ * lugar que Cerimônia ocupava, porque é a mesma hora do dia. Um bloco que
+ * reúne várias categorias assume a posição da primeira delas. Sem isso, dar
+ * nome ao espaço jogaria o bloco para o fim da folha, e a equipe carregaria o
+ * caminhão fora de ordem só porque alguém digitou um nome bonito.
+ *
+ * Ambiente sem item nenhum não aparece: o projeto mostra o que existe.
+ */
+export function agruparPorAmbiente<T extends { area?: string; ambiente?: string }>(
+  itens: readonly T[],
+): GrupoDeAmbiente<T>[] {
+  const ordemConhecida = BRIEFING_AREAS.map((a) => a.key);
+  const porChave = new Map<string, Acumulado<T>>();
+
+  for (const item of itens) {
+    const r = resolverAmbiente(item);
+    const ordem = ordemConhecida.indexOf(r.area);
+    const existente = porChave.get(r.chave);
+    if (existente) {
+      existente.itens.push(item);
+      existente.areas.add(r.area);
+      if (ordem !== -1 && (existente.ordem === -1 || ordem < existente.ordem)) {
+        existente.ordem = ordem;
+      }
+      continue;
+    }
+    // O rótulo é o da PRIMEIRA ocorrência: entre "Jardim das Oliveiras" e
+    // "jardim das oliveiras" o bloco é um só, e mostra a grafia que apareceu
+    // primeiro. Reescrever o texto dela não é opção.
+    porChave.set(r.chave, {
+      key: r.chave,
+      label: r.label,
+      emoji: r.emoji,
+      doAmbiente: r.doAmbiente,
+      ordem,
+      areas: new Set([r.area]),
+      itens: [item],
+    });
+  }
+
+  return [...porChave.values()]
+    .sort((a, b) => {
+      if (a.ordem === -1 && b.ordem === -1) return a.label.localeCompare(b.label, "pt-BR");
+      if (a.ordem === -1) return 1;
+      if (b.ordem === -1) return -1;
+      if (a.ordem !== b.ordem) return a.ordem - b.ordem;
+      return a.label.localeCompare(b.label, "pt-BR");
+    })
+    .map((g) => ({
+      key: g.key,
+      label: g.label,
+      emoji: g.emoji,
+      categoria: categoriaDoGrupo(g),
+      itens: g.itens,
+    }));
 }
 
 export function montarProjeto(itens: readonly ItemDoProjeto[]): AmbienteDoProjeto[] {

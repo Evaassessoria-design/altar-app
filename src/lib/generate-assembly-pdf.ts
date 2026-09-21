@@ -6,12 +6,15 @@ import { ptBR } from "date-fns/locale";
 import type { Doc } from "@/convex/_generated/dataModel.d.ts";
 import { formatEventDayOnly } from "./event-date";
 import { ASSINATURA_ALTAR, resolveIdentidade, type EmpresaLike, type RGB } from "./brand";
-import { ehObrigacaoDeMontagem } from "./decoration-project";
+import {
+  agruparPorAmbiente,
+  chaveDoAmbiente,
+  ehObrigacaoDeMontagem,
+} from "./decoration-project";
 import {
   resolveAreasForAudience,
   itemVisibleTo,
   areaByKey,
-  BRIEFING_AREAS,
   type Audience,
   type BriefingFields,
 } from "./briefing-areas.ts";
@@ -272,21 +275,22 @@ export async function generateAssemblyPDF(data: AssemblyReportData): Promise<voi
     }
   }
 
-  // ── Itens de montagem, agrupados por área ─────────────────────────────────
+  // ── Itens de montagem, agrupados por AMBIENTE ─────────────────────────────
+  // Até esta rodada o caderno agrupava pela ÁREA do briefing, que é onde o
+  // item é cadastrado — não onde ele é montado. A equipe chegava no sítio com
+  // um caderno dividido em "Festa", "Bolo" e "Iluminação" e tinha de descobrir
+  // sozinha que as três coisas aconteciam dentro do mesmo salão.
+  //
+  // Agora é a mesma regra da Ficha Técnica, do Projeto Visual e da Folha de
+  // Carregamento: o nome que ela deu ao espaço manda; sem nome, a área
+  // traduzida. A CATEGORIA não some — vai no título quando acrescenta.
   if (reportItems.length > 0) {
-    const byArea = new Map<string, AssemblyItem[]>();
-    for (const item of reportItems) {
-      const list = byArea.get(item.area) ?? [];
-      list.push(item);
-      byArea.set(item.area, list);
-    }
-
-    // Percorre na ordem canônica das áreas; área sem item é pulada (regra 2).
-    for (const area of BRIEFING_AREAS) {
-      const list = byArea.get(area.key);
-      if (!list || list.length === 0) continue;
-
-      y = sectionHeader(doc, `Montagem · ${area.label}`, y, identidade.cor);
+    for (const grupo of agruparPorAmbiente(reportItems)) {
+      const list = grupo.itens;
+      const titulo = grupo.categoria
+        ? `Montagem · ${grupo.label} · ${grupo.categoria}`
+        : `Montagem · ${grupo.label}`;
+      y = sectionHeader(doc, titulo, y, identidade.cor);
 
       for (const item of list) {
         // ── QUAL FOTO, E COM QUE NOME ────────────────────────────────────
@@ -306,7 +310,13 @@ export async function generateAssemblyPDF(data: AssemblyReportData): Promise<voi
 
         const detailPairs: [string, string][] = [];
         if (item.model?.trim()) detailPairs.push(["Modelo", item.model.trim()]);
-        if (item.ambiente?.trim()) detailPairs.push(["Ambiente", item.ambiente.trim()]);
+        // "Ambiente: Jardim das oliveiras" embaixo de um bloco chamado JARDIM
+        // DAS OLIVEIRAS é eco, e eco ocupa linha numa folha que a equipe lê de
+        // pé. Só aparece quando diz algo que o título não disse.
+        const ambienteDoItem = item.ambiente?.trim();
+        if (ambienteDoItem && chaveDoAmbiente(ambienteDoItem) !== grupo.key) {
+          detailPairs.push(["Ambiente", ambienteDoItem]);
+        }
         // Fornecedor e observação NÃO vão no caderno da cliente: um é o
         // contato comercial da decoradora, o outro é a nota que ela escreve
         // para a própria equipe. Ver `audiencia-do-caderno.ts`.

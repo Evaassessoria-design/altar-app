@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   ambienteTemConteudo,
-  chaveVisual,
   montarProjetoVisual,
   papelDaFoto,
   totalDeImagens,
   type FotoDoProjeto,
 } from "./projeto-visual.ts";
-import type { GrupoDeAmbiente } from "./decoration-project.ts";
+import { chaveDoAmbiente, type GrupoDeAmbiente } from "./decoration-project.ts";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // AS FOTOS ENCONTRANDO OS ITENS
@@ -27,8 +26,11 @@ import type { GrupoDeAmbiente } from "./decoration-project.ts";
 
 type Item = { _id: string; area: string };
 
-const grupo = (key: string, label: string, itens: Item[] = []): GrupoDeAmbiente<Item> => ({
-  key, label, itens,
+// A `key` sai de `chaveDoAmbiente`, exatamente como `agruparPorAmbiente` faz.
+// Montar grupo à mão com uma chave inventada (`"cake"`) mascararia a junção:
+// o teste passaria e a tela real continuaria com dois blocos.
+const grupo = (_area: string, label: string, itens: Item[] = []): GrupoDeAmbiente<Item> => ({
+  key: chaveDoAmbiente(label), label, itens,
 });
 
 const foto = (p: Partial<FotoDoProjeto> & { _id: string }): FotoDoProjeto => ({
@@ -66,18 +68,18 @@ describe("o papel da foto no projeto", () => {
 
 describe("as três grafias são o mesmo ambiente", () => {
   it("acento, caixa e espaço não criam blocos diferentes", () => {
-    const chaves = ["Mesa do Bolo", " mesa do bolo ", "MESA DO BOLO"].map(chaveVisual);
+    const chaves = ["Mesa do Bolo", " mesa do bolo ", "MESA DO BOLO"].map(chaveDoAmbiente);
     expect(new Set(chaves).size).toBe(1);
   });
 
   it("mas ambientes de verdade continuam separados", () => {
-    expect(chaveVisual("Mesa do bolo")).not.toBe(chaveVisual("Mesa dos convidados"));
+    expect(chaveDoAmbiente("Mesa do bolo")).not.toBe(chaveDoAmbiente("Mesa dos convidados"));
   });
 
   it("vazio e ausente não viram chave", () => {
-    expect(chaveVisual("")).toBe("");
-    expect(chaveVisual("   ")).toBe("");
-    expect(chaveVisual(undefined)).toBe("");
+    expect(chaveDoAmbiente("")).toBe("");
+    expect(chaveDoAmbiente("   ")).toBe("");
+    expect(chaveDoAmbiente(undefined)).toBe("");
   });
 });
 

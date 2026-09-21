@@ -2,6 +2,7 @@ import jsPDF from "jspdf";
 import { entregarPdf } from "./pdf-delivery.ts";
 import { ASSINATURA_ALTAR, resolveIdentidade, type EmpresaLike } from "./brand.ts";
 import { formatEventDayOnly } from "./event-date.ts";
+import { chaveDoAmbiente } from "./decoration-project.ts";
 import {
   montarFolhaDeCarregamento,
   quantidadeTexto,
@@ -161,7 +162,14 @@ export async function generateLoadingPDF(data: LoadingPdfData): Promise<void> {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
 
-      const detalhe = item.ambiente?.trim() ? `  (${item.ambiente.trim()})` : "";
+      // O ambiente já é o TÍTULO do bloco desde que o agrupamento passou a
+      // segui-lo. Repeti-lo em cada linha era eco — e numa folha lida de pé,
+      // com a prancheta na mão, eco é ruído.
+      const ambienteDoItem = item.ambiente?.trim();
+      const detalhe =
+        ambienteDoItem && chaveDoAmbiente(ambienteDoItem) !== ambiente.key
+          ? `  (${ambienteDoItem})`
+          : "";
       const nome = doc.splitTextToSize(`${item.name}${detalhe}`, X_QTD - X_ITEM - 4)[0] as string;
       doc.text(nome, X_ITEM, y);
       doc.text(quantidadeTexto(item), X_QTD, y);

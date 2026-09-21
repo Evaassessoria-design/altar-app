@@ -1,5 +1,4 @@
-import { normalizeName } from "@/convex/lib/supplierIdentity.ts";
-import type { GrupoDeAmbiente } from "./decoration-project.ts";
+import { chaveDoAmbiente, type GrupoDeAmbiente } from "./decoration-project.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // O PROJETO VISUAL — AS FOTOS ENCONTRANDO OS ITENS
@@ -21,24 +20,20 @@ import type { GrupoDeAmbiente } from "./decoration-project.ts";
 // divergem na primeira semana.
 //
 // ── A JUNÇÃO É PELO RÓTULO, E É O ÚNICO JEITO HONESTO ───────────────────────
-// Os dois lados guardam ambiente de formas diferentes:
+// Não há id ligando foto e item, e inventar um exigiria cadastro de ambiente —
+// burocracia que o domínio não pediu. O que existe é o RÓTULO.
 //
-//   assemblyItems.area  → chave de área conhecida (`ceremony`) ou texto livre
-//   eventPhotos.ambiente → texto livre, sempre
+// A regra de qual rótulo vale mora em `decoration-project.ts`
+// (`resolverAmbiente`), e é a MESMA do Caderno, da Ficha Técnica e da Folha de
+// Carregamento. Este módulo não decide mais nada sobre ambiente: recebe os
+// grupos já resolvidos e só precisa comparar a chave da foto com a deles.
 //
-// Não há id ligando os dois, e inventar um exigiria cadastro de ambiente —
-// burocracia que o domínio não pediu. O que existe é o RÓTULO: "Cerimônia" de
-// um lado e "cerimônia" do outro são o mesmo lugar para quem está olhando.
-//
-// A comparação normaliza acento, caixa e espaço. O TEXTO ORIGINAL nunca é
-// reescrito: o rótulo exibido é o que ela digitou, e a normalização serve só
-// para agrupar.
+// Antes desta rodada ele tinha a própria `chaveVisual`, e o item ia para
+// "Cerimônia" enquanto a foto do mesmo canto ia para "Jardim das oliveiras".
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Chave de agrupamento. Só para comparar — nunca para exibir. */
-export function chaveVisual(texto: string | undefined | null): string {
-  return normalizeName(texto);
-}
+/** Fotos que ela ainda não situou. Chave própria: não colide com item algum. */
+export const FOTOS_SEM_AMBIENTE = "__fotos-sem-ambiente";
 
 export type FotoDoProjeto = {
   _id: string;
@@ -87,6 +82,8 @@ export type AmbienteVisual<T> = {
   key: string;
   label: string;
   emoji?: string;
+  /** A categoria do briefing, quando acrescenta. Ver `GrupoDeAmbiente`. */
+  categoria?: string;
   itens: T[];
   referencias: FotoDoProjeto[];
   contratadas: FotoDoProjeto[];
@@ -107,9 +104,15 @@ export function ambienteTemConteudo<T>(a: AmbienteVisual<T>): boolean {
   );
 }
 
-function vazio<T>(key: string, label: string, emoji?: string, itens: T[] = []): AmbienteVisual<T> {
+function vazio<T>(
+  key: string,
+  label: string,
+  emoji?: string,
+  itens: T[] = [],
+  categoria?: string,
+): AmbienteVisual<T> {
   return {
-    key, label, emoji, itens,
+    key, label, emoji, categoria, itens,
     referencias: [], contratadas: [], execucao: [], foraDoEscopo: [], semClassificacao: [],
   };
 }
@@ -148,18 +151,19 @@ export function montarProjetoVisual<T>(
   grupos: readonly GrupoDeAmbiente<T>[],
   fotos: readonly FotoDoProjeto[],
 ): ProjetoVisual<T> {
-  const ambientes = grupos.map((g) => vazio<T>(g.key, g.label, g.emoji, g.itens));
+  const ambientes = grupos.map((g) =>
+    vazio<T>(g.key, g.label, g.emoji, g.itens, g.categoria),
+  );
   const porChave = new Map<string, AmbienteVisual<T>>();
-  for (const a of ambientes) {
-    const chave = chaveVisual(a.label);
-    if (chave) porChave.set(chave, a);
-  }
+  // `g.key` JÁ é a chave normalizada que `agruparPorAmbiente` produziu — a
+  // foto e o item colidem na mesma entrada sem ninguém normalizar de novo.
+  for (const a of ambientes) if (a.key) porChave.set(a.key, a);
 
-  const semAmbiente = vazio<T>("__sem-ambiente", "Referências do evento");
+  const semAmbiente = vazio<T>(FOTOS_SEM_AMBIENTE, "Referências do evento");
   const extras: AmbienteVisual<T>[] = [];
 
   for (const foto of fotos) {
-    const chave = chaveVisual(foto.ambiente);
+    const chave = chaveDoAmbiente(foto.ambiente);
     if (!chave) {
       guardar(semAmbiente, foto);
       continue;

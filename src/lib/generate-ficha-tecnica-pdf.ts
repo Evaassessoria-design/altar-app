@@ -2,7 +2,9 @@ import jsPDF from "jspdf";
 import { entregarPdf } from "./pdf-delivery.ts";
 import { ASSINATURA_ALTAR, resolveIdentidade, type EmpresaLike } from "./brand.ts";
 import { formatEventDayOnly } from "./event-date.ts";
-import { labelDoAmbiente } from "./decoration-project.ts";
+// Mesma função que a tela da ficha, o Caderno e a Folha de Carregamento
+// usam. Era aqui que morava a segunda cópia da regra de ambiente.
+import { agruparPorAmbiente } from "./decoration-project.ts";
 import {
   consolidarMateriais,
   necessidadeDoComponente,
@@ -50,15 +52,7 @@ export type FichaTecnicaPdfData = {
   empresa?: EmpresaLike | null;
 };
 
-/** Agrupa por ambiente na mesma ordem que as telas usam. */
-function porAmbiente(composicoes: readonly ComposicaoNoEvento[]) {
-  const mapa = new Map<string, ComposicaoNoEvento[]>();
-  for (const c of composicoes) {
-    const chave = c.ambiente?.trim() || c.area;
-    mapa.set(chave, [...(mapa.get(chave) ?? []), c]);
-  }
-  return [...mapa.entries()];
-}
+
 
 export async function generateFichaTecnicaPDF(data: FichaTecnicaPdfData): Promise<void> {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -135,12 +129,13 @@ export async function generateFichaTecnicaPDF(data: FichaTecnicaPdfData): Promis
   }
 
   // ── Por ambiente ──────────────────────────────────────────────────────────
-  for (const [ambiente, itens] of porAmbiente(executaveis)) {
+  for (const grupo of agruparPorAmbiente(executaveis)) {
+    const itens = grupo.itens;
     garantirEspaco(24);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
     doc.setTextColor(...identidade.cor);
-    doc.text(labelDoAmbiente(ambiente).label.toUpperCase(), MARGIN, y);
+    doc.text(grupo.label.toUpperCase(), MARGIN, y);
     doc.setTextColor(30, 30, 30);
     y += 2;
     doc.setDrawColor(...identidade.cor);

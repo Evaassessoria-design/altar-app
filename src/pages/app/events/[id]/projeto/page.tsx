@@ -201,10 +201,18 @@ export default function ProjetoDecoracaoPage() {
                   ela procura quando está pensando "como vai ficar a mesa do
                   bolo?". */}
               <div className="flex items-baseline justify-between gap-3 border-b border-border px-5 py-4">
-                <h2 className="font-serif text-lg leading-tight">
-                  {ambiente.emoji ? `${ambiente.emoji} ` : ""}
-                  {ambiente.label}
-                </h2>
+                <div className="min-w-0">
+                  <h2 className="font-serif text-lg leading-tight">
+                    {ambiente.emoji ? `${ambiente.emoji} ` : ""}
+                    {ambiente.label}
+                  </h2>
+                  {/* A categoria do briefing não some quando ela dá nome ao
+                      espaço: "Entrada" continua sendo Mobiliário, e é assim
+                      que ela vai achar o item no Questionário. */}
+                  {ambiente.categoria && (
+                    <p className="text-xs text-muted-foreground">{ambiente.categoria}</p>
+                  )}
+                </div>
                 <p className="flex-shrink-0 text-xs text-muted-foreground">
                   {ambiente.itens.length > 0 &&
                     `${ambiente.itens.length} ${ambiente.itens.length === 1 ? "item" : "itens"}`}

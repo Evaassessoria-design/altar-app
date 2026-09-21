@@ -74,11 +74,14 @@ describe("montagem do projeto por ambiente", () => {
     item({ area: "Ilha gastronômica", name: "Toalha de linho" }),
   ];
 
+  // Os testes deste bloco ancoram no RÓTULO, não na chave: desde que o
+  // agrupamento passou a seguir `ambiente`, a chave virou detalhe interno
+  // (normalizada, para comparar) e o rótulo é o que a decoradora lê.
   it("agrupa por ambiente e respeita a ordem das áreas conhecidas", () => {
     const projeto = montarProjeto(itens);
-    expect(projeto.map((a) => a.key)).toEqual([
-      "ceremony",
-      "flowers",
+    expect(projeto.map((a) => a.label)).toEqual([
+      "Cerimônia",
+      "Flores",
       "Ilha gastronômica",
     ]);
   });
@@ -89,7 +92,7 @@ describe("montagem do projeto por ambiente", () => {
   });
 
   it("conta inclusos e referências por ambiente", () => {
-    const cerimonia = montarProjeto(itens).find((a) => a.key === "ceremony")!;
+    const cerimonia = montarProjeto(itens).find((a) => a.label === "Cerimônia")!;
     expect(cerimonia.itens).toHaveLength(2);
     expect(cerimonia.inclusos).toBe(1);
     expect(cerimonia.referencias).toBe(1);
@@ -98,7 +101,7 @@ describe("montagem do projeto por ambiente", () => {
   it("ambiente sem item não aparece", () => {
     const projeto = montarProjeto([item({ area: "flowers", name: "Só flores" })]);
     expect(projeto).toHaveLength(1);
-    expect(projeto[0].key).toBe("flowers");
+    expect(projeto[0].label).toBe("Flores");
   });
 
   it("lista vazia devolve projeto vazio", () => {

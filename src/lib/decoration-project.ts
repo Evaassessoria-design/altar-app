@@ -2,7 +2,10 @@ import { BRIEFING_AREAS } from "./briefing-areas.ts";
 import { scopeMeta, type ProjectScope } from "./photo-scope.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PROJETO DE DECORAÇÃO
+// PROJETO VISUAL (o antigo "Projeto de decoração")
+//
+// O nome mudou para a usuária; a estrutura não. A tela passou a mostrar também
+// as FOTOS da galeria, agrupadas pelo mesmo ambiente — ver `projeto-visual.ts`.
 //
 // ── POR QUE NÃO EXISTE TABELA NOVA ──────────────────────────────────────────
 // `assemblyItems` JÁ É o modelo de composição. Cada linha tem:

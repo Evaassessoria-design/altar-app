@@ -10,10 +10,17 @@ import { cn } from "@/lib/utils.ts";
 import { formatEventDateLong } from "@/lib/event-date.ts";
 import { PROJECT_SCOPES, scopeMeta, AVISO_REFERENCIA, type ProjectScope } from "@/lib/photo-scope.ts";
 import {
+  agruparPorAmbiente,
   fotoDoItem,
-  montarProjeto,
   type ItemDoProjeto,
 } from "@/lib/decoration-project.ts";
+import {
+  montarProjetoVisual,
+  totalDeImagens,
+  type FotoDoProjeto,
+} from "@/lib/projeto-visual.ts";
+import { PrateleiraDeFotos } from "@/components/projeto/prateleira-de-fotos.tsx";
+import { labelDoTipoDeEvento } from "@/lib/event-types.ts";
 import {
   Empty,
   EmptyContent,
@@ -54,10 +61,29 @@ export default function ProjetoDecoracaoPage() {
 
   const event = useQuery(api.events.get, { id: eventId });
   const itens = useQuery(api.assemblyItems.listByEvent, { eventId });
+  // As fotos da GALERIA, que é a biblioteca. Esta tela não sobe nem guarda
+  // imagem nenhuma: ela LÊ o mesmo registro, então classificar uma foto lá
+  // muda o projeto aqui, sem cópia e sem divergência.
+  const fotos = useQuery(api.gallery.listPhotos, { eventId });
+  // A planta já existe; o que faltava era ela estar perto do projeto.
+  const plantas = useQuery(api.layoutRenders.listByEvent, { eventId });
   const atualizar = useMutation(api.assemblyItems.update);
 
-  const projeto = montarProjeto((itens ?? []) as unknown as ItemDoProjeto[]);
-  const totalItens = itens?.length ?? 0;
+  const lista = (itens ?? []) as unknown as ItemDoProjeto[];
+  const projeto = montarProjetoVisual(
+    agruparPorAmbiente(lista),
+    (fotos ?? []) as unknown as FotoDoProjeto[],
+  );
+  const totalItens = lista.length;
+  const totalFotos = totalDeImagens(projeto);
+  const carregando = itens === undefined || fotos === undefined;
+  const vazio = totalItens === 0 && totalFotos === 0;
+
+  // A planta pronta mais recente. `listByEvent` já vem da mais nova para a
+  // mais antiga; render sem saída ainda está processando ou falhou.
+  const planta = (plantas ?? []).find((r) => r.outputUrl) ?? null;
+
+  const galeria = `/eventos/${id}/fotos`;
 
   const mudarEscopo = async (itemId: Id<"assemblyItems">, scope: ProjectScope | "") => {
     try {
@@ -80,64 +106,152 @@ export default function ProjetoDecoracaoPage() {
         {event?.name ?? "Evento"}
       </Link>
 
-      <div>
-        <h1 className="text-xl font-bold flex items-center gap-2">
-          <Layers className="size-5 text-primary" /> Projeto de decoração
+      {/* ── CAPA ──────────────────────────────────────────────────────────
+          Tipográfica, sem imagem de capa. Escolher "a primeira foto" ou "a
+          primeira referência" como capa seria uma regra inventada em silêncio
+          — e a capa de um casamento é decisão dela, não de um `[0]`. Enquanto
+          não houver como ESCOLHER, a tela não escolhe. */}
+      <header className="space-y-1">
+        <p className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
+          Projeto visual
+        </p>
+        <h1 className="font-serif text-2xl leading-tight md:text-3xl">
+          {event?.name ?? "Evento"}
         </h1>
         {event && (
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {event.name} · {formatEventDateLong(event.date)}
+          <p className="text-sm text-muted-foreground">
+            {[
+              formatEventDateLong(event.date),
+              labelDoTipoDeEvento(event.type),
+              event.location,
+            ]
+              .filter((v) => v && v !== "—")
+              .join("  ·  ")}
           </p>
         )}
-      </div>
+      </header>
 
-      {itens === undefined ? (
+      {carregando ? (
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-32 w-full rounded-xl" />
           ))}
         </div>
-      ) : totalItens === 0 ? (
+      ) : vazio ? (
         <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon">
               <Layers />
             </EmptyMedia>
-            <EmptyTitle>O projeto ainda não tem itens</EmptyTitle>
+            <EmptyTitle>O projeto ainda não tem nada para mostrar</EmptyTitle>
             <EmptyDescription>
-              Os itens de montagem cadastrados no Questionário aparecem aqui, organizados por
-              ambiente. É a mesma informação — você não cadastra duas vezes.
+              Esta tela não guarda nada por conta própria: ela mostra as FOTOS da Galeria
+              classificadas por ambiente e os ITENS do Caderno de Montagem, lado a lado.
+              Comece por qualquer um dos dois.
             </EmptyDescription>
           </EmptyHeader>
-          {/* Dizer DE ONDE vêm os itens não basta: o Caderno de Montagem mora
+          {/* Dizer DE ONDE vêm as coisas não basta: o Caderno de Montagem mora
               dentro do Questionário, em cada área, e não é um lugar que alguém
               adivinhe na primeira semana. */}
           <EmptyContent>
-            <Button asChild size="sm" className="cursor-pointer">
-              <Link to={`/eventos/${id}/briefing`}>
-                Abrir o Questionário <ArrowRight className="size-4" />
-              </Link>
-            </Button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button asChild size="sm" className="cursor-pointer">
+                <Link to={galeria}>
+                  Enviar referências <ArrowRight className="size-4" />
+                </Link>
+              </Button>
+              <Button asChild size="sm" variant="outline" className="cursor-pointer">
+                <Link to={`/eventos/${id}/briefing`}>Abrir o Questionário</Link>
+              </Button>
+            </div>
           </EmptyContent>
         </Empty>
       ) : (
         <div className="space-y-4">
-          {projeto.map((ambiente) => (
+          {/* ── REFERÊNCIAS DO EVENTO ────────────────────────────────────
+              As fotos que ainda não têm ambiente. Não são erro: é o estado
+              natural de quem acabou de subir vinte imagens. Ficam no topo,
+              como o conceito geral, com o convite a classificar. */}
+          {(projeto.semAmbiente.referencias.length > 0 ||
+            projeto.semAmbiente.semClassificacao.length > 0) && (
+            <section className="space-y-3 rounded-xl border border-border bg-card p-5">
+              <PrateleiraDeFotos
+                titulo="Referências do evento"
+                descricao="A direção estética geral, ainda sem ambiente."
+                tom="inspiracao"
+                destaque
+                fotos={projeto.semAmbiente.referencias}
+                verTodasEm={galeria}
+              />
+              <PrateleiraDeFotos
+                titulo="Ainda sem classificação"
+                descricao="Diga na Galeria se cada uma é inspiração ou contratada, e de que ambiente — elas passam a aparecer no lugar certo."
+                fotos={projeto.semAmbiente.semClassificacao}
+                verTodasEm={galeria}
+              />
+            </section>
+          )}
+
+          {projeto.ambientes.map((ambiente) => (
             <section
               key={ambiente.key}
               className="bg-card rounded-xl border border-border overflow-hidden"
             >
-              <div className="px-5 py-3 border-b border-border flex items-center justify-between gap-3">
-                <h2 className="font-semibold text-sm">
+              {/* O nome do ambiente é o protagonista do bloco: é por ele que
+                  ela procura quando está pensando "como vai ficar a mesa do
+                  bolo?". */}
+              <div className="flex items-baseline justify-between gap-3 border-b border-border px-5 py-4">
+                <h2 className="font-serif text-lg leading-tight">
                   {ambiente.emoji ? `${ambiente.emoji} ` : ""}
                   {ambiente.label}
                 </h2>
-                <p className="text-xs text-muted-foreground flex-shrink-0">
-                  {ambiente.itens.length}{" "}
-                  {ambiente.itens.length === 1 ? "item" : "itens"}
-                  {ambiente.referencias > 0 && ` · ${ambiente.referencias} referência${ambiente.referencias === 1 ? "" : "s"}`}
+                <p className="flex-shrink-0 text-xs text-muted-foreground">
+                  {ambiente.itens.length > 0 &&
+                    `${ambiente.itens.length} ${ambiente.itens.length === 1 ? "item" : "itens"}`}
                 </p>
               </div>
+
+              {/* ── AS TRÊS PRATELEIRAS ───────────────────────────────────
+                  Separadas e rotuladas: inspiração, decisão e resultado são
+                  coisas diferentes, e misturá-las é a confusão mais cara da
+                  decoração. */}
+              {(ambiente.referencias.length > 0 ||
+                ambiente.contratadas.length > 0 ||
+                ambiente.execucao.length > 0 ||
+                ambiente.foraDoEscopo.length > 0) && (
+                <div className="space-y-4 border-b border-border px-5 py-4">
+                  <PrateleiraDeFotos
+                    titulo="Contratado"
+                    descricao="O que foi definido para execução."
+                    tom="contratado"
+                    destaque={ambiente.execucao.length === 0}
+                    fotos={ambiente.contratadas}
+                    verTodasEm={galeria}
+                  />
+                  <PrateleiraDeFotos
+                    titulo="Inspiração"
+                    descricao="Direção estética — não é obrigação de montagem."
+                    tom="inspiracao"
+                    destaque={ambiente.contratadas.length === 0 && ambiente.execucao.length === 0}
+                    fotos={ambiente.referencias}
+                    verTodasEm={galeria}
+                  />
+                  <PrateleiraDeFotos
+                    titulo="Como ficou"
+                    descricao="Registro da execução."
+                    tom="execucao"
+                    destaque
+                    fotos={ambiente.execucao}
+                    verTodasEm={galeria}
+                  />
+                  <PrateleiraDeFotos
+                    titulo="Ficou de fora"
+                    descricao="Foi mostrado e não entrou no projeto."
+                    fotos={ambiente.foraDoEscopo}
+                    verTodasEm={galeria}
+                  />
+                </div>
+              )}
 
               <div className="divide-y divide-border">
                 {ambiente.itens.map((item) => {
@@ -225,6 +339,43 @@ export default function ProjetoDecoracaoPage() {
               </div>
             </section>
           ))}
+
+          {/* ── PLANTA ───────────────────────────────────────────────────
+              A planta já existia, na tela dela. O que faltava era estar perto
+              do projeto: a organização espacial é parte de "como vai ficar".
+
+              Só a VISUALIZAÇÃO. Marcar posição sobre a planta exigiria
+              coordenadas por ambiente — o começo de um editor, e decisão de
+              produto que não é desta rodada. */}
+          {planta?.outputUrl && (
+            <section className="overflow-hidden rounded-xl border border-border bg-card">
+              <div className="flex items-baseline justify-between gap-3 border-b border-border px-5 py-4">
+                <h2 className="font-serif text-lg leading-tight">Planta</h2>
+                <Link
+                  to={`/eventos/${id}/planta`}
+                  className="flex-shrink-0 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Abrir planta
+                </Link>
+              </div>
+              <img
+                src={planta.outputUrl}
+                alt="Planta do evento"
+                loading="lazy"
+                decoding="async"
+                className="w-full bg-muted object-contain"
+              />
+            </section>
+          )}
+
+          {/* A tela concentra imagem de propósito — e diz quando está pesada.
+              Não há miniatura no envio: cada foto aqui é o ORIGINAL. */}
+          {totalFotos > 40 && (
+            <p className="text-center text-xs text-muted-foreground">
+              {totalFotos} fotos classificadas neste evento. As prateleiras mostram as
+              primeiras de cada grupo — a Galeria tem todas.
+            </p>
+          )}
         </div>
       )}
     </div>

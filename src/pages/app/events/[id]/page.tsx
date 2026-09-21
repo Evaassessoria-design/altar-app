@@ -444,10 +444,10 @@ export default function EventDetailsPage() {
             <div className="flex items-center gap-3">
               <Layers className="size-5 text-primary" />
               <div>
-                <p className="font-medium text-sm">Projeto de decoração</p>
+                <p className="font-medium text-sm">Projeto visual</p>
                 <p className="text-xs text-muted-foreground">
-                  Ambientes, composições e referências visuais — o que está contratado e o que é
-                  inspiração
+                  Como o evento deve ficar: referências, contratado e resultado, ambiente por
+                  ambiente
                 </p>
               </div>
             </div>

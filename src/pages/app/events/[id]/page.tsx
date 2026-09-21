@@ -38,6 +38,7 @@ import {
   Wand2,
   Layers,
   Boxes,
+  Phone,
 } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
 import { sortEventTeam } from "@/lib/event-team.ts";
@@ -843,6 +844,26 @@ export default function EventDetailsPage() {
                         <span className="flex-shrink-0 italic">· sem horário</span>
                       )}
                     </div>
+                    {/* ── O TELEFONE, QUE FALTAVA ──────────────────────────
+                        No dia da montagem a ação mais frequente é ligar para
+                        quem não chegou. O número já vinha na consulta (é o
+                        cadastro da equipe) e a tela não o mostrava: a
+                        decoradora saía do evento, abria Equipe, procurava a
+                        pessoa e copiava o número na mão.
+
+                        `tel:` e não WhatsApp: quem está atrasado se resolve
+                        por ligação, e a discagem é do aparelho — nada é
+                        enviado por conta própria. */}
+                    {assignment.member?.phone?.trim() && (
+                      <a
+                        href={`tel:${assignment.member.phone.replace(/[^\d+]/g, "")}`}
+                        aria-label={`Ligar para ${assignment.member.name}`}
+                        className="mt-0.5 inline-flex items-center gap-1 min-h-9 sm:min-h-0 text-xs text-primary hover:underline cursor-pointer"
+                      >
+                        <Phone className="size-3 flex-shrink-0" />
+                        {assignment.member.phone}
+                      </a>
+                    )}
                     {assignment.notes && (
                       <p className="text-xs text-muted-foreground mt-0.5 truncate">
                         {assignment.notes}

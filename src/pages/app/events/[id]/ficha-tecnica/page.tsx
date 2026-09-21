@@ -82,7 +82,12 @@ function LinhaConsolidada({
       necessidadeNaCompra: number | null;
     };
     compraSemelhante: { _id: string; name: string; quantity?: number } | null;
-    comprasVinculadas: string[];
+    comprasVinculadas: {
+      _id: string;
+      name: string;
+      quantity?: number;
+      cancelada: boolean;
+    }[];
     precisaDeAtencao: boolean;
     motivoDaAtencao: string | null;
   };
@@ -97,6 +102,7 @@ function LinhaConsolidada({
   const visivel = resumoVisivel(linha.cobertura, linha.sugeridoOperacional);
   const vincular = useMutation(api.fichaTecnica.vincularCompra);
   const reconhecer = useMutation(api.fichaTecnica.reconhecerNecessidade);
+  const desvincular = useMutation(api.fichaTecnica.desvincularCompra);
 
   const agir = async (acao: () => Promise<unknown>, sucesso: string) => {
     setAgindo(true);
@@ -275,7 +281,7 @@ function LinhaConsolidada({
                   void agir(
                     () =>
                       reconhecer({
-                        purchaseId: linha.comprasVinculadas[0] as Id<"purchaseItems">,
+                        purchaseId: linha.comprasVinculadas[0]._id as Id<"purchaseItems">,
                       }),
                     "Necessidade reconhecida. A compra não foi alterada.",
                   )
@@ -283,6 +289,38 @@ function LinhaConsolidada({
               >
                 Reconhecer nova necessidade
               </Button>
+            </div>
+          )}
+
+          {/* ── O VÍNCULO TEM VOLTA ────────────────────────────────────
+              "Vincular a esta necessidade" existia e não tinha inverso.
+              Vincular a compra errada zerava o déficit desta linha e deixava
+              o carimbo da necessidade na compra — sem caminho de volta, e com
+              a tela afirmando cobertura que não existe. */}
+          {linha.comprasVinculadas.length > 0 && (
+            <div className="mb-2 space-y-1">
+              {linha.comprasVinculadas.map((c) => (
+                <div key={c._id} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="truncate text-muted-foreground">
+                    Compra vinculada: <span className="text-foreground">{c.name}</span>
+                    {c.quantity !== undefined && ` · ${quantidadeTexto(c.quantity, linha.unidade)}`}
+                    {c.cancelada && " · cancelada"}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={agindo}
+                    onClick={() =>
+                      void agir(
+                        () => desvincular({ purchaseId: c._id as Id<"purchaseItems"> }),
+                        "Compra desvinculada. Ela continua em Compras, sem alteração.",
+                      )
+                    }
+                    className="flex-shrink-0 min-h-9 sm:min-h-0 text-muted-foreground hover:text-destructive hover:underline cursor-pointer"
+                  >
+                    Desvincular
+                  </button>
+                </div>
+              ))}
             </div>
           )}
 

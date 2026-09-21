@@ -42,6 +42,9 @@ const APAGAM_DE_VERDADE: readonly (readonly [string, string])[] = [
   ["src/pages/app/events/[id]/orcamento/page.tsx", "orcamento.deleteItem"],
   ["src/pages/app/funil/_components/lead-documents.tsx", "leadDocuments.remove"],
   ["src/pages/app/events/[id]/acervo/page.tsx", "acervo.liberarReserva"],
+  // Apaga o lançamento de despesa que a compra gerou no Financeiro. A compra
+  // fica; o dinheiro sai do livro — e não há lixeira.
+  ["src/pages/app/compras/page.tsx", "purchases.unregisterCost"],
 ];
 
 describe("nenhuma exclusão acontece sem pergunta", () => {

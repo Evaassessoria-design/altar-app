@@ -283,6 +283,7 @@ function EventSection({
   onDelete,
   onSetStatus,
   onLancarCusto,
+  onDesfazerCusto,
 }: {
   event: Doc<"events">;
   items: Doc<"purchaseItems">[];
@@ -292,6 +293,7 @@ function EventSection({
   onDelete: (id: Id<"purchaseItems">) => void;
   onSetStatus: (id: Id<"purchaseItems">, status: PurchaseStatus) => void;
   onLancarCusto: (id: Id<"purchaseItems">) => void;
+  onDesfazerCusto: (id: Id<"purchaseItems">, nome: string) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const hoje = hojeDateKey();
@@ -412,12 +414,16 @@ function EventSection({
                               no livro-caixa — e é isso que deixa a margem do
                               evento incompleta. */}
                           {item.transactionId ? (
-                            <span
-                              className="inline-flex items-center gap-1 text-green-700 dark:text-green-400"
-                              title="Esta compra já está no financeiro"
+                            // Era um rótulo verde sem volta. Um lançamento
+                            // feito por engano ficava para sempre — e o custo
+                            // do evento saía afirmado sobre ele.
+                            <button
+                              onClick={() => void onDesfazerCusto(item._id, item.name)}
+                              className="inline-flex items-center gap-1 min-h-9 sm:min-h-0 text-green-700 dark:text-green-400 hover:underline cursor-pointer"
+                              title="Está no financeiro — clique para remover o lançamento"
                             >
                               <Check className="size-3" /> no financeiro
-                            </span>
+                            </button>
                           ) : (
                             !!item.unitPrice && (
                               <button
@@ -489,6 +495,7 @@ function ComprasContent() {
   const addPurchase = useMutation(api.purchases.addPurchase);
   const updatePurchase = useMutation(api.purchases.updatePurchase);
   const registerCost = useMutation(api.purchases.registerCost);
+  const unregisterCost = useMutation(api.purchases.unregisterCost);
   const setPurchaseStatus = useMutation(api.purchases.setPurchaseStatus);
 
   const [addingToEvent, setAddingToEvent] = useState<Id<"events"> | null>(null);
@@ -521,6 +528,42 @@ function ComprasContent() {
         e instanceof ConvexError
           ? (e.data as { message: string }).message
           : "Erro ao lançar no financeiro.",
+      );
+    }
+  };
+
+  /**
+   * Desfaz o lançamento que ESTA compra gerou no financeiro.
+   *
+   * Existia no servidor desde sempre, testado, e sem caminho na tela: um
+   * lançamento feito por engano — preço errado, compra que não era desta
+   * conta, clique trocado — ficava para sempre, e o custo do evento saía
+   * afirmado sobre ele.
+   *
+   * Pergunta antes porque APAGA um lançamento. Apaga só o que nasceu daqui;
+   * despesa que a decoradora criou à mão no Financeiro não é alcançada.
+   */
+  const handleDesfazerCusto = async (id: Id<"purchaseItems">, nome: string) => {
+    if (
+      !window.confirm(
+        `Remover do Financeiro o lançamento de "${nome}"? A compra continua aqui, e o ` +
+          "lançamento é apagado. Não há como desfazer.",
+      )
+    ) {
+      return;
+    }
+    try {
+      const r = await unregisterCost({ id });
+      toast.success(
+        r.removido
+          ? "Lançamento removido do financeiro. A compra continua na lista."
+          : "Esta compra já não tinha lançamento no financeiro.",
+      );
+    } catch (e) {
+      toast.error(
+        e instanceof ConvexError
+          ? (e.data as { message: string }).message
+          : "Erro ao remover o lançamento.",
       );
     }
   };
@@ -693,6 +736,7 @@ function ComprasContent() {
               onDelete={handleDelete}
               onSetStatus={handleSetStatus}
               onLancarCusto={handleLancarCusto}
+              onDesfazerCusto={handleDesfazerCusto}
             />
           ))}
         </div>
@@ -740,6 +784,7 @@ function EventSectionWithData({
   onDelete,
   onSetStatus,
   onLancarCusto,
+  onDesfazerCusto,
 }: {
   event: Doc<"events">;
   onAdd: (eventId: Id<"events">) => void;
@@ -748,6 +793,7 @@ function EventSectionWithData({
   onDelete: (id: Id<"purchaseItems">) => void;
   onSetStatus: (id: Id<"purchaseItems">, status: PurchaseStatus) => void;
   onLancarCusto: (id: Id<"purchaseItems">) => void;
+  onDesfazerCusto: (id: Id<"purchaseItems">, nome: string) => void;
 }) {
   const items = useQuery(api.purchases.listPurchases, { eventId: event._id });
 
@@ -765,6 +811,7 @@ function EventSectionWithData({
       onDelete={onDelete}
       onSetStatus={onSetStatus}
       onLancarCusto={onLancarCusto}
+      onDesfazerCusto={onDesfazerCusto}
     />
   );
 }

@@ -131,12 +131,22 @@ export const getFicha = query({
       return {
         ...linha,
         cobertura,
-        // Quem a tela precisa para oferecer "Vincular" e "Reconhecer" — ids,
-        // não objetos inteiros: a compra vive em Compras, não aqui.
+        // Só o que a tela precisa para oferecer "Vincular", "Reconhecer" e
+        // "Desvincular": nome, quantidade e id. A compra inteira continua
+        // morando em Compras — esta ficha não é uma segunda cópia dela.
         compraSemelhante: semelhante
           ? { _id: semelhante._id, name: semelhante.name, quantity: semelhante.quantity }
           : null,
-        comprasVinculadas: vinculadas.map((c) => c._id),
+        // Nome e quantidade junto com o id: sem eles a tela não consegue
+        // dizer QUAL compra está vinculada, e "Desvincular" viraria uma
+        // aposta. A compra continua morando em Compras — aqui vai só o
+        // suficiente para reconhecê-la.
+        comprasVinculadas: vinculadas.map((c) => ({
+          _id: c._id,
+          name: c.name,
+          quantity: c.quantity,
+          cancelada: effectivePurchaseStatus(c) === "cancelado",
+        })),
         precisaDeAtencao: precisaDeAtencao(cobertura, linha.tipoAmbiguo),
         motivoDaAtencao: motivoDaAtencao(cobertura, linha.tipoAmbiguo),
       };

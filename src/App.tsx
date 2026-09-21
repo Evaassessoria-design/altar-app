@@ -41,6 +41,7 @@ const CatalogoPage = lazy(() => import("./pages/app/catalogo/page.tsx"));
 const AcervoDoEventoPage = lazy(() => import("./pages/app/events/[id]/acervo/page.tsx"));
 const ConfiguracoesPage = lazy(() => import("./pages/app/configuracoes/page.tsx"));
 const CatalogoFornecedoresPage = lazy(() => import("./pages/app/fornecedores/page.tsx"));
+const FornecedorPage = lazy(() => import("./pages/app/fornecedores/[id]/page.tsx"));
 const EquipePage = lazy(() => import("./pages/app/equipe/page.tsx"));
 const ComprasPage = lazy(() => import("./pages/app/compras/page.tsx"));
 const FinanceiroPage = lazy(() => import("./pages/app/financeiro/page.tsx"));
@@ -132,6 +133,7 @@ function AppRoutes() {
         <Route path="/eventos/:id/ficha-tecnica" element={<FichaTecnicaPage />} />
         <Route path="/eventos/:id/acervo" element={<AcervoDoEventoPage />} />
         <Route path="/fornecedores" element={<CatalogoFornecedoresPage />} />
+        <Route path="/fornecedores/:id" element={<FornecedorPage />} />
         <Route path="/equipe" element={<EquipePage />} />
         <Route path="/compras" element={<ComprasPage />} />
         <Route path="/acervo" element={<AcervoPage />} />

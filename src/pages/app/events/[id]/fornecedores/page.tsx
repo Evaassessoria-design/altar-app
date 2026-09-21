@@ -56,6 +56,7 @@ import { format } from "date-fns";
 import { formatDateInput, formatEventDayOnly } from "@/lib/event-date.ts";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils.ts";
+import { SUPPLIER_STATUSES, type SupplierStatus } from "@/lib/supplier-status.ts";
 import {
   CATEGORIAS_DA_DECORACAO,
   CATEGORIAS_DO_EVENTO,
@@ -72,12 +73,7 @@ import {
 type SupplierRow = Doc<"eventSuppliers"> & { logoUrl: string | null };
 type OpItem = { label: string; value: string; group?: string };
 type Alignment = { date: string; note: string; by?: string; nextAction?: string };
-type SupplierStatus =
-  | "cotacao"
-  | "em_negociacao"
-  | "contratado"
-  | "confirmado"
-  | "finalizado";
+// O tipo vem do mesmo módulo dos rótulos — ver src/lib/supplier-status.ts.
 
 // ── Categorias + templates de campos operacionais (só UI) ─────────────────────
 
@@ -89,13 +85,10 @@ const GROUP_LABELS: Record<string, string> = {
 };
 const GROUP_ORDER = ["operacional", "operacao", "mesa_posta", "extra"];
 
-const STATUSES: { value: SupplierStatus; label: string; cls: string }[] = [
-  { value: "cotacao", label: "Cotação", cls: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300" },
-  { value: "em_negociacao", label: "Em negociação", cls: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
-  { value: "contratado", label: "Contratado", cls: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
-  { value: "confirmado", label: "Confirmado", cls: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
-  { value: "finalizado", label: "Finalizado", cls: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400" },
-];
+// A lista saiu daqui para `src/lib/supplier-status.ts` quando a página do
+// fornecedor passou a exibir a MESMA situação: copiá-la seria a segunda cópia
+// do mesmo conceito nesta tela, e a primeira já foi eliminada por divergir.
+const STATUSES = SUPPLIER_STATUSES;
 
 // A lista conceitual vive em convex/lib/escopoDecoradora.ts; os enfeites
 // (ícone e roteiro) em src/lib/supplier-metadata.ts. Esta tela não mantém mais

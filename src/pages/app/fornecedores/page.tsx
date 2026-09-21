@@ -411,7 +411,15 @@ export default function CatalogoFornecedoresPage() {
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-semibold text-sm">{f.companyName}</p>
+                  {/* O nome abre o fornecedor por inteiro — quanto já comprei,
+                      em que eventos, o que ficou em aberto. O cartão continua
+                      resumindo; a página responde. */}
+                  <Link
+                    to={`/fornecedores/${f._id}`}
+                    className="font-semibold text-sm hover:text-primary hover:underline cursor-pointer"
+                  >
+                    {f.companyName}
+                  </Link>
                   <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
                     {labelDaCategoria(f.category)}
                   </span>

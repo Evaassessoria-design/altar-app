@@ -4,6 +4,8 @@ import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireUser } from "./lib/identity";
 import { dedupKey, normalizeName, normalizePhone } from "./lib/supplierIdentity";
+import { effectivePurchaseStatus, isPendingStatus } from "./lib/purchaseStatus";
+import { somaEmDinheiro, emCentavos } from "./lib/dinheiro";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CATÁLOGO CENTRAL DE FORNECEDORES — "este fornecedor pertence a esta empresa".
@@ -104,6 +106,130 @@ export const listEventsForSupplier = query({
         }),
     );
     return resultado.filter((r) => r !== null);
+  },
+});
+
+/**
+ * Teto da varredura de compras de UM fornecedor.
+ *
+ * Não é paginação: a página SOMA, e somar exige ver tudo. É o limite a partir
+ * do qual ela para de conseguir somar — e passa a dizer isso em vez de
+ * afirmar o número que viu.
+ */
+const LIMITE_DE_COMPRAS = 300;
+
+/**
+ * O fornecedor por inteiro: quem é, onde já usei, o que já comprei.
+ *
+ * ── A PERGUNTA QUE ISTO RESPONDE ────────────────────────────────────────────
+ * Ela vai ligar para a floricultura. Antes de ligar, quer saber: já trabalhei
+ * com eles em quantos casamentos? quanto já comprei? ficou alguma coisa em
+ * aberto? Hoje a resposta exigia abrir evento por evento.
+ *
+ * ── O QUE ESTE NÚMERO É, E O QUE ELE NÃO É ──────────────────────────────────
+ * `totalComprado` é a soma de `unitPrice × quantity` das compras **não
+ * canceladas** deste fornecedor. É o que ela combinou com ele — NÃO é o que
+ * saiu do caixa: compra sem preço não entra, e o que foi de fato pago vive em
+ * `transactions` (ver lib/custoDoEvento.ts, que é quem responde por custo).
+ *
+ * Por isso a resposta diz também quantas compras estão SEM PREÇO: um total que
+ * ignora dez itens sem preço, exibido sozinho, engana.
+ *
+ * ── SEM N+1 ────────────────────────────────────────────────────────────────
+ * Uma leitura por índice para os vínculos, uma para as compras, e os nomes dos
+ * eventos de um `Map` montado numa passada — nunca uma consulta por linha.
+ */
+export const panorama = query({
+  args: { supplierId: v.id("suppliers") },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const supplier = await ctx.db.get(args.supplierId);
+    // Id de outra conta responde como inexistente: confirmar que existe já
+    // seria contar algo sobre o catálogo alheio.
+    if (!supplier || supplier.userId !== user._id) return null;
+
+    const [vinculos, comprasCruas] = await Promise.all([
+      ctx.db
+        .query("eventSuppliers")
+        .withIndex("by_supplier", (q) => q.eq("supplierId", args.supplierId))
+        .collect(),
+      ctx.db
+        .query("purchaseItems")
+        .withIndex("by_supplier", (q) => q.eq("supplierId", args.supplierId))
+        .take(LIMITE_DE_COMPRAS + 1),
+    ]);
+
+    // Os índices são por fornecedor. O dono é conferido aqui, e não por
+    // confiança na integridade do vínculo.
+    const meusVinculos = vinculos.filter((v) => v.userId === user._id);
+    const minhasCompras = comprasCruas.filter((c) => c.userId === user._id);
+    const temMaisCompras = minhasCompras.length > LIMITE_DE_COMPRAS;
+    const compras = minhasCompras.slice(0, LIMITE_DE_COMPRAS);
+
+    // Nomes dos eventos numa leitura só, indexada por dono.
+    const eventos = new Map(
+      (
+        await ctx.db
+          .query("events")
+          .withIndex("by_user", (q) => q.eq("userId", user._id))
+          .collect()
+      ).map((e) => [e._id as string, e]),
+    );
+
+    const valorDaCompra = (c: (typeof compras)[number]) =>
+      typeof c.unitPrice === "number" && Number.isFinite(c.unitPrice)
+        ? emCentavos(c.unitPrice * (typeof c.quantity === "number" && Number.isFinite(c.quantity) ? c.quantity : 1))
+        : 0;
+
+    const naoCanceladas = compras.filter((c) => effectivePurchaseStatus(c) !== "cancelado");
+    const semPreco = naoCanceladas.filter((c) => typeof c.unitPrice !== "number").length;
+
+    return {
+      supplier,
+      /** Eventos em que ele já foi usado, do mais recente para o mais antigo. */
+      eventos: meusVinculos
+        .map((v) => {
+          const evento = eventos.get(v.eventId as string);
+          return evento
+            ? {
+                eventId: evento._id,
+                nome: evento.name,
+                data: evento.date,
+                status: v.status,
+                /** O que ficou registrado como próximo passo com ele. */
+                proximaAcao: v.nextAction?.trim() || undefined,
+              }
+            : null;
+        })
+        .filter((e): e is NonNullable<typeof e> => e !== null)
+        .sort((a, b) => b.data.localeCompare(a.data)),
+      compras: {
+        total: naoCanceladas.length,
+        /** Compras não canceladas que ainda exigem ação. */
+        pendentes: naoCanceladas.filter((c) => isPendingStatus(effectivePurchaseStatus(c))).length,
+        canceladas: compras.length - naoCanceladas.length,
+        /** Quantas não têm preço — é o que impede o total de ser o total. */
+        semPreco,
+        /** `unitPrice × quantity` do que NÃO foi cancelado. Combinado, não pago. */
+        valor: somaEmDinheiro(naoCanceladas.map(valorDaCompra)),
+        /** As mais recentes, para reconhecer sem abrir evento nenhum. */
+        recentes: naoCanceladas
+          .slice()
+          .sort((a, b) => b._creationTime - a._creationTime)
+          .slice(0, 8)
+          .map((c) => ({
+            _id: c._id,
+            nome: c.name,
+            quantidade: c.quantity,
+            unidade: c.unit,
+            valor: valorDaCompra(c),
+            situacao: effectivePurchaseStatus(c),
+            evento: eventos.get(c.eventId as string)?.name,
+            eventId: c.eventId,
+          })),
+        temMais: temMaisCompras,
+      },
+    };
   },
 });
 

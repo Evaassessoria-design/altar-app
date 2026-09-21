@@ -606,7 +606,11 @@ export default defineSchema({
     // O panorama de compras lê TODAS as compras da empresa de uma vez (a
     // pergunta de segunda-feira: "o que resolvo esta semana?"). Sem este
     // indice a consulta varreria a tabela de todos os usuarios.
-    .index("by_user", ["userId"]),
+    .index("by_user", ["userId"])
+    // "O que eu já comprei deste fornecedor?" é a pergunta que se faz antes de
+    // ligar para ele. Sem o índice, a resposta exigiria varrer todas as
+    // compras da empresa — que crescem a cada evento, para sempre.
+    .index("by_supplier", ["supplierId"]),
 
   budgetItems: defineTable({
     userId: v.id("users"),

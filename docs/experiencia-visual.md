@@ -212,24 +212,74 @@ com foto grande vira um documento de 60 páginas para levar ao galpão. É
 
 ---
 
-## 6. Imagens e custo
+## 6. Imagens e custo — RESOLVIDO na maior parte
 
 | | Situação |
 |---|---|
 | Teto de upload | 15 MB por imagem (`lib/upload.ts`) |
-| Redução no upload | **não existe** — o original vai inteiro para o storage |
-| Redução no PDF | **existe**: canvas → JPEG 0,7, 320px (miniatura) e 1400px (planta) |
-| Falha de imagem | nunca derruba o documento (`loadThumbnail` devolve `null`) |
-| Lazy loading | a grade da galeria tem; as imagens únicas não precisam |
-| Storage órfão | a cascata de exclusão apaga arquivo (`cascade.test.ts`) |
+| Redução no upload | **existe** — versão leve de 1400 px, JPEG 0,72 (`lib/imagem-reduzida.ts`) |
+| Redução no PDF | existe: canvas → JPEG 0,7, 320 px (miniatura) e 1400 px (planta) |
+| Falha de imagem | nunca derruba o documento nem o envio: devolve `null` |
+| Lazy loading | a grade da galeria e as prateleiras têm |
+| Storage órfão | a cascata apaga os DOIS arquivos (`preview-da-foto.test.ts`) |
 
-**O risco é o original de 15 MB servido na grade.** Não há thumbnail no
-storage: a galeria baixa a foto inteira para desenhar um quadrado de 120px.
-Com 70 fotos num evento, num galpão com 4G, isso é lento e caro.
+### Como funciona
 
-**Gatilho para corrigir:** quando uma conta passar de ~200 fotos, ou na
-primeira reclamação de lentidão na galeria. A correção é gerar uma versão
-reduzida no upload — não um pipeline de processamento.
+A redução acontece **no navegador, no momento do envio**. Não é técnica nova
+aqui: o Caderno de Montagem já reduz imagem exatamente assim desde que passou
+a levar foto. `imagem-reduzida.ts` é aquela ideia, movida para o envio e
+escrita uma vez só.
+
+`eventPhotos.previewStorageId` é **opcional e aditivo**. Foto antiga não tem, e
+cai no original — é o fallback, e é por ele que **não existe backfill**.
+
+**O original nunca é tocado.** Sobe inteiro, primeiro, sempre. Se a geração
+falhar, a foto é salva exatamente como antes desta rodada.
+
+### Um tamanho, não dois
+
+Medido antes de decidir:
+
+| Superfície | CSS | Tela em DPR 3 |
+|---|---|---|
+| Grade da Galeria | 138 px | ~414 px |
+| Prateleira do Projeto | 77–120 px | ~360 px |
+| Capa no telefone | até 430 px | ~1290 px |
+| Capa no computador | 720 px | ~1440 px (DPR 2) |
+
+1400 px atende o maior com nitidez. Dois arquivos economizariam banda na grade
+e custariam **um terceiro upload por foto**, no pior momento possível: ela
+subindo trinta fotos do sítio, no 4G. **Upload é o gargalo dela; download é o
+nosso.**
+
+Se a grade um dia provar-se lenta, cabe acrescentar uma miniatura sem mexer em
+nada: o campo é opcional e a regra de exibição é uma função só.
+
+### Quem ainda baixa o original
+
+O **visualizador em tela cheia**, e é deliberado: uma imagem por vez, ampliada
+com intenção, para decidir um detalhe. O download também entrega o arquivo que
+ela enviou. Há teste que falha se alguém "otimizar" isso.
+
+### O que a redução NÃO resolve
+
+- **Fotos já enviadas** continuam pesando o que pesam. Não há backfill, e
+  fazê-lo exigiria reprocessar no servidor — a infraestrutura que esta solução
+  existe para evitar.
+- **HEIC vindo do app Arquivos do iPhone** no Android: o navegador não
+  decodifica, a versão leve não é gerada, e a foto sobe só com o original.
+  Pela câmera ou pelo álbum, o iOS costuma entregar JPEG e funciona. **Não
+  prometemos o que o navegador não oferece.**
+- **O storage cresce ~2%**: cada foto nova passa a ter um derivado de ~250 KB
+  ao lado de um original de vários MB. É o preço, e é barato.
+
+### Uma pendência encontrada nesta auditoria
+
+`loadThumbnail`, nos PDFs, **não** passa `imageOrientation: "from-image"`. Se o
+navegador não fizer isso por padrão, foto de retrato do iPhone sai **deitada no
+Caderno de Montagem**. Não foi alterado nesta rodada — mexer na saída de um PDF
+não era o escopo, e só o aparelho responde se o defeito é real. **Está no
+checklist de amanhã.**
 
 ---
 

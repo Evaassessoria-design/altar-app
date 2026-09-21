@@ -231,13 +231,38 @@ agora, e a que mais depende de olho.
 
 ---
 
-**21. Central em modo simulado.** `ALTAR_CENTRAL_ENVIO_HABILITADO` tem de estar
+**21. O peso das fotos — só o aparelho responde.** É o passo que precisa de
+4G de verdade, não de Wi-Fi do escritório.
+
+1. **Suba uma foto nova** pelo iPhone, pela câmera e pelo álbum. As duas
+   precisam aparecer na grade. Se uma delas vier do app **Arquivos** em
+   formato HEIC, ela ainda sobe — só não ganha versão leve.
+2. **Confira a orientação**: foto tirada em RETRATO tem de aparecer em pé na
+   grade, no Projeto Visual e na capa. Deitada = a redução ignorou o EXIF.
+3. **Abra a foto em tela cheia.** Aqui é o original, de propósito: tem de
+   estar nítido ao ampliar.
+4. **Baixe a foto** pelo botão de download. O arquivo tem de ser o que você
+   enviou — mesmo tamanho, mesma qualidade.
+5. **Num evento com muitas fotos**, role a Galeria no 4G e cronometre. Antes
+   desta rodada cada quadradinho baixava até 15 MB; agora, ~250 KB.
+6. **Abra o Projeto Visual com capa definida** e cronometre até a capa
+   aparecer. É o número que decide se 1400 px foi generoso ou insuficiente.
+7. **Fotos ANTIGAS** (enviadas antes de hoje) continuam pesadas — não há
+   backfill. Confirme que elas ainda aparecem normalmente; só não ficaram
+   mais rápidas.
+8. **Gere o Caderno de Montagem** de um evento com foto de retrato no item de
+   montagem. **Se a foto sair deitada no PDF**, encontramos a pendência
+   anotada em `docs/experiencia-visual.md §6` — anote e me diga.
+
+---
+
+**22. Central em modo simulado.** `ALTAR_CENTRAL_ENVIO_HABILITADO` tem de estar
 **ausente ou diferente de `"true"`**. Aprovar uma mensagem e confirmar que ela
 termina em `aprovada`, **nunca** em `executada`. Nada sai.
 
 ---
 
-## 22. Relatório
+## 23. Relatório
 
 Anotar, em uma linha cada: o que quebrou, o que pareceu confuso, e o que uma
 decoradora perguntaria. O que não couber em uma linha vira tarefa, não

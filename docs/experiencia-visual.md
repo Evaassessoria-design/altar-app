@@ -273,6 +273,35 @@ direto.
 **Nada disto foi aberto em telefone.** São contas de CSS, e contas de CSS não
 substituem o polegar de ninguém.
 
+### A capa e o conceito — AUDITORIA ESTÁTICA, AGUARDA TESTE REAL
+
+A capa é `aspect-[3/2]` no telefone e `aspect-[2/1]` a partir de `md`. Com o
+`p-4` da página, a altura fica:
+
+| Largura | Conteúdo | Altura da capa |
+|---|---|---|
+| 320 px | 288 px | **192 px** |
+| 375 px | 343 px | 229 px |
+| 390 px | 358 px | 239 px |
+| 430 px | 398 px | 265 px |
+| ≥768 px | 720 px (2:1) | 360 px |
+
+192 px num telefone de 320 é cerca de um terço da tela: a imagem abre o
+evento sem empurrar o nome para fora da dobra.
+
+| Ponto | Estado estático |
+|---|---|
+| Nome longo do evento | `break-words`; nome sem espaço não estoura |
+| Local comprido | `break-words` na mesma linha de data e tipo |
+| Capa chegando depois | espaço **reservado** assim que o evento diz que há capa |
+| Ponteiro para foto apagada | nenhuma caixa cinza: cai na capa tipográfica |
+| Conceito | serifa, `leading-relaxed`, `max-w-prose`, borda à esquerda |
+| Atmosfera muito longa | **risco residual**: o texto é dela e não é cortado |
+
+O último ponto é uma escolha, não um descuido: `line-clamp` esconderia o que
+ela escreveu. Se virar parede de texto na prática, a correção é um "ver mais"
+— e isso se decide vendo, não prevendo.
+
 ---
 
 ## 8. Decisões adiadas
@@ -293,11 +322,8 @@ Nenhuma é técnica. Todas mudam o produto.
    imagem por IA: seria cor inventada apresentada como decisão dela.
 5. **Redução de imagem no upload.** Ver §6.
 
-6. **Foto de capa do projeto.** A capa é tipográfica de propósito. Escolher "a
-   primeira foto" ou "a primeira referência" seria regra inventada em silêncio,
-   e a capa de um casamento é decisão dela. Para existir capa, precisa existir
-   um jeito de ESCOLHER — um campo no evento, ou uma marcação na galeria. É
-   decisão de produto, não de código.
+6. ~~**Foto de capa do projeto.**~~ **FEITA** — o jeito de ESCOLHER passou a
+   existir, na Galeria, e a tela continua sem escolher sozinha. Ver §9.
 
 7. **Moodboard como tela própria.** As prateleiras do Projeto Visual já são um
    moodboard organizado por ambiente. O que falta — e que é decisão — é poder
@@ -331,55 +357,109 @@ caderno dividido por assunto de reunião, não por lugar de montagem.
 
 ---
 
-## 9. Foto de capa — o menor modelo possível
+## 9. Foto de capa — IMPLEMENTADA
 
-**Investigado, não implementado. Nenhuma linha de schema foi tocada.**
+A análise desta seção previa `v.optional(v.id("eventPhotos"))` no evento. Foi
+exatamente isso, e vale registrar por quê e como.
 
-A pergunta é "o que precisaria existir para ela poder dizer *esta é a capa*".
+### Como funciona
 
-**Onde mora.** No **evento**, não na foto. Um campo em `eventPhotos`
-(`ehCapa: boolean`) precisaria ser desmarcado em todas as outras a cada troca
-— um estado que envelhece e exige varredura. Um campo em `events` é uma linha
-só, e "só pode haver uma" vira consequência do tipo, não de disciplina.
+`events.coverPhotoId` — um ponteiro opcional para a linha da galeria. **Mesma
+forma de `events.responsibleId`**, que já apontava para `teamMembers`:
+`v.union(v.id(...), v.null())` no `update`, helper de posse antes de gravar,
+`null` para limpar.
 
-**O que guardar: `v.optional(v.id("eventPhotos"))`.** Não o `storageId`.
+Não é `storageId` e não é cópia. O arquivo continua sendo um só, a capa herda
+ambiente, legenda e classificação da foto, e apagar a foto tem como limpar a
+capa — coisas que um `storageId` não permitiria.
 
-| | id da foto | storageId |
+`requireEventPhoto` faz **três** perguntas: a foto existe, é da conta, **e é
+deste evento**. A terceira não é zelo: sem ela, a capa de Marina & Gabriel
+poderia ser uma foto do casamento da Joana. Os dois eventos são da mesma
+decoradora, nenhuma regra de posse é violada, e ainda assim é a foto errada no
+documento errado.
+
+### A escolha mora na Galeria
+
+É onde ela olha foto por foto. No Projeto Visual, escolher transformaria em
+editor justamente a tela que ela vira para a cliente.
+
+Definir, trocar, remover e **ver qual é** (selo na grade). Ação imediata, fora
+do "Salvar" da legenda: um botão que grava em duas tabelas deixa metade salva
+quando a outra metade falha.
+
+### Quando a foto é removida
+
+`gallery.deletePhoto` **limpa a capa antes de apagar**. A tela degrada para a
+capa tipográfica de qualquer jeito — mas ponteiro quebrado no banco é dívida
+calada: quem ler o campo amanhã não sabe se a capa foi removida ou se o dado
+se perdeu. A exclusão do evento inteiro continua na cascata de sempre.
+
+### Sem capa
+
+A abertura continua **tipográfica**, e isso não é plano B: "a primeira foto"
+seria regra inventada em silêncio. Nada é escolhido automaticamente, não há
+IA, e o demo — que não sobe imagem nenhuma — abre bem.
+
+### O risco que ficou
+
+A capa é o **arquivo original**, que pode ter 15 MB, e está acima da dobra.
+Não há miniatura no envio (§6), e construir esse sistema nesta rodada dobraria
+o escopo. O que foi feito: espaço reservado assim que o evento diz que existe
+capa (a tela não pula na cara de quem olha) e `decoding="async"`.
+
+**O que NÃO foi feito e continua valendo:** gerar versão reduzida no upload.
+É o mesmo gatilho do §6, e a capa o antecipa — ela é a primeira imagem que
+uma noiva vê num 4G de fazenda.
+
+---
+
+## 9b. O conceito do evento — IMPLEMENTADO, sem campo novo
+
+Três campos que **já existiam** no grupo "Conceito do Evento" do Questionário
+e não apareciam em lugar nenhum do projeto:
+
+| Campo | Vira | Audiência |
 |---|---|---|
-| A capa some quando a foto é apagada | sim, com um `null` explícito | não: aponta para arquivo deletado |
-| Herda classificação e ambiente | sim | não |
-| Duplica o arquivo | não | não, mas duplica a verdade |
+| `decorStyle` | "Jardim contemporâneo" | `ALL` |
+| `colorPalette` | "Verde oliva e branco" | `ALL` |
+| `atmosphereDescription` | o parágrafo | `ALL` |
 
-**Se a foto for apagada** — e é o ponto que decide o desenho —
-`gallery.deletePhoto` hoje apaga a linha e o arquivo e **não limpa referência
-nenhuma**. Com um `coverPhotoId`, ele passaria a ter de limpar a capa do
-evento antes de apagar. Sem isso a tela pediria uma foto que não existe e
-mostraria o quadrado quebrado que o resto do produto já evita. É a mesma
-correção que `assemblyItems.setPhoto` já faz quando troca a foto de um item.
+Ela descrevia o casamento numa tela e abria a outra sem ele.
 
-**Só pode haver uma?** Sim, e é bom que seja: capa é singular por definição.
-Trocar é sobrescrever, e sobrescrever não deixa órfão porque o arquivo
-continua na galeria — a capa é um ponteiro, não uma cópia.
+**Quem escolhe os campos é `src/lib/conceito-do-evento.ts`**, e ele constrói o
+objeto campo a campo — não existe `...briefing` ali, e a ausência é a regra.
+`getBriefing` devolve a linha inteira, com contato do espaço, seguro e
+pagamento dentro, e esta é a tela que ela vira para a noiva. A fronteira mora
+na transformação, como em `paraOCliente`, não numa tela que esconde.
 
-**Tenant isolation:** sem impacto novo, desde que a mutation confira as DUAS
-posses — o evento e a foto — e que a foto pertença àquele evento. Um
-`v.id("eventPhotos")` vindo do navegador não é prova de posse (é a trava 2 do
-`CLAUDE.md`), e capa aceitando foto de outro evento da mesma conta já seria
-errado.
+**Nenhuma paleta é inferida.** "Verde oliva e branco" continua sendo o texto
+dela. Virar amostra de cor exigiria adivinhar que verde é esse — cor inventada
+apresentada como decisão dela. Há teste que falha se um hexadecimal aparecer
+no módulo ou na seção.
 
-**Exportação:** hoje não existe export de arquivo
-(`docs/portabilidade-dados.md`), então a capa não muda nada. No dia em que
-existir, ela é um ponteiro para uma foto que já está no pacote — não um
-arquivo a mais.
+**Campo vazio não aparece. Os três vazios e a seção some** — evento novo não
+tem conceito escrito, e isso não é defeito.
 
-**Demo:** o seed não sobe imagem nenhuma por desenho. Sem foto, não há capa a
-semear, e a tela precisa continuar boa sem ela — é por isso que a capa
-tipográfica **fica**, mesmo depois de a escolha existir. Capa é adorno, não
-requisito.
+O quarto campo do grupo, **`referenceImages`** ("Imagens de Referência
+(URLs)"), ficou de fora de propósito: é uma caixa de texto anterior à Galeria,
+e trazê-la criaria um segundo lugar para guardar referência — o defeito que a
+rodada do ambiente acabou de tirar daqui. **Continua pendente de decisão**
+(§8): aposentar ou assumir que é o campo de link externo.
 
-**O que falta não é código: é a decisão de onde ela escolhe.** Na galeria
-("usar como capa" no menu da foto) ou no projeto (um seletor no topo). Isso é
-decisão visual, e é para amanhã.
+---
+
+## 9c. O que continua NÃO implementado
+
+Para não restar dúvida depois desta rodada:
+
+- **Biblioteca de inspirações** — não existe. Nenhuma tabela, nenhuma tela.
+  A especificação está no relatório da rodada de design, não no código.
+- **PDF do Projeto Visual** — não existe. Continua faltando `visibility` em
+  `eventPhotos` (§10).
+- **Moodboard, paleta automática, extração de cor, IA sobre imagem** — nada
+  disso foi construído.
+- **Redesenho dos PDFs** — nenhum dos seis foi tocado nesta rodada.
 
 ---
 

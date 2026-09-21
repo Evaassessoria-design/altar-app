@@ -207,13 +207,37 @@ em detalhe.
 
 ---
 
-**20. Central em modo simulado.** `ALTAR_CENTRAL_ENVIO_HABILITADO` tem de estar
+**20. A capa e o conceito do Projeto Visual.** É a rodada mais visual até
+agora, e a que mais depende de olho.
+
+1. Num evento com fotos, abra a **Galeria**, clique no lápis de uma foto e
+   use **"Usar como capa"**. A foto deve ganhar o selo **Capa** na grade.
+2. Abra o **Projeto Visual**: a foto abre a tela, com o nome do evento
+   **abaixo** dela — nunca por cima.
+3. Volte à Galeria e defina **outra** foto como capa. A anterior perde o selo:
+   é uma capa por evento, sempre.
+4. **Remover capa** na foto que é capa. O projeto volta à abertura
+   tipográfica, sem buraco nem caixa cinza.
+5. **Apague** a foto que é capa. O projeto volta ao título — e não pode
+   aparecer imagem quebrada em lugar nenhum.
+6. No **Questionário**, preencha "Estilo da Decoração", "Paleta de Cores" e
+   "Atmosfera". No Projeto Visual eles aparecem logo abaixo do nome, em
+   serifa. Apague os três: a seção inteira **some**.
+7. Num evento **novo**, sem foto e sem briefing: a tela abre tipográfica e
+   sem seção de conceito. Não pode haver espaço vazio pedindo imagem.
+8. **No iPhone, com 4G de verdade**: quanto tempo a capa leva para aparecer?
+   Ela é o arquivo ORIGINAL — não há miniatura no envio. Se demorar, anote o
+   tempo: é o gatilho para a redução de imagem no upload.
+
+---
+
+**21. Central em modo simulado.** `ALTAR_CENTRAL_ENVIO_HABILITADO` tem de estar
 **ausente ou diferente de `"true"`**. Aprovar uma mensagem e confirmar que ela
 termina em `aprovada`, **nunca** em `executada`. Nada sai.
 
 ---
 
-## 21. Relatório
+## 22. Relatório
 
 Anotar, em uma linha cada: o que quebrou, o que pareceu confuso, e o que uma
 decoradora perguntaria. O que não couber em uma linha vira tarefa, não

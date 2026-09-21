@@ -110,6 +110,16 @@ export default function ProjetoDecoracaoPage() {
       : null) ?? null;
 
   /**
+   * O evento chega antes das fotos, e já diz SE existe capa.
+   *
+   * Sem isto a tela desenharia o título, baixaria as fotos e empurraria tudo
+   * para baixo quando a imagem chegasse — na frente de quem está olhando. O
+   * espaço fica reservado só enquanto a lista não chegou: ponteiro que
+   * sobreviveu a uma foto apagada não vira caixa cinza permanente.
+   */
+  const capaPendente = !!event?.coverPhotoId && fotos === undefined;
+
+  /**
    * Quantas fotos ainda não dizem o que são.
    *
    * Inclui as que TÊM ambiente: uma foto situada no Salão de vidro mas sem
@@ -164,14 +174,18 @@ export default function ProjetoDecoracaoPage() {
           `brand.ts` já registra a lição no documento: um fundo claro demais
           com texto claro em cima é pior do que não personalizar. Aqui não há
           contraste a medir porque não há sobreposição. */}
-      {capa?.url && (
+      {(capa?.url || capaPendente) && (
         <div className="overflow-hidden rounded-xl bg-muted">
-          <img
-            src={capa.url}
-            alt={capa.caption?.trim() || `Capa do projeto de ${event?.name ?? "evento"}`}
-            decoding="async"
-            className="aspect-[3/2] w-full object-cover md:aspect-[2/1]"
-          />
+          {capa?.url ? (
+            <img
+              src={capa.url}
+              alt={capa.caption?.trim() || `Capa do projeto de ${event?.name ?? "evento"}`}
+              decoding="async"
+              className="aspect-[3/2] w-full object-cover md:aspect-[2/1]"
+            />
+          ) : (
+            <div className="aspect-[3/2] w-full md:aspect-[2/1]" />
+          )}
         </div>
       )}
 
@@ -212,7 +226,7 @@ export default function ProjetoDecoracaoPage() {
             </p>
           )}
           {conceito.atmosfera && (
-            <p className="font-serif text-base leading-relaxed text-foreground/90 whitespace-pre-line">
+            <p className="max-w-prose font-serif text-base leading-relaxed text-foreground/90 whitespace-pre-line">
               {conceito.atmosfera}
             </p>
           )}

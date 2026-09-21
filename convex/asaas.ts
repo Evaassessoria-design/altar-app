@@ -563,9 +563,16 @@ export const cancelSubscription = action({
 
 // ── Get Asaas customer portal URL ────────────────────────────────────────────
 
-export const getCustomerPortalUrl = action({
-  args: { asaasCustomerId: v.string() },
-  handler: async (_ctx, args): Promise<{ url: string }> => {
-    return { url: `https://www.asaas.com/c/${args.asaasCustomerId}` };
-  },
-});
+// `getCustomerPortalUrl` foi REMOVIDO. Era uma `action` PÚBLICA sem nenhuma
+// guarda — `_ctx`, sem `requireUser` — que recebia um id de cliente do
+// navegador e devolvia uma URL montada a partir dele. Nunca teve chamador em
+// tela nenhuma.
+//
+// O risco de informação era nulo (só concatenava o que o chamador já tinha),
+// mas a regra nº 1 do repositório não abre exceção por inofensividade: toda
+// função pública passa por um guarda. Uma porta aberta que ninguém usa é uma
+// porta que ninguém revisa — e esta ficaria no meio do módulo que fala com o
+// Asaas, que é o último lugar onde alguém quer encontrar uma.
+//
+// Se um dia o portal do assinante ganhar tela, ele nasce com `requireUser` e
+// lendo `user.asaasCustomerId` do banco, nunca do argumento.

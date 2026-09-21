@@ -96,8 +96,10 @@ Funções que existem, são testadas e ninguém consegue chamar pelo aplicativo:
   esvazia o item; o que `limparReceita` faz a mais é também soltar a
   procedência (`compositionId`)
 - Notificações: `generateMyAlerts`
-- Assinatura: `asaas.getCustomerPortalUrl` (sem uso e sem guarda — ver
-  "Recomendações")
+- *(Saiu: `asaas.getCustomerPortalUrl` foi REMOVIDO. Era uma action pública sem
+  guarda e sem chamador, que montava a URL do portal a partir de um id vindo do
+  navegador. Quando o portal do assinante ganhar tela, ele nasce com
+  `requireUser` lendo `asaasCustomerId` do banco.)*
 
 Saiu desta lista porque foi REMOVIDO: `supplierCatalog.get` — quando
 `/fornecedores/:id` chegou, quem respondeu foi um `panorama` novo, e o `get`

@@ -1,5 +1,5 @@
 import { ConvexError } from "convex/values";
-import { VALOR_MAXIMO, valorMonetarioValido } from "./dinheiro";
+import { VALOR_MAXIMO } from "./dinheiro";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // O NÚMERO QUE PODE SER GRAVADO
@@ -47,9 +47,11 @@ export function exigirDinheiroGravavel(
   campo: string,
 ): void {
   if (valor === null || valor === undefined) return;
+  // Uma condição por recado: `valorMonetarioValido` responde sim ou não, e um
+  // "valor inválido" genérico não diz a ninguém o que corrigir.
   if (!Number.isFinite(valor)) recusar(campo, "informe um valor em reais.");
   if (valor < 0) recusar(campo, "não pode ser negativo.");
-  if (!valorMonetarioValido(valor)) {
+  if (valor > VALOR_MAXIMO) {
     recusar(campo, `acima do limite de ${VALOR_MAXIMO.toLocaleString("pt-BR")}. Confira os zeros.`);
   }
 }

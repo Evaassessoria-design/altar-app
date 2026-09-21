@@ -4,6 +4,7 @@ import { ConvexError } from "convex/values";
 import { getOwnedEvent, requireEventOwner, requireIdentity, requireUser, getOptionalUser } from "./lib/identity";
 import { requireActiveAccess } from "./lib/accessGuard";
 import { limparCampos } from "./lib/limparCampos";
+import { exigirQuantidadeGravavel } from "./lib/numeroGravavel";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Itens operacionais de montagem. Camada de dados do Caderno de Montagem.
@@ -189,6 +190,10 @@ export const update = mutation({
     if (!item || item.userId !== user._id) {
       throw new ConvexError({ message: "Item não encontrado", code: "NOT_FOUND" });
     }
+    // A quantidade do item de montagem multiplica a receita inteira: um `NaN`
+    // aqui atravessa o consolidado, a geração de compras e a folha de
+    // carregamento. `null` continua LIMPANDO o campo (lib/limparCampos.ts).
+    exigirQuantidadeGravavel(args.quantity, "Quantidade");
     const { id, ...fields } = args;
     await ctx.db.patch(id, {
       ...limparCampos(fields),

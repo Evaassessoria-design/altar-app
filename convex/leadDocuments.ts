@@ -5,6 +5,7 @@ import type { QueryCtx } from "./_generated/server";
 import { getOwnedEvent, getOwnedLead, requireIdentity, requireLeadOwner, requireUser } from "./lib/identity";
 import { requireActiveAccess } from "./lib/accessGuard";
 import { safeDeleteFile } from "./lib/cascade";
+import { exigirQuantidadeGravavel } from "./lib/numeroGravavel";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DOCUMENTOS DO LEAD
@@ -85,6 +86,9 @@ export const save = mutation({
     fileSize: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    // Vem do navegador e é só exibido, mas `NaN bytes` na tela da pasta do
+    // evento é o mesmo tipo de ruído que faz duvidar do resto.
+    exigirQuantidadeGravavel(args.fileSize, "Tamanho do arquivo");
     const { user } = await requireLeadOwner(ctx, args.leadId);
 
     const fileName = args.fileName.trim();

@@ -77,6 +77,13 @@ export function aplicarAjuste(entrada: {
   unidade: string;
 }): ResultadoDoAjuste {
   const { quantidadeAtual, tipo, unidade } = entrada;
+  // ANTES de limpar. `quantidadeLimpa(NaN)` devolve 0, e daí em diante um
+  // valor impossível é indistinguível de um zero digitado — o ajuste era
+  // recusado, mas com o recado errado ("um ajuste de zero não muda nada"),
+  // que manda a decoradora procurar o problema no lugar errado.
+  if (!Number.isFinite(entrada.quantidade)) {
+    return { ok: false, motivo: "Informe a quantidade do ajuste." };
+  }
   const quantidade = quantidadeLimpa(entrada.quantidade);
 
   if (!quantidadeFisicaValida(quantidade, unidade)) {
@@ -116,6 +123,16 @@ export function aplicarContagem(entrada: {
   unidade: string;
 }): ResultadoDoAjuste {
   const { quantidadeAtual, unidade } = entrada;
+  // ── O DEFEITO QUE ESTA LINHA FECHA ────────────────────────────────────────
+  // `quantidadeLimpa(NaN)` devolve 0, e `quantidadeFisicaValida(0)` é
+  // verdadeiro. Uma contagem com valor impossível passava por válida e era
+  // gravada como "contei ZERO" — zerando o estoque da peça e deixando o
+  // ajuste registrado no histórico como se alguém tivesse contado mesmo.
+  //
+  // É diferente do ajuste, que ao menos recusava. Aqui o estrago era gravado.
+  if (!Number.isFinite(entrada.quantidadeContada)) {
+    return { ok: false, motivo: "Informe a quantidade contada." };
+  }
   const contada = quantidadeLimpa(entrada.quantidadeContada);
 
   if (!quantidadeFisicaValida(contada, unidade)) {

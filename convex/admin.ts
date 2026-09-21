@@ -8,6 +8,7 @@ import { ALTAR_ADMIN_ROLE, effectiveSubscriptionStatus, resolveAccess } from "./
 import { deleteUserDataCascade } from "./lib/cascade";
 import { ACTIVE_WINDOWS, isActiveWithin } from "./lib/presence";
 import { deleteBetterAuthAccount } from "./lib/authAccount";
+import { exigirNumeroReal } from "./lib/numeroGravavel";
 
 // ─── Auth helpers ──────────────────────────────────────────────────────────
 
@@ -259,6 +260,9 @@ export const setUserAccess = mutation({
     if (!target) {
       throw new ConvexError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
     }
+    // Epoch em `NaN` faz o acesso beta expirar em "Invalid Date": a conta não
+    // é bloqueada nem liberada, e o painel não sabe dizer qual das duas.
+    exigirNumeroReal(args.accessExpiresAt, "Data de expiração");
     if (args.accessType === "beta" && args.accessExpiresAt === undefined) {
       throw new ConvexError({
         code: "BAD_REQUEST",

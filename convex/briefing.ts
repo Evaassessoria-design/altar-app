@@ -2,6 +2,7 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { getOwnedEvent, requireEventOwner, requireUser } from "./lib/identity";
+import { exigirNumeroReal, exigirQuantidadeGravavel } from "./lib/numeroGravavel";
 
 // Briefing fields validator (all optional strings)
 const briefingFields = {
@@ -165,6 +166,10 @@ export const addChecklistItem = mutation({
   },
   handler: async (ctx, args) => {
     const { user } = await requireEventOwner(ctx, args.eventId);
+    // A quantidade sai impressa na folha de carregamento, que é papel levado
+    // ao galpão. "Providenciar NaN un" não é um erro que alguém corrige lá.
+    exigirQuantidadeGravavel(args.quantity, "Quantidade");
+    exigirNumeroReal(args.order, "Posição");
     // Auto-compute order if not provided
     let order = args.order;
     if (order === undefined) {
@@ -215,6 +220,7 @@ export const updateChecklistItem = mutation({
     if (!item || item.userId !== user._id) {
       throw new ConvexError({ message: "Item não encontrado", code: "NOT_FOUND" });
     }
+    exigirQuantidadeGravavel(args.quantity, "Quantidade");
     const { id, ...patch } = args;
     await ctx.db.patch(id, patch);
   },

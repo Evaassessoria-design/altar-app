@@ -9,6 +9,11 @@ import { dataDoDia } from "./lib/dataDoDia";
 import { requireActiveAccess } from "./lib/accessGuard";
 import { limparCampos } from "./lib/limparCampos";
 import { diasSemContato, resumirFollowUp } from "./lib/leadFollowUp";
+import {
+  exigirDinheiroGravavel,
+  exigirNumeroReal,
+  exigirQuantidadeGravavel,
+} from "./lib/numeroGravavel";
 
 export const listLeads = query({
   args: {},
@@ -52,6 +57,11 @@ export const createLead = mutation({
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     await requireTeamMember(ctx, user._id, args.responsibleId);
+    // `...args` entra direto no insert logo abaixo: sem estas duas linhas, um
+    // `NaN` no orçamento envenena o TOTAL DA COLUNA inteira do funil, e nada
+    // aponta qual lead causou.
+    exigirDinheiroGravavel(args.budget, "Orçamento");
+    exigirQuantidadeGravavel(args.guestCount, "Convidados", { inteiro: true });
     // Get max order for this stage
     const stageleads = await ctx.db
       .query("leads")
@@ -100,6 +110,9 @@ export const updateLead = mutation({
     if (!lead || lead.userId !== user._id)
       throw new ConvexError({ message: "Lead não encontrado", code: "NOT_FOUND" });
     await requireTeamMember(ctx, user._id, args.responsibleId);
+    exigirDinheiroGravavel(args.budget, "Orçamento");
+    exigirQuantidadeGravavel(args.guestCount, "Convidados", { inteiro: true });
+    exigirNumeroReal(args.order, "Posição");
     const { id, ...fields } = args;
     await ctx.db.patch(id, comCarimbo(limparCampos(fields)));
   },
@@ -267,6 +280,7 @@ export const convertToEvent = mutation({
       }
     }
 
+    exigirDinheiroGravavel(args.budget, "Orçamento");
     const { leadId, eventName, eventDate, ...rest } = args;
     // Reaproveita o que a decoradora já anotou durante a negociação, em vez de
     // exigir que ela redigite. O que veio no formulário tem precedência — ela
@@ -278,6 +292,9 @@ export const convertToEvent = mutation({
       ...rest,
       location: rest.location || lead.venue || "",
       clientPhone: rest.clientPhone ?? lead.clientPhone,
+      // ESTE insert não passa por `events.create`, e por isso não passava pela
+      // guarda de orçamento que vive lá. Um valor impossível entrava no evento
+      // pela porta lateral da conversão.
       budget: rest.budget ?? lead.budget,
       notes: lead.notes,
       status: "planning",

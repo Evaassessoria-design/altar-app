@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils.ts";
 import { paraOCampo, valorDigitado } from "@/lib/valor-digitado.ts";
 import { formatEventDayOnly } from "@/lib/event-date.ts";
 import { ROTULO_DO_STATUS } from "@/convex/lib/propostaComercial.ts";
+import { propostaMudou } from "@/lib/rascunho-da-proposta.ts";
 import { VisaoDoCliente } from "../_components/visao-do-cliente.tsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -114,6 +115,29 @@ export default function PropostaPage() {
   const total = itens.reduce((s, i) => s + (valorDigitado(i.valor) ?? 0), 0);
   const emCentavos = (v: number) => Math.round(v * 100);
 
+  /**
+   * Há edição que ainda não foi salva?
+   *
+   * Compara TODOS os campos, não só o investimento. Antes, bastava mexer no
+   * texto para o aviso calar: ela reescrevia a apresentação, abria "Ver como a
+   * cliente vê", lia o texto ANTIGO, aprovava e mandava o PDF antigo — porque
+   * os valores batiam. A regra vive em `lib/rascunho-da-proposta.ts`.
+   */
+  const naoSalvo =
+    carregado &&
+    propostaMudou(proposta, {
+      titulo,
+      apresentacao,
+      condicoesPagamento: condicoes,
+      validadeAte: validade,
+      observacoes,
+      itens: itens.map((i) => ({
+        descricao: i.descricao,
+        detalhe: i.detalhe,
+        valor: i.valor.trim() ? valorDigitado(i.valor) : 0,
+      })),
+    });
+
   const comErro = (e: unknown) =>
     toast.error(
       e instanceof ConvexError
@@ -178,7 +202,7 @@ export default function PropostaPage() {
       return null;
     }
     if (clienteVe === null) return null;
-    if (emCentavos(clienteVe.investimento) !== emCentavos(total)) {
+    if (naoSalvo) {
       toast.error("Há alterações não salvas. Salve para ver o que a cliente vai receber.");
       return null;
     }
@@ -457,7 +481,16 @@ export default function PropostaPage() {
           />
         </div>
 
-        <div className="flex flex-wrap gap-2 border-t border-border pt-3">
+        <div className="border-t border-border pt-3">
+          {/* O aviso vem ANTES dos botões, não como surpresa depois do clique:
+              "Ver como a cliente vê" e "PDF" saem do que está SALVO, e a tela
+              precisa dizer isso enquanto ela ainda está digitando. */}
+          {naoSalvo && (
+            <p className="mb-2 text-xs text-amber-700 dark:text-amber-400">
+              Alterações não salvas. A prévia e o PDF mostram a última versão salva.
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
           <Button onClick={() => void handleSalvar()} disabled={salvando} className="cursor-pointer">
             {salvando ? "Salvando…" : "Salvar"}
           </Button>
@@ -467,6 +500,7 @@ export default function PropostaPage() {
           <Button variant="outline" onClick={() => void handlePdf()} className="cursor-pointer gap-1.5">
             <Download className="size-4" /> PDF
           </Button>
+          </div>
         </div>
       </div>
 

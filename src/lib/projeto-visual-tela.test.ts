@@ -151,3 +151,55 @@ describe("o estado vazio ensina os dois caminhos", () => {
     expect(TELA).toMatch(/const vazio = totalItens === 0 && totalFotos === 0;/);
   });
 });
+
+describe("o caminho até a Galeria é direto, e continua sendo só um caminho", () => {
+  const GALERIA = readFileSync("src/pages/app/events/[id]/fotos/page.tsx", "utf-8");
+
+  it("o bloco do ambiente leva à galeria JÁ filtrada nele", () => {
+    // "+12 na Galeria" que abre setenta fotos faz a decoradora procurar o que
+    // a tela acabou de mostrar organizado.
+    expect(TELA).toContain("galeriaDo(ambiente.label)");
+    expect(TELA).toMatch(/\?ambiente=\$\{encodeURIComponent\(ambiente\)\}/);
+  });
+
+  it("e o filtro é o MESMO do servidor, não um recorte da página carregada", () => {
+    // Filtrar a lista já baixada faria a contagem mentir assim que houvesse
+    // teto de paginação. A galeria manda `ambiente` na consulta.
+    expect(GALERIA).toContain("ambiente: ambienteFiltro");
+    expect(GALERIA).toContain('searchParams.get("ambiente")');
+  });
+
+  it("o servidor compara pela chave canônica, não por toLowerCase", () => {
+    const g = readFileSync("convex/gallery.ts", "utf-8");
+    expect(g).toContain("chaveDoAmbiente(p.ambiente) === alvo");
+    expect(g).not.toContain('(p.ambiente ?? "").trim().toLowerCase()');
+  });
+
+  it("a tela DIZ quantas fotos ainda não se classificaram", () => {
+    expect(TELA).toContain("const semClassificacao =");
+    // Inclui as que já têm ambiente: situada não é classificada.
+    expect(TELA).toMatch(/projeto\.ambientes\.reduce\(\(n, a\) => n \+ a\.semClassificacao\.length, 0\)/);
+  });
+
+  it("foto com ambiente e sem classificação NÃO fica invisível", () => {
+    // Era o defeito: caía no bloco certo e não era desenhada em prateleira
+    // nenhuma, e o bloco podia aparecer vazio.
+    const i = TELA.indexOf('titulo="Ficou de fora"');
+    expect(TELA.slice(i)).toContain('titulo="Ainda sem classificação"');
+    expect(TELA).toContain("fotos={ambiente.semClassificacao}");
+  });
+
+  it("e mesmo assim a tela continua sem editar foto", () => {
+    // O convite leva para a Galeria. Não existe segundo sistema de
+    // classificação, nem upload, nem exclusão daqui.
+    for (const proibido of [
+      "updatePhoto",
+      "savePhoto",
+      "deletePhoto",
+      "generateUploadUrl",
+      "setScopeValue",
+    ]) {
+      expect(TELA).not.toContain(proibido);
+    }
+  });
+});

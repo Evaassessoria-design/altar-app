@@ -83,7 +83,27 @@ export default function ProjetoDecoracaoPage() {
   // mais antiga; render sem saída ainda está processando ou falhou.
   const planta = (plantas ?? []).find((r) => r.outputUrl) ?? null;
 
+  /**
+   * Quantas fotos ainda não dizem o que são.
+   *
+   * Inclui as que TÊM ambiente: uma foto situada no Salão de vidro mas sem
+   * "inspiração ou contratada" não é menos pendente que uma foto solta.
+   */
+  const semClassificacao =
+    projeto.ambientes.reduce((n, a) => n + a.semClassificacao.length, 0) +
+    projeto.semAmbiente.semClassificacao.length;
+
   const galeria = `/eventos/${id}/fotos`;
+  /**
+   * A galeria JÁ FILTRADA no ambiente do bloco.
+   *
+   * O "+N na Galeria" levava para setenta fotos e deixava a decoradora
+   * procurar. A galeria já sabia filtrar por ambiente — o filtro só não tinha
+   * endereço. Agora tem, e é o MESMO filtro do servidor: nada é reclassificado
+   * aqui, nada é editado aqui.
+   */
+  const galeriaDo = (ambiente: string) =>
+    ambiente ? `${galeria}?ambiente=${encodeURIComponent(ambiente)}` : galeria;
 
   const mudarEscopo = async (itemId: Id<"assemblyItems">, scope: ProjectScope | "") => {
     try {
@@ -168,6 +188,29 @@ export default function ProjetoDecoracaoPage() {
         </Empty>
       ) : (
         <div className="space-y-4">
+          {/* ── O QUE FALTA PARA A TELA FICAR BOA ─────────────────────────
+              Esta tela só mostra o casamento se a galeria estiver organizada,
+              e isso é uma verdade do produto, não um defeito a esconder. Diz
+              o número e o caminho — e não classifica nada aqui: a Galeria
+              continua sendo o único lugar que edita foto. */}
+          {semClassificacao > 0 && (
+            <Link
+              to={galeria}
+              className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm dark:border-amber-900/40 dark:bg-amber-950/20"
+            >
+              <span className="text-amber-900 dark:text-amber-200">
+                <strong className="font-semibold">
+                  {semClassificacao}{" "}
+                  {semClassificacao === 1 ? "foto ainda não diz" : "fotos ainda não dizem"}
+                </strong>{" "}
+                se {semClassificacao === 1 ? "é" : "são"} inspiração ou contratado.
+              </span>
+              <span className="flex flex-shrink-0 items-center gap-1 font-medium text-amber-800 dark:text-amber-300">
+                Classificar <ArrowRight className="size-4" />
+              </span>
+            </Link>
+          )}
+
           {/* ── REFERÊNCIAS DO EVENTO ────────────────────────────────────
               As fotos que ainda não têm ambiente. Não são erro: é o estado
               natural de quem acabou de subir vinte imagens. Ficam no topo,
@@ -226,7 +269,8 @@ export default function ProjetoDecoracaoPage() {
               {(ambiente.referencias.length > 0 ||
                 ambiente.contratadas.length > 0 ||
                 ambiente.execucao.length > 0 ||
-                ambiente.foraDoEscopo.length > 0) && (
+                ambiente.foraDoEscopo.length > 0 ||
+                ambiente.semClassificacao.length > 0) && (
                 <div className="space-y-4 border-b border-border px-5 py-4">
                   <PrateleiraDeFotos
                     titulo="Contratado"
@@ -234,7 +278,7 @@ export default function ProjetoDecoracaoPage() {
                     tom="contratado"
                     destaque={ambiente.execucao.length === 0}
                     fotos={ambiente.contratadas}
-                    verTodasEm={galeria}
+                    verTodasEm={galeriaDo(ambiente.label)}
                   />
                   <PrateleiraDeFotos
                     titulo="Inspiração"
@@ -242,7 +286,7 @@ export default function ProjetoDecoracaoPage() {
                     tom="inspiracao"
                     destaque={ambiente.contratadas.length === 0 && ambiente.execucao.length === 0}
                     fotos={ambiente.referencias}
-                    verTodasEm={galeria}
+                    verTodasEm={galeriaDo(ambiente.label)}
                   />
                   <PrateleiraDeFotos
                     titulo="Como ficou"
@@ -250,13 +294,23 @@ export default function ProjetoDecoracaoPage() {
                     tom="execucao"
                     destaque
                     fotos={ambiente.execucao}
-                    verTodasEm={galeria}
+                    verTodasEm={galeriaDo(ambiente.label)}
                   />
                   <PrateleiraDeFotos
                     titulo="Ficou de fora"
                     descricao="Foi mostrado e não entrou no projeto."
                     fotos={ambiente.foraDoEscopo}
-                    verTodasEm={galeria}
+                    verTodasEm={galeriaDo(ambiente.label)}
+                  />
+                  {/* Estas estavam INVISÍVEIS: a foto tinha ambiente, caía no
+                      bloco certo e não era desenhada em prateleira nenhuma —
+                      o bloco podia aparecer vazio. Situada não é o mesmo que
+                      classificada. */}
+                  <PrateleiraDeFotos
+                    titulo="Ainda sem classificação"
+                    descricao="Diga na Galeria se é inspiração ou contratada."
+                    fotos={ambiente.semClassificacao}
+                    verTodasEm={galeriaDo(ambiente.label)}
                   />
                 </div>
               )}

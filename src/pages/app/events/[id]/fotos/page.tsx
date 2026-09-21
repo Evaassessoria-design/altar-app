@@ -1,4 +1,4 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, useSearchParams, Link } from "react-router-dom";
 import { useEnvioDeArquivo } from "@/hooks/use-upload.ts";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
@@ -60,8 +60,35 @@ export default function GaleriaPage() {
   const photoCounts = useQuery(api.gallery.getPhotoCounts, { eventId });
 
   const [activeTab, setActiveTab] = useState<Category | "all">("all");
-  /** Filtro por ambiente. `null` = todos. */
-  const [ambienteFiltro, setAmbienteFiltro] = useState<string | null>(null);
+  /**
+   * Filtro por ambiente. `null` = todos.
+   *
+   * Mora na URL, não em `useState`, para que o Projeto Visual consiga mandar
+   * a decoradora direto ao recorte certo: clicar em "+12 na Galeria" no bloco
+   * do Jardim das oliveiras abre a galeria JÁ filtrada nele, em vez de largar
+   * setenta fotos na tela para ela procurar.
+   *
+   * Nenhuma classificação acontece aqui — a Galeria continua sendo o único
+   * lugar que edita foto. Isto é só o endereço de onde ela precisa chegar.
+   */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const ambienteFiltro = searchParams.get("ambiente")?.trim() || null;
+  const setAmbienteFiltro = useCallback(
+    (valor: string | null) => {
+      setSearchParams(
+        (atual) => {
+          const proximo = new URLSearchParams(atual);
+          if (valor) proximo.set("ambiente", valor);
+          else proximo.delete("ambiente");
+          return proximo;
+        },
+        // Filtrar não é navegar: o botão "voltar" tem de sair da galeria, não
+        // desfazer sete cliques de filtro.
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
   // Uma consulta SEM filtro de ambiente, só para saber quais ambientes
   // existem — ela alimenta as sugestões e os botões de filtro, e não pode
   // encolher quando o filtro está ligado (senão o botão some ao ser usado).

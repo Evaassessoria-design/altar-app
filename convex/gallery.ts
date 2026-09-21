@@ -2,6 +2,7 @@ import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getOwnedEvent, requireEventOwner, requireIdentity, requireUser } from "./lib/identity";
 import { requireActiveAccess } from "./lib/accessGuard";
+import { chaveDoAmbiente } from "./lib/ambiente";
 
 // Generate upload URL for photo
 /**
@@ -113,9 +114,13 @@ export const listPhotos = query({
     }
 
     const encontradas = await photosQuery.order("asc").collect();
-    const alvo = args.ambiente?.trim().toLowerCase();
+    // MESMA chave que o Projeto Visual usa para agrupar (`lib/ambiente.ts`).
+    // Antes daqui a comparação era `trim().toLowerCase()`, que não junta
+    // acento: o bloco do projeto mostrava "Salão de vidro" e "salao de vidro"
+    // juntos, e o link "+12 na Galeria" abria com nove.
+    const alvo = args.ambiente ? chaveDoAmbiente(args.ambiente) : "";
     const photos = alvo
-      ? encontradas.filter((p) => (p.ambiente ?? "").trim().toLowerCase() === alvo)
+      ? encontradas.filter((p) => chaveDoAmbiente(p.ambiente) === alvo)
       : encontradas;
 
     return await Promise.all(

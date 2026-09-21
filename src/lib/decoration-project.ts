@@ -1,4 +1,4 @@
-import { normalizeName } from "@/convex/lib/supplierIdentity.ts";
+import { chaveDoAmbiente } from "@/convex/lib/ambiente.ts";
 import { BRIEFING_AREAS } from "./briefing-areas.ts";
 import { scopeMeta, type ProjectScope } from "./photo-scope.ts";
 
@@ -113,17 +113,12 @@ export { escopoDoItem, ehObrigacaoDeMontagem };
 /** Grupo de itens sem área e sem ambiente. Existe para nada desaparecer. */
 export const SEM_AMBIENTE = "__sem-ambiente";
 
-/**
- * Chave de comparação: minúscula, sem acento, espaços colapsados.
- *
- * Só para agrupar. NUNCA para exibir, e nunca gravada por cima do texto dela.
- */
-export function chaveDoAmbiente(texto: string | undefined | null): string {
-  const normalizada = normalizeName(texto);
-  // Texto que normaliza para vazio ("***") ainda é um rótulo que ela digitou:
-  // vira chave própria em vez de colidir com todos os outros no vazio.
-  return normalizada || (texto ?? "").trim().toLowerCase();
-}
+// A normalização desceu para `convex/lib/ambiente.ts` porque o FILTRO da
+// galeria roda no servidor e precisa da mesma chave — senão o bloco mostra
+// doze fotos e o link para a galeria devolve nove. Mesmo motivo de
+// `escopoDoItem` ter descido no MASTER #6. Reexportada aqui para os
+// consumidores não mudarem de endereço.
+export { chaveDoAmbiente };
 
 export type AmbienteResolvido = {
   /** Chave normalizada — comparação e agrupamento. */

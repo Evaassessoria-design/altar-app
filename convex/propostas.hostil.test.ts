@@ -143,9 +143,10 @@ describe("proposta — sem sessão não se lê nem se escreve", () => {
 describe("proposta de outra empresa", () => {
   it("não aparece na lista de quem não é dona", async () => {
     const { dona, ids } = await cenario();
-    const minhas = await dona.query(api.propostas.list, {});
-    expect(minhas.map((p) => p._id)).not.toContain(ids.propostaAlheia);
-    expect(minhas).toHaveLength(0);
+    const { propostas, temMais } = await dona.query(api.propostas.list, {});
+    expect(propostas.map((p) => p._id)).not.toContain(ids.propostaAlheia);
+    expect(propostas).toHaveLength(0);
+    expect(temMais).toBe(false);
   });
 
   it("responde como inexistente na leitura — sem confirmar que existe", async () => {
@@ -248,7 +249,7 @@ describe("a versão enviada é passado, e passado não se reescreve", () => {
 
     // E a tela precisa saber que as duas divergem, para ela não discutir um
     // valor que a cliente nunca viu.
-    const [resumo] = await dona.query(api.propostas.list, {});
+    const [resumo] = (await dona.query(api.propostas.list, {})).propostas;
     expect(resumo.divergeDoEnviado).toBe(true);
   });
 

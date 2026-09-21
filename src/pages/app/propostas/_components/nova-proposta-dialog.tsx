@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
+import type { Id } from "@/convex/_generated/dataModel.d.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import {
@@ -26,7 +27,7 @@ import { formatEventDayOnly } from "@/lib/event-date.ts";
 
 type Props = {
   onClose: () => void;
-  onCriar: (args: { leadId?: string; eventId?: string }) => Promise<void>;
+  onCriar: (args: { leadId?: Id<"leads">; eventId?: Id<"events"> }) => Promise<void>;
 };
 
 export function NovaPropostaDialog({ onClose, onCriar }: Props) {
@@ -40,7 +41,11 @@ export function NovaPropostaDialog({ onClose, onCriar }: Props) {
     const [tipo, id] = origem.split(":");
     setSalvando(true);
     try {
-      await onCriar(tipo === "lead" ? { leadId: id } : { eventId: id });
+      await onCriar(
+        tipo === "lead"
+          ? { leadId: id as Id<"leads"> }
+          : { eventId: id as Id<"events"> },
+      );
     } finally {
       setSalvando(false);
     }

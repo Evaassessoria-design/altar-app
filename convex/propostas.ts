@@ -90,18 +90,37 @@ function resumir(p: Doc<"proposals">, hoje: string) {
   };
 }
 
+/**
+ * O teto da lista.
+ *
+ * Uma decoradora com cinco anos de ALTAR acumula centenas de propostas, e
+ * `collect()` sobre elas para em silêncio quando a conta cresce — o mesmo
+ * defeito que já tinha sido corrigido em `users` na Central.
+ *
+ * A resposta diz `temMais` para a tela poder escrever "200 carregadas (há
+ * mais)" em vez de afirmar um total que ela não conferiu.
+ */
+const LIMITE_DA_LISTA = 200;
+
 export const list = query({
   args: {},
   handler: async (ctx) => {
     const user = await requireUser(ctx);
     const hoje = dataDoDia();
-    const todas = await ctx.db
+    const encontradas = await ctx.db
       .query("proposals")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .collect();
-    return todas
-      .map((p) => resumir(p, hoje))
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      .order("desc")
+      .take(LIMITE_DA_LISTA + 1);
+    const temMais = encontradas.length > LIMITE_DA_LISTA;
+    return {
+      propostas: encontradas
+        .slice(0, LIMITE_DA_LISTA)
+        .map((p) => resumir(p, hoje))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      /** Há mais do que as carregadas. A tela precisa dizer isso. */
+      temMais,
+    };
   },
 });
 

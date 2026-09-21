@@ -352,7 +352,10 @@ export default function PropostaPage() {
           <div className="mt-1 space-y-2">
             {itens.map((item, i) => (
               <div key={i} className="rounded-lg border border-border p-2.5">
-                <div className="flex gap-2">
+                {/* Empilha no celular. Lado a lado, a descrição ficava com ~60px
+                    num aparelho de 320px — largura em que não cabe "Projeto
+                    floral" nem para conferir o que já foi escrito. */}
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <Input
                     value={item.descricao}
                     onChange={(e) =>
@@ -361,27 +364,31 @@ export default function PropostaPage() {
                       )
                     }
                     placeholder="Projeto floral da cerimônia"
-                    className="flex-1"
+                    aria-label={`Descrição do item ${i + 1}`}
+                    className="min-w-0 flex-1"
                   />
-                  <Input
-                    inputMode="decimal"
-                    value={item.valor}
-                    onChange={(e) =>
-                      setItens((a) =>
-                        a.map((x, idx) => (idx === i ? { ...x, valor: e.target.value } : x)),
-                      )
-                    }
-                    placeholder="38.000,00"
-                    className="w-32"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setItens((a) => a.filter((_, idx) => idx !== i))}
-                    aria-label={`Remover item ${i + 1}`}
-                    className="flex-shrink-0 cursor-pointer rounded-lg p-2.5 text-muted-foreground hover:text-destructive"
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
+                  <div className="flex gap-2">
+                    <Input
+                      inputMode="decimal"
+                      value={item.valor}
+                      onChange={(e) =>
+                        setItens((a) =>
+                          a.map((x, idx) => (idx === i ? { ...x, valor: e.target.value } : x)),
+                        )
+                      }
+                      placeholder="38.000,00"
+                      aria-label={`Valor do item ${i + 1}`}
+                      className="min-w-0 flex-1 sm:w-32 sm:flex-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setItens((a) => a.filter((_, idx) => idx !== i))}
+                      aria-label={`Remover item ${i + 1}`}
+                      className="flex size-9 flex-shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground hover:text-destructive"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </div>
                 </div>
                 <Input
                   value={item.detalhe}
@@ -424,19 +431,17 @@ export default function PropostaPage() {
               o ALTAR não tem por que ter. */}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label htmlFor="p-validade" className="text-xs">
-              Válida até
-            </Label>
-            <Input
-              id="p-validade"
-              type="date"
-              value={validade}
-              onChange={(e) => setValidade(e.target.value)}
-              className="mt-1"
-            />
-          </div>
+        <div>
+          <Label htmlFor="p-validade" className="text-xs">
+            Válida até
+          </Label>
+          <Input
+            id="p-validade"
+            type="date"
+            value={validade}
+            onChange={(e) => setValidade(e.target.value)}
+            className="mt-1 sm:max-w-48"
+          />
         </div>
 
         <div>

@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { ConvexError } from "convex/values";
 import { toast } from "sonner";
 import { api } from "@/convex/_generated/api.js";
+import type { Id } from "@/convex/_generated/dataModel.d.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import {
@@ -44,13 +45,17 @@ const CORES: Record<string, string> = {
 };
 
 export default function PropostasPage() {
-  const propostas = useQuery(api.propostas.list);
+  const resposta = useQuery(api.propostas.list);
+  const propostas = resposta?.propostas;
   const criar = useMutation(api.propostas.create);
   const [criando, setCriando] = useState(false);
 
-  const handleCriar = async (args: { leadId?: string; eventId?: string }) => {
+  const handleCriar = async (args: {
+    leadId?: Id<"leads">;
+    eventId?: Id<"events">;
+  }) => {
     try {
-      await criar(args as never);
+      await criar(args);
       toast.success("Proposta criada. Agora escreva o escopo.");
       setCriando(false);
     } catch (e) {
@@ -149,6 +154,13 @@ export default function PropostasPage() {
               </div>
             </Link>
           ))}
+          {/* A tela nunca afirma o que não sabe: acima do teto ela diz que há
+              mais, em vez de deixar entender que a lista é o total. */}
+          {resposta?.temMais && (
+            <p className="pt-1 text-center text-xs text-muted-foreground">
+              {propostas.length} propostas carregadas — há mais. As mais recentes vêm primeiro.
+            </p>
+          )}
         </div>
       )}
 

@@ -87,10 +87,12 @@ export const list = query({
  * eventos. Essa sim deixa de oferecer o material.
  *
  * As composições são poucas por empresa (é a biblioteca dela, não um catálogo
- * compartilhado) e vêm por índice de dono. O teto existe mesmo assim, e a
- * resposta diz quando bateu nele.
+ * compartilhado) e vêm por índice de dono. Os dois tetos existem mesmo assim —
+ * o da VARREDURA e o da RESPOSTA — e `temMais` cobre os dois, porque uma
+ * varredura que parou no meio também é uma resposta incompleta.
  */
 const LIMITE_DE_COMPOSICOES = 50;
+const VARREDURA_DE_COMPOSICOES = 1000;
 
 export const ondeEUsado = query({
   args: { id: v.id("materials") },
@@ -104,11 +106,12 @@ export const ondeEUsado = query({
     const composicoes = await ctx.db
       .query("compositions")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .collect();
+      .take(VARREDURA_DE_COMPOSICOES + 1);
+    const varreduraCompleta = composicoes.length <= VARREDURA_DE_COMPOSICOES;
 
-    const usam = composicoes.filter((c) =>
-      c.receita.some((linha) => linha.materialId === args.id),
-    );
+    const usam = composicoes
+      .slice(0, VARREDURA_DE_COMPOSICOES)
+      .filter((c) => c.receita.some((linha) => linha.materialId === args.id));
 
     return {
       nome: material.nome,
@@ -122,7 +125,7 @@ export const ondeEUsado = query({
           .filter((linha) => linha.materialId === args.id)
           .reduce((soma, linha) => soma + linha.quantidade, 0),
       })),
-      temMais: usam.length > LIMITE_DE_COMPOSICOES,
+      temMais: usam.length > LIMITE_DE_COMPOSICOES || !varreduraCompleta,
     };
   },
 });

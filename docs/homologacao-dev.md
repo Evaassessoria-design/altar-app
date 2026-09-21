@@ -86,6 +86,11 @@ cai no painel e que o menu aparece inteiro.
 próximos, dinheiro vencido, funil. Conferir que nenhum número aparece como
 `NaN`, `R$ 0,00` sem motivo ou "em -3 dias".
 
+**11b. A conta NOVA, antes do seed.** Se der para entrar numa conta sem nenhum
+evento, o painel tem de dizer **"Seu primeiro evento ainda não existe"** com o
+caminho — nunca o ✓ verde de "nada pedindo atenção", que contradizia o aviso de
+primeiros passos logo acima.
+
 **12. Catálogo (`/catalogo`).** Buscar um material; buscar uma composição **pelo
 nome de um material dela**; filtrar por categoria; abrir "ver arquivados".
 Abrir um material e digitar `1.500,00` no custo → tem de **gravar 1500**, não
@@ -127,6 +132,10 @@ receita: tem de dizer **"nenhum lançamento neste filtro"** e oferecer "Ver
 todos" — nunca "adicione o primeiro". Em Compras, apagar um item que tenha
 lançamento no financeiro: tem de **perguntar antes** e avisar que a despesa sai
 junto.
+
+**16b. Galeria de fotos, no teclado.** Abrir uma foto no notebook: **Esc** tem
+de fechar e as **setas** têm de andar entre as fotos. Era sobreposição feita à
+mão, sem nada disso — e é a tela mais usada no dia do evento.
 
 **17b. A identidade oficial, com os olhos.** É o único jeito de conferir:
 - **favicon** na aba, em 16px reais — o arco continua reconhecível?

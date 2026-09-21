@@ -139,6 +139,8 @@ Duas páginas escritas para a reunião, e não para o código:
   minutos antes do Meet.
 - `docs/prontidao-comercial.md` — a matriz do que está PRONTO, PRONTO COM
   RESSALVA, NÃO MOSTRAR AINDA e FUTURO, recurso por recurso.
+- `docs/portabilidade-dados.md` — o que conseguimos devolver hoje se uma
+  empresa pedir uma cópia dos próprios dados. É mapa, não plano.
 
 ---
 

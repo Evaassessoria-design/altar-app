@@ -12,6 +12,8 @@ Ele é diferente dos vizinhos de propósito:
 | `docs/prontidao-comercial.md` | posso mostrar numa reunião? |
 | `docs/proposta-comercial.md` | o que a proposta faz, e o que ela deliberadamente não faz |
 | `docs/homologacao-dev.md` | o que fazer no notebook, na ordem |
+| `docs/portabilidade-dados.md` | o que conseguimos devolver se ela pedir os dados |
+| `docs/identidade-visual.md` | de onde sai cada imagem da marca |
 | **este** | **o que construir a seguir, e por quê** |
 
 Datado de 21/09/2026, conferido contra o código em `c0fdf39`. Cada item cita a
@@ -86,6 +88,8 @@ Nada pendente. As oito últimas auditorias fecharam, em ordem de gravidade:
 | A tela mentindo | Três telas diziam "você não tem nada" a quem tem 200 lançamentos |
 | Vocabulário | Um objeto, uma tela, **três nomes** no Catálogo |
 | Superfície | Duas queries e uma action **públicas sem chamador**, uma delas sem guarda |
+| A tela mentindo | O painel dizia "✓ tudo certo" a quem **ainda não cadastrou nada** — contradizendo o aviso de primeiros passos logo acima, na mesma tela |
+| Acessibilidade | Os três botões do visualizador de fotos sem nome acessível, e **Esc não fechava** |
 
 **Não há item em aberto nesta lista.** O que sobrou depende de notebook ou de
 decisão humana — está nas duas listas seguintes.
@@ -120,6 +124,30 @@ Nenhuma é técnica, e por isso nenhuma foi tomada aqui.
 3. **Segunda pessoa na conta.** Medida em `docs/arquitetura-multiusuario.md`.
 4. **O que acontece quando a assinatura vence** (§4).
 5. **Quando ligar o envio externo da Central.**
+
+### 🚫 NÃO CONSTRUIR ANTES DO BETA
+
+Cada item aqui existe no repositório como porta fechada, campo inerte ou
+decisão adiada — e **abrir qualquer uma antes de cinco contas reais rodarem 30
+dias** troca um risco conhecido por um desconhecido, sem nenhum dado novo para
+justificar.
+
+| | Por que agora não |
+|---|---|
+| **Envio externo da Central** | `communicationsOutbox` é o único módulo que chama `fetch`, e o portão está fechado por construção. Ligar exige número comercial integrado E critério medido de acerto da IA (`communicationTriage.divergiu`) — que só existe depois de volume real |
+| **IA autônoma** | `adminAutonomyPolicy` é gravável e **inerte por decisão**. Ligar autonomia é mudança de fase, não de dado: passa a existir ação sem gente no meio, e não há como medir arrependimento antes do primeiro erro |
+| **Assinatura jurídica da proposta** | Hoje "aceita" é a decoradora registrando o que ouviu, e a tela diz isso. Assinatura muda contrato, responsabilidade e provavelmente traz fornecedor externo. Prometer na reunião custa caro três meses depois |
+| **Cobrança automática além do Asaas** | O que existe (checkout, webhook auditado, reconciliação, tolerância) já mexe com o dinheiro de quem paga. Acrescentar régua, split ou boleto no beta é mexer no que menos pode errar, sem necessidade demonstrada |
+| **Segunda pessoa na conta e permissões** | Medido em `docs/arquitetura-multiusuario.md`: o schema quase suporta, mas **papel que restringe leitura de ARQUIVO é incompatível com o storage atual** — a URL do Convex é pública para quem a tem, e não dá para revogar |
+| **Exportação total dos dados** | Agora mapeada em `docs/portabilidade-dados.md`. Uma exportação parcial e honesta vale mais do que uma total e adiada — e o formato é decisão de produto, não de código |
+| **Renomear "lead" para "cliente"** | Atravessa tabela, funções, telas e documentos. `vocabulario.test.ts` mede o raio (11 ocorrências, uma tela, fora do menu). Fazer isso na véspera é trocar defeito conhecido por mexida larga sem teste de tela |
+| **Customização de campos e de fluxo** | Não existe nada disso no repositório, e é a porta que nunca fecha: cada campo configurável multiplica estados a testar. Cinco contas não pedem isso — pedem que o que existe não erre |
+
+**O que é "pós-beta" e não entra nesta lista**, porque é acréscimo pequeno e
+sem risco: `compositions.duplicate`, `fichaTecnica.limparReceita`, paginação do
+Financeiro e o pacote de 830 kB. São dívidas com gatilho, não portas.
+
+---
 
 ### 🕓 PÓS-BETA
 

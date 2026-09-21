@@ -143,6 +143,10 @@ derivações são geradas por `scripts/brand/gerar-icones.py`.
 perguntas frequentes, checklist pré-Meet) e `docs/prontidao-comercial.md` (o
 que pode e o que não pode ser mostrado hoje).
 
+**Se alguém pedir os próprios dados**: `docs/portabilidade-dados.md` — o que
+sai hoje (os PDFs, evento por evento), o que exigiria implementação, e por que
+o arquivo no storage é a parte difícil. É mapa, não plano.
+
 **Antes de decidir o que construir**: `docs/estado-do-produto.md` (o que existe,
 com que qualidade, e o que cresce com o uso). A pergunta de segunda pessoa na
 conta está medida, e só medida, em `docs/arquitetura-multiusuario.md` — ela

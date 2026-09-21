@@ -91,11 +91,21 @@ export const getVencidos = query({
   args: {},
   handler: async (ctx) => {
     const user = await requireUser(ctx);
+    const hoje = dataDoDia();
+    // O filtro é do BANCO, não da memória: varrer todo o histórico financeiro
+    // — que cresce para sempre — a cada abertura do Dashboard, para achar um
+    // punhado de linhas em aberto, é o tipo de consulta que só dói quando a
+    // cliente já está grande. O índice lê o que está em aberto e vencido.
+    //
+    // A regra continua sendo de `lib/dinheiroVencido.ts`: ela refiltra o que
+    // recebe, então a consulta pode estreitar sem virar a fonte da verdade.
     const txs = await ctx.db
       .query("transactions")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .withIndex("by_user_pago_data", (q) =>
+        q.eq("userId", user._id).eq("isPaid", false).lt("date", hoje),
+      )
       .collect();
-    return dinheiroVencido(txs, dataDoDia());
+    return dinheiroVencido(txs, hoje);
   },
 });
 

@@ -664,6 +664,12 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_date", ["userId", "date"])
+    // O painel da manhã pergunta "o que venceu e não foi liquidado?" a cada
+    // abertura do Dashboard. Sem este índice a resposta exigia varrer TODO o
+    // histórico financeiro da conta — que cresce para sempre — para achar um
+    // punhado de linhas em aberto. Com ele, a consulta lê só o que está em
+    // aberto e com data no passado.
+    .index("by_user_pago_data", ["userId", "isPaid", "date"])
     .index("by_event", ["eventId"]),
 
   notifications: defineTable({

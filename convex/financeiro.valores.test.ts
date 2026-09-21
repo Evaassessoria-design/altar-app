@@ -25,6 +25,8 @@ import schema from "./schema";
 import { modules } from "./test.setup";
 import { api } from "./_generated/api";
 import { autenticarComo } from "./test.auth";
+import { dinheiroVencido } from "./lib/dinheiroVencido";
+import { dataDoDia } from "./lib/dataDoDia";
 import type { MutationCtx } from "./_generated/server";
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -406,5 +408,31 @@ describe("os vencidos do painel da manhã", () => {
   it("sem sessão não responde nada", async () => {
     const { t } = await cenario();
     await expect(t.query(api.financeiro.getVencidos, {})).rejects.toThrow();
+  });
+
+  it("a consulta estreita no banco e a regra pura confere de novo", async () => {
+    // O índice lê só o que está em aberto e com data no passado. A regra em
+    // `lib/dinheiroVencido.ts` refiltra o que recebe — é ela a fonte da
+    // verdade, e a consulta pode estreitar sem virar uma segunda regra.
+    //
+    // Este teste existe para o dia em que alguém mudar o índice: o resultado
+    // tem de continuar igual ao de filtrar tudo em memória.
+    const { t, dona } = await cenario();
+    for (const [amount, isPaid, date] of [
+      [43_500, false, "2020-01-10"],
+      [1_000, true, "2020-01-11"],
+      [2_000, false, "2099-12-31"],
+    ] as const) {
+      await dona.mutation(api.financeiro.addTransaction, {
+        ...lancamento, amount, isPaid, date,
+      });
+    }
+    const pelaConsulta = await dona.query(api.financeiro.getVencidos, {});
+
+    const todas = await t.run(async (ctx: MutationCtx) =>
+      ctx.db.query("transactions").collect(),
+    );
+    const naMemoria = dinheiroVencido(todas, dataDoDia());
+    expect(pelaConsulta).toEqual(naMemoria);
   });
 });

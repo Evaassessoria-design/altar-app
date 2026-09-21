@@ -20,6 +20,7 @@ import {
   Building2,
   Menu,
   Boxes,
+  Layers,
   CalendarClock,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -55,6 +56,7 @@ const ICONES: Record<RotaDeMenu, LucideIcon> = {
   "/fornecedores": Building2,
   "/equipe": Users,
   "/acervo": Boxes,
+  "/catalogo": Layers,
   "/compras": ShoppingCart,
   "/financeiro": DollarSign,
   "/funil": BarChart3,

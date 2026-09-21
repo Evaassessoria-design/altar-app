@@ -20,6 +20,10 @@ export const NAV_ITEMS = [
   { to: "/fornecedores", label: "Fornecedores" },
   { to: "/equipe", label: "Equipe" },
   { to: "/acervo", label: "Acervo" },
+  // Materiais e composições: o conhecimento do estúdio. Fica ao lado do
+  // Acervo de propósito — "o que eu tenho" e "o que eu sei fazer" são a
+  // mesma gaveta na cabeça de quem decora.
+  { to: "/catalogo", label: "Catálogo" },
   { to: "/compras", label: "Compras" },
   { to: "/financeiro", label: "Financeiro" },
   { to: "/funil", label: "Funil" },
@@ -55,6 +59,7 @@ export const MORE_MENU_ITEMS = [
   { to: "/fornecedores", label: "Fornecedores" },
   { to: "/equipe", label: "Equipe" },
   { to: "/acervo", label: "Acervo" },
+  { to: "/catalogo", label: "Catálogo" },
   { to: "/funil", label: "Funil" },
   { to: "/configuracoes", label: "Configurações" },
 ] as const satisfies readonly NavItem[];

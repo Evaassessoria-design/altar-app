@@ -69,6 +69,64 @@ export const list = query({
  *
  * Em caso de dúvida, duplicar é melhor que fundir: fundir é irreversível.
  */
+/**
+ * Em quais composições da biblioteca este material aparece.
+ *
+ * ── A PERGUNTA QUE ELA FAZ ANTES DE MEXER ───────────────────────────────────
+ * "Se eu arquivar a Rosa Avalanche, o que eu quebro?" Sem resposta, arquivar
+ * vira aposta — e o catálogo só cresce, porque ninguém mexe no que não
+ * entende.
+ *
+ * ── POR QUE SÓ A BIBLIOTECA, E NÃO OS EVENTOS ───────────────────────────────
+ * A receita de um item de montagem é um SNAPSHOT: ela copiou nome, unidade e
+ * custo no momento em que foi criada, e não muda quando o catálogo muda (ver
+ * convex/compositions.ts). Listar eventos aqui sugeriria um risco que não
+ * existe — arquivar material nunca altera evento nenhum.
+ *
+ * O que importa é a BIBLIOTECA, que é o que será aplicado nos próximos
+ * eventos. Essa sim deixa de oferecer o material.
+ *
+ * As composições são poucas por empresa (é a biblioteca dela, não um catálogo
+ * compartilhado) e vêm por índice de dono. O teto existe mesmo assim, e a
+ * resposta diz quando bateu nele.
+ */
+const LIMITE_DE_COMPOSICOES = 50;
+
+export const ondeEUsado = query({
+  args: { id: v.id("materials") },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const material = await ctx.db.get(args.id);
+    // Id de outra conta responde como inexistente — confirmar que existe já
+    // seria contar algo sobre o catálogo alheio.
+    if (!material || material.userId !== user._id) return null;
+
+    const composicoes = await ctx.db
+      .query("compositions")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+
+    const usam = composicoes.filter((c) =>
+      c.receita.some((linha) => linha.materialId === args.id),
+    );
+
+    return {
+      nome: material.nome,
+      archived: material.archived === true,
+      composicoes: usam.slice(0, LIMITE_DE_COMPOSICOES).map((c) => ({
+        _id: c._id,
+        nome: c.nome,
+        archived: c.archived === true,
+        /** Quanto desta composição usa deste material. */
+        quantidade: c.receita
+          .filter((linha) => linha.materialId === args.id)
+          .reduce((soma, linha) => soma + linha.quantidade, 0),
+      })),
+      temMais: usam.length > LIMITE_DE_COMPOSICOES,
+    };
+  },
+});
+
 export const create = mutation({
   args: {
     nome: v.string(),

@@ -451,3 +451,100 @@ describe("a manutenção da biblioteca é só da dona", () => {
     expect(r!.eventos.map((e) => e.nome)).toEqual(["Marina & Gabriel"]);
   });
 });
+
+// ═════════════════════════════════════ ONDE ESTE MATERIAL É USADO
+
+describe("o material sabe dizer onde aparece", () => {
+  it("lista as composições da biblioteca que o citam, com a quantidade", async () => {
+    // "Se eu arquivar a Rosa, o que eu quebro?" Sem resposta, arquivar vira
+    // aposta — e o catálogo só cresce, porque ninguém mexe no que não entende.
+    const { t, dona, itemA, donaId, rosa } = await cenario();
+    await dona.mutation(api.fichaTecnica.salvarNaBiblioteca, { id: itemA });
+    const [composicao] = await biblioteca(t, donaId);
+
+    const r = await dona.query(api.materials.ondeEUsado, { id: rosa });
+    expect(r!.nome).toBe("Rosa branca");
+    expect(r!.composicoes).toHaveLength(1);
+    expect(r!.composicoes[0]._id).toBe(composicao._id);
+    expect(r!.composicoes[0].quantidade).toBe(5);
+    expect(r!.temMais).toBe(false);
+  });
+
+  it("material que nenhuma receita cita devolve lista vazia, não erro", async () => {
+    const { t, dona, donaId } = await cenario();
+    const solto = await t.run(async (ctx: MutationCtx) =>
+      ctx.db.insert("materials", {
+        userId: donaId, nome: "Fita de cetim", searchName: "fita de cetim",
+        unidade: "m", updatedAt: NOW,
+      }),
+    );
+    const r = await dona.query(api.materials.ondeEUsado, { id: solto });
+    expect(r!.composicoes).toEqual([]);
+  });
+
+  it("soma quando a MESMA composição usa o material em duas linhas", async () => {
+    const { t, dona, donaId, rosa } = await cenario();
+    const composicao = await t.run(async (ctx: MutationCtx) =>
+      ctx.db.insert("compositions", {
+        userId: donaId, nome: "Arranjo duplo", searchName: "arranjo duplo",
+        receita: [
+          { materialId: rosa, nome: "Rosa branca", unidade: "haste", quantidade: 5 },
+          { materialId: rosa, nome: "Rosa branca", unidade: "haste", quantidade: 3 },
+        ],
+        updatedAt: NOW,
+      }),
+    );
+    const r = await dona.query(api.materials.ondeEUsado, { id: rosa });
+    expect(r!.composicoes.find((c) => c._id === composicao)!.quantidade).toBe(8);
+  });
+
+  it("a composição arquivada aparece, marcada — ela volta se for reativada", async () => {
+    const { t, dona, itemA, donaId, rosa } = await cenario();
+    await dona.mutation(api.fichaTecnica.salvarNaBiblioteca, { id: itemA });
+    const [composicao] = await biblioteca(t, donaId);
+    await dona.mutation(api.compositions.setArchived, { id: composicao._id, archived: true });
+
+    const r = await dona.query(api.materials.ondeEUsado, { id: rosa });
+    expect(r!.composicoes).toHaveLength(1);
+    expect(r!.composicoes[0].archived).toBe(true);
+  });
+
+  it("material de OUTRA empresa responde como inexistente", async () => {
+    const { t, dona, outraId } = await cenario();
+    const alheio = await t.run(async (ctx: MutationCtx) =>
+      ctx.db.insert("materials", {
+        userId: outraId, nome: "Rosa alheia", searchName: "rosa alheia",
+        unidade: "haste", updatedAt: NOW,
+      }),
+    );
+    expect(await dona.query(api.materials.ondeEUsado, { id: alheio })).toBeNull();
+  });
+
+  it("não enxerga a biblioteca da outra empresa nem com o mesmo material", async () => {
+    // A varredura é por índice de DONO. Se fosse por materialId solto, a
+    // composição alheia que cita um id qualquer entraria na resposta.
+    const { t, dona, outra, daOutra, rosa, itemA, donaId } = await cenario();
+    await dona.mutation(api.fichaTecnica.salvarNaBiblioteca, { id: itemA });
+    await outra.mutation(api.fichaTecnica.salvarNaBiblioteca, { id: daOutra });
+    await t.run(async (ctx: MutationCtx) => {
+      const itemAlheio = (await ctx.db.get(daOutra))!;
+      const alheias = await ctx.db
+        .query("compositions")
+        .withIndex("by_user", (q) => q.eq("userId", itemAlheio.userId))
+        .collect();
+      // Força o vínculo cruzado, que só nasceria de dado corrompido.
+      await ctx.db.patch(alheias[0]._id, {
+        receita: [{ materialId: rosa, nome: "Rosa branca", unidade: "haste", quantidade: 1 }],
+      });
+    });
+
+    const r = await dona.query(api.materials.ondeEUsado, { id: rosa });
+    expect(r!.composicoes).toHaveLength(1);
+    expect(r!.composicoes[0].nome).toBe("Arranjo baixo");
+  });
+
+  it("sem sessão, ninguém pergunta", async () => {
+    const { t, rosa } = await cenario();
+    await expect(t.query(api.materials.ondeEUsado, { id: rosa })).rejects.toThrow();
+  });
+});

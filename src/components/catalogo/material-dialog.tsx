@@ -25,11 +25,14 @@ import {
 // servidor, testadas, e nenhuma tela as chamava: um "Rosa brnaca" digitado
 // errado ficava para sempre, e a biblioteca só crescia.
 //
-// ── POR QUE AQUI, E NÃO NUMA TELA PRÓPRIA ───────────────────────────────────
-// Uma tela de catálogo no menu é a resposta completa, e é uma decisão de
-// produto ainda aberta (`docs/estado-do-produto.md`, §7.3). Esta é a menor
-// correção que fecha o ciclo: conserta-se o material de onde ele é escolhido,
-// sem rota nova, sem item de menu e sem pré-decidir nada.
+// ── DOIS LUGARES, UM DIÁLOGO ────────────────────────────────────────────────
+// Ele abre de dois lugares, e é o MESMO componente nos dois: do diálogo da
+// receita (corrigir o material de onde ele é escolhido) e da tela de Catálogo
+// (revisar a biblioteca inteira antes da temporada).
+//
+// Por isso ele mora em `src/components/catalogo/` e não dentro da Ficha
+// Técnica: duas cópias divergiriam na primeira correção, e o aviso do rodapé
+// — o que muda e o que não muda — é justamente o que não pode divergir.
 //
 // ── O QUE ESTA TELA DELIBERADAMENTE NÃO FAZ ─────────────────────────────────
 // Não mexe em receita nenhuma. A receita guarda um SNAPSHOT do material — nome,

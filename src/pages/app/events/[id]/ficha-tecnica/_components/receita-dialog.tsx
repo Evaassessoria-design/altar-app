@@ -17,8 +17,11 @@ import { ConvexError } from "convex/values";
 import { Plus, Trash2, Loader2, BookMarked, Pencil } from "lucide-react";
 import { TIPOS_DE_MATERIAL, UNIDADES, aceitaDecimal, normalizeName } from "@/convex/lib/materiais.ts";
 import { necessidadeDoComponente, quantidadeTexto } from "@/convex/lib/fichaTecnica.ts";
-import { MaterialDialog, type MaterialEditavel } from "./material-dialog.tsx";
-import { ComposicaoDialog } from "./composicao-dialog.tsx";
+// Os dois diálogos são COMPARTILHADOS com a tela de Catálogo: corrigir um
+// material é a mesma ação venha ela da receita ou da biblioteca, e duas
+// cópias divergiriam na primeira correção.
+import { MaterialDialog, type MaterialEditavel } from "@/components/catalogo/material-dialog.tsx";
+import { ComposicaoDialog } from "@/components/catalogo/composicao-dialog.tsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RECEITA DE UM ITEM

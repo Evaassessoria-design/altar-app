@@ -26,11 +26,10 @@ import { formatEventDateShort } from "@/lib/event-date.ts";
 // chamava. Um "Arranjo bxo" salvo com o nome errado ficava no menu para
 // sempre, e uma receita que a decoradora não usa mais também.
 //
-// ── POR QUE AQUI, E NÃO NUMA TELA DE BIBLIOTECA ─────────────────────────────
-// Mesma escolha do diálogo de material, e pelo mesmo motivo: conserta-se de
-// onde a coisa é escolhida, sem rota nova e sem item de menu. Uma tela própria
-// de biblioteca é a resposta completa e continua sendo decisão de produto em
-// aberto (`docs/estado-do-produto.md`).
+// ── DOIS LUGARES, UM DIÁLOGO ────────────────────────────────────────────────
+// Abre do diálogo da receita (corrigir de onde a composição é escolhida) e da
+// tela de Catálogo (revisar a biblioteca inteira). É o mesmo componente nos
+// dois, por isso mora em `src/components/catalogo/`.
 //
 // ── O QUE ESTA TELA DELIBERADAMENTE NÃO FAZ ─────────────────────────────────
 // Não mexe em evento nenhum. O item de montagem guarda um SNAPSHOT da receita

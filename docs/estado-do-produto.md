@@ -16,6 +16,15 @@ Ele é diferente dos vizinhos de propósito:
 Datado de 21/09/2026, conferido contra o código em `c0fdf39`. Cada item cita a
 evidência. Onde não há evidência, não há item — nada aqui é suposição.
 
+> **O que saiu deste mapa na rodada "polimento para beta" (21/09)**, porque
+> foi corrigido: o **slug do tipo de evento vazando para o PDF da cliente**
+> (cinco cópias do mesmo mapa de rótulos, e a função canônica sem nenhum uso
+> em produção), a **lixeira de Compras** apagando compra e lançamento sem
+> perguntar, o **custo do material** sendo apagado por quem digitasse
+> "1.500,00", o aviso de "não salvo" da proposta **cego para texto**, e três
+> telas dizendo "você não tem nada" a quem tem. Saíram da §3 duas queries
+> públicas sem chamador — removidas, não implementadas.
+
 > **O que saiu deste mapa na rodada "camada comercial" (21/09)**, porque foi
 > construído: as TRÊS primeiras entregas da §8 — a proposta comercial (§7.0), a
 > tela de catálogo (§7.3) e a página do fornecedor (§3). A §7 perdeu duas
@@ -229,7 +238,7 @@ que ela descubra.**
 
 | | A ressalva |
 |---|---|
-| Catálogo de materiais e biblioteca de receitas | Nascem e se corrigem de dentro da Ficha Técnica. Não há tela de catálogo no menu para revisar a lista inteira antes da temporada |
+| ~~Catálogo de materiais e biblioteca de receitas~~ | **Resolvido na rodada comercial**: `/catalogo` no menu, e o mesmo diálogo continua abrindo de dentro da Ficha Técnica |
 | Importação de contrato por IA | Lê e propõe; quem aplica é ela. Depende de chave no ambiente |
 | Planta Premium | Depende do provedor de imagem |
 | Orçamento em PDF | É documento **interno**: traz custo, lucro e margem. A proposta para a cliente não existe (ver decisão abaixo) |

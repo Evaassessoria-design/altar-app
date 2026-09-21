@@ -38,7 +38,8 @@ duas marcadas abaixo.
 | Conversão de lead em evento | **PRONTO COM RESSALVA** | Funciona e reaproveita o que já foi digitado. **Não converta ao vivo numa demonstração**: altera os dados do demo. |
 | Captação pela landing | **PRONTO** | O formulário da landing grava o interessado. Aparece no Painel Admin, não no app da decoradora. |
 | Importar leads de planilha | **FUTURO** | Não existe importação de nenhum tipo. |
-| Proposta comercial gerada pelo sistema | **FUTURO** | A proposta é anexada, não gerada. |
+| Proposta comercial gerada pelo sistema | **PRONTO** | `/propostas`. Nasce do lead ou do evento copiando o que já foi digitado; escopo, investimento, condições e validade; prévia do que a cliente verá e PDF com a identidade do estúdio. **Sem custo e sem margem — por desenho, não por filtro de tela** (`docs/proposta-comercial.md`). |
+| Envio, assinatura e cobrança da proposta | **FUTURO** | O ALTAR não manda e não assina. "Enviada" e "aceita" são REGISTROS do que aconteceu fora do sistema, e a tela diz isso. Se perguntarem por assinatura eletrônica, a resposta é "ainda não". |
 
 ---
 
@@ -73,8 +74,8 @@ isso vale saber cada uma.
 | Salvar uma receita na biblioteca | **PRONTO** | O ciclo fecha: escreve uma vez, reaproveita sempre. Vai o que está NA TELA, e o nome repetido é recusado em vez de virar uma segunda entrada igual. |
 | **Renomear ou arquivar** uma composição salva | **PRONTO COM RESSALVA** | "Renomear ou arquivar esta receita na biblioteca", dentro do diálogo da receita, com a lista dos eventos em que ela já foi usada. Ressalva: a manutenção acontece de dentro da receita — não há tela de biblioteca no menu, como no catálogo de materiais. |
 | **Duplicar** uma composição | **FUTURO** | `compositions.duplicate` existe no servidor e não tem tela. |
-| Cadastrar material | **PRONTO COM RESSALVA** | Nasce — e agora também se corrige — de dentro do diálogo da receita. Não há tela de catálogo no menu. |
-| **Editar ou arquivar** um material | **PRONTO COM RESSALVA** | O lápis ao lado do material na receita abre nome, categoria, tipo, custo, margem e arquivar. Ressalva: não há tela de catálogo no menu para revisar a lista inteira. |
+| Cadastrar material | **PRONTO** | Nasce e se corrige de dentro do diálogo da receita, onde ele é escolhido — e também em **Catálogo**, no menu. O mesmo diálogo, em dois lugares. |
+| **Editar ou arquivar** um material | **PRONTO** | O lápis ao lado do material na receita abre nome, categoria, tipo, custo, margem e arquivar. `/catalogo` faz o mesmo sobre a lista inteira, com busca e filtro por categoria, e mostra onde o material é usado antes de arquivar. |
 | Consolidado de necessidade do evento | **PRONTO** | A multiplicação e a soma por material e unidade. |
 | Margem de segurança por material | **PRONTO** | `necessário` e `sugerido` ficam separados de propósito. |
 | Geração de compras a partir da ficha | **PRONTO COM RESSALVA** | Idempotente. **Não acione ao vivo**: muda os números que você acabou de citar. |
@@ -193,15 +194,19 @@ impede a demonstração; todas mudam a resposta a uma pergunta que vai aparecer.
 **Pode mostrar sem medo:** funil, evento, briefing, fornecedores, projeto,
 ficha técnica, acervo, compras, financeiro, orçamento, equipe, agenda e os PDFs.
 
-**Mostre sabendo a ressalva:** IA (confira o ambiente antes), geração de
-compras e reservas (não acione ao vivo), e a manutenção do catálogo — material
-e composição se corrigem de dentro da receita, e não há tela de catálogo no
-menu para revisar a lista inteira.
+**Mostre sabendo a ressalva:** IA (confira o ambiente antes) e geração de
+compras e reservas (não acione ao vivo). *(A ressalva do catálogo caiu:
+`/catalogo` existe no menu desde a rodada comercial, com busca, filtro,
+arquivados e "onde é usado".)*
 
-**NUNCA mande para a cliente:** o PDF do Orçamento. Ele traz custo, lucro e
-margem — agora diz isso no título, no rodapé de toda página e no nome do
-arquivo (`altar-orcamento-interno-…`), mas o cuidado é seu. A proposta
-comercial da cliente **ainda não existe**; se perguntarem, é isso que se diz.
+**OS DOIS DOCUMENTOS DE DINHEIRO, E A DIFERENÇA ENTRE ELES.** O PDF do
+Orçamento é INTERNO: traz custo, lucro e margem, e diz isso no título, no
+rodapé de toda página e no nome do arquivo (`altar-orcamento-interno-…`).
+**Nunca mande esse para a cliente.** O que vai para ela é a **Proposta**
+(`proposta-<cliente>.pdf`), que existe desde a rodada comercial e não carrega
+custo nem margem — não porque a tela filtre, mas porque esses campos não estão
+no objeto que sai. Numa reunião, mostrar os dois lado a lado é um dos
+argumentos mais fortes do produto.
 
 **Não abra:** Painel Admin, Central, e qualquer botão que escreve.
 

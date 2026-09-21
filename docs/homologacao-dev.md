@@ -1,0 +1,144 @@
+# CHECKLIST DE HOMOLOGAÇÃO DE AMANHÃ
+
+**Para fazer no notebook, uma vez, na ordem.** Vinte passos. O primeiro bloco
+(1–7) é o que só o notebook consegue fazer; o resto é olhar o produto como uma
+decoradora olharia.
+
+> **Antes de começar, uma frase:** o alvo é **`healthy-pika-907` (DEV)**.
+> `mellow-goose-539` é PRODUÇÃO e não entra nesta lista em nenhum passo.
+
+---
+
+## Bloco A — trazer o código e fechar a pendência do codegen (1–7)
+
+**1. Trazer o que foi revisado, sem merge acidental.**
+```bash
+git checkout integration/altar-release-2026-09-18
+git pull --ff-only origin integration/altar-release-2026-09-18
+```
+`--ff-only` é o ponto: se o comando recusar, alguém divergiu e isso precisa ser
+resolvido olhando, não com um merge automático.
+
+**2. Confirmar o deployment ANTES de qualquer coisa que escreva.**
+```bash
+npx convex env list        # ou abra o painel
+```
+Tem de ser **`healthy-pika-907`**. Se aparecer `mellow-goose-539`, pare aqui.
+
+**3. Rodar o codegen — a pendência que veio da rodada anterior.**
+```bash
+npx convex codegen
+```
+Este comando não roda no ambiente do agente (sem `CONVEX_DEPLOYMENT`), e por
+isso `convex/_generated/api.d.ts` recebeu **duas linhas escritas à mão** para
+registrar o módulo `propostas`.
+
+**4. Conferir o que o codegen mudou.**
+```bash
+git diff --stat convex/_generated/
+git diff convex/_generated/api.d.ts
+```
+- **Sem diferença** → a edição manual estava certa. Siga.
+- **Com diferença** → **o gerador tem razão.** Aceite o arquivo dele e commite
+  só isso, com uma mensagem que diga que é saída de codegen.
+
+> Também é aqui que se descobre se o codegen quer REMOVER alguma coisa: esta
+> rodada apagou duas queries públicas sem chamador (`supplierCatalog.get` e
+> `propostas.doLead`), e o arquivo gerado deve acompanhar.
+
+**5. Revalidar, se o passo 4 mudou alguma coisa.**
+```bash
+pnpm test && npx tsc -p tsconfig.app.json --noEmit \
+  && npx tsc -p convex/tsconfig.json --noEmit && pnpm lint && pnpm build
+```
+Se o passo 4 não mudou nada, esta validação já foi feita e está verde.
+
+**6. Publicar no DEV.**
+```bash
+npx convex dev --once
+```
+
+**7. Confirmar que subiu onde devia.** Painel do Convex → `healthy-pika-907` →
+Functions. `propostas` tem de aparecer; `supplierCatalog.get` e
+`propostas.doLead`, não.
+
+---
+
+## Bloco B — o produto, olhado como ela olharia (8–19)
+
+**8. Abrir o frontend.**
+```bash
+pnpm dev
+```
+
+**9. Semear o demo — só se o ambiente aceitar.** No painel do Convex, rode
+primeiro `internal.demo.checkEnvironment` e leia `proximoPasso`. Só rode
+`internal.demo.seed` se ele disser que está pronto. As três travas
+(`ALTAR_DEMO=1`, recusa em banco com sinal de produção, idempotência) fazem o
+trabalho, mas a leitura vem antes.
+
+**10. Login.** Entrar, sair e entrar de novo. Confirmar que o redirecionamento
+cai no painel e que o menu aparece inteiro.
+
+**11. Início.** O painel de atenção responde "o que eu faço hoje?" — eventos
+próximos, dinheiro vencido, funil. Conferir que nenhum número aparece como
+`NaN`, `R$ 0,00` sem motivo ou "em -3 dias".
+
+**12. Catálogo (`/catalogo`).** Buscar um material; buscar uma composição **pelo
+nome de um material dela**; filtrar por categoria; abrir "ver arquivados".
+Abrir um material e digitar `1.500,00` no custo → tem de **gravar 1500**, não
+apagar o campo (era o defeito). Digitar `abc` → tem de recusar com recado, sem
+salvar.
+
+**13. Fornecedor 360 (`/fornecedores/:id`).** Abrir pelo nome no catálogo.
+Conferir eventos, total de compras e a frase que diz **o que o total não é**.
+Abrir um fornecedor sem nenhuma compra e conferir que a tela não inventa zero.
+
+**14. Proposta (`/propostas`).** Criar a partir de um lead do funil e a partir
+de um evento. Conferir que **o tipo do evento aparece em português** ("Casamento",
+nunca `wedding`) — era o defeito mais grave desta rodada. Editar só o TEXTO e
+tentar a prévia: tem de avisar que há alteração não salva. Salvar, ver a prévia,
+marcar como enviada, editar de novo e conferir o aviso de divergência.
+
+**15. PDF da proposta.** Gerar e **abrir o arquivo**. Procurar, com os olhos:
+custo, margem, lucro, nome de fornecedor. Não pode haver nenhum. Comparar com o
+PDF do Orçamento, que tem de dizer "USO INTERNO" em toda página e sair com
+`altar-orcamento-interno-` no nome.
+
+**16. Evento.** Abrir o casamento do demo. Conferir o tipo em português, a data
+sem hora inventada, o telefone da equipe clicável, e a linha da Proposta ao
+lado da do Orçamento — cada uma dizendo para quem é.
+
+**17. Financeiro e Compras.** No Financeiro, filtrar por "Receitas" num mês sem
+receita: tem de dizer **"nenhum lançamento neste filtro"** e oferecer "Ver
+todos" — nunca "adicione o primeiro". Em Compras, apagar um item que tenha
+lançamento no financeiro: tem de **perguntar antes** e avisar que a despesa sai
+junto.
+
+**18. Celular e PWA.** Abrir em 320–430 px de verdade (ou no aparelho). Olhar:
+o editor de proposta (os campos empilham?), a linha de compras (os dois botões
+têm 44 px?), o menu "Mais", e instalar como PWA para conferir ícone e nome.
+
+**19. Central em modo simulado.** `ALTAR_CENTRAL_ENVIO_HABILITADO` tem de estar
+**ausente ou diferente de `"true"`**. Aprovar uma mensagem e confirmar que ela
+termina em `aprovada`, **nunca** em `executada`. Nada sai.
+
+---
+
+## 20. Relatório
+
+Anotar, em uma linha cada: o que quebrou, o que pareceu confuso, e o que uma
+decoradora perguntaria. O que não couber em uma linha vira tarefa, não
+correção no calor da homologação.
+
+---
+
+## O que NÃO fazer em nenhum passo
+
+- `convex deploy` contra `mellow-goose-539`;
+- merge em `main`;
+- ligar `ALTAR_CENTRAL_ENVIO_HABILITADO`;
+- mexer em Asaas;
+- converter lead em evento **no demo** durante uma demonstração ao vivo (altera
+  os dados do roteiro — ver `docs/demo-comercial.md`);
+- corrigir código no meio da homologação. Anote e siga.

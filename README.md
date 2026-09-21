@@ -84,6 +84,10 @@ As travas (não tocar produção, não rodar com envio externo ligado, exigir
 `mock`, token só do ambiente) vivem em `scripts/homologacao/travas.mjs`, são
 funções puras e têm teste próprio (`npx vitest run --project scripts`).
 
+Para publicar uma rodada no DEV e conferir o produto depois, a sequência está
+em **`docs/homologacao-dev.md`** — vinte passos, na ordem, incluindo o
+`convex codegen` e a conferência do `api.d.ts`.
+
 Variáveis de ambiente usadas pelo backend (só os NOMES; os valores vivem no
 Convex e em lugar nenhum do repositório):
 

@@ -9,6 +9,9 @@ IA) e dava por pronto o que nunca foi feito. Um plano que não bate com o códig
 
 Datado de 21/09/2026. Quando divergir do código, o código está certo.
 
+Para publicar no DEV e conferir o produto depois, veja
+`docs/homologacao-dev.md`.
+
 ---
 
 ## Pronto e em uso

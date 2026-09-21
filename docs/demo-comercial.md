@@ -415,7 +415,9 @@ aberta, e as quatro já compradas.
 **NÃO faça:** não gere o PDF desta tela na reunião sem dizer o que ele é. Ele
 é **interno** — traz custo orçado, lucro e margem — e o botão, o título, o
 rodapé e o nome do arquivo dizem isso. Se perguntarem pela proposta que vai
-para a cliente: **ainda não implementado**, e é a próxima entrega da lista.
+para a cliente: ela **existe**, é outro documento e mora em `/propostas` —
+escopo e investimento, sem custo e sem margem. Mostrar os dois em sequência é
+um dos momentos mais fortes da demonstração.
 
 ### Parada 11 — o papel que vai para o galpão · 1,5 min
 
@@ -536,18 +538,18 @@ saem **em papel** — é essa a resposta do produto para o galpão sem sinal.
 ### Sobre materiais e acervo
 
 **"Tenho uma tela para gerenciar meu catálogo de materiais?"**
-Parcialmente. O material é cadastrado de dentro da receita, e a partir daí é
-reaproveitado em todas as outras — e **corrigido de lá também**: o lápis ao
-lado do material abre nome, categoria, tipo, custo, margem e arquivar. O que
-não existe é uma **tela de catálogo no menu**, para revisar a lista inteira
-antes da temporada: ainda não implementado.
+Sim — **Catálogo**, no menu. Duas abas (materiais e composições), busca, filtro
+por categoria e "ver arquivados". A busca de composição encontra também pelo
+nome do MATERIAL, que é como se procura de verdade ("onde eu uso rosa
+avalanche?"). E antes de arquivar, o ALTAR mostra onde aquilo é usado.
+
+O material continua podendo ser cadastrado e corrigido de dentro da receita,
+onde ele é escolhido: é o **mesmo diálogo**, em dois lugares.
 
 **"E a biblioteca de composições, eu edito?"**
-Salvar, aplicar, **renomear e arquivar**: funciona hoje, tudo de dentro do
-diálogo da receita — e antes de arquivar, o ALTAR mostra em quais eventos
-aquela receita já foi usada. **Duplicar** uma composição para criar uma
-variação: ainda não implementado. Uma tela de biblioteca no menu, como a do
-catálogo: ainda não implementado.
+Salvar, aplicar, renomear, arquivar e ver em quais eventos a receita já foi
+usada: funciona hoje, tanto no Catálogo quanto de dentro do diálogo da receita.
+**Duplicar** uma composição para criar uma variação: ainda não implementado.
 
 **"O acervo controla peça por peça, com etiqueta?"**
 Não, e é uma decisão. O controle é por **quantidade** — "tenho 58 vasos âmbar,
@@ -571,15 +573,28 @@ ALTAR calcula é o resultado **da decoradora**.
 Ainda não implementado.
 
 **"Consigo mandar o orçamento para a minha cliente?"**
-Não como proposta pronta: **ainda não implementado**. O PDF do Orçamento é
-documento **interno** — ele traz custo orçado, lucro e margem, e existe para a
-reunião de fechamento DELA, não para a cliente. A tela, o título do PDF, o
-rodapé de todas as páginas e o nome do arquivo dizem isso.
+O Orçamento, não — e essa é a melhor parte da resposta. Ele é documento
+**interno**: traz custo orçado, lucro e margem, e existe para a reunião de
+fechamento DELA. A tela, o título do PDF, o rodapé de todas as páginas e o
+nome do arquivo (`altar-orcamento-interno-…`) dizem isso.
 
-O que existe hoje para a cliente: o Caderno de Montagem na audiência
-"cliente", que mostra o que foi contratado sem nenhum valor. Uma proposta
-comercial — só honorários, com validade e condição de pagamento — é a próxima
-entrega da lista.
+O que vai para a cliente é a **Proposta** (`/propostas`), que é outro
+documento: escopo, investimento, condições e validade — **sem custo e sem
+margem**. E não é a tela que esconde: esses campos não existem no objeto que
+sai. A proposta nasce da oportunidade do funil ou do evento, copiando o que já
+foi digitado, e tem uma prévia do que a cliente vai ler antes de gerar o PDF.
+
+*Bom momento da demonstração:* abrir os dois lado a lado. É a diferença que
+quem vende entende na hora.
+
+**"Ele manda a proposta para a cliente? Ela assina por ali?"**
+Não, e é deliberado. O ALTAR não envia e não assina: "marcar como enviada" e
+"aceita" são REGISTROS do que aconteceu no WhatsApp, e a tela diz isso em
+português. Assinatura com valor jurídico é decisão de produto em aberto.
+Prometer aqui custa caro depois.
+
+O Caderno de Montagem na audiência "cliente" continua existindo, e é outra
+coisa: mostra o que foi contratado, sem nenhum valor.
 
 **"O sistema me avisa se um cliente atrasar o pagamento?"**
 Sim, do que está registrado: o painel de Início mostra "Venceu e não foi

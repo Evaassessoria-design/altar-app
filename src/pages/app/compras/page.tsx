@@ -41,6 +41,8 @@ import {
   isOverdue,
   type PurchaseStatus,
 } from "@/convex/lib/purchaseStatus.ts";
+import { motivoDaListaVazia } from "@/lib/lista-vazia.ts";
+import { Link } from "react-router-dom";
 
 const CATEGORIES = [
   "Flores",
@@ -518,6 +520,10 @@ function ComprasContent() {
     if (eventFilter === "completed") return e.status === "completed";
     return e.status !== "cancelled";
   });
+  // Mesmo em "Todos" a lista esconde os cancelados. Quem tinha um evento só, e
+  // cancelado, lia "Crie eventos para gerenciar suas compras" — com o evento
+  // cadastrado, visível em Eventos, ali do lado.
+  const vazio = motivoDaListaVazia((events ?? []).length, filteredEvents.length);
 
   /**
    * Lança o custo desta compra no financeiro.
@@ -754,13 +760,44 @@ function ComprasContent() {
         ))}
       </div>
 
-      {filteredEvents.length === 0 ? (
+      {vazio === "filtro" ? (
         <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon"><ShoppingCart /></EmptyMedia>
-            <EmptyTitle>Nenhum evento encontrado</EmptyTitle>
-            <EmptyDescription>Crie eventos para gerenciar suas compras</EmptyDescription>
+            <EmptyTitle>Nenhum evento neste filtro</EmptyTitle>
+            <EmptyDescription>
+              {eventFilter === "all"
+                ? "Os eventos cancelados não entram em Compras."
+                : `Você tem ${(events ?? []).length} evento${(events ?? []).length === 1 ? "" : "s"} — nenhum deles neste recorte.`}
+            </EmptyDescription>
           </EmptyHeader>
+          {eventFilter !== "all" && (
+            <EmptyContent>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setEventFilter("all")}
+                className="cursor-pointer"
+              >
+                Ver todos
+              </Button>
+            </EmptyContent>
+          )}
+        </Empty>
+      ) : vazio === "sem_dados" ? (
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon"><ShoppingCart /></EmptyMedia>
+            <EmptyTitle>Nenhum evento ainda</EmptyTitle>
+            <EmptyDescription>
+              A lista de compras nasce de um evento. Crie o primeiro para começar.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button size="sm" asChild className="cursor-pointer">
+              <Link to="/eventos">Ir para Eventos</Link>
+            </Button>
+          </EmptyContent>
         </Empty>
       ) : (
         <div className="space-y-4">

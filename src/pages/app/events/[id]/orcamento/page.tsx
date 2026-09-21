@@ -43,6 +43,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog.tsx";
+import { motivoDaListaVazia } from "@/lib/lista-vazia.ts";
 
 const CATEGORIES = [
   "Honorários",
@@ -271,6 +272,9 @@ export default function OrcamentoPage() {
   const filteredItems = (items ?? []).filter(
     (i) => activeTab === "all" || i.type === activeTab,
   );
+  // A aba mostrava "12" logo acima de "Nenhum item ainda" — a contradição
+  // inteira cabia numa tela só.
+  const vazio = motivoDaListaVazia((items ?? []).length, filteredItems.length);
   const incomeTotal = items.filter((i) => i.type === "income").reduce((s, i) => s + i.quantity * i.unitPrice, 0);
   const expenseTotal = items.filter((i) => i.type === "expense").reduce((s, i) => s + i.quantity * i.unitPrice, 0);
 
@@ -437,10 +441,21 @@ export default function OrcamentoPage() {
           })}
         </div>
 
-        {filteredItems.length === 0 ? (
+        {vazio === "filtro" ? (
+          <div className="py-12 text-center text-sm text-muted-foreground">
+            Nenhuma linha de {activeTab === "income" ? "receita" : "custo"} neste orçamento.{" "}
+            <button
+              type="button"
+              onClick={() => setActiveTab("all")}
+              className="cursor-pointer text-primary hover:underline"
+            >
+              Ver todos
+            </button>
+          </div>
+        ) : vazio === "sem_dados" ? (
           <div className="py-12 text-center text-sm text-muted-foreground">
             Nenhum item ainda.{" "}
-            <button onClick={openAdd} className="text-primary hover:underline cursor-pointer">
+            <button type="button" onClick={openAdd} className="text-primary hover:underline cursor-pointer">
               Adicionar agora
             </button>
           </div>

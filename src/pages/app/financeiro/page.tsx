@@ -62,6 +62,7 @@ import { format } from "date-fns";
 import { formatDateInput } from "@/lib/event-date.ts";
 import { paraOCampo, valorDigitado } from "@/lib/valor-digitado.ts";
 import { ptBR } from "date-fns/locale";
+import { motivoDaListaVazia } from "@/lib/lista-vazia.ts";
 
 const INCOME_CATEGORIES = [
   "Honorários",
@@ -335,6 +336,10 @@ export default function FinanceiroPage() {
   const filtered = (transactions ?? []).filter(
     (t) => filter === "all" || t.type === filter,
   );
+  // "Não há lançamento nenhum" e "este recorte não tem lançamento" são coisas
+  // diferentes, e a tela dizia a primeira nas duas situações — com 200 linhas
+  // no livro e o filtro em "Receitas", ela convidava a cadastrar o primeiro.
+  const vazia = motivoDaListaVazia((transactions ?? []).length, filtered.length);
 
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-6">
@@ -435,7 +440,29 @@ export default function FinanceiroPage() {
               <Skeleton key={i} className="h-16 rounded-xl" />
             ))}
           </div>
-        ) : filtered.length === 0 ? (
+        ) : vazia === "filtro" ? (
+          <Empty>
+            <EmptyHeader>
+              <EmptyMedia variant="icon"><DollarSign /></EmptyMedia>
+              <EmptyTitle>Nenhum lançamento neste filtro</EmptyTitle>
+              <EmptyDescription>
+                Você tem {(transactions ?? []).length} lançamento
+                {(transactions ?? []).length === 1 ? "" : "s"} no livro — nenhum deles é{" "}
+                {filter === "income" ? "receita" : "despesa"}.
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setFilter("all")}
+                className="cursor-pointer"
+              >
+                Ver todos
+              </Button>
+            </EmptyContent>
+          </Empty>
+        ) : vazia === "sem_dados" ? (
           <Empty>
             <EmptyHeader>
               <EmptyMedia variant="icon"><DollarSign /></EmptyMedia>

@@ -11,6 +11,7 @@ Ele é diferente dos vizinhos de propósito:
 | `ROADMAP.md` | o que existe |
 | `docs/prontidao-comercial.md` | posso mostrar numa reunião? |
 | `docs/proposta-comercial.md` | o que a proposta faz, e o que ela deliberadamente não faz |
+| `docs/homologacao-dev.md` | o que fazer no notebook, na ordem |
 | **este** | **o que construir a seguir, e por quê** |
 
 Datado de 21/09/2026, conferido contra o código em `c0fdf39`. Cada item cita a
@@ -57,6 +58,81 @@ evidência. Onde não há evidência, não há item — nada aqui é suposição
 > PDF do caderno de montagem), e listava a reserva de acervo como backend sem
 > tela. As três estavam velhas. Um mapa que erra para menos faz construir o que
 > já existe.
+
+---
+
+## 0. PRONTO? — a definição, depois da última auditoria
+
+Escrito na véspera da homologação, e por isso organizado pela única pergunta
+que importa agora: **o que impede cinco decoradoras de trabalharem 30 dias sem
+o Matheus ao lado?**
+
+As quatro listas abaixo são exaustivas. O que não está aqui, ou já funciona, ou
+está nas seções seguintes como dívida conhecida com gatilho declarado.
+
+### ✅ PRONTO PARA BETA
+
+Nada pendente. As oito últimas auditorias fecharam, em ordem de gravidade:
+
+| | O que era |
+|---|---|
+| Documento da cliente | O PDF da proposta dizia **"wedding"** sob o timbre do estúdio |
+| Perda de dado | A lixeira de Compras apagava a compra **e a despesa** do livro-caixa, sem perguntar |
+| Perda de dado | Arquivar uma peça do Acervo era **porta de uma mão só** — sem filtro e sem volta |
+| Perda de dado | O custo do material era **apagado** por quem digitasse "1.500,00" |
+| Dado incorreto | `acervo.registrarContagem` gravava `NaN` como **"contei zero"**, zerando a peça |
+| Dado incorreto | `funil.convertToEvent` gravava em `events` **por fora** da guarda de orçamento |
+| Documento errado | A prévia e o PDF da proposta saíam da **versão antiga** quando só o texto mudava |
+| A tela mentindo | Três telas diziam "você não tem nada" a quem tem 200 lançamentos |
+| Vocabulário | Um objeto, uma tela, **três nomes** no Catálogo |
+| Superfície | Duas queries e uma action **públicas sem chamador**, uma delas sem guarda |
+
+**Não há item em aberto nesta lista.** O que sobrou depende de notebook ou de
+decisão humana — está nas duas listas seguintes.
+
+### 🖥 PRECISA HOMOLOGAR NO NOTEBOOK
+
+Nenhum destes é corrigível aqui. A sequência está em `docs/homologacao-dev.md`.
+
+1. **`npx convex codegen` e a conferência do `api.d.ts`.** O arquivo recebeu
+   duas linhas à mão quando `propostas` nasceu, e desde então **três funções
+   públicas foram removidas**. O gerador tem a palavra final.
+2. **Mobile de verdade, 320–430 px.** Toda auditoria de celular feita até aqui
+   foi ESTÁTICA, por leitura de código. Nenhum navegador foi aberto.
+3. **Os seis PDFs abertos com os olhos.** A trava de audiência lê o código; ela
+   não vê um rodapé sobreposto nem um texto cortado.
+4. **O seed do demo contra o DEV**, com `checkEnvironment` antes.
+5. **A Central em modo simulado**, confirmando que aprovar termina em
+   `aprovada` e nunca em `executada`.
+
+### 🤔 DECISÃO DO MATHEUS
+
+Nenhuma é técnica, e por isso nenhuma foi tomada aqui.
+
+1. **"Lead" ou "cliente"?** A decoradora diz cliente. A palavra está confinada
+   a UMA tela (`funil/page.tsx`, 11 ocorrências visíveis) e fora do menu —
+   `vocabulario.test.ts` mede e trava esse raio para que a troca, se vier, não
+   seja uma busca e um susto. Atravessa também a tabela `leads`, as funções de
+   `convex/funil.ts` e os documentos comerciais.
+2. **A proposta ganha valor jurídico?** Hoje "aceita" é a decoradora
+   registrando o que ouviu. Assinatura muda contrato, responsabilidade e
+   provavelmente fornecedor externo.
+3. **Segunda pessoa na conta.** Medida em `docs/arquitetura-multiusuario.md`.
+4. **O que acontece quando a assinatura vence** (§4).
+5. **Quando ligar o envio externo da Central.**
+
+### 🕓 PÓS-BETA
+
+Conhecidos, medidos, com gatilho — e **deliberadamente não corrigidos agora**,
+porque nenhum é alcançável por cinco contas novas em 30 dias.
+
+| | Quando dói |
+|---|---|
+| `financeiro.listTransactions` sem paginação | Uma conta com anos de lançamentos. O TOTAL não é afetado: `getSummary` soma por conta própria |
+| `admin.getStats` / `listUsers` varrendo `users` | Cresce com os clientes do ALTAR, não com o uso dela |
+| `collect()` de `users` no webhook do Asaas | Por webhook recebido — o único sem tela, e por isso o único que ninguém reporta |
+| Pacote principal em 830 kB | Primeira abertura no 4G |
+| `compositions.duplicate`, `fichaTecnica.limparReceita` | Backend pronto, sem tela. Deliberado |
 
 ---
 

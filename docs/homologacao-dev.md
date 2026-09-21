@@ -42,9 +42,11 @@ git diff convex/_generated/api.d.ts
 - **Com diferença** → **o gerador tem razão.** Aceite o arquivo dele e commite
   só isso, com uma mensagem que diga que é saída de codegen.
 
-> Também é aqui que se descobre se o codegen quer REMOVER alguma coisa: esta
-> rodada apagou duas queries públicas sem chamador (`supplierCatalog.get` e
-> `propostas.doLead`), e o arquivo gerado deve acompanhar.
+> Também é aqui que se descobre se o codegen quer REMOVER alguma coisa. Foram
+> **três** funções públicas apagadas por não terem chamador:
+> `supplierCatalog.get`, `propostas.doLead` e `asaas.getCustomerPortalUrl`
+> (esta última também não tinha guarda). O arquivo gerado deve acompanhar as
+> três.
 
 **5. Revalidar, se o passo 4 mudou alguma coisa.**
 ```bash
@@ -90,15 +92,26 @@ Abrir um material e digitar `1.500,00` no custo → tem de **gravar 1500**, não
 apagar o campo (era o defeito). Digitar `abc` → tem de recusar com recado, sem
 salvar.
 
+**12b. Acervo (`/acervo`) — o caminho de volta.** Arquivar uma peça, conferir
+que ela some da lista, marcar **"Ver arquivados"**, achá-la e **reativar**. Era
+porta de uma mão só até esta rodada, e o botão fica encostado em "Ajustar
+estoque", que é o que ela usa o tempo todo.
+
 **13. Fornecedor 360 (`/fornecedores/:id`).** Abrir pelo nome no catálogo.
 Conferir eventos, total de compras e a frase que diz **o que o total não é**.
 Abrir um fornecedor sem nenhuma compra e conferir que a tela não inventa zero.
 
 **14. Proposta (`/propostas`).** Criar a partir de um lead do funil e a partir
-de um evento. Conferir que **o tipo do evento aparece em português** ("Casamento",
-nunca `wedding`) — era o defeito mais grave desta rodada. Editar só o TEXTO e
-tentar a prévia: tem de avisar que há alteração não salva. Salvar, ver a prévia,
-marcar como enviada, editar de novo e conferir o aviso de divergência.
+de um evento. Conferir que **o tipo do evento aparece em português**
+("Casamento", nunca `wedding`). Editar só o TEXTO — sem tocar em valor — e
+tentar a prévia: tem de avisar que há alteração não salva, **acima dos botões,
+antes do clique**. Salvar, ver a prévia, marcar como enviada, editar de novo e
+conferir o aviso de divergência.
+
+**14b. Números impossíveis, pelo console.** Com a sessão aberta, chamar
+`api.funil.createLead` com `budget: NaN` e `api.acervo.registrarContagem` com
+`quantidadeContada: NaN`. As duas têm de RECUSAR. É o teste que só o navegador
+faz de verdade: a tela nunca deixaria chegar lá.
 
 **15. PDF da proposta.** Gerar e **abrir o arquivo**. Procurar, com os olhos:
 custo, margem, lucro, nome de fornecedor. Não pode haver nenhum. Comparar com o

@@ -211,10 +211,10 @@ export default function ProjetoDecoracaoPage() {
                 </p>
               </div>
 
-              {/* ── AS TRÊS PRATELEIRAS ───────────────────────────────────
-                  Separadas e rotuladas: inspiração, decisão e resultado são
-                  coisas diferentes, e misturá-las é a confusão mais cara da
-                  decoração. */}
+              {/* ── AS PRATELEIRAS DO AMBIENTE ────────────────────────────
+                  Separadas e rotuladas: inspiração, decisão, resultado e o que
+                  ficou de fora são coisas diferentes, e misturá-las é a
+                  confusão mais cara da decoração. Prateleira vazia some. */}
               {(ambiente.referencias.length > 0 ||
                 ambiente.contratadas.length > 0 ||
                 ambiente.execucao.length > 0 ||

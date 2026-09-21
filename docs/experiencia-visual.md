@@ -7,6 +7,26 @@ Datado de 21/09/2026, conferido contra o código em `b94c891`.
 
 ---
 
+## 0. Quem faz o quê
+
+Seis lugares, seis papéis. **Nenhum compete com os outros** — e nenhum guarda o
+que já é de outro.
+
+| | O que é | O que NÃO é |
+|---|---|---|
+| **GALERIA** | A **biblioteca de imagens** do evento. Único lugar que sobe, classifica e apaga foto | Não é a visão do projeto |
+| **PROJETO VISUAL** | A **visão criativa**: como o evento deve ficar, ambiente por ambiente. LÊ a galeria e os itens; não guarda nada | Não é galeria, não é caderno |
+| **CADERNO DE MONTAGEM** | A **instrução de execução**, em papel, para o galpão | Não é moodboard |
+| **FICHA TÉCNICA** | **Composição e materiais**: o que comprar e quanto | Não é visual |
+| **LAYOUT / PLANTA** | A **organização espacial** | Não marca posição de ambiente (ainda) |
+| **RESULTADO FINAL** | O **registro da execução** — fotos de `montagem`/`evento`/`desmontagem` | Não é inspiração |
+
+A regra que mantém isso: **um dado, um dono.** A foto pertence à Galeria; o
+Projeto Visual a exibe. Classificar na Galeria muda o Projeto no mesmo
+instante, porque é o mesmo registro — não há cópia.
+
+---
+
 ## 1. O sistema visual dos documentos
 
 São **seis**, e até esta rodada eram **duas famílias**.
@@ -78,6 +98,26 @@ Ou seja: o schema documentava a distinção em oito linhas, `scopeMeta` desenhav
 o selo, `AVISO_REFERENCIA` escrevia o aviso — e nada chegava ao banco. Em
 `assemblyItems` a mesma regra sempre funcionou. Só nas FOTOS era jogada fora.
 
+### E agora elas aparecem onde ela pensa
+
+Até esta rodada a classificação existia e **não ia a lugar nenhum**: o Projeto
+mostrava só as duas fotos presas ao item de montagem
+(`referencePhotoUrl` / `contractedPhotoUrl`), nunca as setenta da galeria.
+
+`lib/projeto-visual.ts` faz a junção **pelo rótulo do ambiente** — não há id
+ligando foto e item, e inventar um exigiria cadastro de ambiente. A comparação
+normaliza acento, caixa e espaço; o texto original nunca é reescrito.
+
+Cada ambiente mostra **prateleiras separadas e rotuladas** — Contratado,
+Inspiração, Como ficou e Ficou de fora — nunca na mesma fileira. Prateleira
+vazia não aparece: a tela mostra o que existe.
+
+**A fase manda mais que o escopo.** Uma foto tirada em `montagem`, `evento` ou
+`desmontagem` é EXECUÇÃO, qualquer que fosse a classificação anterior: foi
+feita depois da decisão, então registra o que aconteceu. E foto **sem
+classificação não é promovida a referência** — o padrão de um envio recente
+viraria decisão estética sem ninguém dizer.
+
 ---
 
 ## 3. Ambiente — a entidade que não foi criada
@@ -109,6 +149,10 @@ inteiro, nunca um dentro do outro.
 
 Ligar os dois exigiria coordenadas por ambiente — o começo de um editor. **Não
 foi feito, e não deve ser feito agora** (ver §8).
+
+O que mudou: a planta agora aparece **dentro do Projeto Visual**, como seção
+própria, com link para a tela dela. Só visualização — sem arrastar, sem marcar,
+sem coordenada.
 
 ---
 
@@ -185,6 +229,32 @@ Nenhuma é técnica. Todas mudam o produto.
    empresa em `brandColor`). Falta a tela. Paleta **não** deve ser extraída da
    imagem por IA: seria cor inventada apresentada como decisão dela.
 5. **Redução de imagem no upload.** Ver §6.
+
+6. **Foto de capa do projeto.** A capa é tipográfica de propósito. Escolher "a
+   primeira foto" ou "a primeira referência" seria regra inventada em silêncio,
+   e a capa de um casamento é decisão dela. Para existir capa, precisa existir
+   um jeito de ESCOLHER — um campo no evento, ou uma marcação na galeria. É
+   decisão de produto, não de código.
+
+7. **Moodboard como tela própria.** As prateleiras do Projeto Visual já são um
+   moodboard organizado por ambiente. O que falta — e que é decisão — é poder
+   SELECIONAR quais fotos entram numa composição de apresentação. Sem isso, um
+   moodboard só poderia usar "as primeiras seis", que é a mesma regra inventada
+   da capa. **Nenhuma extração automática de paleta**: seria cor inventada
+   apresentada como decisão dela.
+
+### Uma limitação conhecida do agrupamento
+
+Os itens agrupam por `area` (a chave da área do briefing → "Cerimônia"), e as
+fotos por `ambiente` (texto livre). Quando o item tem AMBOS — `area: "ceremony"`
+e `ambiente: "Jardim das oliveiras"`, como no demo — o bloco leva o nome da
+ÁREA, e fotos classificadas como "Jardim das oliveiras" formam um bloco
+separado. Mesmo lugar físico, dois blocos.
+
+Não foi corrigido porque `agruparPorAmbiente` é compartilhada com a Folha de
+Carregamento e a Ficha Técnica: mudar a chave reordenaria documentos que a
+equipe já usa. A saída provável é preferir `ambiente` sobre `area` **em todos
+os consumidores de uma vez**, com os três conferidos juntos — não numa tela só.
 
 ---
 

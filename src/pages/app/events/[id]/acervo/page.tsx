@@ -12,11 +12,12 @@ import {
 } from "@/components/ui/empty.tsx";
 import { toast } from "sonner";
 import { ConvexError } from "convex/values";
-import { ArrowLeft, ArrowRight, Boxes, TriangleAlert } from "lucide-react";
+import { ArrowLeft, ArrowRight, Boxes, Plus, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
 import { formatEventDayOnly } from "@/lib/event-date.ts";
 import { abreviarUnidade } from "@/convex/lib/materiais.ts";
 import { ROTULO_DA_RESERVA } from "@/convex/lib/acervo.ts";
+import { ReservaManualDialog } from "./_components/reserva-manual-dialog.tsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ACERVO DO EVENTO
@@ -77,6 +78,7 @@ export default function AcervoDoEventoPage() {
   const registrarRetorno = useMutation(api.acervo.registrarRetorno);
   const liberar = useMutation(api.acervo.liberarReserva);
   const [gerando, setGerando] = useState(false);
+  const [reservando, setReservando] = useState(false);
   // Baixa iniciada a partir do evento: leva a sugestao de quantidade, mas a
   // confirmacao (tipo, numero, motivo) continua sendo da pessoa.
   const [baixa, setBaixa] = useState<
@@ -145,10 +147,18 @@ export default function AcervoDoEventoPage() {
             O que sai do seu galpão para este evento
           </p>
         </div>
-        <Button size="sm" variant="outline" disabled={gerando}
-          onClick={() => void handleDaFicha()} className="cursor-pointer">
-          {gerando ? "..." : "Reservar da ficha"}
-        </Button>
+        {/* Os dois caminhos, lado a lado: a ficha traz o que o projeto pede,
+            e "Reservar peça" resolve o resto — inclusive o caso em que a
+            própria ficha manda escolher à mão entre peças equivalentes. */}
+        <div className="flex flex-shrink-0 gap-2">
+          <Button size="sm" variant="outline" disabled={gerando}
+            onClick={() => void handleDaFicha()} className="cursor-pointer">
+            {gerando ? "..." : "Reservar da ficha"}
+          </Button>
+          <Button size="sm" onClick={() => setReservando(true)} className="cursor-pointer gap-1.5">
+            <Plus className="size-4" /> Reservar peça
+          </Button>
+        </div>
       </div>
 
       {acervo.reservas.length === 0 ? (
@@ -157,16 +167,22 @@ export default function AcervoDoEventoPage() {
             <EmptyMedia variant="icon"><Boxes /></EmptyMedia>
             <EmptyTitle>Nenhuma peça reservada</EmptyTitle>
             <EmptyDescription>
-              Use “Reservar da ficha” para trazer o que a Ficha Técnica precisa e que já existe no
-              seu acervo. Se a ficha ainda não tem receita, é por lá que começa.
+              “Reservar peça” escolhe direto do seu acervo — é o caminho quando você já sabe o
+              que vai levar. “Reservar da ficha” traz de uma vez tudo o que a Ficha Técnica
+              precisa e que já é seu.
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
-            <Button asChild size="sm" variant="outline" className="cursor-pointer">
-              <Link to={`/eventos/${id}/ficha-tecnica`}>
-                Abrir a Ficha Técnica <ArrowRight className="size-4" />
-              </Link>
-            </Button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button size="sm" onClick={() => setReservando(true)} className="cursor-pointer gap-1.5">
+                <Plus className="size-4" /> Reservar peça
+              </Button>
+              <Button asChild size="sm" variant="outline" className="cursor-pointer">
+                <Link to={`/eventos/${id}/ficha-tecnica`}>
+                  Abrir a Ficha Técnica <ArrowRight className="size-4" />
+                </Link>
+              </Button>
+            </div>
           </EmptyContent>
         </Empty>
       ) : (
@@ -281,6 +297,13 @@ export default function AcervoDoEventoPage() {
           ))}
         </div>
       )}
+
+      <ReservaManualDialog
+        eventId={eventId}
+        dataDoEvento={event.date}
+        aberto={reservando}
+        onClose={() => setReservando(false)}
+      />
 
       {baixa && (
         <AjusteDeAcervoDialog

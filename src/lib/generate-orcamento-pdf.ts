@@ -31,6 +31,8 @@
 
 import jsPDF from "jspdf";
 import { entregarPdf } from "./pdf-delivery.ts";
+import { resolveIdentidade, type EmpresaLike } from "./brand.ts";
+import { cabecalhoDaEmpresa, rodapeEmTodasAsPaginas } from "./pdf-marca.ts";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -64,7 +66,15 @@ export interface OrcamentoPDFData {
     profit: number;
     margin: number;
   };
-  studioName?: string;
+  /**
+   * A empresa inteira, não só o nome.
+   *
+   * Antes era `studioName?: string`, e a tela mandava `currentUser.name` — o
+   * nome da PESSOA. Uma empresa chamada "Aurora Decorações" imprimia "Eva" no
+   * topo do documento de custo, e sem cor, sem contato e sem assinatura.
+   * `resolveIdentidade` já resolve os quatro de uma vez.
+   */
+  empresa?: EmpresaLike | null;
 }
 
 function brl(v: number) {
@@ -84,26 +94,25 @@ function summaryRow(doc: jsPDF, label: string, value: string, y: number, bold = 
 }
 
 export function generateOrcamentoPDF(data: OrcamentoPDFData): void {
-  const { event, items, summary, studioName } = data;
+  const { event, items, summary } = data;
+  const identidade = resolveIdentidade(data.empresa);
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
-  // Header bar
-  doc.setFillColor(...PRIMARY);
-  doc.rect(0, 0, PAGE_W, 28, "F");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.setTextColor(255, 255, 255);
-  doc.text(studioName ?? "ALTAR", MARGIN, 12);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  // O documento diz o que é na primeira linha que se lê.
-  doc.text("Orçamento — USO INTERNO (contém custos e margem)", MARGIN, 18);
+  // O cabeçalho é COMPARTILHADO (lib/pdf-marca.ts): a empresa em destaque, o
+  // tipo de documento abaixo, e o aviso de uso interno ao lado dele — onde se
+  // lê primeiro, não num canto.
+  const inicio = cabecalhoDaEmpresa({
+    doc,
+    identidade,
+    titulo: "ORÇAMENTO (custos e margem)",
+    audiencia: "interno",
+    margem: MARGIN,
+  });
+
   const today = format(new Date(), "dd/MM/yyyy", { locale: ptBR });
-  doc.setTextColor(240, 230, 210);
-  doc.text(`Emitido em ${today}`, PAGE_W - MARGIN, 18, { align: "right" });
 
   // Event info
-  let y = 36;
+  let y = inicio + 2;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
   doc.setTextColor(...DARK);
@@ -213,24 +222,15 @@ export function generateOrcamentoPDF(data: OrcamentoPDFData): void {
     y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
   }
 
-  // Footer
-  const totalPages = doc.getNumberOfPages();
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i);
-    doc.setDrawColor(...BORDER);
-    doc.setLineWidth(0.3);
-    doc.line(MARGIN, 288, PAGE_W - MARGIN, 288);
-    doc.setFontSize(7);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(...MUTED);
-    // Em TODA página: quem imprime e separa folha não vê a capa.
-    doc.text(
-      `${studioName ?? "Altar"} · Orçamento: ${event.name} · USO INTERNO — não enviar ao cliente`,
-      MARGIN,
-      293,
-    );
-    doc.text(`Página ${i} de ${totalPages}`, PAGE_W - MARGIN, 293, { align: "right" });
-  }
+  // Rodapé compartilhado: repete o aviso de USO INTERNO em toda página, porque
+  // quem imprime e separa folha não vê a capa.
+  rodapeEmTodasAsPaginas({
+    doc,
+    identidade,
+    audiencia: "interno",
+    referencia: `Orçamento: ${event.name}`,
+    margem: MARGIN,
+  });
 
   const safeName = event.name.replace(/[^a-zA-Z0-9\u00C0-\u024F ]/g, "").trim().replace(/\s+/g, "-");
   // "interno" no nome do arquivo não é detalhe: é o que aparece na lista de

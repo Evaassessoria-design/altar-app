@@ -238,7 +238,9 @@ export default function OrcamentoPage() {
         event,
         items,
         summary,
-        studioName: currentUser?.name ?? undefined,
+        // A empresa inteira: `resolveIdentidade` prefere `studioName` e só
+        // cai para o nome da pessoa quando não há estúdio cadastrado.
+        empresa: currentUser ?? null,
       });
       toast.success("PDF gerado!");
     } catch {

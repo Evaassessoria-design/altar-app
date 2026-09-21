@@ -249,14 +249,33 @@ describe("o PDF que carrega margem se anuncia como interno", () => {
     expect(ORCAMENTO).toContain("altar-orcamento-interno-");
   });
 
-  it("o cabeçalho diz interno", () => {
-    expect(ORCAMENTO).toMatch(/USO INTERNO/);
+  it("o cabeçalho e o rodapé declaram a audiência", () => {
+    // A regra não mudou; o LUGAR dela mudou. O cabeçalho e o rodapé saíram
+    // deste arquivo para `lib/pdf-marca.ts`, porque seis documentos repetiam
+    // a mesma faixa com identidades diferentes — e dois deles anunciavam o
+    // ALTAR em vez do estúdio.
+    //
+    // O que este teste cobra agora é a DECLARAÇÃO: o gerador diz que é
+    // interno, e o módulo compartilhado responde por desenhar o aviso.
+    const chamadas = ORCAMENTO.match(/audiencia: "interno"/g) ?? [];
+    expect(chamadas.length, "o orçamento não se declara interno").toBe(2);
+    expect(ORCAMENTO).toContain("cabecalhoDaEmpresa");
+    expect(ORCAMENTO).toContain("rodapeEmTodasAsPaginas");
   });
 
-  it("o rodapé repete em TODA página", () => {
+  it("e o módulo compartilhado repete o aviso em TODA página", () => {
     // Quem imprime e separa folha não vê a capa.
-    const rodape = ORCAMENTO.slice(ORCAMENTO.indexOf("// Footer"));
-    expect(rodape).toMatch(/USO INTERNO/);
+    const MARCA = readFileSync("src/lib/pdf-marca.ts", "utf-8");
+    const rodape = MARCA.slice(MARCA.indexOf("export function rodapeEmTodasAsPaginas"));
+    expect(rodape).toMatch(/getNumberOfPages/);
+    expect(rodape).toMatch(/audiencia === "interno"/);
+    expect(rodape).toMatch(/AVISO_USO_INTERNO/);
+    expect(MARCA).toContain('AVISO_USO_INTERNO = "USO INTERNO — não enviar ao cliente"');
+  });
+
+  it("o relatório do evento também — ele carrega o briefing inteiro", () => {
+    const RELATORIO = readFileSync("src/lib/generate-event-pdf.ts", "utf-8");
+    expect((RELATORIO.match(/audiencia: "interno"/g) ?? []).length).toBe(2);
   });
 
   it("o botão da tela não é um ícone mudo", () => {

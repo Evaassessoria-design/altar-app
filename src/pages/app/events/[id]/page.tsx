@@ -87,6 +87,10 @@ export default function EventDetailsPage() {
   const [importingContract, setImportingContract] = useState(false);
 
   const event = useQuery(api.events.get, { id: id as Id<"events"> });
+
+  // A empresa vai no PDF: é a marca DELA que abre o relatório.
+
+  const currentUser = useQuery(api.users.getCurrentUser);
   const updateEvent = useMutation(api.events.update);
   const removeEvent = useMutation(api.events.remove);
   const preChecklist = useQuery(api.briefing.getChecklist, { eventId: id as Id<"events">, phase: "pre" });
@@ -243,6 +247,8 @@ export default function EventDetailsPage() {
     try {
       (await import("@/lib/generate-event-pdf.ts")).generateEventPDF({
         event,
+        // Sem isto o relatório DELA abria anunciando o ALTAR.
+        empresa: currentUser ?? null,
         briefing: briefing ?? null,
         preChecklist: preChecklist ?? [],
         postChecklist: postChecklist ?? [],

@@ -1,5 +1,7 @@
 import jsPDF from "jspdf";
 import { entregarPdf } from "./pdf-delivery.ts";
+import { resolveIdentidade, type EmpresaLike } from "./brand.ts";
+import { cabecalhoDaEmpresa, rodapeEmTodasAsPaginas } from "./pdf-marca.ts";
 import { effectivePurchaseStatus } from "@/convex/lib/purchaseStatus.ts";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
@@ -49,6 +51,13 @@ export interface EventReportData {
   team?: TeamAssignment[];
   purchases?: PurchaseItem[];
   generatedBy?: string;
+  /**
+   * A empresa. Sem ela, este documento abria com uma faixa de 28mm escrita
+   * "ALTAR — Plataforma para Decoradores de Eventos", em negrito de 18pt, e
+   * não mostrava o nome do estúdio em lugar nenhum — o relatório DELA
+   * anunciando o fornecedor do software.
+   */
+  empresa?: EmpresaLike | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -99,28 +108,22 @@ export function generateEventPDF(data: EventReportData): void {
   const { event, briefing, preChecklist = [], postChecklist = [], team = [], purchases = [] } = data;
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
-  // ── Cover header bar ──────────────────────────────────────────────────────
-  doc.setFillColor(...PRIMARY);
-  doc.rect(0, 0, PAGE_W, 28, "F");
+  // ── Cabeçalho compartilhado (lib/pdf-marca.ts) ────────────────────────────
+  // A empresa em destaque; o ALTAR assina no rodapé, discreto. É a regra que
+  // `brand.ts` sempre declarou e que este documento era o último a quebrar.
+  const identidade = resolveIdentidade(data.empresa);
+  const inicio = cabecalhoDaEmpresa({
+    doc,
+    identidade,
+    titulo: "RELATÓRIO DO EVENTO",
+    audiencia: "interno",
+    margem: MARGIN,
+  });
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.setTextColor(255, 255, 255);
-  doc.text("ALTAR", MARGIN, 12);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.text("Plataforma para Decoradores de Eventos", MARGIN, 18);
-
-  doc.setFontSize(8);
-  doc.setTextColor(240, 230, 210);
   const today = format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-  doc.text(`Gerado em ${today}`, PAGE_W - MARGIN, 18, { align: "right" });
-  if (data.generatedBy) {
-    doc.text(data.generatedBy, PAGE_W - MARGIN, 23, { align: "right" });
-  }
 
   // ── Event title block ─────────────────────────────────────────────────────
-  let y = 36;
+  let y = inicio + 2;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
   doc.setTextColor(...DARK);
@@ -370,18 +373,16 @@ export function generateEventPDF(data: EventReportData): void {
   }
 
   // ── Footer on each page ───────────────────────────────────────────────────
-  const totalPages = doc.getNumberOfPages();
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i);
-    doc.setDrawColor(...BORDER);
-    doc.setLineWidth(0.3);
-    doc.line(MARGIN, 288, PAGE_W - MARGIN, 288);
-    doc.setFontSize(7);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(...MUTED);
-    doc.text(`Altar · Relatório do Evento: ${event.name}`, MARGIN, 293);
-    doc.text(`Página ${i} de ${totalPages}`, PAGE_W - MARGIN, 293, { align: "right" });
-  }
+  // O rodapé antigo assinava "Altar" onde deveria estar o nome dela, e não
+  // dizia que o documento é interno — apesar de carregar compras, valores,
+  // equipe e o briefing inteiro na audiência interna.
+  rodapeEmTodasAsPaginas({
+    doc,
+    identidade,
+    audiencia: "interno",
+    referencia: `Relatório do evento: ${event.name}`,
+    margem: MARGIN,
+  });
 
   // ── Save ──────────────────────────────────────────────────────────────────
   const safeName = event.name.replace(/[^a-zA-Z0-9\u00C0-\u024F ]/g, "").trim().replace(/\s+/g, "-");

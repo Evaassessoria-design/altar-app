@@ -117,6 +117,7 @@ describe("os geradores de PDF só chegam no clique", () => {
     ["src/pages/app/events/[id]/briefing/page.tsx", "generate-assembly-pdf"],
     ["src/pages/app/events/[id]/ficha-tecnica/page.tsx", "generate-ficha-tecnica-pdf"],
     ["src/pages/app/events/[id]/orcamento/page.tsx", "generate-orcamento-pdf"],
+    ["src/pages/app/propostas/[id]/page.tsx", "generate-proposta-pdf"],
   ])("%s carrega %s dinamicamente", (arquivo, modulo) => {
     const codigo = semComentarios(readFileSync(arquivo, "utf-8"));
     // 385 kB de jsPDF não podem vir junto com a tela do evento, que é a mais

@@ -271,6 +271,96 @@ describe("o PDF que carrega margem se anuncia como interno", () => {
   });
 });
 
+// ═════════════════════════════════════════════════════════════════════════════
+// O PDF QUE VAI PARA A CLIENTE E TEM DINHEIRO DENTRO
+//
+// A proposta é o ÚNICO documento do ALTAR que sai para fora com valor — e é
+// justamente por isso que ela é o lugar mais perigoso do produto.
+//
+// A diferença em relação ao Orçamento não é de aviso, é de DESENHO: o Orçamento
+// recebe o resumo interno inteiro e por isso precisa se anunciar "USO INTERNO"
+// em todas as páginas; o gerador da proposta recebe `PropostaParaCliente`, que
+// `paraOCliente` construiu campo a campo. Custo, margem e fornecedor não estão
+// escondidos — não existem no objeto, e não existem no tipo.
+//
+// Estes testes travam as duas pontas: que o gerador continua recebendo SÓ o
+// tipo da cliente, e que ninguém acrescentou ali um caminho de volta ao
+// registro do banco.
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("o PDF da proposta recebe só o que a cliente pode ver", () => {
+  const PROPOSTA = readFileSync("src/lib/generate-proposta-pdf.ts", "utf-8");
+
+  it("a entrada é o tipo da cliente, não o registro do banco", () => {
+    expect(PROPOSTA).toContain("PropostaParaCliente");
+    // `Doc<"proposals">` traria o registro inteiro — com status, vínculos e
+    // qualquer campo interno que o schema ganhe amanhã.
+    expect(PROPOSTA).not.toMatch(/Doc<"proposals">/);
+    expect(PROPOSTA).not.toMatch(/PropostaArmazenada/);
+  });
+
+  it("nenhum campo interno é LIDO pelo gerador", () => {
+    // A trava é sobre LEITURA DE CAMPO, não sobre a palavra.
+    //
+    // Proibir a palavra "margem" já produziu um teste errado neste repositório
+    // (na Ficha Técnica ela é a margem de SEGURANÇA, instrução de produção), e
+    // aqui produziria outro: tanto o gerador quanto a pré-visualização FALAM
+    // sobre custo e margem de propósito — para dizer à decoradora que eles não
+    // estão ali. O que não pode existir é `.custo`, `.margem`, `.lucro`.
+    expect(semComentarios(PROPOSTA)).not.toMatch(CAMPO_INTERNO);
+    expect(PROPOSTA).not.toContain("budgetItems");
+  });
+
+  it("não se anuncia interno — porque não é, e dizer isso confundiria", () => {
+    expect(PROPOSTA).not.toMatch(/USO INTERNO/);
+    expect(PROPOSTA).toContain("proposta-");
+    expect(PROPOSTA).not.toContain("altar-orcamento");
+  });
+
+  it("a tela que gera o PDF usa a consulta que passa pela fronteira", () => {
+    const tela = readFileSync("src/pages/app/propostas/[id]/page.tsx", "utf-8");
+    // `comoOClienteVe` é a única query que passa por `paraOCliente`. Montar o
+    // documento a partir de `api.propostas.get` seria entregar o registro.
+    expect(tela).toContain("api.propostas.comoOClienteVe");
+    const geracao = tela.slice(tela.indexOf("generatePropostaPDF"));
+    expect(geracao).not.toMatch(/proposta\.itens/);
+  });
+
+  it("a pré-visualização mostra o MESMO objeto que o PDF", () => {
+    const visao = readFileSync(
+      "src/pages/app/propostas/_components/visao-do-cliente.tsx",
+      "utf-8",
+    );
+    // Se a tela tivesse o próprio tipo, ela poderia divergir do PDF sem que
+    // nada quebrasse — e a decoradora aprovaria um documento que não é o que
+    // vai ser enviado.
+    expect(visao).toContain("PropostaParaCliente");
+    expect(semComentarios(visao)).not.toMatch(CAMPO_INTERNO);
+  });
+});
+
+/**
+ * Leitura de um campo que a cliente não pode ver.
+ *
+ * `.custo`, `["margem"]`, `.supplierId` — o ACESSO, não a menção. Sem espaço
+ * depois do ponto, de propósito: "É isto que sai no PDF. Custo, margem e
+ * fornecedor não estão aqui" é frase, não leitura de campo, e foi exatamente
+ * o que a primeira versão deste teste acusou por engano.
+ */
+const CAMPO_INTERNO =
+  /[.[]"?(custo\w*|margem\w*|lucro\w*|comissao|notaInterna|supplierId|fornecedorPreferido)\b/i;
+
+/** O código sem comentário: a explicação pode citar o que o código não faz. */
+function semComentarios(fonte: string): string {
+  return fonte
+    .split("\n")
+    .filter((l) => {
+      const t = l.trim();
+      return !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*");
+    })
+    .join("\n");
+}
+
 describe("os três PDFs operacionais continuam sem dinheiro", () => {
   it.each([
     ["src/lib/generate-assembly-pdf.ts", "Caderno de Montagem"],

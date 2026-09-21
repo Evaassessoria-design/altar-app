@@ -31,6 +31,27 @@ const unidade = v.union(
  * Acima de 100% é quase sempre erro de digitação — "compre o dobro" já é o
  * teto do que faz sentido como folga.
  */
+/**
+ * O custo de referência que pode ser gravado.
+ *
+ * `valor < 0` não alcança `NaN`: toda comparação com `NaN` é falsa, então a
+ * guarda anterior deixava passar exatamente o caso que estraga o consolidado —
+ * um material com custo `NaN` contamina toda soma que o inclua, e o número
+ * aparece na tela depois, longe de onde foi digitado.
+ */
+function exigirCustoValido(valor: number | null | undefined) {
+  if (valor === null || valor === undefined) return;
+  if (!Number.isFinite(valor)) {
+    throw new ConvexError({ code: "INVALID", message: "Informe o custo em reais." });
+  }
+  if (valor < 0) {
+    throw new ConvexError({
+      code: "INVALID",
+      message: "Custo de referência não pode ser negativo",
+    });
+  }
+}
+
 function exigirMargemValida(valor: number | undefined) {
   if (valor === undefined) return;
   if (!margemValida(valor)) {
@@ -152,9 +173,7 @@ export const create = mutation({
         throw new ConvexError({ code: "NOT_FOUND", message: "Fornecedor não encontrado" });
       }
     }
-    if (typeof args.custoReferencia === "number" && args.custoReferencia < 0) {
-      throw new ConvexError({ code: "INVALID", message: "Custo de referência não pode ser negativo" });
-    }
+    exigirCustoValido(args.custoReferencia);
     exigirMargemValida(args.margemPercentual);
 
     const searchName = normalizeName(nome);
@@ -212,9 +231,7 @@ export const update = mutation({
         throw new ConvexError({ code: "NOT_FOUND", message: "Fornecedor não encontrado" });
       }
     }
-    if (typeof args.custoReferencia === "number" && args.custoReferencia < 0) {
-      throw new ConvexError({ code: "INVALID", message: "Custo de referência não pode ser negativo" });
-    }
+    exigirCustoValido(args.custoReferencia);
     // `null` limpa a margem; ausente não mexe; `0` é margem configurada valendo
     // zero — a diferença entre os três é o ponto todo (lib/limparCampos.ts).
     if (args.margemPercentual !== null) exigirMargemValida(args.margemPercentual);

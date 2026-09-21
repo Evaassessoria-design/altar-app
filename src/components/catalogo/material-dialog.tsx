@@ -6,6 +6,7 @@ import { Archive } from "lucide-react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel";
 import { TIPOS_DE_MATERIAL, UNIDADES } from "@/convex/lib/materiais.ts";
+import { valorDigitado } from "@/lib/valor-digitado.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
@@ -61,12 +62,31 @@ type Props = {
   onClose: () => void;
 };
 
-/** Campo numérico opcional: vazio vira `null` (limpa), nunca `0` por acidente. */
-function numeroOuNulo(texto: string): number | null {
-  const limpo = texto.trim().replace(",", ".");
-  if (!limpo) return null;
-  const n = Number(limpo);
-  return Number.isFinite(n) ? n : null;
+/**
+ * Campo numérico opcional: vazio LIMPA, ilegível RECUSA.
+ *
+ * ── O DEFEITO ───────────────────────────────────────────────────────────────
+ * A versão anterior devolvia `null` nos dois casos, e `null` significa "apague
+ * este campo". Quem digitasse "1.500,00" no custo de referência via:
+ *
+ *   `"1.500,00"` → `"1.500.00"` → `Number` → `NaN` → `null` → campo APAGADO
+ *
+ * seguido de "Material atualizado." em verde. O custo que ela acabara de
+ * escrever sumia, e o único sinal era o campo vazio na próxima abertura — que
+ * parece esquecimento dela, não defeito do sistema.
+ *
+ * E "1.500,00" não é digitação exótica: é como se escreve dinheiro no Brasil.
+ * `valorDigitado` existe por causa desse mesmo erro em cinco outras telas.
+ *
+ * As três respostas agora são distintas, porque significam coisas diferentes:
+ *   `undefined` — o campo está vazio: limpar;
+ *   `number`    — leu;
+ *   `"erro"`    — tem texto e não dá para ler: não gravar nada e avisar.
+ */
+function numeroOpcional(texto: string): number | null | "erro" {
+  if (!texto.trim()) return null;
+  const valor = valorDigitado(texto);
+  return valor === null ? "erro" : valor;
 }
 
 export function MaterialDialog({ material, onClose }: Props) {
@@ -103,6 +123,27 @@ export function MaterialDialog({ material, onClose }: Props) {
       toast.error("O material precisa de um nome.");
       return;
     }
+    const custoLido = numeroOpcional(custo);
+    if (custoLido === "erro") {
+      toast.error("Custo não reconhecido. Ex.: 12,50 ou 1.500,00");
+      return;
+    }
+    if (custoLido !== null && custoLido < 0) {
+      toast.error("O custo não pode ser negativo.");
+      return;
+    }
+    const margemLida = numeroOpcional(margem);
+    if (margemLida === "erro") {
+      toast.error("Margem não reconhecida. Escreva só o número: 40 para 40%.");
+      return;
+    }
+    // A margem é PERCENTUAL, não dinheiro. Um 1500 digitado ali é quase sempre
+    // alguém escrevendo o preço no campo errado — e uma sugestão de preço a
+    // 1500% passaria despercebida no consolidado.
+    if (margemLida !== null && (margemLida < 0 || margemLida > 100)) {
+      toast.error("A margem é uma porcentagem entre 0 e 100.");
+      return;
+    }
     setSalvando(true);
     try {
       await atualizar({
@@ -113,8 +154,8 @@ export function MaterialDialog({ material, onClose }: Props) {
         // gravaria uma categoria vazia em vez de remover a categoria.
         categoria: categoria.trim() || null,
         tipo: (tipo || null) as never,
-        custoReferencia: numeroOuNulo(custo),
-        margemPercentual: numeroOuNulo(margem),
+        custoReferencia: custoLido,
+        margemPercentual: margemLida,
       });
       toast.success("Material atualizado. As receitas já salvas não mudam.");
       onClose();

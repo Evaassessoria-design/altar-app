@@ -14,6 +14,7 @@ Ele é diferente dos vizinhos de propósito:
 | `docs/homologacao-dev.md` | o que fazer no notebook, na ordem |
 | `docs/portabilidade-dados.md` | o que conseguimos devolver se ela pedir os dados |
 | `docs/identidade-visual.md` | de onde sai cada imagem da marca |
+| `docs/experiencia-visual.md` | como o produto apresenta o trabalho dela |
 | **este** | **o que construir a seguir, e por quê** |
 
 Datado de 21/09/2026, conferido contra o código em `c0fdf39`. Cada item cita a
@@ -90,6 +91,8 @@ Nada pendente. As oito últimas auditorias fecharam, em ordem de gravidade:
 | Superfície | Duas queries e uma action **públicas sem chamador**, uma delas sem guarda |
 | A tela mentindo | O painel dizia "✓ tudo certo" a quem **ainda não cadastrou nada** — contradizendo o aviso de primeiros passos logo acima, na mesma tela |
 | Acessibilidade | Os três botões do visualizador de fotos sem nome acessível, e **Esc não fechava** |
+| Dado descartado | A classificação da foto (**referência × contratado**) e o ambiente eram aceitos e **jogados fora** na gravação |
+| Marca | Os dois documentos INTERNOS abriam anunciando o **ALTAR**, não o estúdio dela |
 
 **Não há item em aberto nesta lista.** O que sobrou depende de notebook ou de
 decisão humana — está nas duas listas seguintes.

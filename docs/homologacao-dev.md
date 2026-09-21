@@ -133,9 +133,20 @@ todos" — nunca "adicione o primeiro". Em Compras, apagar um item que tenha
 lançamento no financeiro: tem de **perguntar antes** e avisar que a despesa sai
 junto.
 
+**16a. Classificar uma foto e achá-la depois.** Subir uma foto, abrir "Legenda
+e classificação", marcar **Referência** e escrever o ambiente (ex.: "Mesa do
+bolo"). Fechar, reabrir: a classificação tem de estar lá — era aceita e jogada
+fora. Depois usar o filtro de ambiente e conferir que a foto aparece.
+
 **16b. Galeria de fotos, no teclado.** Abrir uma foto no notebook: **Esc** tem
 de fechar e as **setas** têm de andar entre as fotos. Era sobreposição feita à
 mão, sem nada disso — e é a tela mais usada no dia do evento.
+
+**17a. Os dois PDFs internos, abertos.** Gerar o **Relatório do evento** e o
+**Orçamento**: os dois têm de abrir com o **nome do estúdio** (não "ALTAR",
+não o nome da pessoa), na cor da empresa, com o aviso de USO INTERNO ao lado
+do tipo do documento e repetido no rodapé de toda página. Conferir também a
+Proposta: ela NÃO pode ter esse aviso.
 
 **17b. A identidade oficial, com os olhos.** É o único jeito de conferir:
 - **favicon** na aba, em 16px reais — o arco continua reconhecível?

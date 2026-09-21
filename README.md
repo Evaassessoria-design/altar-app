@@ -143,6 +143,10 @@ derivações são geradas por `scripts/brand/gerar-icones.py`.
 perguntas frequentes, checklist pré-Meet) e `docs/prontidao-comercial.md` (o
 que pode e o que não pode ser mostrado hoje).
 
+**Como o produto se apresenta**: `docs/experiencia-visual.md` — o sistema
+visual dos seis documentos, a diferença CLIENTE/EQUIPE/INTERNO, referência x
+resultado, ambientes, custo de imagem e as decisões adiadas.
+
 **Se alguém pedir os próprios dados**: `docs/portabilidade-dados.md` — o que
 sai hoje (os PDFs, evento por evento), o que exigiria implementação, e por que
 o arquivo no storage é a parte difícil. É mapa, não plano.

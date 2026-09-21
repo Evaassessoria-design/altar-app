@@ -32,6 +32,15 @@ export const savePhoto = mutation({
   args: {
     eventId: v.id("events"),
     storageId: v.id("_storage"),
+    /**
+     * Versão leve, quando o navegador conseguiu gerar uma.
+     *
+     * Opcional em todos os sentidos: envio que falhou em gerar continua
+     * salvando a foto, e este é o ÚNICO caminho que grava o campo — não há
+     * update que o troque depois, então a versão leve nunca aponta para
+     * arquivo de outra foto.
+     */
+    previewStorageId: v.optional(v.id("_storage")),
     filename: v.string(),
     category: v.union(
       v.literal("antes"),
@@ -64,6 +73,7 @@ export const savePhoto = mutation({
       eventId: args.eventId,
       userId: user._id,
       storageId: args.storageId,
+      previewStorageId: args.previewStorageId,
       filename: args.filename,
       category: args.category,
       caption: args.caption,
@@ -127,6 +137,12 @@ export const listPhotos = query({
       photos.map(async (p) => ({
         ...p,
         url: await ctx.storage.getUrl(p.storageId),
+        // A versão leve, quando existe. Quem escolhe qual desenhar é
+        // `urlDeExibicao` (src/lib/imagem-reduzida.ts) — uma regra só para as
+        // três telas, senão uma delas continuaria baixando o original.
+        previewUrl: p.previewStorageId
+          ? await ctx.storage.getUrl(p.previewStorageId)
+          : null,
       })),
     );
   },
@@ -205,6 +221,9 @@ export const deletePhoto = mutation({
       await ctx.db.patch(photo.eventId, { coverPhotoId: undefined });
     }
 
+    // Os DOIS arquivos saem: a versão leve pertence a esta foto e a mais
+    // ninguém. Deixá-la para trás seria storage órfão cobrado para sempre.
+    if (photo.previewStorageId) await ctx.storage.delete(photo.previewStorageId);
     await ctx.storage.delete(photo.storageId);
     await ctx.db.delete(args.id);
   },

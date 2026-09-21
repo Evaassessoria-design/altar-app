@@ -752,6 +752,19 @@ export default defineSchema({
     userId: v.id("users"),
     eventId: v.id("events"),
     storageId: v.id("_storage"),
+    /**
+     * Versao LEVE da mesma foto (1400 px, JPEG), gerada no navegador no
+     * momento do envio. Ver src/lib/imagem-reduzida.ts.
+     *
+     * AUSENTE = foto enviada antes desta rodada, ou formato que o navegador
+     * nao decodificou (HEIC no Android), ou imagem ja pequena. A tela cai no
+     * ORIGINAL e funciona igual — nao ha backfill e nada precisa ser
+     * reprocessado para o produto funcionar.
+     *
+     * NUNCA substitui `storageId`: o arquivo que ela enviou continua inteiro.
+     * O visualizador em tela cheia usa o original de proposito.
+     */
+    previewStorageId: v.optional(v.id("_storage")),
     filename: v.string(),
     // FASE do evento em que a foto foi tirada (antes/montagem/evento/
     // desmontagem). Eixo diferente de `projectScope`, abaixo.

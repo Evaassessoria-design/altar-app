@@ -20,6 +20,7 @@ import {
   type FotoDoProjeto,
 } from "@/lib/projeto-visual.ts";
 import { conceitoDoEvento, linhaDoConceito } from "@/lib/conceito-do-evento.ts";
+import { urlDeExibicao } from "@/lib/imagem-reduzida.ts";
 import { PrateleiraDeFotos } from "@/components/projeto/prateleira-de-fotos.tsx";
 import { labelDoTipoDeEvento } from "@/lib/event-types.ts";
 import {
@@ -174,11 +175,14 @@ export default function ProjetoDecoracaoPage() {
           `brand.ts` já registra a lição no documento: um fundo claro demais
           com texto claro em cima é pior do que não personalizar. Aqui não há
           contraste a medir porque não há sobreposição. */}
-      {(capa?.url || capaPendente) && (
+      {(capa || capaPendente) && (
         <div className="overflow-hidden rounded-xl bg-muted">
-          {capa?.url ? (
+          {capa ? (
             <img
-              src={capa.url}
+              // A versão leve, quando existe. O ponteiro da capa continua
+              // sendo UM (`event.coverPhotoId` → a foto), e quem escolhe qual
+              // arquivo desenhar é a mesma função das outras duas telas.
+              src={urlDeExibicao(capa) ?? undefined}
               alt={capa.caption?.trim() || `Capa do projeto de ${event?.name ?? "evento"}`}
               decoding="async"
               className="aspect-[3/2] w-full object-cover md:aspect-[2/1]"

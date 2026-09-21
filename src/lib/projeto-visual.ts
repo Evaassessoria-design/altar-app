@@ -38,6 +38,8 @@ export const FOTOS_SEM_AMBIENTE = "__fotos-sem-ambiente";
 export type FotoDoProjeto = {
   _id: string;
   url: string | null;
+  /** Versão leve (1400 px). Ausente em foto anterior a ela — ver `urlDeExibicao`. */
+  previewUrl?: string | null;
   caption?: string;
   ambiente?: string;
   category: string;

@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils.ts";
 import type { FotoDoProjeto } from "@/lib/projeto-visual.ts";
+import { urlDeExibicao } from "@/lib/imagem-reduzida.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // UMA PRATELEIRA DE FOTOS, COM O SIGNIFICADO ESCRITO
@@ -81,11 +82,16 @@ export function PrateleiraDeFotos({
             : "grid-cols-3 sm:grid-cols-4 md:grid-cols-6",
         )}
       >
-        {visiveis.map((foto) => (
+        {visiveis.map((foto) => {
+          // A prateleira desenha 77–120 px. O original de 15 MB nunca foi
+          // para isso — `urlDeExibicao` prefere a versão leve e cai no
+          // original quando a foto é anterior a ela.
+          const src = urlDeExibicao(foto);
+          return (
           <figure key={foto._id} className="space-y-1">
-            {foto.url ? (
+            {src ? (
               <img
-                src={foto.url}
+                src={src}
                 alt={foto.caption ?? titulo}
                 // `lazy` porque esta tela concentra imagens de propósito, e
                 // `async` para o navegador não travar a rolagem decodificando.
@@ -114,7 +120,8 @@ export function PrateleiraDeFotos({
               </figcaption>
             )}
           </figure>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import { useParams, useSearchParams, Link } from "react-router-dom";
 import { useEnvioDeArquivo } from "@/hooks/use-upload.ts";
+import { gerarPreview, urlDeExibicao } from "@/lib/imagem-reduzida.ts";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
@@ -160,10 +161,25 @@ export default function GaleriaPage() {
           setUploadQueue((q) => q.filter((n) => n !== file.name));
           continue;
         }
+        // ── A VERSÃO LEVE ────────────────────────────────────────────
+        // Gerada DEPOIS que o original já está guardado: a foto dela nunca
+        // depende disto dar certo. `null` é resultado legítimo (HEIC que o
+        // navegador não decodifica, imagem já pequena) e o envio segue.
+        //
+        // Sequencial, e não em paralelo, porque `useEnvioDeArquivo` tem trava
+        // de envio em curso — é a mesma trava que impede o clique duplo.
+        let previewStorageId: Id<"_storage"> | undefined;
+        const preview = await gerarPreview(file);
+        if (preview) {
+          const p = await enviar(preview);
+          if (p.ok) previewStorageId = p.storageId;
+        }
+
         try {
           await savePhoto({
             eventId,
             storageId: r.storageId,
+            previewStorageId,
             filename: file.name,
             category: uploadCategory,
           });
@@ -508,11 +524,16 @@ export default function GaleriaPage() {
                   className="relative group rounded-xl overflow-hidden bg-muted aspect-square cursor-pointer"
                   onClick={() => setLightboxIndex(idx)}
                 >
+                  {/* A grade desenha um quadrado de ~138 px no telefone.
+                      Baixar o ORIGINAL para isso era o defeito: até 15 MB por
+                      célula. `urlDeExibicao` prefere a versão leve e cai no
+                      original quando a foto é antiga. */}
                   <img
-                    src={photo.url ?? undefined}
+                    src={urlDeExibicao(photo) ?? undefined}
                     alt={photo.caption ?? photo.filename}
                     className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                     loading="lazy"
+                    decoding="async"
                   />
                   {/* Category badge — a FASE em que a foto foi tirada. */}
                   <div className={cn("absolute top-2 left-2 px-1.5 py-0.5 rounded text-[10px] font-semibold", cat.color)}>
@@ -622,6 +643,12 @@ export default function GaleriaPage() {
               onClick={(e) => e.stopPropagation()}
             >
               <img
+                // ── AQUI É O ORIGINAL, DE PROPÓSITO ────────────────────
+                // Tela cheia é o momento em que ela AMPLIA para decidir um
+                // detalhe — o acabamento do arranjo, se a vela está torta.
+                // Uma imagem por vez, escolhida com intenção: é exatamente
+                // onde o arquivo inteiro se justifica. O download ao lado
+                // também leva o original, que é o que ela enviou.
                 src={lightboxPhoto.url ?? undefined}
                 alt={lightboxPhoto.caption ?? lightboxPhoto.filename}
                 className="max-h-[75vh] max-w-full rounded-xl object-contain"

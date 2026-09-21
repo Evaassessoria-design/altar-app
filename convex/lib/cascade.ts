@@ -125,6 +125,10 @@ export async function deleteEventCascade(
     .withIndex("by_event", (q) => q.eq("eventId", eventId))
     .collect();
   for (const photo of eventPhotos) {
+    // A versão leve sai junto — é arquivo desta foto, não registro próprio.
+    if (photo.previewStorageId && (await safeDeleteFile(ctx, photo.previewStorageId))) {
+      files += 1;
+    }
     if (await safeDeleteFile(ctx, photo.storageId)) files += 1;
     await ctx.db.delete(photo._id);
     documents += 1;

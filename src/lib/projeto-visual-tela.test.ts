@@ -120,7 +120,7 @@ describe("a tela não inventa o que não sabe", () => {
   it("e sem capa escolhida a abertura continua tipográfica", () => {
     // Nenhum `<img` de capa fora da condição: sem foto, nenhum espaço vazio
     // pedindo imagem.
-    expect(CODIGO).toMatch(/\{\(capa\?\.url \|\| capaPendente\) && \(/);
+    expect(CODIGO).toMatch(/\{\(capa \|\| capaPendente\) && \(/);
     expect(CODIGO).toContain("Projeto visual");
     // O espaço reservado vale só ENQUANTO as fotos não chegaram. Um ponteiro
     // que sobreviveu a uma foto apagada não pode virar caixa cinza eterna.

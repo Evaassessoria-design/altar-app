@@ -75,9 +75,15 @@ describe("o produto fala de CLIENTE, não de casal", () => {
 
 describe("os tipos de evento cobrem a rotina de um decorador", () => {
   it("o seletor não é só casamento", () => {
-    // Os literais saíram dos formulários para a fonte única em
-    // src/lib/event-types.ts — a regra é a mesma, o lugar mudou.
-    const fonte = readFileSync("src/lib/event-types.ts", "utf-8");
+    // A lista mudou de casa DE NOVO, e pelo mesmo motivo de sempre: o lugar
+    // certo é onde todo mundo alcança. Agora é `convex/lib/tiposDeEvento.ts`,
+    // porque o SERVIDOR também precisa traduzir — foi um "wedding" chegando ao
+    // PDF da cliente que provou isso, e `convex/` não importa de `src/`.
+    //
+    // A regra que este teste protege não mudou: o ALTAR decora aniversário,
+    // debutante, corporativo e batizado, e o produto não pode se declarar de
+    // casamento oferecendo uma lista só.
+    const fonte = readFileSync("convex/lib/tiposDeEvento.ts", "utf-8");
     for (const tipo of ["corporate", "birthday", "debutante", "baptism", "other"]) {
       expect(fonte).toContain(`"${tipo}"`);
     }

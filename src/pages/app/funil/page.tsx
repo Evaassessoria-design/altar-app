@@ -40,6 +40,7 @@ import { LeadDocumentsDialog } from "./_components/lead-documents.tsx";
 import { ResponsavelInline, ResponsavelSelect } from "@/components/responsavel-select.tsx";
 import { descreverUltimaAtualizacao } from "@/convex/lib/ultimaAtualizacao.ts";
 import { ROTULO_DO_STATUS } from "@/convex/lib/propostaComercial.ts";
+import { EVENT_TYPES, rotuloDoTipoDeEvento } from "@/lib/event-types.ts";
 import type { FunctionReturnType } from "convex/server";
 
 // O resumo vem do servidor; o tipo é LIDO de lá, nunca redigitado aqui — um
@@ -79,15 +80,6 @@ const STAGES: { id: Stage; label: string; color: string; bg: string }[] = [
   { id: "negotiating", label: "Negociação", color: "text-orange-700 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-900/20" },
   { id: "contracted", label: "Fechado", color: "text-green-700 dark:text-green-400", bg: "bg-green-50 dark:bg-green-900/20" },
   { id: "discarded", label: "Perdido", color: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-900/20" },
-];
-
-const EVENT_TYPES = [
-  { value: "wedding", label: "Casamento" },
-  { value: "corporate", label: "Corporativo" },
-  { value: "birthday", label: "Aniversário" },
-  { value: "debutante", label: "Debutante" },
-  { value: "baptism", label: "Batizado" },
-  { value: "other", label: "Outro" },
 ];
 
 const leadSchema = z.object({
@@ -260,7 +252,7 @@ function ConvertDialog({
   } = useForm<ConvertFormValues>({
     resolver: zodResolver(convertSchema),
     defaultValues: {
-      eventName: `${lead.clientName} - ${EVENT_TYPES.find((t) => t.value === lead.eventType)?.label ?? "Evento"}`,
+      eventName: `${lead.clientName} - ${rotuloDoTipoDeEvento(lead.eventType) ?? "Evento"}`,
       eventDate: lead.eventDate ?? "",
       // O local já foi anotado durante a negociação. Sem isto, a decoradora
       // redigitava a fazenda que ela mesma cadastrou no lead.
@@ -438,7 +430,7 @@ function LeadCard({
       <div className="flex flex-wrap gap-2 text-xs">
         {lead.eventType && (
           <span className="bg-muted px-2 py-0.5 rounded-full text-muted-foreground">
-            {EVENT_TYPES.find((t) => t.value === lead.eventType)?.label ?? lead.eventType}
+            {rotuloDoTipoDeEvento(lead.eventType)}
           </span>
         )}
         {lead.eventDate && (

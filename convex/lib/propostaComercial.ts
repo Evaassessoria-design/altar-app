@@ -31,6 +31,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { emCentavos, somaEmDinheiro } from "./dinheiro";
+import { rotuloDoTipoDeEvento } from "./tiposDeEvento";
 
 /** Os cinco estados de uma proposta. Nenhum deles acontece sozinho. */
 export const STATUS_DA_PROPOSTA = [
@@ -151,7 +152,12 @@ export function paraOCliente(
     estudio: { nome: estudio.nome, contato: textoLimpo(estudio.contato) },
     cliente: proposta.clienteNome.trim(),
     evento: {
-      tipo: textoLimpo(proposta.eventoTipo),
+      // Traduz OUTRA VEZ, de propósito. `create` já grava o rótulo, mas as
+      // propostas criadas antes desta correção têm o slug gravado, e não há
+      // backfill: o documento da cliente é o último lugar onde um "wedding"
+      // pode aparecer, então é aqui que ele para. Valor desconhecido volta
+      // como veio, então traduzir duas vezes é inofensivo.
+      tipo: rotuloDoTipoDeEvento(textoLimpo(proposta.eventoTipo)),
       data: textoLimpo(proposta.eventoData),
       local: textoLimpo(proposta.eventoLocal),
       convidados:

@@ -8,6 +8,7 @@ import type { Doc } from "@/convex/_generated/dataModel.d.ts";
 import { resolveAreasForAudience } from "./briefing-areas.ts";
 
 import { formatEventDateShort } from "./event-date";
+import { labelDoTipoDeEvento } from "./event-types.ts";
 // ─── Brand colors (bege/dourado) ─────────────────────────────────────────────
 const PRIMARY: [number, number, number] = [178, 142, 96];      // #B28E60
 const PRIMARY_DARK: [number, number, number] = [120, 90, 50];  // header text
@@ -24,15 +25,6 @@ const CONTENT_W = PAGE_W - MARGIN * 2;
 // (`insuranceInfo` não saía em lugar nenhum, `referenceImages` faltava no PDF).
 // Agora vêm de src/lib/briefing-areas.ts — fonte única. Este é o relatório
 // completo do evento, então usa a audiência "interno".
-
-const TYPE_LABELS: Record<string, string> = {
-  wedding: "Casamento",
-  corporate: "Corporativo",
-  birthday: "Aniversário",
-  debutante: "Debutante",
-  baptism: "Batizado",
-  other: "Outro",
-};
 
 const STATUS_LABELS: Record<string, string> = {
   planning: "Planejamento",
@@ -139,7 +131,7 @@ export function generateEventPDF(data: EventReportData): void {
   doc.setFontSize(9);
   doc.setTextColor(...MUTED);
   doc.text(
-    `${TYPE_LABELS[event.type] ?? event.type}  ·  ${STATUS_LABELS[event.status] ?? event.status}`,
+    `${labelDoTipoDeEvento(event.type)}  ·  ${STATUS_LABELS[event.status] ?? event.status}`,
     MARGIN,
     y,
   );

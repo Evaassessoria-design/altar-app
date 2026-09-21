@@ -5,6 +5,7 @@ import { getOwnedEvent, getOwnedLead, requireUser } from "./lib/identity";
 import { comCarimbo } from "./lib/ultimaAtualizacao";
 import { dataDoDia } from "./lib/dataDoDia";
 import { emCentavos, motivoDoValorInvalido } from "./lib/dinheiro";
+import { rotuloDoTipoDeEvento } from "./lib/tiposDeEvento";
 import {
   estaVencida,
   faltaParaEnviar,
@@ -317,7 +318,11 @@ export const create = mutation({
       eventId: args.eventId,
       titulo,
       clienteNome,
-      eventoTipo: event?.type ?? lead?.eventType,
+      // `events.type` é um SLUG ("wedding"). Sem esta tradução ele atravessava
+      // `paraOCliente` intacto e a cliente recebia um PDF dizendo "wedding"
+      // sob o timbre do estúdio. `leads.eventType` é texto livre e passa
+      // adiante como veio (ver lib/tiposDeEvento.ts).
+      eventoTipo: rotuloDoTipoDeEvento(event?.type ?? lead?.eventType),
       eventoData: event?.date ?? lead?.eventDate,
       eventoLocal: event?.location ?? lead?.venue,
       eventoConvidados: lead?.guestCount,

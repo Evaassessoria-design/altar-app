@@ -40,6 +40,7 @@ import {
   EmptyDescription,
   EmptyContent,
 } from "@/components/ui/empty.tsx";
+import { labelDoTipoDeEvento } from "@/lib/event-types.ts";
 import type { Doc, Id } from "@/convex/_generated/dataModel.d.ts";
 
 import { formatEventDayOnly } from "@/lib/event-date.ts";
@@ -51,15 +52,6 @@ const FILTERS: { value: FilterType; label: string }[] = [
   { value: "completed", label: "Concluídos" },
   { value: "cancelled", label: "Cancelados" },
 ];
-
-const TYPE_LABELS: Record<string, string> = {
-  wedding: "Casamento",
-  corporate: "Corporativo",
-  birthday: "Aniversário",
-  debutante: "Debutante",
-  baptism: "Batizado",
-  other: "Outro",
-};
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   planning: { label: "Planejamento", className: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" },
@@ -222,7 +214,7 @@ export default function EventsPage() {
                         {status.label}
                       </span>
                       <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                        {TYPE_LABELS[event.type] ?? event.type}
+                        {labelDoTipoDeEvento(event.type)}
                       </span>
                       <HealthBadge health={event.health} />
                     </div>

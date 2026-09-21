@@ -1,7 +1,14 @@
 import { z } from "zod";
+import {
+  EVENT_TYPES,
+  TIPOS_DE_EVENTO,
+  ehTipoDeEventoValido,
+  rotuloDoTipoDeEvento,
+  type TipoDeEvento,
+} from "@/convex/lib/tiposDeEvento.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TIPOS DE EVENTO
+// TIPOS DE EVENTO — o que é do formulário
 //
 // ── POR QUE NÃO EXISTE MAIS UM PADRÃO ───────────────────────────────────────
 // O formulário nascia com "Casamento" selecionado. Parecia conveniência, mas
@@ -17,33 +24,22 @@ import { z } from "zod";
 // Agora o campo começa VAZIO e escolher é obrigatório. "Casamento" continua na
 // lista, no mesmo lugar — deixou de ser a resposta presumida.
 //
-// ── UMA LISTA SÓ ────────────────────────────────────────────────────────────
-// A lista vivia duplicada no formulário de evento e no onboarding. Duas cópias
-// da mesma verdade divergem: uma ganha um tipo novo, a outra não, e o mesmo
-// sistema passa a oferecer opções diferentes em telas diferentes.
+// ── A LISTA MUDOU DE CASA ───────────────────────────────────────────────────
+// Ela vive em `convex/lib/tiposDeEvento.ts`. Este arquivo dizia, por um tempo,
+// que a duplicação tinha acabado — e não tinha: havia cinco cópias do mapa de
+// rótulos, e a função daqui não era chamada por nenhuma tela. Foi assim que um
+// slug ("wedding") chegou ao PDF da cliente, quando a proposta comercial
+// nasceu copiando `event.type` do evento.
+//
+// O mapa teve de DESCER, não subir: `convex/` não importa de `src/`, então um
+// mapa que só existisse aqui seria inalcançável exatamente na função que monta
+// o documento da cliente.
+//
+// O que fica aqui é o que só o formulário usa: o schema zod e as mensagens.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Os valores gravados no banco. Não mudam: eventos antigos dependem deles. */
-export const TIPOS_DE_EVENTO = [
-  "wedding",
-  "corporate",
-  "birthday",
-  "debutante",
-  "baptism",
-  "other",
-] as const;
-
-export type TipoDeEvento = (typeof TIPOS_DE_EVENTO)[number];
-
-/** Rótulos na ordem em que aparecem no seletor. */
-export const EVENT_TYPES: readonly { value: TipoDeEvento; label: string }[] = [
-  { value: "wedding", label: "Casamento" },
-  { value: "birthday", label: "Aniversário" },
-  { value: "debutante", label: "Debutante" },
-  { value: "corporate", label: "Corporativo" },
-  { value: "baptism", label: "Batizado" },
-  { value: "other", label: "Outro" },
-] as const;
+export { EVENT_TYPES, TIPOS_DE_EVENTO, ehTipoDeEventoValido, rotuloDoTipoDeEvento };
+export type { TipoDeEvento };
 
 export const PLACEHOLDER_TIPO_DE_EVENTO = "Selecione o tipo de evento";
 
@@ -69,13 +65,14 @@ export const tipoDeEventoSchema = z.enum(TIPOS_DE_EVENTO, {
   errorMap: () => ({ message: ERRO_TIPO_OBRIGATORIO }),
 });
 
-/** O valor é um tipo de evento conhecido? Usado onde não há zod (onboarding). */
-export function ehTipoDeEventoValido(valor: unknown): valor is TipoDeEvento {
-  return typeof valor === "string" && (TIPOS_DE_EVENTO as readonly string[]).includes(valor);
-}
-
-/** Rótulo legível de um tipo já gravado. Valor desconhecido volta como veio. */
+/**
+ * O rótulo, ou "—" quando não há tipo.
+ *
+ * Só para TELA: um card vazio precisa de um travessão para não desalinhar a
+ * coluna. O documento da cliente usa `rotuloDoTipoDeEvento` direto, que devolve
+ * `undefined` e deixa a linha inteira sumir — um PDF de venda não imprime
+ * travessão no lugar do que a decoradora escolheu não dizer.
+ */
 export function labelDoTipoDeEvento(valor: string | undefined): string {
-  if (!valor) return "—";
-  return EVENT_TYPES.find((t) => t.value === valor)?.label ?? valor;
+  return rotuloDoTipoDeEvento(valor) ?? "—";
 }

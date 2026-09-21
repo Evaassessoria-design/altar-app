@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
 import { sortEventTeam } from "@/lib/event-team.ts";
+import { labelDoTipoDeEvento } from "@/lib/event-types.ts";
 import { useRef, useState } from "react";
 import EventFormDialog from "../_components/event-form-dialog.tsx";
 import { ContractImportDialog } from "./_components/contract-import-dialog.tsx";
@@ -76,15 +77,6 @@ const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   in_progress: { label: "Em Andamento", className: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" },
   completed: { label: "Concluído", className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
   cancelled: { label: "Cancelado", className: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
-};
-
-const TYPE_LABELS: Record<string, string> = {
-  wedding: "Casamento",
-  corporate: "Corporativo",
-  birthday: "Aniversário",
-  debutante: "Debutante",
-  baptism: "Batizado",
-  other: "Outro",
 };
 
 export default function EventDetailsPage() {
@@ -232,7 +224,7 @@ export default function EventDetailsPage() {
             .filter(([k, v]) => !k.startsWith("_") && k !== "eventId" && k !== "userId" && typeof v === "string")
             .map(([k, v]) => `${k}: ${v}`)
             .join("\n")
-        : `Evento: ${event.name}, Tipo: ${event.type}, Data: ${event.date}, Local: ${event.location}`;
+        : `Evento: ${event.name}, Tipo: ${labelDoTipoDeEvento(event.type)}, Data: ${event.date}, Local: ${event.location}`;
       const { itemsCreated } = await generateChecklist({
         eventId: event._id,
         phase,
@@ -288,7 +280,7 @@ export default function EventDetailsPage() {
                 {status.label}
               </span>
               <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                {TYPE_LABELS[event.type] ?? event.type}
+                {labelDoTipoDeEvento(event.type)}
               </span>
             </div>
             <h1 className="text-xl font-bold mt-1">{event.name}</h1>

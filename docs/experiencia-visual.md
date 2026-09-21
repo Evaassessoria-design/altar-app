@@ -130,8 +130,41 @@ numa empresa é "mesa de doces" na outra, e um evento traz "capela" que nenhuma
 lista fechada previu. Os ambientes já usados viram sugestão (`<datalist>`) e
 botões de filtro — o vocabulário nasce do uso dela, não de uma enumeração.
 
-O filtro vive na CONSULTA e ignora caixa e espaço: "mesa do bolo" e
-"Mesa do Bolo" são o mesmo lugar para quem procura.
+O filtro vive na CONSULTA e ignora caixa, acento e espaço: "mesa do bolo" e
+"Mesa do Bolo" são o mesmo lugar para quem procura. A comparação é
+`chaveDoAmbiente`, em `convex/lib/ambiente.ts` — a MESMA dos dois lados da
+rede, porque o servidor comparava com `trim().toLowerCase()` e devolvia menos
+fotos do que o bloco do projeto mostrava.
+
+### `area` e `ambiente` são coisas diferentes
+
+Este é o ponto que causou o defeito mais caro da rodada, e vale escrito:
+
+| | O que é | Quem escreve |
+|---|---|---|
+| `area` | A **categoria** do briefing (`ceremony`, `cake`). Nasce da seção do Questionário onde o item foi cadastrado — `assembly-items-section.tsx` filtra por `i.area === area` | Ninguém. É estrutura |
+| `ambiente` | O **nome do espaço** ("Jardim das oliveiras") | A decoradora, à mão |
+| `eventPhotos.ambiente` | O mesmo nome, na foto | A decoradora, à mão |
+
+**A regra canônica** (`resolverAmbiente`, em `src/lib/decoration-project.ts`):
+
+1. deu nome ao espaço → **o nome dela manda**;
+2. não deu → a **categoria traduzida** é o rótulo;
+3. nem um nem outro → "Sem ambiente", e o item **continua aparecendo**.
+
+A normalização é só para COMPARAR. O rótulo exibido é sempre o texto digitado.
+
+A **categoria não some**: vira `categoria` no grupo e aparece quando
+acrescenta ("Entrada · Mobiliário"). Some quando seria eco, e some quando o
+bloco reúne categorias diferentes — "Salão de vidro" tem item de Festa e de
+Bolo, e escolher uma seria mentira.
+
+A **ordem** é a da categoria, não a do alfabeto: "Jardim das oliveiras" ocupa
+o lugar que Cerimônia ocupava. Sem isso, dar nome bonito ao espaço jogaria o
+bloco para o fim da folha e a equipe carregaria o caminhão fora de ordem.
+
+Não desceu para `convex/lib/` inteira porque depende de `BRIEFING_AREAS`, que
+mora no front. Só a normalização desceu.
 
 ---
 
@@ -163,7 +196,11 @@ Já é mais visual do que parece:
 - **contratada tem precedência sobre referência**, e quando só há referência
   ela vai **rotulada como referência** — sem isso a equipe monta a inspiração
   em vez do contratado;
-- agrupado por área/ambiente;
+- **agrupado por AMBIENTE**, pela regra canônica (§3): a seção é o lugar onde
+  se monta, e a categoria vai no título quando acrescenta ("Montagem · Entrada
+  · Mobiliário"). Antes as seções eram as áreas do briefing, e a equipe chegava
+  no sítio com um caderno dividido por assunto de reunião;
+- o par "Ambiente: ..." **saiu das linhas** quando vira eco do título;
 - caixa de conferência por item;
 - planta do evento como seção;
 - fornecedor e observação **somem** na audiência `cliente`.
@@ -210,6 +247,32 @@ confortavelmente; e se o `<datalist>` do campo de ambiente abre bem no iOS —
 o suporte varia, e se não abrir a sugestão simplesmente não aparece (o campo
 continua funcionando como texto livre).
 
+### As prateleiras do Projeto Visual — AUDITORIA ESTÁTICA, AGUARDA TESTE REAL
+
+A prateleira é **grade responsiva**, não fileira horizontal: `grid-cols-3`
+(`grid-cols-2` na prateleira em destaque), abrindo para 4 e 6 colunas em telas
+maiores. Não há rolagem lateral, e portanto não há o risco clássico de ela
+esconder conteúdo à direita sem indicar.
+
+Contas em 320px, a tela mais estreita que vale considerar: `p-4` + `px-5`
+deixam 248px úteis; três colunas com dois vãos de 8px dão ~77px por miniatura,
+e a prateleira em destaque dá ~120px. **77px decide "que foto é essa", não
+decide uma montagem** — para decidir, é a Galeria, e o caminho até ela agora é
+direto.
+
+| Ponto | Estado estático |
+|---|---|
+| Título de ambiente longo | `break-words` + `min-w-0`; nome sem espaço não estoura |
+| 10 ambientes | 10 seções empilhadas — rolagem longa, sem índice |
+| 70 fotos | teto de 6 por prateleira + aviso de peso acima de 40 |
+| "+N na Galeria" | `flex-shrink-0`; o título quebra em duas linhas antes de espremer o link |
+| Botões | alvos herdados do design system; nenhum alvo novo menor |
+| Planta | `w-full object-contain`, não estoura |
+| Sem foto | caixa "sem imagem" do mesmo tamanho, não quebra a grade |
+
+**Nada disto foi aberto em telefone.** São contas de CSS, e contas de CSS não
+substituem o polegar de ninguém.
+
 ---
 
 ## 8. Decisões adiadas
@@ -243,22 +306,126 @@ Nenhuma é técnica. Todas mudam o produto.
    da capa. **Nenhuma extração automática de paleta**: seria cor inventada
    apresentada como decisão dela.
 
-### Uma limitação conhecida do agrupamento
+### A limitação do agrupamento — RESOLVIDA
 
-Os itens agrupam por `area` (a chave da área do briefing → "Cerimônia"), e as
-fotos por `ambiente` (texto livre). Quando o item tem AMBOS — `area: "ceremony"`
-e `ambiente: "Jardim das oliveiras"`, como no demo — o bloco leva o nome da
-ÁREA, e fotos classificadas como "Jardim das oliveiras" formam um bloco
-separado. Mesmo lugar físico, dois blocos.
+A rodada anterior deixou registrado que itens agrupavam por `area` e fotos por
+`ambiente`, e que o mesmo lugar físico virava dois blocos. Foi corrigido nesta
+rodada, e **nas quatro superfícies de uma vez** — que era a condição para
+mexer: `agruparPorAmbiente` é compartilhada, e alinhar uma tela só faria o
+mesmo evento se organizar de dois jeitos.
 
-Não foi corrigido porque `agruparPorAmbiente` é compartilhada com a Folha de
-Carregamento e a Ficha Técnica: mudar a chave reordenaria documentos que a
-equipe já usa. A saída provável é preferir `ambiente` sobre `area` **em todos
-os consumidores de uma vez**, com os três conferidos juntos — não numa tela só.
+O que mudou no demo, que é o casamento inteiro em miniatura:
+
+| ANTES | DEPOIS |
+|---|---|
+| Cerimônia (3) | **Jardim das oliveiras** (4) |
+| Festa (4) | **Salão de vidro** (6) |
+| Mobiliário (3) | **Entrada** · Mobiliário (1) |
+| Flores (1) | **Lounge do jardim** · Mobiliário (2) |
+| Bolo e Doces (1) | Flores (1) |
+| Iluminação (2) | |
+
+Os spots do jardim estavam em "Iluminação" e a mesa do bolo tinha seção
+própria, embora esteja dentro do salão. A equipe chegava no sítio com um
+caderno dividido por assunto de reunião, não por lugar de montagem.
 
 ---
 
-## 9. O que NÃO entra agora
+## 9. Foto de capa — o menor modelo possível
+
+**Investigado, não implementado. Nenhuma linha de schema foi tocada.**
+
+A pergunta é "o que precisaria existir para ela poder dizer *esta é a capa*".
+
+**Onde mora.** No **evento**, não na foto. Um campo em `eventPhotos`
+(`ehCapa: boolean`) precisaria ser desmarcado em todas as outras a cada troca
+— um estado que envelhece e exige varredura. Um campo em `events` é uma linha
+só, e "só pode haver uma" vira consequência do tipo, não de disciplina.
+
+**O que guardar: `v.optional(v.id("eventPhotos"))`.** Não o `storageId`.
+
+| | id da foto | storageId |
+|---|---|---|
+| A capa some quando a foto é apagada | sim, com um `null` explícito | não: aponta para arquivo deletado |
+| Herda classificação e ambiente | sim | não |
+| Duplica o arquivo | não | não, mas duplica a verdade |
+
+**Se a foto for apagada** — e é o ponto que decide o desenho —
+`gallery.deletePhoto` hoje apaga a linha e o arquivo e **não limpa referência
+nenhuma**. Com um `coverPhotoId`, ele passaria a ter de limpar a capa do
+evento antes de apagar. Sem isso a tela pediria uma foto que não existe e
+mostraria o quadrado quebrado que o resto do produto já evita. É a mesma
+correção que `assemblyItems.setPhoto` já faz quando troca a foto de um item.
+
+**Só pode haver uma?** Sim, e é bom que seja: capa é singular por definição.
+Trocar é sobrescrever, e sobrescrever não deixa órfão porque o arquivo
+continua na galeria — a capa é um ponteiro, não uma cópia.
+
+**Tenant isolation:** sem impacto novo, desde que a mutation confira as DUAS
+posses — o evento e a foto — e que a foto pertença àquele evento. Um
+`v.id("eventPhotos")` vindo do navegador não é prova de posse (é a trava 2 do
+`CLAUDE.md`), e capa aceitando foto de outro evento da mesma conta já seria
+errado.
+
+**Exportação:** hoje não existe export de arquivo
+(`docs/portabilidade-dados.md`), então a capa não muda nada. No dia em que
+existir, ela é um ponteiro para uma foto que já está no pacote — não um
+arquivo a mais.
+
+**Demo:** o seed não sobe imagem nenhuma por desenho. Sem foto, não há capa a
+semear, e a tela precisa continuar boa sem ela — é por isso que a capa
+tipográfica **fica**, mesmo depois de a escolha existir. Capa é adorno, não
+requisito.
+
+**O que falta não é código: é a decisão de onde ela escolhe.** Na galeria
+("usar como capa" no menu da foto) ou no projeto (um seletor no topo). Isso é
+decisão visual, e é para amanhã.
+
+---
+
+## 10. Um PDF visual para a cliente — o que já dá, e o que não tem audiência
+
+**Nada foi implementado.** A pergunta é se a informação existe e se ela é
+segura.
+
+**Dá para montar hoje, com segurança:**
+
+| Dado | De onde | Audiência |
+|---|---|---|
+| Nome do evento, data, local | `events` | já vai em documento de cliente |
+| Ambiente (rótulo) | `resolverAmbiente` | é o nome que ELA deu |
+| Referências | `eventPhotos` com `projectScope: "referencia"` | precisa de aviso explícito |
+| Contratado | `eventPhotos` com `projectScope: "incluso"` | seguro |
+| Resultado final | fotos de `montagem`/`evento`/`desmontagem` | seguro |
+| Layout | `layoutRenders.outputStorageId` | é a planta que ela já mostra |
+
+**O que NÃO tem audiência segura — e é o motivo de isto não ser um "é só
+gerar":**
+
+1. **`eventPhotos` não tem `visibility`.** `assemblyItems` tem, e o Caderno a
+   respeita campo a campo (`audiencia-do-caderno.ts`). A foto não tem nada
+   equivalente: `projectScope` diz o que a imagem É no projeto, não para quem
+   ela pode aparecer. Uma foto interna ("o estrago da chuva", "o fornecedor
+   entregou errado") não tem como se declarar interna.
+2. **`caption` é texto livre que ela escreve para si mesma.** "refazer, ficou
+   torto" é legenda legítima na galeria e impublicável num documento da
+   cliente.
+3. **`nao_incluso` é explosivo.** Mandar "ficou de fora" para a cliente é
+   conversa comercial, não documento.
+4. **Item de montagem carrega `supplierName`, `notes` e `receita`** — os três
+   são internos, e a `receita` é o custo. Se o PDF visual mostrar itens além de
+   fotos, ele atravessa a mesma fronteira da proposta comercial.
+
+**Conclusão honesta:** um PDF visual só de FOTOS `incluso` + fotos de execução
++ planta + cabeçalho do evento é seguro hoje. Qualquer coisa além disso pede
+ou um `visibility` em `eventPhotos`, ou a mesma disciplina de
+`paraOCliente`: **uma função que CONSTRÓI o objeto campo a campo**, e não uma
+tela que esconde. A fronteira mora na transformação, não na renderização — é a
+regra que `convex/lib/propostaComercial.ts` já sustenta.
+
+---
+
+## 11. O que NÃO entra agora
 
 IA generativa de decoração, Pinterest/Instagram API, busca automática de
 inspiração, editor 3D, realidade aumentada, reconhecimento de flores,

@@ -245,7 +245,10 @@ export default function ProjetoDecoracaoPage() {
                   bolo?". */}
               <div className="flex items-baseline justify-between gap-3 border-b border-border px-5 py-4">
                 <div className="min-w-0">
-                  <h2 className="font-serif text-lg leading-tight">
+                  {/* `break-words`: ambiente é texto livre, e um nome longo
+                      sem espaço ("Jardimdasoliveiras...") estouraria a caixa
+                      num telefone de 320px. */}
+                  <h2 className="font-serif text-lg leading-tight break-words">
                     {ambiente.emoji ? `${ambiente.emoji} ` : ""}
                     {ambiente.label}
                   </h2>

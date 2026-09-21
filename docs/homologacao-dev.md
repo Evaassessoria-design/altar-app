@@ -171,13 +171,49 @@ cache dele e a conferência não vale nada.
   piscar outra cor;
 - o nome embaixo do ícone continua **"Altar"**.
 
-**19. Central em modo simulado.** `ALTAR_CENTRAL_ENVIO_HABILITADO` tem de estar
+**19. Um ambiente, uma verdade.** É o passo mais importante desta rodada,
+porque é o único que não dá para provar em teste automático: o teste garante
+que as quatro superfícies usam a MESMA função, mas só um par de olhos garante
+que a organização faz sentido para quem monta.
+
+1. Num evento, crie um item de montagem na área **Cerimônia** com o campo
+   **Ambiente** preenchido como `Jardim das oliveiras`.
+2. Na **Galeria**, envie uma foto e classifique-a com o ambiente
+   `Jardim das oliveiras` — de preferência digitando com outra caixa
+   (`jardim das OLIVEIRAS`), porque é assim que acontece de verdade.
+3. Abra o **Projeto Visual**. Deve existir **UM** bloco, chamado
+   `Jardim das oliveiras`, com o item E a foto dentro. Dois blocos = o defeito
+   voltou.
+4. Clique em **"+N na Galeria"** dentro desse bloco: a galeria tem de abrir
+   **já filtrada** naquele ambiente (a URL mostra `?ambiente=...`), e a
+   contagem tem de bater com a do bloco.
+5. Abra o **Caderno de Montagem** (PDF). A seção deve se chamar
+   `Montagem · Jardim das oliveiras` — e **não** `Montagem · Cerimônia`. O par
+   "Ambiente: Jardim das oliveiras" **não** deve aparecer embaixo do item: é
+   eco do título.
+6. Abra a **Ficha Técnica**, aba **Ambientes**. Mesmo nome, mesmo bloco.
+7. Gere a **Folha de Carregamento** (PDF). Mesmo nome, mesma ordem.
+8. Confirme que a **ordem** dos blocos é coerente entre as quatro: o bloco do
+   jardim ocupa o lugar que "Cerimônia" ocupava, não o fim da folha.
+
+No **demo** isso já está semeado: `Salão de vidro` deve reunir mesas, cadeiras,
+centro de mesa, mesa posta, varal de luz e a mesa do bolo — **seis itens** que
+antes moravam em três seções diferentes (Festa, Iluminação e Bolo e Doces). `Entrada` e `Lounge do jardim` devem aparecer com
+`Mobiliário` ao lado, em letra menor.
+
+**Se alguma das quatro superfícies discordar das outras, anote qual e pare.**
+É a única coisa desta rodada que vale interromper a homologação para registrar
+em detalhe.
+
+---
+
+**20. Central em modo simulado.** `ALTAR_CENTRAL_ENVIO_HABILITADO` tem de estar
 **ausente ou diferente de `"true"`**. Aprovar uma mensagem e confirmar que ela
 termina em `aprovada`, **nunca** em `executada`. Nada sai.
 
 ---
 
-## 20. Relatório
+## 21. Relatório
 
 Anotar, em uma linha cada: o que quebrou, o que pareceu confuso, e o que uma
 decoradora perguntaria. O que não couber em uma linha vira tarefa, não

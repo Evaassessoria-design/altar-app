@@ -172,7 +172,7 @@ export default function Dashboard() {
       {/* Precisam da sua atenção — entra ANTES dos números do mês porque
           responde a primeira pergunta da manhã: "o que exige algo de mim
           hoje?". As regras vivem em convex/lib/attention.ts. */}
-      <AttentionBoard />
+      <AttentionBoard totalDeEventos={stats?.totalEvents} />
 
       {/* Stat cards */}
       {stats === undefined ? (

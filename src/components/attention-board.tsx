@@ -113,7 +113,25 @@ function LinhaDoDinheiro({ vencido }: { vencido: Vencidos }) {
   );
 }
 
-export function AttentionBoard() {
+/**
+ * `totalDeEventos` vem do PAI, que já consulta `getDashboardStats`.
+ *
+ * ── POR QUE ESTE NÚMERO IMPORTA AQUI ────────────────────────────────────────
+ * Sem ele, o painel não distingue duas situações opostas que produzem
+ * exatamente o mesmo vazio:
+ *
+ *   · a decoradora entrou hoje e ainda não cadastrou nada;
+ *   · ela usa o ALTAR há meses e está tudo em dia.
+ *
+ * O painel dizia a segunda frase nas duas, com um ✓ verde: "Nada pedindo
+ * atenção agora". No primeiro dia isso é tranquilizar sobre coisa nenhuma — e
+ * contradiz o aviso de primeiros passos logo acima, que no mesmo instante está
+ * pedindo para criar o primeiro evento.
+ *
+ * `undefined` = ainda não sei. Nesse caso o painel não afirma nem uma coisa
+ * nem outra, que é a regra da casa.
+ */
+export function AttentionBoard({ totalDeEventos }: { totalDeEventos?: number }) {
   const eventos = useQuery(api.dashboard.getAttentionBoard);
   // As três fontes ficam no PAI porque o estado vazio depende das três. Com a
   // consulta dentro de cada linha, o cartão exibia "2 a receber · R$ 43.500" e
@@ -150,7 +168,28 @@ export function AttentionBoard() {
       <LinhaDoDinheiro vencido={vencido} />
       <LinhaDoFunil funil={funil} />
 
-      {vazio ? (
+      {vazio && totalDeEventos === undefined ? (
+        <div className="px-5 py-8">
+          <Skeleton className="mx-auto h-4 w-56" />
+        </div>
+      ) : vazio && totalDeEventos === 0 ? (
+        <div className="px-5 py-8 text-center">
+          {/* Sem ✓ verde: não há nada em dia, há uma conta em branco. O ícone
+              de "tudo certo" no primeiro dia é o que faz alguém achar que o
+              sistema já sabe de alguma coisa. */}
+          <p className="text-sm font-medium">Seu primeiro evento ainda não existe</p>
+          <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
+            É a partir dele que este painel passa a responder o que exige algo de
+            você hoje — prazos, pendências e dinheiro a receber.
+          </p>
+          <Link
+            to="/eventos"
+            className="mt-3 inline-block text-xs font-medium text-primary hover:underline"
+          >
+            Criar o primeiro evento
+          </Link>
+        </div>
+      ) : vazio ? (
         <div className="px-5 py-8 text-center">
           <CheckCircle2 className="size-6 text-green-600 dark:text-green-500 mx-auto" />
           <p className="text-sm font-medium mt-2">Nada pedindo atenção agora</p>

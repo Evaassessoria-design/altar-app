@@ -273,6 +273,27 @@ ela enviou. Há teste que falha se alguém "otimizar" isso.
 - **O storage cresce ~2%**: cada foto nova passa a ter um derivado de ~250 KB
   ao lado de um original de vários MB. É o preço, e é barato.
 
+### Arquivos órfãos — risco medido e ACEITO para o beta
+
+Uma foto envolve agora três coisas: original, versão leve e a linha. Se o
+`savePhoto` falhar depois dos uploads, ou se ela fechar a aba no meio, os
+arquivos ficam no storage sem linha que os referencie.
+
+**O risco é limitado por desenho:** o `savePhoto` roda DENTRO do laço, uma vez
+por foto. Fechar a aba ao subir trinta fotos deixa órfãos de **uma** foto — a
+que estava em voo —, não de trinta. O teto é **dois arquivos por foto
+interrompida**.
+
+**Não há coleta automática, e não deve haver agora.** Limpar do lado do
+cliente exigiria uma mutation que apaga por `storageId`, e essa mutation é um
+buraco pior que o órfão: um id de arquivo vindo do navegador não prova posse
+de nada, e quem descobrisse o id de outra conta apagaria o arquivo dela. A
+coleta correta é do lado do servidor, varrendo o que não tem referência — e
+isso é worker, não correção de fluxo.
+
+**Decisão:** aceito no beta, registrado aqui. Gatilho para rever: quando o
+storage passar a ser uma linha visível no custo.
+
 ### Uma pendência encontrada nesta auditoria
 
 `loadThumbnail`, nos PDFs, **não** passa `imageOrientation: "from-image"`. Se o

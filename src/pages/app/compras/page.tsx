@@ -418,6 +418,7 @@ function EventSection({
                             // feito por engano ficava para sempre — e o custo
                             // do evento saía afirmado sobre ele.
                             <button
+                              type="button"
                               onClick={() => void onDesfazerCusto(item._id, item.name)}
                               className="inline-flex items-center gap-1 min-h-9 sm:min-h-0 text-green-700 dark:text-green-400 hover:underline cursor-pointer"
                               title="Está no financeiro — clique para remover o lançamento"

@@ -45,6 +45,11 @@ const APAGAM_DE_VERDADE: readonly (readonly [string, string])[] = [
   // Apaga o lançamento de despesa que a compra gerou no Financeiro. A compra
   // fica; o dinheiro sai do livro — e não há lixeira.
   ["src/pages/app/compras/page.tsx", "purchases.unregisterCost"],
+  // E a irmã MAIOR dela, que estava de fora desta lista: apagar a compra leva
+  // JUNTO o lançamento. A tela pedia confirmação para a perda menor e não
+  // pedia para a maior.
+  ["src/pages/app/compras/page.tsx", "purchases.deletePurchase"],
+  ["src/pages/app/propostas/[id]/page.tsx", "propostas.remove"],
 ];
 
 describe("nenhuma exclusão acontece sem pergunta", () => {
@@ -109,5 +114,59 @@ describe("arquivar não é apagar — e não precisa de pergunta", () => {
     );
     expect(bloco).not.toContain("ctx.db.delete");
     expect(bloco).not.toContain("ctx.storage.delete");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// A LIXEIRA DAS COMPRAS
+//
+// Um clique numa lixeira de 26px apagava a compra E a despesa que ela tinha
+// lançado no Financeiro — sem pergunta. Na MESMA tela, "remover do Financeiro"
+// (que preserva a compra) já perguntava. A ação mais destrutiva pedia menos
+// confirmação que a menos destrutiva.
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("excluir uma compra avisa do que sai junto", () => {
+  const COMPRAS = ler("src/pages/app/compras/page.tsx");
+
+  it("pergunta ANTES de chamar a mutation, não depois", () => {
+    const i = COMPRAS.indexOf("const handleDelete");
+    expect(i).toBeGreaterThan(-1);
+    const corpo = COMPRAS.slice(i, i + 1600);
+    const confirma = corpo.indexOf("window.confirm");
+    const chama = corpo.indexOf("deletePurchase(");
+    expect(confirma, "apaga sem perguntar").toBeGreaterThan(-1);
+    expect(confirma, "confirma DEPOIS de apagar").toBeLessThan(chama);
+  });
+
+  it("nomeia o lançamento do Financeiro — não fala de 'este registro'", () => {
+    const i = COMPRAS.indexOf("const handleDelete");
+    const corpo = COMPRAS.slice(i, i + 1600);
+    expect(corpo).toMatch(/Financeiro/);
+    expect(corpo).toMatch(/desfazer/i);
+  });
+
+  it("só promete essa perda quando ela existe", () => {
+    // Avisar de um estrago que não vai acontecer ensina a ignorar o aviso: a
+    // compra sem lançamento não tem nada a perder no livro-caixa.
+    const i = COMPRAS.indexOf("const handleDelete");
+    const corpo = COMPRAS.slice(i, i + 1600);
+    expect(corpo).toMatch(/item\.transactionId/);
+  });
+
+  it("e o resultado diz o que de fato aconteceu", () => {
+    // A mutation devolve `lancamentoRemovido`. Um "Item removido." fixo
+    // esconderia que o dinheiro saiu do livro.
+    const i = COMPRAS.indexOf("const handleDelete");
+    const corpo = COMPRAS.slice(i, i + 1600);
+    expect(corpo).toMatch(/lancamentoRemovido/);
+  });
+
+  it("os dois botões da linha são alvo de dedo, não de mouse", () => {
+    // Compras é tela de rua — usada em pé, no atacadão, com uma mão.
+    const i = COMPRAS.indexOf("aria-label={`Excluir ${item.name}`}");
+    expect(i).toBeGreaterThan(-1);
+    const botao = COMPRAS.slice(i, i + 400);
+    expect(botao).toMatch(/size-11|min-h-11/);
   });
 });

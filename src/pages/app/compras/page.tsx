@@ -290,7 +290,7 @@ function EventSection({
   onAdd: (eventId: Id<"events">) => void;
   onEdit: (item: Doc<"purchaseItems">) => void;
   onToggle: (id: Id<"purchaseItems">) => void;
-  onDelete: (id: Id<"purchaseItems">) => void;
+  onDelete: (item: Doc<"purchaseItems">) => void;
   onSetStatus: (id: Id<"purchaseItems">, status: PurchaseStatus) => void;
   onLancarCusto: (id: Id<"purchaseItems">) => void;
   onDesfazerCusto: (id: Id<"purchaseItems">, nome: string) => void;
@@ -453,20 +453,27 @@ function EventSection({
                       </div>
                       <div className="flex gap-1 flex-shrink-0">
                         {/* Botões só de ícone precisam de nome acessível —
-                            sem isto o leitor de tela anuncia apenas "botão". */}
+                            sem isto o leitor de tela anuncia apenas "botão".
+
+                            E de alvo de DEDO: Compras é tela de rua, usada em
+                            pé, no atacadão. `p-1.5` sobre um ícone de 14px dá
+                            26px — metade do que iOS e Android pedem, e o vizinho
+                            do lado apaga coisa. */}
                         <button
+                          type="button"
                           onClick={() => onEdit(item)}
                           aria-label={`Editar ${item.name}`}
-                          className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer text-muted-foreground"
+                          className="flex size-11 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent"
                         >
-                          <Pencil className="size-3.5" />
+                          <Pencil className="size-4" />
                         </button>
                         <button
-                          onClick={() => onDelete(item._id)}
-                          aria-label={`Remover ${item.name}`}
-                          className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer text-muted-foreground hover:text-destructive"
+                          type="button"
+                          onClick={() => onDelete(item)}
+                          aria-label={`Excluir ${item.name}`}
+                          className="flex size-11 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-red-50 hover:text-destructive dark:hover:bg-red-900/20"
                         >
-                          <Trash2 className="size-3.5" />
+                          <Trash2 className="size-4" />
                         </button>
                       </div>
                     </div>
@@ -674,12 +681,46 @@ function ComprasContent() {
     }
   };
 
-  const handleDelete = async (id: Id<"purchaseItems">) => {
+  /**
+   * Excluir a compra — e o que ela deixou no Financeiro.
+   *
+   * ── O DEFEITO ─────────────────────────────────────────────────────────────
+   * Era um clique numa lixeira de 26px, sem pergunta nenhuma. E a mutation
+   * APAGA JUNTO o lançamento de despesa que a compra gerou no livro-caixa
+   * (`purchases.deletePurchase`), de propósito — despesa órfã pesaria na
+   * margem para sempre.
+   *
+   * O resultado era o pior arranjo possível: a ação MENOS destrutiva da mesma
+   * tela ("remover do Financeiro", que preserva a compra) perguntava antes; a
+   * MAIS destrutiva, que leva as duas coisas, não perguntava.
+   *
+   * A pergunta nomeia o item e só menciona o lançamento quando ele existe —
+   * avisar de uma perda que não vai acontecer ensina a ignorar o aviso.
+   */
+  const handleDelete = async (item: Doc<"purchaseItems">) => {
+    const tambemOFinanceiro = item.transactionId
+      ? " A despesa que ela lançou no Financeiro é apagada junto."
+      : "";
+    if (
+      !window.confirm(
+        `Excluir "${item.name}" das compras?${tambemOFinanceiro} Não há como desfazer.`,
+      )
+    ) {
+      return;
+    }
     try {
-      await deletePurchase({ id });
-      toast.success("Item removido.");
+      const r = await deletePurchase({ id: item._id });
+      toast.success(
+        r.lancamentoRemovido
+          ? "Compra excluída, e a despesa saiu do Financeiro."
+          : "Compra excluída.",
+      );
     } catch (e) {
-      toast.error("Erro ao remover item");
+      toast.error(
+        e instanceof ConvexError
+          ? (e.data as { message: string }).message
+          : "Não foi possível excluir a compra.",
+      );
     }
   };
 
@@ -791,7 +832,7 @@ function EventSectionWithData({
   onAdd: (eventId: Id<"events">) => void;
   onEdit: (item: Doc<"purchaseItems">) => void;
   onToggle: (id: Id<"purchaseItems">) => void;
-  onDelete: (id: Id<"purchaseItems">) => void;
+  onDelete: (item: Doc<"purchaseItems">) => void;
   onSetStatus: (id: Id<"purchaseItems">, status: PurchaseStatus) => void;
   onLancarCusto: (id: Id<"purchaseItems">) => void;
   onDesfazerCusto: (id: Id<"purchaseItems">, nome: string) => void;

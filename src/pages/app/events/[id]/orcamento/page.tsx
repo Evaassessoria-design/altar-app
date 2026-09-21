@@ -290,18 +290,26 @@ export default function OrcamentoPage() {
           <h1 className="text-xl font-bold flex items-center gap-2">
             <DollarSign className="size-5 text-primary" /> Orçamento Interativo
           </h1>
-          <p className="text-sm text-muted-foreground">Receitas e custos estimados para o evento</p>
+          <p className="text-sm text-muted-foreground">
+            Receitas e custos estimados para o evento — <strong>uso interno</strong>
+          </p>
         </div>
         <div className="flex gap-2">
+          {/* O PDF traz custo orçado, lucro e margem — é documento DELA, não
+              da cliente. O botão era um ícone sem rótulo, e o arquivo se
+              chamava só "orcamento": um clique e a cliente sabia quanto a
+              decoradora ia ganhar. */}
           <Button
             size="sm"
             variant="secondary"
             disabled={pdfGenerating || items.length === 0}
             onClick={handleDownloadPDF}
+            title="Baixar em PDF — documento interno, com custos e margem"
+            aria-label="Baixar o orçamento em PDF (uso interno, com custos e margem)"
             className="cursor-pointer gap-1.5"
           >
             {pdfGenerating ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-            <span className="hidden sm:inline">PDF</span>
+            <span className="hidden sm:inline">PDF interno</span>
           </Button>
           <Button size="sm" onClick={openAdd} className="cursor-pointer gap-1.5">
             <Plus className="size-4" /> Adicionar

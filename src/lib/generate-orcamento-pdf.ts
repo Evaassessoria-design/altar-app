@@ -1,3 +1,34 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// PDF DO ORÇAMENTO — DOCUMENTO INTERNO
+//
+// ── O QUE ESTE DOCUMENTO CONTÉM ─────────────────────────────────────────────
+// "Custo Orçado", "Lucro Orçado", "Lucro Real", "Margem Real", a tabela
+// inteira de "Custos e Despesas" e uma faixa colorida dizendo
+// "Resultado positivo: R$ 48.200 (margem 37,4%)".
+//
+// Ou seja: o resultado da decoradora, linha a linha.
+//
+// ── POR QUE ISSO ERA PERIGOSO ───────────────────────────────────────────────
+// Tudo em volta dizia "documento do cliente": o timbre do estúdio no topo, o
+// título "Orçamento de Evento", o nome e o telefone da cliente logo abaixo, e
+// o arquivo chamado `altar-orcamento-<evento>.pdf`. O botão era um ícone de
+// download sem rótulo.
+//
+// Um clique e a cliente sabia exatamente quanto a decoradora ia ganhar. É o
+// vazamento mais caro que este produto podia ter, e nada na tela avisava.
+//
+// ── A CORREÇÃO ─────────────────────────────────────────────────────────────
+// O documento passa a se anunciar: título, subtítulo, rodapé e NOME DO
+// ARQUIVO dizem que é interno. O conteúdo não mudou — ele é útil, e é ele
+// que a decoradora leva para a própria reunião de fechamento.
+//
+// ── O QUE FALTA, E NÃO FOI INVENTADO AQUI ───────────────────────────────────
+// Uma PROPOSTA para a cliente — só honorários, sem custo e sem margem — é
+// outro documento, com decisões que não são de engenharia: validade, condição
+// de pagamento, o que entra no escopo. Está registrado como decisão pendente
+// em `docs/estado-do-produto.md`, e não como um subconjunto improvisado deste.
+// ─────────────────────────────────────────────────────────────────────────────
+
 import jsPDF from "jspdf";
 import { entregarPdf } from "./pdf-delivery.ts";
 import autoTable from "jspdf-autotable";
@@ -65,7 +96,8 @@ export function generateOrcamentoPDF(data: OrcamentoPDFData): void {
   doc.text(studioName ?? "ALTAR", MARGIN, 12);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
-  doc.text("Orçamento de Evento", MARGIN, 18);
+  // O documento diz o que é na primeira linha que se lê.
+  doc.text("Orçamento — USO INTERNO (contém custos e margem)", MARGIN, 18);
   const today = format(new Date(), "dd/MM/yyyy", { locale: ptBR });
   doc.setTextColor(240, 230, 210);
   doc.text(`Emitido em ${today}`, PAGE_W - MARGIN, 18, { align: "right" });
@@ -191,10 +223,17 @@ export function generateOrcamentoPDF(data: OrcamentoPDFData): void {
     doc.setFontSize(7);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(...MUTED);
-    doc.text(`${studioName ?? "Altar"} · Orçamento: ${event.name}`, MARGIN, 293);
+    // Em TODA página: quem imprime e separa folha não vê a capa.
+    doc.text(
+      `${studioName ?? "Altar"} · Orçamento: ${event.name} · USO INTERNO — não enviar ao cliente`,
+      MARGIN,
+      293,
+    );
     doc.text(`Página ${i} de ${totalPages}`, PAGE_W - MARGIN, 293, { align: "right" });
   }
 
   const safeName = event.name.replace(/[^a-zA-Z0-9\u00C0-\u024F ]/g, "").trim().replace(/\s+/g, "-");
-  entregarPdf(doc, `altar-orcamento-${safeName}.pdf`);
+  // "interno" no nome do arquivo não é detalhe: é o que aparece na lista de
+  // downloads na hora de anexar alguma coisa no WhatsApp.
+  entregarPdf(doc, `altar-orcamento-interno-${safeName}.pdf`);
 }

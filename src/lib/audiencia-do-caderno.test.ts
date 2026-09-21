@@ -214,3 +214,85 @@ describe("o relatório completo do evento se anuncia como interno", () => {
     expect(tela).toMatch(/title="Baixar relatório interno/);
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// TODO PDF DIZ PARA QUEM ELE É
+//
+// O produto gera cinco PDFs. Três são operacionais e não carregam dinheiro
+// nenhum (Caderno, Ficha Técnica, Folha de Carregamento) — isso já é travado
+// acima e nos comentários de cada gerador.
+//
+// Os outros DOIS carregam o resultado da decoradora, e os dois se pareciam com
+// documento de cliente:
+//
+//  · o Relatório do evento (compras, valores, equipe, briefing interno);
+//  · o **Orçamento**, que traz "Custo Orçado", "Lucro Real", "Margem Real", a
+//    tabela inteira de custos e uma faixa "Resultado positivo: R$ X (margem
+//    Y%)" — sob o timbre do estúdio, com o nome e o telefone da cliente logo
+//    abaixo, e o arquivo chamado `altar-orcamento-<evento>.pdf`.
+//
+// Um clique e a cliente sabia exatamente quanto a decoradora ia ganhar.
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("o PDF que carrega margem se anuncia como interno", () => {
+  const ORCAMENTO = readFileSync("src/lib/generate-orcamento-pdf.ts", "utf-8");
+
+  it("ele de fato carrega margem e custo — é por isso que a regra existe", () => {
+    // Trava ao contrário: se um dia o documento deixar de trazer resultado,
+    // este teste avisa que a exigência de "interno" pode ser revista.
+    expect(ORCAMENTO).toContain("Margem Real");
+    expect(ORCAMENTO).toContain("Lucro Real");
+    expect(ORCAMENTO).toContain("Custos e Despesas");
+  });
+
+  it("o nome do arquivo diz interno", () => {
+    expect(ORCAMENTO).toContain("altar-orcamento-interno-");
+  });
+
+  it("o cabeçalho diz interno", () => {
+    expect(ORCAMENTO).toMatch(/USO INTERNO/);
+  });
+
+  it("o rodapé repete em TODA página", () => {
+    // Quem imprime e separa folha não vê a capa.
+    const rodape = ORCAMENTO.slice(ORCAMENTO.indexOf("// Footer"));
+    expect(rodape).toMatch(/USO INTERNO/);
+  });
+
+  it("o botão da tela não é um ícone mudo", () => {
+    const tela = readFileSync("src/pages/app/events/[id]/orcamento/page.tsx", "utf-8");
+    expect(tela).toMatch(/title="Baixar em PDF — documento interno/);
+    expect(tela).toMatch(/PDF interno/);
+  });
+
+  it("o relatório do evento continua se anunciando", () => {
+    const relatorio = readFileSync("src/lib/generate-event-pdf.ts", "utf-8");
+    expect(relatorio).toContain("altar-relatorio-interno-");
+  });
+});
+
+describe("os três PDFs operacionais continuam sem dinheiro", () => {
+  it.each([
+    ["src/lib/generate-assembly-pdf.ts", "Caderno de Montagem"],
+    ["src/lib/generate-ficha-tecnica-pdf.ts", "Ficha Técnica"],
+    ["src/lib/generate-loading-pdf.ts", "Folha de Carregamento"],
+  ])("%s (%s) não imprime valor", (arquivo) => {
+    // Preço na mão de quem monta, do florista ou de quem carrega é vazamento
+    // comercial — e nenhum dos três precisa do número para fazer o trabalho.
+    //
+    // "margem" NÃO entra nesta lista de propósito: na Ficha Técnica ela é a
+    // margem de SEGURANÇA — comprar 10% de rosa a mais porque flor quebra no
+    // transporte. É instrução de produção, não resultado financeiro, e
+    // confundir as duas apagaria da ficha um número de que o florista precisa.
+    const codigo = readFileSync(arquivo, "utf-8")
+      .split("\n")
+      .filter((l) => {
+        const t = l.trim();
+        return !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*");
+      })
+      .join("\n");
+    expect(codigo).not.toMatch(
+      /lucro|custoReferencia|unitPrice|valorTotal|style: "currency"|R\$/i,
+    );
+  });
+});

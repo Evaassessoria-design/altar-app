@@ -7,7 +7,7 @@ Ele é a rede de segurança do roteiro em `docs/demo-comercial.md`. Antes de abr
 uma tela que não está no roteiro, consulte a matriz. Antes de prometer qualquer
 coisa, consulte a matriz.
 
-Datado de 20/09/2026 e conferido contra o código em `e05863b`. Quando divergir, o
+Datado de 20/09/2026 e conferido contra o código em `c0fdf39`. Quando divergir, o
 código está certo e este arquivo está velho.
 
 ---
@@ -79,6 +79,9 @@ isso vale saber cada uma.
 | Margem de segurança por material | **PRONTO** | `necessário` e `sugerido` ficam separados de propósito. |
 | Geração de compras a partir da ficha | **PRONTO COM RESSALVA** | Idempotente. **Não acione ao vivo**: muda os números que você acabou de citar. |
 | Caderno de montagem e folha de carregamento em PDF | **PRONTO** | É a resposta do produto para o galpão sem sinal. |
+| Reservar uma peça do acervo à mão | **PRONTO** | "Reservar peça", no acervo do evento: escolhe do acervo, sugere a janela pela data do evento e mostra quantas estão livres nela antes de gravar. |
+| Desvincular uma compra da ficha | **PRONTO** | A compra vinculada aparece pelo NOME na linha aberta, com o caminho de volta. |
+| Desfazer o lançamento de uma compra no financeiro | **PRONTO** | O rótulo "no financeiro" virou ação, com pergunta antes. Só apaga o lançamento que nasceu da compra. |
 | Caderno de montagem por audiência (cliente / equipe / interno) | **PRONTO** | O menu pergunta para quem é o documento. A regra é aninhada: o caderno da cliente não carrega item de equipe nem interno. |
 
 ---
@@ -194,6 +197,11 @@ ficha técnica, acervo, compras, financeiro, orçamento, equipe, agenda e os PDF
 compras e reservas (não acione ao vivo), e a manutenção do catálogo — material
 e composição se corrigem de dentro da receita, e não há tela de catálogo no
 menu para revisar a lista inteira.
+
+**NUNCA mande para a cliente:** o PDF do Orçamento. Ele traz custo, lucro e
+margem — agora diz isso no título, no rodapé de toda página e no nome do
+arquivo (`altar-orcamento-interno-…`), mas o cuidado é seu. A proposta
+comercial da cliente **ainda não existe**; se perguntarem, é isso que se diz.
 
 **Não abra:** Painel Admin, Central, e qualquer botão que escreve.
 

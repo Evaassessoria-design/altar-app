@@ -8,7 +8,7 @@ operação de evento, não como sistema de flor. O que é realmente específico 
 decoração é um trecho só — mas é o trecho mais valioso, e é justamente ele que
 precisa de um equivalente.
 
-Datado de 20/09/2026, conferido contra o código em `e05863b`. Nada aqui é
+Datado de 20/09/2026, conferido contra o código em `c0fdf39`. Nada aqui é
 implementação: é mapa.
 
 > **Nada de ALTAR Buffet foi construído nesta rodada**, por instrução. Este
@@ -234,9 +234,9 @@ mesmo formato.
 
 ## 8. O que mudou neste mapa desde a primeira versão
 
-A rodada "primeiros clientes reais" não construiu nada de Buffet — por
-instrução — mas mexeu em peças que este mapa classifica, e três delas mudaram
-de tamanho:
+As rodadas "primeiros clientes reais" e "beta real" não construíram nada de
+Buffet — por instrução — mas mexeram em peças que este mapa classifica, e
+várias delas mudaram de tamanho:
 
 - **Dinheiro virou regra pura e testada.** `convex/lib/dinheiro.ts` e
   `src/lib/valor-digitado.ts` nasceram de um defeito do Decor ("1.500,00"
@@ -247,6 +247,25 @@ de tamanho:
   observação interna não vão no documento da cliente. A §2 já dizia que a
   engenharia de audiência serve inteira; ela agora serve com mais precisão, e é
   o que a "ordem de serviço da cozinha" da §4 vai herdar.
+- **O painel da manhã passou a olhar dinheiro.** `dinheiroVencido` responde
+  "o que venceu e não foi liquidado" a partir de `transactions` —
+  **REUTILIZA DIRETO**: um buffet tem exatamente as mesmas contas a receber e
+  a pagar, e a regra não sabe o que foi vendido.
+- **Reserva manual do acervo** — **NÃO SERVE**, e é o exemplo mais claro do
+  mapa. Reservar pressupõe peça que VOLTA. Insumo de buffet não volta, e o
+  equivalente dele (separar insumo perecível por evento) tem validade, lote e
+  temperatura, que este modelo não tem. A §4 já dizia isso do Acervo; a tela
+  nova não muda a conclusão.
+- **Desfazer vínculo (ficha↔compra) e desfazer lançamento (compra↔caixa)** —
+  **REUTILIZA DIRETO**. A cadeia "necessidade → compra → caixa" é a mesma para
+  insumo de cozinha, e o defeito era o mesmo: ligação sem volta produz número
+  errado.
+- **Telefone na escala do evento** — **REUTILIZA DIRETO**. Ligar para quem não
+  chegou é o dia da operação em qualquer vertical.
+- **O PDF que carrega margem se anuncia como interno** — **REUTILIZA DIRETO**,
+  e vale a pena transplantar a trava junto: a mesma confusão ("orçamento" que
+  parece documento do cliente e traz o resultado da empresa) nasceria igual no
+  Buffet.
 - **A biblioteca de composições fechou o ciclo.** Guardar a partir do trabalho
   já feito, recusar o nome repetido, renomear, arquivar e ver onde a receita já
   foi usada. Para o Buffet isso importa porque o cardápio é o mesmo mecanismo:

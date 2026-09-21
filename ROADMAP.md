@@ -81,13 +81,19 @@ Funções que existem, são testadas e ninguém consegue chamar pelo aplicativo:
   arquivar esta receita na biblioteca", dentro do diálogo da receita. `create`
   não tem tela porque a biblioteca nasce do trabalho já feito, não de um
   formulário em branco — é deliberado
-- Acervo: `disponibilidade` (a reserva manual e a gerada da ficha TÊM tela, em
-  `/eventos/:id/acervo`)
-- Ficha técnica: `limparReceita` e `desvincularCompra`
-- Compras: `unregisterCost`
+- Ficha técnica: `limparReceita`. Apagar TODAS as linhas da receita e salvar já
+  esvazia o item; o que `limparReceita` faz a mais é também soltar a
+  procedência (`compositionId`)
+- Catálogo de fornecedores: `supplierCatalog.get` (a lista e a edição têm tela;
+  uma página de UM fornecedor não existe)
 - Notificações: `generateMyAlerts`
 - Assinatura: `asaas.getCustomerPortalUrl` (sem uso e sem guarda — ver
   "Recomendações")
+
+Saíram desta lista porque ganharam caminho na tela: `acervo.reservar` e
+`acervo.disponibilidade` ("Reservar peça", no acervo do evento),
+`fichaTecnica.desvincularCompra` (na linha da ficha) e
+`purchases.unregisterCost` (no rótulo "no financeiro", em Compras).
 
 O mapa completo, com evidência, impacto e esforço de cada um, está em
 `docs/estado-do-produto.md`.

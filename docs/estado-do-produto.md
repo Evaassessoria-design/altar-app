@@ -12,8 +12,15 @@ Ele é diferente dos vizinhos de propósito:
 | `docs/prontidao-comercial.md` | posso mostrar numa reunião? |
 | **este** | **o que construir a seguir, e por quê** |
 
-Datado de 20/09/2026, conferido contra o código em `e05863b`. Cada item cita a
+Datado de 21/09/2026, conferido contra o código em `c0fdf39`. Cada item cita a
 evidência. Onde não há evidência, não há item — nada aqui é suposição.
+
+> **O que saiu deste mapa na rodada "beta real" (21/09)**, porque foi
+> construído: desvincular compra da ficha e desfazer o lançamento no
+> financeiro (§3), e a reserva manual do acervo — `acervo.reservar` existia,
+> testada, sem tela, enquanto a própria interface mandava "reserve
+> manualmente". Entrou no lugar o que a auditoria encontrou de mais grave: o
+> **PDF do Orçamento levava a margem da decoradora para a cliente** (§5).
 
 > **O que saiu deste mapa na rodada "primeiros clientes reais" (20/09)**,
 > porque foi construído: a manutenção da biblioteca de composições e o "onde
@@ -155,10 +162,16 @@ maior retorno por hora do repositório inteiro.
 - **Risco**: baixo — é conveniência, não dado preso
 - **Dependências**: nenhuma
 
-### Desfazer vínculos da Ficha Técnica
-- **Evidência**: `fichaTecnica.limparReceita`, `fichaTecnica.desvincularCompra`, `purchases.unregisterCost` — sem caminho na tela
-- **Usuário**: um vínculo errado não tem como ser desfeito pela interface
-- **Risco**: médio — é dado preso
+### Soltar a procedência de uma receita
+- **Evidência**: `fichaTecnica.limparReceita` — zero referências em `src/`. Apagar TODAS as linhas da receita e salvar já esvazia o item; o que esta mutation faz a mais é soltar o `compositionId`
+- **Usuário**: um item que teve a receita apagada continua dizendo que veio de uma composição da biblioteca
+- **Risco**: baixo — é rastro, não número
+- **Dependências**: nenhuma
+
+### Página de um fornecedor do catálogo
+- **Evidência**: `supplierCatalog.get` e `listEventsForSupplier` — a lista e a edição têm tela; a página de UM fornecedor, com o histórico de eventos dele, não existe
+- **Usuário**: "com quantos eventos já trabalhei com a Flores de Aurora?" não tem onde ser respondido
+- **Risco**: baixo
 - **Dependências**: nenhuma
 
 ---
@@ -173,6 +186,82 @@ A tela está lá. O caminho até o resultado tem um buraco.
 - **Usuário**: um clique a mais, uma vez
 - **Risco**: baixo
 - **Dependências**: decidir se conclui sozinho — é escrita sem ação do usuário, e por isso não foi feito
+
+---
+
+## 4B. PRONTO PARA 5 CLIENTES
+
+A pergunta desta seção é a mais concreta que existe: **amanhã cinco
+decoradoras recebem login. O que elas conseguem fazer sem o Matheus ao lado?**
+
+### PRONTO
+
+Funciona, está testado, e uma decoradora usa sozinha.
+
+| | Por que está pronto |
+|---|---|
+| Funil, evento, briefing, checklist | Cadastro, sete estágios, conversão que preserva dado, 61 campos com audiência |
+| Projeto de decoração e Caderno de Montagem | Itens por ambiente, três audiências, PDF que vai para o galpão sem sinal |
+| Ficha Técnica e catálogo | Receita, consolidado, margem de segurança, geração idempotente de compras, e agora o vínculo com a compra tem volta |
+| Acervo | Reserva pela ficha **e à mão**, conflito entre eventos, déficit, saída, retorno, ajuste com histórico |
+| Compras | Categoria, fornecedor, responsável, prazo, panorama, elo com o caixa — e agora o elo se desfaz |
+| Financeiro | Livro-caixa, orçado × real, leitura de dinheiro em formato brasileiro, travas contra `NaN` e negativo |
+| Fornecedores | Catálogo por empresa, dossiê por evento, alinhamentos datados |
+| Equipe e dia do evento | Escala com horário e **telefone tocável**, agenda do dia |
+| Painel da manhã | Eventos com pendência, oportunidades paradas e **dinheiro vencido**, cada linha com destino |
+| Documentos | Cinco PDFs, cada um sabendo para quem é |
+| Assinatura e paywall | Trial, bloqueio no servidor, e o caminho de volta nunca bloqueado |
+
+### PRONTO COM RESSALVA
+
+Funciona; tem um limite que aparece se ela insistir. **Diga a ressalva antes
+que ela descubra.**
+
+| | A ressalva |
+|---|---|
+| Catálogo de materiais e biblioteca de receitas | Nascem e se corrigem de dentro da Ficha Técnica. Não há tela de catálogo no menu para revisar a lista inteira antes da temporada |
+| Importação de contrato por IA | Lê e propõe; quem aplica é ela. Depende de chave no ambiente |
+| Planta Premium | Depende do provedor de imagem |
+| Orçamento em PDF | É documento **interno**: traz custo, lucro e margem. A proposta para a cliente não existe (ver decisão abaixo) |
+| Demonstração | A semente é ancorada em 10/10/2026 e envelhece depois dessa data |
+
+### NÃO MOSTRAR AINDA
+
+| | Por quê |
+|---|---|
+| Painel Admin e Central | Operação do SaaS, não produto dela |
+| Envio externo da Central | Portão fechado por construção — aprovar registra e não envia |
+| Segunda pessoa na conta | Não existe. A resposta honesta é "ainda não" |
+
+### DECISÃO NECESSÁRIA
+
+Cada uma trava um trabalho que **não deve ser feito sem resposta**.
+
+1. **Proposta comercial para a cliente.** O orçamento em PDF é interno. Uma
+   proposta — só honorários, sem custo e sem margem — exige decidir validade,
+   condição de pagamento e o que entra no escopo. É a ausência mais visível
+   para quem vende.
+2. **Segunda pessoa na conta.** Medida em `docs/arquitetura-multiusuario.md`.
+   Quem paga, quem convida, quem pode o quê.
+3. **Tela de catálogo no menu.** Materiais e receitas se corrigem de dentro da
+   ficha; revisar a lista inteira não tem lugar.
+4. **O aviso de primeiros passos se fecha sozinho?** É escrita sem ação de
+   ninguém.
+5. **Quando ligar o envio externo da Central.** Exige número comercial
+   integrado e critério medido de acerto da IA.
+
+### RISCO DE ESCALA FUTURO
+
+Nada disto dói com cinco clientes. Todos doem com cinquenta — e o gatilho de
+cada um está em §6.
+
+| | Quando dói |
+|---|---|
+| `admin.getStats` varre `users` + `events` | Cresce com o número de CLIENTES do ALTAR. É o primeiro a doer, e é a tela que Matheus abre todo dia |
+| `financeiro.listTransactions` sem paginação | Conta com dois ou três anos de lançamentos |
+| `collect()` por conta em dashboard, health e agenda | Decoradora com muitos eventos abertos ao mesmo tempo |
+| Pacote de 827 kB | Primeira abertura no 4G, que é como ela abre no galpão |
+| IA sem teto por conta | Custo por chamada, sem limite nem contador |
 
 ---
 
@@ -264,6 +353,12 @@ volume de hoje e é a primeira coisa a instrumentar se o custo aparecer.
 Não são de código. São de negócio, e cada uma muda a resposta a uma pergunta
 que aparece em reunião.
 
+0. **Proposta comercial para a cliente.** O PDF do Orçamento é documento
+   interno — traz custo orçado, lucro e margem, e agora diz isso no título, no
+   rodapé e no nome do arquivo. Falta o documento que ELA manda: só
+   honorários, sem custo e sem margem. Não é recorte técnico deste: exige
+   decidir validade da proposta, condição de pagamento e o que entra no
+   escopo. É a ausência mais visível para quem vende.
 1. **O que acontece quando a assinatura vence.** Fechar o aplicativo inteiro ou
    manter leitura e exportação do que já foi pago? O servidor e a tela discordam
    hoje. *(Ver §4.)*
@@ -291,30 +386,39 @@ que aparece em reunião.
 Ordenadas por **retorno sobre esforço**. Saíram desta lista, porque foram
 feitas: paywall, audiência do caderno, déficit na lista de acervo e edição de
 material (madrugada de 20/09); manutenção da biblioteca de composições
-(rodada "primeiros clientes reais").
+(rodada "primeiros clientes reais"); desfazer vínculos da Ficha Técnica e das
+Compras (rodada "beta real").
 
-### 1. Tela de catálogo (materiais e composições)
+### 1. Proposta comercial para a cliente
+- **Por quê**: hoje o único PDF de dinheiro é interno. Quem vende não tem o
+  documento que fecha a venda, e o risco de mandar o errado é permanente
+- **Esforço**: pequeno no código — as linhas de receita já estão separadas das
+  de custo no orçamento
+- **Risco**: baixo tecnicamente; **a decisão é que não é técnica** (§7.0)
+- **Depende de**: decisão §7.0
+
+### 2. Tela de catálogo (materiais e composições)
 - **Por quê**: corrigir de dentro da receita resolve o erro pontual; não
   resolve "quero revisar minha lista inteira antes da temporada"
 - **Esforço**: médio — uma tela de lista com busca, editar e arquivar
 - **Impacto**: retenção
 - **Depende de**: decisão §7.3
 
-### 2. Desfazer vínculos da Ficha Técnica
-- **Por quê**: `limparReceita`, `desvincularCompra` e `unregisterCost` existem
-  e não têm caminho. Um vínculo errado hoje é dado preso
-- **Esforço**: pequeno
-- **Risco**: médio — são ações destrutivas e precisam de confirmação, como a
-  de liberar reserva
+### 3. Página de um fornecedor do catálogo
+- **Por quê**: `supplierCatalog.get` e `listEventsForSupplier` existem e não
+  têm caminho. "Com quantos eventos já trabalhei com a Flores de Aurora?" não
+  tem onde ser respondido
+- **Esforço**: pequeno — as duas consultas já devolvem tudo
+- **Risco**: baixo
 - **Depende de**: nada
 
-### 3. Segunda pessoa na conta
+### 4. Segunda pessoa na conta
 - **Por quê**: é a objeção mais frequente em reunião, e a resposta é "não"
 - **Esforço**: **grande** — toca identidade, autorização e cobrança
 - **Risco**: alto. `users` é a fronteira de dados de todo o modelo
 - **Depende de**: decisão §7.2. **Não comece sem ela.**
 
-### 4. Vocabulário do ALTAR Buffet
+### 5. Vocabulário do ALTAR Buffet
 - **Por quê**: `docs/altar-buffet-readiness.md` mostra que a fundação já serve;
   o que falta primeiro é a vertical reconhecer-se na tela
 - **Esforço**: pequeno para o vocabulário; o diferencial (cadeia de produção)

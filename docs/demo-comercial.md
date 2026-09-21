@@ -95,6 +95,16 @@ o que está pendente no Marina & Gabriel: a prévia do arranjo sem data, a
 confirmação das cadeiras, 3 itens de compra pendentes, 6 itens do carregamento
 a conferir, 1 fornecedor sem confirmação e **30 peças do acervo em falta**.
 
+No topo do mesmo bloco, duas linhas que não são do evento e sim da empresa:
+**"Venceu e não foi liquidado · 1 a pagar · R$ 17.000"** — o saldo da
+floricultura, vencido em 15/09 — e as oportunidades do funil que estão
+paradas. É o que transforma o painel em primeira tela da manhã em vez de
+vitrine.
+
+> "Ninguém digitou isso. São o contrato, as compras, o acervo e o financeiro
+> dela, lidos ao mesmo tempo."
+
+
 **Que problema resolve:** a lista mental que ela carrega da segunda-feira até o
 dia do evento, e que hoje vive em papel, no WhatsApp e na cabeça dela.
 
@@ -402,6 +412,11 @@ aberta, e as quatro já compradas.
 > "Orçado é o que ela planejou. Real é o que já passou pela conta dela. A
 > diferença aparece enquanto ainda dá para fazer alguma coisa a respeito."
 
+**NÃO faça:** não gere o PDF desta tela na reunião sem dizer o que ele é. Ele
+é **interno** — traz custo orçado, lucro e margem — e o botão, o título, o
+rodapé e o nome do arquivo dizem isso. Se perguntarem pela proposta que vai
+para a cliente: **ainda não implementado**, e é a próxima entrega da lista.
+
 ### Parada 11 — o papel que vai para o galpão · 1,5 min
 
 | | |
@@ -554,6 +569,23 @@ ALTAR calcula é o resultado **da decoradora**.
 
 **"Tem controle de comissão / pró-labore / folha?"**
 Ainda não implementado.
+
+**"Consigo mandar o orçamento para a minha cliente?"**
+Não como proposta pronta: **ainda não implementado**. O PDF do Orçamento é
+documento **interno** — ele traz custo orçado, lucro e margem, e existe para a
+reunião de fechamento DELA, não para a cliente. A tela, o título do PDF, o
+rodapé de todas as páginas e o nome do arquivo dizem isso.
+
+O que existe hoje para a cliente: o Caderno de Montagem na audiência
+"cliente", que mostra o que foi contratado sem nenhum valor. Uma proposta
+comercial — só honorários, com validade e condição de pagamento — é a próxima
+entrega da lista.
+
+**"O sistema me avisa se um cliente atrasar o pagamento?"**
+Sim, do que está registrado: o painel de Início mostra "Venceu e não foi
+liquidado", separando o que ela tem a receber do que ela tem a pagar. É
+descritivo — o ALTAR não sabe se houve acordo ou pagamento por fora — e
+**não cobra ninguém**: não manda mensagem, não emite boleto.
 
 ### Sobre preço e contratação
 

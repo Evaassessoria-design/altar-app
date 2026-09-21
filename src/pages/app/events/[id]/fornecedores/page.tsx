@@ -1157,7 +1157,13 @@ export default function FornecedoresPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Remover fornecedor?</AlertDialogTitle>
-            <AlertDialogDescription>{deleting?.companyName} será removido deste evento.</AlertDialogDescription>
+            <AlertDialogDescription>
+              {/* Dizer o que se perde E o que fica: sem a segunda metade, a
+                  decoradora hesita achando que vai perder o cadastro. */}
+              <strong>{deleting?.companyName}</strong> sai deste evento, junto com os
+              alinhamentos, o status e a próxima ação registrados aqui. Não há como
+              desfazer. O fornecedor continua no seu catálogo e nos outros eventos.
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>

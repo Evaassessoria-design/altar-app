@@ -2,6 +2,7 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { requireEventOwner, requireIdentity, requireUser } from "./lib/identity";
+import { safeDeleteFile } from "./lib/cascade";
 import { requireActiveAccess } from "./lib/accessGuard";
 import { dedupKey, normalizeName, normalizePhone } from "./lib/supplierIdentity";
 import type { MutationCtx } from "./_generated/server";
@@ -254,6 +255,19 @@ export const update = mutation({
   },
 });
 
+/**
+ * Tira o fornecedor DESTE evento. O catálogo da empresa não é tocado.
+ *
+ * ── O ARQUIVO TINHA DE SAIR JUNTO ───────────────────────────────────────────
+ * Apagar o vínculo deixava a logo no storage quando ela era exclusiva dele —
+ * registro anterior ao catálogo, sem `supplierId`. `lib/cascade.ts` já fazia a
+ * distinção certa ao apagar o evento inteiro, com a regra escrita: quando o
+ * vínculo aponta para o catálogo o arquivo é COMPARTILHADO e não pode sair;
+ * quando não aponta, ele é só dele.
+ *
+ * Os dois caminhos apagam a mesma coisa e precisavam da mesma regra. Storage
+ * é cobrado, e arquivo órfão não tem quem o encontre depois.
+ */
 export const remove = mutation({
   args: { id: v.id("eventSuppliers") },
   handler: async (ctx, args) => {
@@ -261,6 +275,11 @@ export const remove = mutation({
     const supplier = await ctx.db.get(args.id);
     if (!supplier || supplier.userId !== user._id) {
       throw new ConvexError({ message: "Fornecedor não encontrado", code: "NOT_FOUND" });
+    }
+    // Só o arquivo EXCLUSIVO deste vínculo. Se ele aponta para o catálogo, a
+    // logo é de lá e apagá-la estragaria todos os outros eventos.
+    if (supplier.supplierId === undefined) {
+      await safeDeleteFile(ctx, supplier.logoStorageId);
     }
     await ctx.db.delete(args.id);
   },

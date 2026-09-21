@@ -27,6 +27,17 @@ import { modules } from "./test.setup";
 import { api } from "./_generated/api";
 import { autenticarComo } from "./test.auth";
 import type { MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+
+/**
+ * O `MutationCtx` real MAIS `storage.store`, que só existe no ambiente de
+ * teste — no aplicativo o arquivo entra por `generateUploadUrl`. Mesma
+ * tipagem de `lib/cascade.test.ts`, pelo mesmo motivo: assinatura frouxa não
+ * é compatível com `db.insert`, que exige nome de tabela conhecido.
+ */
+type TestMutationCtx = MutationCtx & {
+  storage: { store: (blob: Blob) => Promise<Id<"_storage">> };
+};
 
 // ═════════════════════════════════════════════════════════════════════════════
 // TODO VÍNCULO TEM VOLTA
@@ -295,5 +306,95 @@ describe("as duas ações têm caminho na tela", () => {
       fonte.indexOf("no financeiro"),
     );
     expect(trecho).toContain("onDesfazerCusto");
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// TIRAR O FORNECEDOR DO EVENTO NÃO PODE DEIXAR ARQUIVO ÓRFÃO
+//
+// `suppliers.remove` apagava a linha e pronto. `lib/cascade.ts` — o outro
+// caminho que apaga a MESMA coisa, quando o evento inteiro morre — já fazia a
+// distinção certa, com a regra escrita:
+//
+//   · vínculo que aponta para o catálogo → a logo é COMPARTILHADA, fica;
+//   · vínculo sem `supplierId` (anterior ao catálogo) → a logo é só dele, sai.
+//
+// Dois caminhos para a mesma exclusão, uma regra só. Storage é cobrado, e
+// arquivo órfão não tem quem o encontre depois.
+// ═════════════════════════════════════════════════════════════════════════════
+
+describe("remover o fornecedor do evento", () => {
+  async function comVinculo(comCatalogo: boolean) {
+    const { t, dona, donaId, eventId } = await cenario();
+    const ids = await t.run(async (ctx: TestMutationCtx) => {
+      const storageId = await ctx.storage.store(new Blob(["logo"]));
+      const supplierId = comCatalogo
+        ? await ctx.db.insert("suppliers", {
+            userId: donaId, companyName: "Flores de Aurora",
+            searchName: "flores de aurora", logoStorageId: storageId,
+            category: "flores", createdAt: NOW, updatedAt: NOW,
+          })
+        : undefined;
+      const vinculo = await ctx.db.insert("eventSuppliers", {
+        userId: donaId, eventId, category: "flores", companyName: "Flores de Aurora",
+        logoStorageId: storageId, supplierId,
+      });
+      return { storageId, supplierId, vinculo };
+    });
+    return { t, dona, ...ids };
+  }
+
+  it("vínculo sem catálogo: a logo exclusiva sai junto", async () => {
+    const { t, dona, storageId, vinculo } = await comVinculo(false);
+    await dona.mutation(api.suppliers.remove, { id: vinculo });
+    await t.run(async (ctx: MutationCtx) => {
+      expect(await ctx.db.get(vinculo)).toBeNull();
+      expect(await ctx.storage.getUrl(storageId)).toBeNull();
+    });
+  });
+
+  it("vínculo do catálogo: a logo COMPARTILHADA fica", async () => {
+    // Apagá-la estragaria o fornecedor em todos os outros eventos.
+    const { t, dona, storageId, supplierId, vinculo } = await comVinculo(true);
+    await dona.mutation(api.suppliers.remove, { id: vinculo });
+    await t.run(async (ctx: MutationCtx) => {
+      expect(await ctx.db.get(vinculo)).toBeNull();
+      expect(await ctx.storage.getUrl(storageId)).not.toBeNull();
+      expect(await ctx.db.get(supplierId!)).not.toBeNull();
+    });
+  });
+
+  it("o catálogo nunca é apagado por aqui", async () => {
+    const { t, dona, supplierId, vinculo } = await comVinculo(true);
+    await dona.mutation(api.suppliers.remove, { id: vinculo });
+    const doCatalogo = await t.run(async (ctx: MutationCtx) => ctx.db.get(supplierId!));
+    expect(doCatalogo!.companyName).toBe("Flores de Aurora");
+  });
+
+  it("vínculo de outra empresa responde NOT_FOUND", async () => {
+    const { t, dona, outra, outraId, eventoDaOutra } = await cenario();
+    const alheio = await t.run(async (ctx: MutationCtx) =>
+      ctx.db.insert("eventSuppliers", {
+        userId: outraId, eventId: eventoDaOutra, category: "flores", companyName: "Alheio",
+      }),
+    );
+    await expect(dona.mutation(api.suppliers.remove, { id: alheio })).rejects.toThrow(
+      /não encontrado/i,
+    );
+    expect(await t.run(async (ctx: MutationCtx) => ctx.db.get(alheio))).not.toBeNull();
+    await outra.mutation(api.suppliers.remove, { id: alheio });
+  });
+
+  it("a tela diz o que se perde E o que fica", () => {
+    // Sem a segunda metade a decoradora hesita, achando que vai perder o
+    // cadastro do fornecedor.
+    const fonte = readFileSync("src/pages/app/events/[id]/fornecedores/page.tsx", "utf-8");
+    const aviso = fonte.slice(
+      fonte.indexOf("Remover fornecedor?"),
+      fonte.indexOf("</AlertDialogDescription>"),
+    );
+    expect(aviso).toMatch(/alinhamentos/i);
+    expect(aviso).toMatch(/desfazer/i);
+    expect(aviso).toMatch(/continua no seu catálogo/i);
   });
 });

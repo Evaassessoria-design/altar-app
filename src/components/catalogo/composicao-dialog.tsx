@@ -64,18 +64,18 @@ export function ComposicaoDialog({ compositionId, onClose }: Props) {
     toast.error(
       e instanceof ConvexError
         ? (e.data as { message: string }).message
-        : "Não foi possível salvar a receita.",
+        : "Não foi possível salvar a composição.",
     );
 
   const salvar = async () => {
     if (!nome.trim()) {
-      toast.error("A receita precisa de um nome.");
+      toast.error("A composição precisa de um nome.");
       return;
     }
     setSalvando(true);
     try {
       await atualizar({ id: compositionId, nome: nome.trim() });
-      toast.success("Receita renomeada na biblioteca. Os eventos não mudam.");
+      toast.success("Composição renomeada na biblioteca. Os eventos não mudam.");
       onClose();
     } catch (e) {
       comErro(e);
@@ -90,7 +90,7 @@ export function ComposicaoDialog({ compositionId, onClose }: Props) {
     if (
       indoParaArquivo &&
       !window.confirm(
-        `Arquivar "${detalhe.nome}"? Ela sai do menu de receitas, e os eventos ` +
+        `Arquivar "${detalhe.nome}"? Ela sai da lista de escolha, e os eventos ` +
           "que já a usaram continuam exatamente como estão.",
       )
     ) {
@@ -109,7 +109,7 @@ export function ComposicaoDialog({ compositionId, onClose }: Props) {
     <Dialog open onOpenChange={(aberto) => !aberto && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Receita da biblioteca</DialogTitle>
+          <DialogTitle>Composição da biblioteca</DialogTitle>
         </DialogHeader>
 
         {/* Enquanto a consulta não volta, nada é afirmado — nem o nome, nem
@@ -118,7 +118,7 @@ export function ComposicaoDialog({ compositionId, onClose }: Props) {
           <p className="text-sm text-muted-foreground">Carregando…</p>
         ) : detalhe === null ? (
           <p className="text-sm text-muted-foreground">
-            Esta receita não está mais na biblioteca.
+            Esta composição não está mais na biblioteca.
           </p>
         ) : (
           <div className="space-y-3">
@@ -135,7 +135,7 @@ export function ComposicaoDialog({ compositionId, onClose }: Props) {
             </div>
 
             <p className="text-xs text-muted-foreground">
-              {detalhe.materiais} {detalhe.materiais === 1 ? "material" : "materiais"} nesta receita.
+              {detalhe.materiais} {detalhe.materiais === 1 ? "material" : "materiais"} na receita.
               {detalhe.archived && " Está arquivada — não aparece no menu de escolha."}
             </p>
 

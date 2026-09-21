@@ -265,8 +265,8 @@ function AbaComposicoes({ verArquivados }: { verArquivados: boolean }) {
     return (
       <Vazio
         icone={BookMarked}
-        titulo="Sua biblioteca de receitas está vazia"
-        descricao="Uma receita entra aqui quando você termina a ficha técnica de um item e clica em “Salvar na biblioteca”. Ela nasce do trabalho já feito — não de um formulário em branco."
+        titulo="Sua biblioteca de composições está vazia"
+        descricao="Uma composição é a receita de um item que se repete — “arranjo baixo branco” é a mesma receita em quinze casamentos. Ela entra aqui quando você termina a ficha técnica de um item e clica em “Salvar na biblioteca”: nasce do trabalho já feito, não de um formulário em branco."
         acao={
           <Button asChild size="sm" variant="outline" className="cursor-pointer">
             <Link to="/eventos">Abrir um evento</Link>
@@ -290,7 +290,7 @@ function AbaComposicoes({ verArquivados }: { verArquivados: boolean }) {
 
       {visiveis.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">
-          Nenhuma receita encontrada para “{busca}”.
+          Nenhuma composição encontrada para “{busca}”.
         </p>
       ) : (
         <div className="space-y-2">
@@ -367,7 +367,7 @@ export default function CatalogoPage() {
           <Layers className="size-5 text-primary" /> Catálogo
         </h1>
         <p className="text-sm text-muted-foreground">
-          Os materiais que você usa e as receitas que já criou
+          Os materiais que você usa e as composições que já montou
         </p>
       </div>
 

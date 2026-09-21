@@ -98,6 +98,7 @@ import type * as notifications from "../notifications.js";
 import type * as officeBridgeHttp from "../officeBridgeHttp.js";
 import type * as officeCentralHttp from "../officeCentralHttp.js";
 import type * as orcamento from "../orcamento.js";
+import type * as propostas from "../propostas.js";
 import type * as purchases from "../purchases.js";
 import type * as supplierCatalog from "../supplierCatalog.js";
 import type * as suppliers from "../suppliers.js";
@@ -201,6 +202,7 @@ declare const fullApi: ApiFromModules<{
   officeBridgeHttp: typeof officeBridgeHttp;
   officeCentralHttp: typeof officeCentralHttp;
   orcamento: typeof orcamento;
+  propostas: typeof propostas;
   purchases: typeof purchases;
   supplierCatalog: typeof supplierCatalog;
   suppliers: typeof suppliers;

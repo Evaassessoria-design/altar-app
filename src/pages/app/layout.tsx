@@ -22,6 +22,7 @@ import {
   Boxes,
   Layers,
   CalendarClock,
+  FileText,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth.ts";
@@ -60,6 +61,7 @@ const ICONES: Record<RotaDeMenu, LucideIcon> = {
   "/compras": ShoppingCart,
   "/financeiro": DollarSign,
   "/funil": BarChart3,
+  "/propostas": FileText,
   "/configuracoes": Settings,
 };
 

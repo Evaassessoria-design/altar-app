@@ -42,6 +42,8 @@ const AcervoDoEventoPage = lazy(() => import("./pages/app/events/[id]/acervo/pag
 const ConfiguracoesPage = lazy(() => import("./pages/app/configuracoes/page.tsx"));
 const CatalogoFornecedoresPage = lazy(() => import("./pages/app/fornecedores/page.tsx"));
 const FornecedorPage = lazy(() => import("./pages/app/fornecedores/[id]/page.tsx"));
+const PropostasPage = lazy(() => import("./pages/app/propostas/page.tsx"));
+const PropostaPage = lazy(() => import("./pages/app/propostas/[id]/page.tsx"));
 const EquipePage = lazy(() => import("./pages/app/equipe/page.tsx"));
 const ComprasPage = lazy(() => import("./pages/app/compras/page.tsx"));
 const FinanceiroPage = lazy(() => import("./pages/app/financeiro/page.tsx"));
@@ -140,6 +142,8 @@ function AppRoutes() {
         <Route path="/catalogo" element={<CatalogoPage />} />
         <Route path="/financeiro" element={<FinanceiroPage />} />
         <Route path="/funil" element={<FunilPage />} />
+        <Route path="/propostas" element={<PropostasPage />} />
+        <Route path="/propostas/:id" element={<PropostaPage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/central" element={<CentralPage />} />
         <Route path="/configuracoes" element={<ConfiguracoesPage />} />

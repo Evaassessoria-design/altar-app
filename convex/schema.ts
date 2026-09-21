@@ -419,6 +419,112 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_stage", ["userId", "stage"]),
 
+  // ── PROPOSTA COMERCIAL ────────────────────────────────────────────────────
+  // O documento que a decoradora MANDA para a cliente.
+  //
+  // Distinto de `budgetItems`, que é o orçamento INTERNO: aquele traz custo,
+  // lucro e margem e existe para a reunião dela; este traz escopo e
+  // investimento e existe para a reunião com a cliente. Os dois convivem, e a
+  // fronteira entre eles vive em `lib/propostaComercial.ts` — na
+  // TRANSFORMAÇÃO, não na tela.
+  //
+  // ── POR QUE NÃO REAPROVEITAR `budgetItems` ───────────────────────────────
+  // Porque o que a cliente lê não é um recorte do que a decoradora calcula.
+  // Ela vende "Projeto floral da cerimônia — R$ 38.000", e por trás disso há
+  // dezoito linhas de custo que a cliente não vai ver e não deve ver. Derivar
+  // uma coisa da outra amarraria as duas para sempre e faria toda mudança de
+  // preço interno mexer no documento já enviado.
+  //
+  // ── A PROPOSTA NASCE DE UM LEAD OU DE UM EVENTO ──────────────────────────
+  // Antes do fechamento ela pende do LEAD (ainda não há evento); depois, do
+  // EVENTO. Os dois são opcionais e pelo menos um está presente — a mutation
+  // exige. Ausentes os dois, a proposta não teria de quem falar.
+  proposals: defineTable({
+    userId: v.id("users"),
+    leadId: v.optional(v.id("leads")),
+    eventId: v.optional(v.id("events")),
+
+    titulo: v.string(),
+    /** Texto de abertura: o conceito, o que ela entendeu do desejo da cliente. */
+    apresentacao: v.optional(v.string()),
+
+    /** Para quem é. Copiado do lead/evento na criação e editável depois. */
+    clienteNome: v.string(),
+    eventoTipo: v.optional(v.string()),
+    eventoData: v.optional(v.string()),
+    eventoLocal: v.optional(v.string()),
+    eventoConvidados: v.optional(v.number()),
+
+    /**
+     * O escopo como a CLIENTE lê: descrição e valor.
+     *
+     * Não há custo, quantidade de insumo nem fornecedor aqui — de propósito.
+     * "Projeto floral da cerimônia" é uma linha; as dezoito compras que a
+     * sustentam vivem em `purchaseItems`, e não têm por que aparecer.
+     */
+    itens: v.array(
+      v.object({
+        descricao: v.string(),
+        detalhe: v.optional(v.string()),
+        valor: v.number(),
+      }),
+    ),
+
+    /** Texto livre: a decoradora escreve a condição que ela pratica. */
+    condicoesPagamento: v.optional(v.string()),
+    /** "AAAA-MM-DD". Vencimento é DERIVADO daqui — nunca um status gravado. */
+    validadeAte: v.optional(v.string()),
+    observacoes: v.optional(v.string()),
+
+    status: v.union(
+      v.literal("rascunho"),
+      v.literal("enviada"),
+      v.literal("aceita"),
+      v.literal("recusada"),
+    ),
+
+    /**
+     * O que foi enviado, congelado no momento do envio.
+     *
+     * Sem isto, editar o valor depois de enviar mudaria em silêncio o
+     * significado de uma proposta que a cliente já tem na mão — e ninguém
+     * conseguiria dizer qual versão ela recebeu.
+     *
+     * É a mesma solução que a receita do item de montagem já usa: cópia é o
+     * versionamento. Sem tabela de versões, sem diff, sem migração.
+     *
+     * AUSENTE = nunca foi enviada.
+     */
+    versaoEnviada: v.optional(
+      v.object({
+        enviadaEm: v.string(),
+        titulo: v.string(),
+        investimento: v.number(),
+        itens: v.array(
+          v.object({
+            descricao: v.string(),
+            detalhe: v.optional(v.string()),
+            valor: v.number(),
+          }),
+        ),
+        condicoesPagamento: v.optional(v.string()),
+        validadeAte: v.optional(v.string()),
+      }),
+    ),
+
+    /** Quem decidiu e quando. Registro humano, não assinatura. */
+    decididaEm: v.optional(v.string()),
+    decididaPor: v.optional(v.string()),
+    /** Por que foi recusada, quando ela quis registrar. */
+    motivoDaRecusa: v.optional(v.string()),
+
+    createdAt: v.string(),
+    updatedAt: v.optional(v.string()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_lead", ["leadId"])
+    .index("by_event", ["eventId"]),
+
   // ── DOCUMENTOS DO LEAD (comercial) ────────────────────────────────────────
   // A negociacao gera arquivos ANTES de existir evento: proposta enviada,
   // contrato assinado, comprovante do sinal, referencias que a cliente mandou

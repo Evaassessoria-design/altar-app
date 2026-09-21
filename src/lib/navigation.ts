@@ -27,6 +27,9 @@ export const NAV_ITEMS = [
   { to: "/compras", label: "Compras" },
   { to: "/financeiro", label: "Financeiro" },
   { to: "/funil", label: "Funil" },
+  // A proposta fica DEPOIS do funil: é o que se faz com a oportunidade que
+  // entrou nele, e antes do evento existir.
+  { to: "/propostas", label: "Propostas" },
 ] as const satisfies readonly NavItem[];
 
 /**
@@ -61,6 +64,7 @@ export const MORE_MENU_ITEMS = [
   { to: "/acervo", label: "Acervo" },
   { to: "/catalogo", label: "Catálogo" },
   { to: "/funil", label: "Funil" },
+  { to: "/propostas", label: "Propostas" },
   { to: "/configuracoes", label: "Configurações" },
 ] as const satisfies readonly NavItem[];
 
@@ -75,6 +79,7 @@ export const ROTAS_SEM_MENU: Readonly<Record<string, string>> = {
   "/central": "operação do SaaS — só administradores, alcançada pelo Painel Admin",
   "/paywall": "destino de redirecionamento, não de navegação",
   "/fornecedores/:id": "acessada pelo card do fornecedor, no catálogo",
+  "/propostas/:id": "acessada pela lista de propostas, pelo funil e pelo evento",
   "/eventos/:id": "acessada pelo card do evento",
   "/eventos/:id/briefing": "acessada de dentro do evento",
   "/eventos/:id/checklist/:phase": "acessada de dentro do evento",

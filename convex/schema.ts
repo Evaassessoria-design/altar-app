@@ -361,6 +361,24 @@ export default defineSchema({
     responsibleId: v.optional(v.id("teamMembers")),
     responsible: v.optional(v.string()),
     /**
+     * A foto que abre o Projeto Visual — ESCOLHIDA por ela, nunca deduzida.
+     *
+     * AUSENTE = sem capa, e a tela abre com a capa tipográfica. Não há
+     * backfill, não há "a primeira foto" e não há IA: a capa de um casamento
+     * é decisão da decoradora, e um `[0]` seria uma regra inventada em
+     * silêncio (a mesma armadilha que `projectScope` evita ao não promover
+     * foto sem classificação a referência).
+     *
+     * É um PONTEIRO para a linha da galeria, não uma cópia e não um
+     * `storageId`: o arquivo continua sendo um só, e a capa herda ambiente,
+     * legenda e classificação da foto. Mesma forma de `responsibleId` acima.
+     *
+     * Ponteiro para foto apagada NÃO é estado válido: `gallery.deletePhoto`
+     * limpa a capa antes de apagar. A leitura ainda degrada para "sem capa"
+     * se um ponteiro velho sobreviver — a regra 3 de `lib/responsavel.ts`.
+     */
+    coverPhotoId: v.optional(v.id("eventPhotos")),
+    /**
      * Ultima vez que ALGUEM MEXEU neste registro dentro do ALTAR.
      *
      * AUSENTE = registro anterior a este campo; a leitura cai em

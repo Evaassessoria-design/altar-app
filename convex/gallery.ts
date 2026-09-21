@@ -191,6 +191,20 @@ export const deletePhoto = mutation({
     const photo = await ctx.db.get(args.id);
     if (!photo || photo.userId !== user._id)
       throw new ConvexError({ code: "FORBIDDEN", message: "Sem permissão" });
+
+    // ── A CAPA SAI ANTES DA FOTO ──────────────────────────────────────────
+    // Apagar a foto que é capa deixaria `events.coverPhotoId` apontando para
+    // uma linha que não existe. A tela degrada para a capa tipográfica mesmo
+    // assim, mas ponteiro quebrado no banco é dívida que cresce em silêncio:
+    // quem ler o campo amanhã não tem como saber se a capa foi removida ou se
+    // o dado se perdeu.
+    //
+    // Só o evento DESTA foto é tocado, e só quando a capa é esta.
+    const evento = await ctx.db.get(photo.eventId);
+    if (evento && evento.coverPhotoId === args.id) {
+      await ctx.db.patch(photo.eventId, { coverPhotoId: undefined });
+    }
+
     await ctx.storage.delete(photo.storageId);
     await ctx.db.delete(args.id);
   },

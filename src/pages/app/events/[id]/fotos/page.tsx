@@ -18,7 +18,7 @@ import {
   Download,
   Pencil,
   Check,
-  Loader2, Camera,} from "lucide-react";
+  Loader2, Camera, Star,} from "lucide-react";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils.ts";
@@ -103,6 +103,29 @@ export default function GaleriaPage() {
   const savePhoto = useMutation(api.gallery.savePhoto);
   const deletePhoto = useMutation(api.gallery.deletePhoto);
   const updatePhoto = useMutation(api.gallery.updatePhoto);
+  const atualizarEvento = useMutation(api.events.update);
+
+  /**
+   * A capa do Projeto Visual.
+   *
+   * Vive AQUI, e não no Projeto, porque é aqui que ela olha foto por foto —
+   * é o momento em que dá para decidir qual abre o casamento. O Projeto
+   * continua sendo só leitura: esta é a única tela que escreve foto.
+   *
+   * Ação imediata, fora do formulário de legenda: misturar uma escrita em
+   * `events` com o "Salvar" que grava em `eventPhotos` deixaria metade salva
+   * se a outra metade falhasse.
+   */
+  const capaAtual = event?.coverPhotoId ?? null;
+  const definirCapa = async (photoId: Id<"eventPhotos"> | null) => {
+    try {
+      // `null` REMOVE. `undefined` sumiria no transporte e a capa ficaria.
+      await atualizarEvento({ id: eventId, coverPhotoId: photoId });
+      toast.success(photoId ? "Capa do projeto definida." : "Capa removida.");
+    } catch {
+      toast.error("Não foi possível alterar a capa.");
+    }
+  };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -495,6 +518,14 @@ export default function GaleriaPage() {
                   <div className={cn("absolute top-2 left-2 px-1.5 py-0.5 rounded text-[10px] font-semibold", cat.color)}>
                     {cat.label}
                   </div>
+                  {/* Qual é a capa — a pergunta "e agora, qual delas eu
+                      escolhi?" não pode exigir abrir uma por uma. */}
+                  {capaAtual === photo._id && (
+                    <div className="absolute bottom-2 left-2 flex items-center gap-1 rounded bg-foreground/85 px-1.5 py-0.5 text-[10px] font-semibold text-background">
+                      <Star className="size-3 fill-current" />
+                      Capa
+                    </div>
+                  )}
                   {/* O que a imagem significa no projeto. Eixo separado da
                       fase: inspiração nunca pode passar por contratação. */}
                   {scopeMeta(photo.projectScope) && (
@@ -726,6 +757,45 @@ export default function GaleriaPage() {
                   ))}
                 </datalist>
               </div>
+
+              {/* ── A CAPA DO PROJETO ─────────────────────────────────────
+                  Ação imediata, com confirmação própria — não entra no
+                  "Salvar" abaixo, que grava na FOTO. Esta grava no EVENTO,
+                  e uma falha de um lado não pode deixar o outro pela metade.
+
+                  Uma capa por evento: escolher outra substitui, e é por isso
+                  que não há "desmarcar" além do botão explícito. */}
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium">Capa do projeto</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {capaAtual === editingCaption
+                      ? "Esta foto abre o Projeto Visual."
+                      : "Abre o Projeto Visual no lugar do título."}
+                  </p>
+                </div>
+                {capaAtual === editingCaption ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void definirCapa(null)}
+                    className="flex-shrink-0 cursor-pointer"
+                  >
+                    Remover capa
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void definirCapa(editingCaption)}
+                    className="flex-shrink-0 cursor-pointer gap-1.5"
+                  >
+                    <Star className="size-3.5" />
+                    Usar como capa
+                  </Button>
+                )}
+              </div>
+
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" size="sm" onClick={() => setEditingCaption(null)} className="cursor-pointer">
                   <X className="size-4" />

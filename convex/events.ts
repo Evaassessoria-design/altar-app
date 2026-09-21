@@ -3,7 +3,7 @@ import { normalizarDataDeEvento } from "./lib/dataDeEvento";
 import { emCentavos, motivoDoValorInvalido } from "./lib/dinheiro";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
-import { requireTeamMember, requireUser } from "./lib/identity";
+import { requireEventPhoto, requireTeamMember, requireUser } from "./lib/identity";
 import { deleteEventCascade } from "./lib/cascade";
 import { limparCampos } from "./lib/limparCampos";
 import { comCarimbo } from "./lib/ultimaAtualizacao";
@@ -136,6 +136,10 @@ export const update = mutation({
     // transporte do Convex e a limpeza falharia em silêncio.
     responsibleId: v.optional(v.union(v.id("teamMembers"), v.null())),
     responsible: v.optional(v.union(v.string(), v.null())),
+    // A capa do Projeto Visual. `null` REMOVE a capa — mesma convenção do
+    // vínculo acima, porque `undefined` some no transporte e "tirar a capa"
+    // falharia em silêncio, com a tela ainda dizendo "salvo".
+    coverPhotoId: v.optional(v.union(v.id("eventPhotos"), v.null())),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
@@ -146,6 +150,9 @@ export const update = mutation({
     // Vincular só a quem é da MINHA equipe: um id de outra empresa viraria um
     // ponteiro cruzado, e o nome dela apareceria no meu evento.
     await requireTeamMember(ctx, user._id, args.responsibleId);
+    // A capa tem de ser foto DESTE evento: um id de outro casamento — mesmo
+    // sendo dela — poria a foto errada na abertura do projeto.
+    await requireEventPhoto(ctx, user._id, args.id, args.coverPhotoId);
 
     const { id, ...fields } = args;
     // Campo ausente nao mexe na data (convencao de limparCampos). Quando VEM,

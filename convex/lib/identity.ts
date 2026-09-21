@@ -163,6 +163,30 @@ export async function requireTeamMember(
   }
 }
 
+/**
+ * A foto existe, é minha, e é DESTE evento?
+ *
+ * Três perguntas, não duas. Conferir só o dono deixaria a decoradora usar como
+ * capa de Marina & Gabriel uma foto do casamento da Joana — os dois eventos
+ * são dela, e mesmo assim seria a foto errada no documento errado.
+ *
+ * Mesma forma de `requireTeamMember` acima: `null`/`undefined` passa (limpar
+ * é operação válida) e id de outra conta responde NOT_FOUND, nunca FORBIDDEN —
+ * dado que não é seu não existe.
+ */
+export async function requireEventPhoto(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+  eventId: Id<"events">,
+  photoId: Id<"eventPhotos"> | null | undefined,
+): Promise<void> {
+  if (!photoId) return;
+  const foto = await ctx.db.get(photoId);
+  if (!foto || foto.userId !== userId || foto.eventId !== eventId) {
+    throw new ConvexError({ code: "NOT_FOUND", message: "Foto não encontrada" });
+  }
+}
+
 // Contexto mínimo com `auth` — cobre QueryCtx, MutationCtx e ActionCtx.
 type AuthCtx = { auth: QueryCtx["auth"] };
 

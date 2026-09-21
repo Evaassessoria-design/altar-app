@@ -134,6 +134,11 @@ ALTAR_DEMO                               ← só no projeto de demonstração
 | Ponte do Escritório 3D (somente leitura) | `convex/officeBridgeHttp.ts`, `officeCentralHttp.ts` |
 | Seed de demonstração (Marina & Gabriel) | `convex/demo.ts`, `lib/demoData.ts`, `lib/demoGuard.ts` — três travas: `ALTAR_DEMO=1`, recusa em banco com sinal de produção, idempotência |
 
+**A identidade visual**: `docs/identidade-visual.md` — a arte oficial, as onze
+derivações técnicas que saem dela, onde cada uma é usada e por que a ocupação
+do símbolo muda de um alvo para outro. A fonte fica em `brand/`, intacta; as
+derivações são geradas por `scripts/brand/gerar-icones.py`.
+
 **Para a reunião comercial**: `docs/demo-comercial.md` (roteiro de 7 e 20 min,
 perguntas frequentes, checklist pré-Meet) e `docs/prontidao-comercial.md` (o
 que pode e o que não pode ser mostrado hoje).

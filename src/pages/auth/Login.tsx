@@ -16,6 +16,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs.tsx";
 import { toast } from "sonner";
 import { Loader2, MailCheck } from "lucide-react";
+import { MarcaAltar } from "@/components/marca-altar.tsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tela única de autenticação (Fase 4B) — Better Auth e-mail/senha.
@@ -119,6 +120,10 @@ export default function LoginPage() {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
+          {/* A porta de entrada mostrava só a palavra. O símbolo aqui é o que
+              diz, antes de qualquer texto, que a pessoa chegou no lugar certo
+              — e é a mesma marca do ícone que ela tocou na tela inicial. */}
+          <MarcaAltar className="mx-auto mb-3 size-14 rounded-2xl" />
           <h1 className="text-3xl font-bold">ALTAR</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Gestão para decoradores de eventos

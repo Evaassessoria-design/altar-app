@@ -43,6 +43,7 @@ import { Suspense, useState } from "react";
 import { toast } from "sonner";
 import { ConvexError } from "convex/values";
 import { AvisoDeAssinatura } from "@/components/aviso-de-assinatura.tsx";
+import { MarcaAltar } from "@/components/marca-altar.tsx";
 
 // Rotas e rótulos vivem em src/lib/navigation.ts, conferidos por teste contra
 // as rotas de App.tsx — foi assim que `/dashboard` apareceu como tela órfã.
@@ -210,7 +211,7 @@ function AppLayoutInner() {
       <aside className="hidden md:flex flex-col w-64 bg-card border-r border-border">
         <div className="px-6 py-5 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <img src="/icon/icon-192.png" alt="Altar" className="size-8 rounded-xl" />
+            <MarcaAltar className="size-8 rounded-xl" />
             <span className="text-xl font-bold tracking-tight">ALTAR</span>
           </div>
           <NotificationCenter />
@@ -256,7 +257,7 @@ function AppLayoutInner() {
         {/* Mobile header */}
         <header className="md:hidden flex items-center justify-between px-4 py-3 bg-card border-b border-border">
           <div className="flex items-center gap-2">
-            <img src="/icon/icon-192.png" alt="Altar" className="size-7 rounded-lg" />
+            <MarcaAltar className="size-7 rounded-lg" />
             <span className="text-lg font-bold tracking-tight">ALTAR</span>
           </div>
           <div className="flex items-center gap-1">

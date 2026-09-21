@@ -17,6 +17,7 @@ import {
   Flower2,
   ClipboardList,
 } from "lucide-react";
+import { MarcaAltar } from "@/components/marca-altar.tsx";
 
 const features = [
   {
@@ -131,7 +132,7 @@ export default function Index() {
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <img src="/icon/icon-192.png" alt="Altar" className="size-8 rounded-xl" />
+            <MarcaAltar className="size-8 rounded-xl" />
             <span className="text-2xl font-bold tracking-tight text-foreground">
               ALTAR
             </span>
@@ -529,7 +530,7 @@ export default function Index() {
       <footer className="py-10 px-4 border-t border-border">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <img src="/icon/icon-192.png" alt="Altar" className="size-8 rounded-xl" />
+            <MarcaAltar className="size-8 rounded-xl" />
             <span className="text-xl font-bold tracking-tight">ALTAR</span>
           </div>
           <p className="text-sm text-muted-foreground">

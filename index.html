@@ -12,11 +12,13 @@
     />
     <meta name="author" content="ALTAR" />
     <meta name="application-name" content="ALTAR" />
-    <link
-      rel="icon"
-      type="image/svg+xml"
-      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>"
-    />
+    <!-- O favicon era um EMOJI ⚡ embutido como data-URI: placeholder do
+         gerador do projeto, que atravessou até aqui. Agora é a arte oficial,
+         recortada no símbolo (ver scripts/brand/gerar-icones.py). -->
+    <link rel="icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/icon/favicon-48.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icon/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/icon/favicon-16.png" />
 
     <meta property="og:title" content="ALTAR — Gestão para Decoradores de Eventos" />
     <meta
@@ -26,9 +28,23 @@
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://www.appaltar.com.br" />
     <meta property="og:site_name" content="ALTAR" />
+    <meta property="og:locale" content="pt_BR" />
+    <!-- Sem `og:image` o link colado no WhatsApp virava um retângulo cinza com
+         o domínio. A imagem é a arte oficial sobre o bege dela mesma. -->
+    <meta property="og:image" content="https://www.appaltar.com.br/brand/altar-og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="ALTAR — o símbolo do arco com a flor" />
 
-    <meta name="twitter:card" content="summary" />
+    <!-- `summary` mostra um selo pequeno; `summary_large_image` usa a arte
+         inteira, que é o motivo de ela existir em 1200×630. -->
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="ALTAR — Gestão para Decoradores de Eventos" />
+    <meta
+      name="twitter:description"
+      content="Plataforma de gestão para decoradores de eventos. Organize briefing, equipe, fornecedores, financeiro, montagem e inteligência artificial em um só lugar."
+    />
+    <meta name="twitter:image" content="https://www.appaltar.com.br/brand/altar-og.png" />
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -59,7 +75,12 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black" />
     <meta name="apple-mobile-web-app-title" content="Altar" />
-    <link rel="apple-touch-icon" href="/icon/icon-192.png" />
+    <!-- 180×180 é o tamanho que o iOS pede. Antes isto apontava para um
+         arquivo de 860×1600 — um PRINT de tela inicial de iPhone, com o ícone
+         pequeno no meio e a palavra "Altar" embaixo. Era essa a causa do
+         símbolo minúsculo no aparelho: o sistema espremia um retrato em um
+         quadrado e ainda cortava as bordas. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/icon/apple-touch-icon.png" />
 
     <link href="/src/index.css" rel="stylesheet" />
   </head>

@@ -128,9 +128,28 @@ todos" — nunca "adicione o primeiro". Em Compras, apagar um item que tenha
 lançamento no financeiro: tem de **perguntar antes** e avisar que a despesa sai
 junto.
 
+**17b. A identidade oficial, com os olhos.** É o único jeito de conferir:
+- **favicon** na aba, em 16px reais — o arco continua reconhecível?
+- **link colado no WhatsApp** (mande para você mesmo): tem de aparecer a arte
+  em 1200×630, não um retângulo cinza;
+- o **selo a 28–32px** na barra lateral e no cabeçalho do celular, nos dois
+  temas. O fundo bege faz parte da arte e vem junto.
+
 **18. Celular e PWA.** Abrir em 320–430 px de verdade (ou no aparelho). Olhar:
 o editor de proposta (os campos empilham?), a linha de compras (os dois botões
-têm 44 px?), o menu "Mais", e instalar como PWA para conferir ícone e nome.
+têm 44 px?) e o menu "Mais".
+
+Depois **instalar como PWA nos dois sistemas** — e este é o ponto da rodada da
+marca. **Remova o atalho antigo antes**, senão o iOS serve o ícone velho do
+cache dele e a conferência não vale nada.
+- no **iPhone**, o símbolo tem de ocupar boa parte do ícone depois que o iOS
+  aplicar os cantos. Era ele que aparecia minúsculo: o arquivo antigo era um
+  print de 860×1600;
+- no **Android**, que recorta um círculo, a ponta da folha não pode ser
+  cortada — é para isso que existe o `maskable` separado;
+- a **tela de abertura** tem de ser do mesmo bege do ícone (`#E7D8C8`), sem
+  piscar outra cor;
+- o nome embaixo do ícone continua **"Altar"**.
 
 **19. Central em modo simulado.** `ALTAR_CENTRAL_ENVIO_HABILITADO` tem de estar
 **ausente ou diferente de `"true"`**. Aprovar uma mensagem e confirmar que ela

@@ -1,5 +1,8 @@
-const CACHE_NAME = "altar-v1";
-const urlsToCache = ["/", "/icon/icon-192.png", "/icon/icon-512.png"];
+// `altar-v2`: a versão sobe junto com a identidade. Sem isso, quem já tem o
+// aplicativo instalado continuaria servindo do cache os ícones antigos — o
+// print de 860×1600 — e a marca nova não chegaria nunca.
+const CACHE_NAME = "altar-v2";
+const urlsToCache = ["/", "/icon/icon-192.png", "/brand/altar-simbolo-192.png"];
 
 // Install event - cache core assets
 //

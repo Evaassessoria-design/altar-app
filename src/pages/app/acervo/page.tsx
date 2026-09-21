@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/empty.tsx";
 import { toast } from "sonner";
 import { ConvexError } from "convex/values";
-import { Boxes, Plus, Archive, Search, SlidersHorizontal } from "lucide-react";
+import { ArchiveRestore, Boxes, Plus, Archive, Search, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
 import { UNIDADES, abreviarUnidade } from "@/convex/lib/materiais.ts";
 import { formatEventDayOnly } from "@/lib/event-date.ts";
@@ -166,7 +166,8 @@ function ItemDialog({
 
 
 export default function AcervoPage() {
-  const itens = useQuery(api.acervo.listItems, {});
+  const [verArquivados, setVerArquivados] = useState(false);
+  const itens = useQuery(api.acervo.listItems, { incluirArquivados: verArquivados });
   const arquivar = useMutation(api.acervo.setItemArchived);
   const [busca, setBusca] = useState("");
   const [criando, setCriando] = useState(false);
@@ -177,11 +178,37 @@ export default function AcervoPage() {
     i.nome.toLowerCase().includes(busca.trim().toLowerCase()),
   );
 
-  const handleArquivar = async (id: Id<"collectionItems">, nome: string) => {
-    if (!window.confirm(`Arquivar "${nome}"? Ele sai das reservas novas, mas o histórico continua.`)) return;
+  /**
+   * Arquivar e DESARQUIVAR.
+   *
+   * ── O DEFEITO ─────────────────────────────────────────────────────────────
+   * A tela só sabia arquivar, e a lista não pedia os arquivados. Um toque
+   * errado na lixeira — que fica ao lado de "Ajustar estoque", a ação mais
+   * frequente daqui — fazia 58 vasos sumirem do acervo, das reservas novas e
+   * da própria tela. Sem filtro e sem botão de volta, o único caminho de
+   * recuperação era o painel do Convex.
+   *
+   * O servidor sempre aceitou `archived: false`. Faltava a tela oferecer — e a
+   * própria tela já tinha o estilo do item arquivado escrito, num ramo que
+   * nunca renderizava.
+   */
+  const handleArquivar = async (
+    id: Id<"collectionItems">,
+    nome: string,
+    arquivado: boolean,
+  ) => {
+    if (
+      !arquivado &&
+      !window.confirm(
+        `Arquivar "${nome}"? Ele sai das reservas novas, mas o histórico continua ` +
+          "e você pode trazê-lo de volta em “Ver arquivados”.",
+      )
+    ) {
+      return;
+    }
     try {
-      await arquivar({ id, archived: true });
-      toast.success("Item arquivado.");
+      await arquivar({ id, archived: !arquivado });
+      toast.success(arquivado ? "Item de volta ao acervo." : "Item arquivado.");
     } catch (e) {
       toast.error(
         e instanceof ConvexError ? (e.data as { message: string }).message : "Não foi possível arquivar.",
@@ -202,6 +229,20 @@ export default function AcervoPage() {
           <Plus className="size-4" /> Novo item
         </Button>
       </div>
+
+      {/* FORA do bloco de lista, de propósito: quem arquivou a última peça cai
+          no estado vazio, e é exatamente essa pessoa que precisa achar o
+          caminho de volta. Se o filtro morasse junto da busca, ele sumiria
+          justamente quando fosse necessário. */}
+      <label className="mb-3 flex w-fit cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={verArquivados}
+          onChange={(e) => setVerArquivados(e.target.checked)}
+          className="cursor-pointer"
+        />
+        Ver arquivados
+      </label>
 
       {itens === undefined ? (
         <div className="space-y-2">
@@ -267,22 +308,32 @@ export default function AcervoPage() {
                     )
                   )}
                 </button>
-                {!item.archived && (
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    {/* Alvo de toque de 40px: esta tela e usada no galpao, em pe. */}
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {/* Alvo de toque de 40px: esta tela e usada no galpao, em pe. */}
+                  {!item.archived && (
                     <button onClick={() => setAjustando(item._id)}
                       aria-label={`Ajustar estoque de ${item.nome}`}
                       title="Ajustar estoque"
                       className="p-2.5 rounded-lg hover:bg-accent text-muted-foreground cursor-pointer">
                       <SlidersHorizontal className="size-4" />
                     </button>
-                    <button onClick={() => void handleArquivar(item._id, item.nome)}
-                      aria-label={`Arquivar ${item.nome}`}
-                      className="p-2.5 rounded-lg hover:bg-accent text-muted-foreground cursor-pointer">
+                  )}
+                  <button
+                    onClick={() =>
+                      void handleArquivar(item._id, item.nome, item.archived === true)
+                    }
+                    aria-label={
+                      item.archived ? `Reativar ${item.nome}` : `Arquivar ${item.nome}`
+                    }
+                    title={item.archived ? "Trazer de volta ao acervo" : "Arquivar"}
+                    className="p-2.5 rounded-lg hover:bg-accent text-muted-foreground cursor-pointer">
+                    {item.archived ? (
+                      <ArchiveRestore className="size-4" />
+                    ) : (
                       <Archive className="size-4" />
-                    </button>
-                  </div>
-                )}
+                    )}
+                  </button>
+                </div>
               </div>
             ))}
           </div>

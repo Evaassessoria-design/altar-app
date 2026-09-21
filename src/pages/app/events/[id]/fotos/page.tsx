@@ -19,7 +19,7 @@ import {
   Pencil,
   Check,
   Loader2, Camera,} from "lucide-react";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils.ts";
 import {
@@ -171,6 +171,32 @@ export default function GaleriaPage() {
 
   const photoList = photos ?? [];
   const lightboxPhoto = lightboxIndex !== null ? photoList[lightboxIndex] : null;
+
+  /**
+   * Esc fecha, seta anda.
+   *
+   * ── O DEFEITO ─────────────────────────────────────────────────────────────
+   * O visualizador é uma sobreposição feita à mão, não um `Dialog` — então não
+   * herdou nada do que o Radix dá de graça. Abrir uma foto no notebook e
+   * apertar Esc não fazia nada: era preciso achar o X, que é o reflexo que
+   * ninguém tem quando a foto ocupa a tela inteira.
+   *
+   * As setas vêm junto porque uma galeria de trinta fotos de montagem é lida
+   * seguidamente, e clicar em cada seta com o mouse é o que faz desistir na
+   * décima.
+   */
+  useEffect(() => {
+    if (lightboxIndex === null) return;
+    const aoTeclar = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightboxIndex(null);
+      if (e.key === "ArrowLeft") setLightboxIndex((i) => (i !== null && i > 0 ? i - 1 : i));
+      if (e.key === "ArrowRight") {
+        setLightboxIndex((i) => (i !== null && i < photoList.length - 1 ? i + 1 : i));
+      }
+    };
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, [lightboxIndex, photoList.length]);
 
   const tabCounts = {
     all: photoCounts?.total ?? 0,
@@ -419,8 +445,12 @@ export default function GaleriaPage() {
             onClick={() => setLightboxIndex(null)}
           >
             {/* Close */}
+            {/* Os três botões do visualizador eram só ícone, sem nome: o
+                leitor de tela anunciava "botão, botão, botão". */}
             <button
-              className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer z-10"
+              type="button"
+              aria-label="Fechar foto"
+              className="absolute top-4 right-4 flex size-11 cursor-pointer items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 z-10"
               onClick={() => setLightboxIndex(null)}
             >
               <X className="size-5" />
@@ -429,7 +459,9 @@ export default function GaleriaPage() {
             {/* Nav prev */}
             {lightboxIndex > 0 && (
               <button
-                className="absolute left-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer z-10"
+                type="button"
+                aria-label="Foto anterior"
+                className="absolute left-4 flex size-11 cursor-pointer items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 z-10"
                 onClick={(e) => { e.stopPropagation(); setLightboxIndex((i) => (i ?? 1) - 1); }}
               >
                 <ChevronLeft className="size-6" />
@@ -438,7 +470,9 @@ export default function GaleriaPage() {
             {/* Nav next */}
             {lightboxIndex < photoList.length - 1 && (
               <button
-                className="absolute right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer z-10"
+                type="button"
+                aria-label="Próxima foto"
+                className="absolute right-4 flex size-11 cursor-pointer items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 z-10"
                 onClick={(e) => { e.stopPropagation(); setLightboxIndex((i) => (i ?? 0) + 1); }}
               >
                 <ChevronRight className="size-6" />

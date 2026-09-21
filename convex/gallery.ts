@@ -39,6 +39,14 @@ export const savePhoto = mutation({
       v.literal("desmontagem"),
     ),
     caption: v.optional(v.string()),
+    // ── O QUE A IMAGEM SIGNIFICA, JÁ NO ENVIO ────────────────────────────────
+    // `projectScope` e `ambiente` existem no schema desde que a distinção
+    // entre INSPIRAÇÃO e CONTRATADO foi desenhada — e nenhum dos dois era
+    // gravado por caminho nenhum. Ver `updatePhoto` logo abaixo.
+    projectScope: v.optional(
+      v.union(v.literal("incluso"), v.literal("referencia"), v.literal("nao_incluso")),
+    ),
+    ambiente: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { user } = await requireEventOwner(ctx, args.eventId);
@@ -58,6 +66,8 @@ export const savePhoto = mutation({
       filename: args.filename,
       category: args.category,
       caption: args.caption,
+      projectScope: args.projectScope,
+      ambiente: args.ambiente?.trim() || undefined,
       order,
       uploadedAt: new Date().toISOString(),
     });
@@ -74,6 +84,17 @@ export const listPhotos = query({
       v.literal("evento"),
       v.literal("desmontagem"),
     )),
+    /**
+     * "Quais são as referências da mesa do bolo?"
+     *
+     * É a pergunta que a decoradora faz no galpão, com o celular na mão, e que
+     * não tinha resposta: a galeria filtrava só por FASE, e setenta fotos de
+     * um casamento moram todas em "antes".
+     *
+     * Filtro na CONSULTA, não na página já carregada — filtrar depois faria a
+     * contagem mentir assim que a lista tivesse teto.
+     */
+    ambiente: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     if (!(await getOwnedEvent(ctx, args.eventId))) return [];
@@ -91,7 +112,11 @@ export const listPhotos = query({
         .withIndex("by_event", (q) => q.eq("eventId", args.eventId));
     }
 
-    const photos = await photosQuery.order("asc").collect();
+    const encontradas = await photosQuery.order("asc").collect();
+    const alvo = args.ambiente?.trim().toLowerCase();
+    const photos = alvo
+      ? encontradas.filter((p) => (p.ambiente ?? "").trim().toLowerCase() === alvo)
+      : encontradas;
 
     return await Promise.all(
       photos.map(async (p) => ({
@@ -125,9 +150,30 @@ export const updatePhoto = mutation({
     if (!photo || photo.userId !== user._id)
       throw new ConvexError({ code: "FORBIDDEN", message: "Sem permissão" });
 
-    const patch: { caption?: string; category?: typeof args.category } = {};
+    // ── O DEFEITO QUE ESTAS QUATRO LINHAS FECHAM ─────────────────────────────
+    // `projectScope` e `ambiente` eram ACEITOS nos argumentos e descartados na
+    // gravação: o patch só carregava `caption` e `category`. A tela mandava a
+    // classificação, recebia "Legenda salva!" em verde, e nada era gravado.
+    //
+    // O efeito é pior do que perder um campo. A distinção entre REFERÊNCIA
+    // ("é assim que queremos") e INCLUSO ("está contratado") é a que impede
+    // uma foto de inspiração de ser cobrada como item do projeto — o schema
+    // documenta isso em oito linhas, `scopeMeta` desenha o selo, e nada disso
+    // chegava ao banco. Em `assemblyItems` a mesma regra sempre funcionou; só
+    // nas FOTOS ela era jogada fora.
+    const patch: {
+      caption?: string;
+      category?: typeof args.category;
+      projectScope?: typeof args.projectScope;
+      ambiente?: string;
+    } = {};
     if (args.caption !== undefined) patch.caption = args.caption;
     if (args.category !== undefined) patch.category = args.category;
+    if (args.projectScope !== undefined) patch.projectScope = args.projectScope;
+    // `""` LIMPA o ambiente; ausente não mexe. A distinção é a convenção da
+    // casa (lib/limparCampos.ts) e aqui ela importa: uma foto pode deixar de
+    // pertencer a um ambiente.
+    if (args.ambiente !== undefined) patch.ambiente = args.ambiente.trim() || undefined;
     await ctx.db.patch(args.id, patch);
   },
 });

@@ -60,12 +60,17 @@ export default function GaleriaPage() {
   const photoCounts = useQuery(api.gallery.getPhotoCounts, { eventId });
 
   const [activeTab, setActiveTab] = useState<Category | "all">("all");
-  const photos = useQuery(
-    api.gallery.listPhotos,
-    activeTab === "all"
-      ? { eventId }
-      : { eventId, category: activeTab },
-  );
+  /** Filtro por ambiente. `null` = todos. */
+  const [ambienteFiltro, setAmbienteFiltro] = useState<string | null>(null);
+  // Uma consulta SEM filtro de ambiente, só para saber quais ambientes
+  // existem — ela alimenta as sugestões e os botões de filtro, e não pode
+  // encolher quando o filtro está ligado (senão o botão some ao ser usado).
+  const todasAsFotos = useQuery(api.gallery.listPhotos, { eventId });
+  const photos = useQuery(api.gallery.listPhotos, {
+    eventId,
+    ...(activeTab === "all" ? {} : { category: activeTab }),
+    ...(ambienteFiltro ? { ambiente: ambienteFiltro } : {}),
+  });
 
   const generateUploadUrl = useMutation(api.gallery.generateUploadUrl);
   const savePhoto = useMutation(api.gallery.savePhoto);
@@ -82,6 +87,7 @@ export default function GaleriaPage() {
   const [editingCaption, setEditingCaption] = useState<Id<"eventPhotos"> | null>(null);
   const [captionText, setCaptionText] = useState("");
   const [scopeValue, setScopeValue] = useState<ProjectScope | null>(null);
+  const [ambienteTexto, setAmbienteTexto] = useState("");
   const [draggingOver, setDraggingOver] = useState(false);
 
   const { enviar } = useEnvioDeArquivo(generateUploadUrl, {
@@ -158,8 +164,11 @@ export default function GaleriaPage() {
         id: photoId,
         caption: captionText || undefined,
         projectScope: scopeValue ?? undefined,
+        // String vazia LIMPA o ambiente. `undefined` não mexeria, e aí tirar
+        // uma foto do ambiente errado seria impossível.
+        ambiente: ambienteTexto.trim(),
       });
-      toast.success("Legenda salva!");
+      toast.success("Foto classificada.");
       // Fecha SO no sucesso. Fechando no `finally`, uma falha de rede levava
       // junto o texto que a pessoa acabou de escrever — e o aviso de erro
       // aparecia num editor que ja tinha sumido, sem nada para tentar de novo.
@@ -168,6 +177,15 @@ export default function GaleriaPage() {
       toast.error("Erro ao salvar legenda. O texto continua aqui — tente de novo.");
     }
   };
+
+  /** Os ambientes que esta decoradora já usou NESTE evento, em ordem. */
+  const ambientesUsados = [
+    ...new Set(
+      (todasAsFotos ?? [])
+        .map((p) => (p.ambiente ?? "").trim())
+        .filter((a) => a.length > 0),
+    ),
+  ].sort((a, b) => a.localeCompare(b, "pt-BR"));
 
   const photoList = photos ?? [];
   const lightboxPhoto = lightboxIndex !== null ? photoList[lightboxIndex] : null;
@@ -353,6 +371,45 @@ export default function GaleriaPage() {
         })}
       </div>
 
+      {/* ── FILTRO POR AMBIENTE ────────────────────────────────────────────
+          Só aparece quando há ambiente classificado: numa conta que ainda não
+          usa o campo, uma fileira vazia de botões seria ruído.
+
+          As abas de cima respondem QUANDO a foto foi tirada. Esta responde DE
+          QUE PARTE DO EVENTO ela é — e é a pergunta do galpão, com o celular
+          na mão: "quais são as referências da mesa do bolo?". */}
+      {ambientesUsados.length > 0 && (
+        <div className="flex gap-1 overflow-x-auto pb-0.5">
+          <button
+            type="button"
+            onClick={() => setAmbienteFiltro(null)}
+            className={cn(
+              "flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors cursor-pointer",
+              ambienteFiltro === null
+                ? "bg-secondary text-secondary-foreground"
+                : "text-muted-foreground hover:bg-accent",
+            )}
+          >
+            Todos os ambientes
+          </button>
+          {ambientesUsados.map((a) => (
+            <button
+              key={a}
+              type="button"
+              onClick={() => setAmbienteFiltro(a)}
+              className={cn(
+                "flex-shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors cursor-pointer",
+                ambienteFiltro === a
+                  ? "bg-secondary text-secondary-foreground"
+                  : "text-muted-foreground hover:bg-accent",
+              )}
+            >
+              {a}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Photo grid */}
       {photos === undefined ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
@@ -361,8 +418,26 @@ export default function GaleriaPage() {
       ) : photoList.length === 0 ? (
         <div className="py-16 text-center text-sm text-muted-foreground">
           <Images className="size-10 mx-auto mb-3 opacity-30" />
-          <p>Nenhuma foto nesta categoria.</p>
-          <p className="text-xs mt-1">Use a área de upload acima para adicionar fotos.</p>
+          {/* Diz QUAL recorte está vazio, e oferece a saída: "nenhuma foto
+              nesta categoria" com um filtro de ambiente ligado manda procurar
+              no lugar errado. */}
+          {ambienteFiltro ? (
+            <>
+              <p>Nenhuma foto em “{ambienteFiltro}” neste recorte.</p>
+              <button
+                type="button"
+                onClick={() => setAmbienteFiltro(null)}
+                className="mt-2 cursor-pointer text-xs text-primary hover:underline"
+              >
+                Ver todos os ambientes
+              </button>
+            </>
+          ) : (
+            <>
+              <p>Nenhuma foto nesta categoria.</p>
+              <p className="text-xs mt-1">Use a área de upload acima para adicionar fotos.</p>
+            </>
+          )}
         </div>
       ) : (
         <motion.div
@@ -412,7 +487,7 @@ export default function GaleriaPage() {
                     )}
                     <div className="flex gap-1 ml-auto">
                       <button
-                        onClick={(e) => { e.stopPropagation(); setEditingCaption(photo._id); setCaptionText(photo.caption ?? ""); setScopeValue((photo.projectScope as ProjectScope | undefined) ?? null); }}
+                        onClick={(e) => { e.stopPropagation(); setEditingCaption(photo._id); setCaptionText(photo.caption ?? ""); setScopeValue((photo.projectScope as ProjectScope | undefined) ?? null); setAmbienteTexto(photo.ambiente ?? ""); }}
                         className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors cursor-pointer"
                         title="Editar legenda"
                       >
@@ -594,6 +669,35 @@ export default function GaleriaPage() {
                     item contratado.
                   </p>
                 )}
+              </div>
+
+              {/* ── O AMBIENTE ────────────────────────────────────────────
+                  O campo existia no schema e não tinha nenhuma tela: setenta
+                  fotos de um casamento moravam todas em "antes", e "quais são
+                  as referências da mesa do bolo?" não tinha resposta.
+
+                  Texto livre, e não lista fechada, porque o vocabulário é
+                  dela: "mesa do bolo" numa empresa é "mesa de doces" na
+                  outra, e um evento traz "capela" que nenhuma lista previu.
+                  Os ambientes já usados viram sugestão. */}
+              <div className="space-y-1.5">
+                <label htmlFor="foto-ambiente" className="text-xs font-medium">
+                  Ambiente
+                </label>
+                <input
+                  id="foto-ambiente"
+                  type="text"
+                  list="ambientes-do-evento"
+                  value={ambienteTexto}
+                  onChange={(e) => setAmbienteTexto(e.target.value)}
+                  placeholder="Mesa do bolo, cerimônia, lounge, bar..."
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <datalist id="ambientes-do-evento">
+                  {ambientesUsados.map((a) => (
+                    <option key={a} value={a} />
+                  ))}
+                </datalist>
               </div>
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" size="sm" onClick={() => setEditingCaption(null)} className="cursor-pointer">

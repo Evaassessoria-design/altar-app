@@ -2,9 +2,19 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import { Link } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
-import { AlertTriangle, CheckCircle2, ChevronRight, Users } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronRight, Users, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
 import { prazoDoEvento } from "@/lib/prazo-do-evento.ts";
+
+type FollowUp = ReturnType<typeof useQuery<typeof api.funil.getFollowUp>>;
+type Vencidos = ReturnType<typeof useQuery<typeof api.financeiro.getVencidos>>;
+
+/** Sem centavos: o painel é para decidir, não para conferir extrato. */
+const brl = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+  maximumFractionDigits: 0,
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // "PRECISAM DA SUA ATENÇÃO"
@@ -23,8 +33,7 @@ import { prazoDoEvento } from "@/lib/prazo-do-evento.ts";
  * os eventos para fora da tela. O painel é para AGIR: uma frase com o número e
  * um caminho para resolver diz o mesmo e cabe.
  */
-function LinhaDoFunil() {
-  const funil = useQuery(api.funil.getFollowUp);
+function LinhaDoFunil({ funil }: { funil: FollowUp }) {
   if (!funil || funil.total === 0) return null;
 
   const partes: string[] = [];
@@ -60,8 +69,57 @@ function LinhaDoFunil() {
   );
 }
 
+/**
+ * Uma linha só para o dinheiro que já devia ter entrado — ou saído.
+ *
+ * O painel respondia por evento e por oportunidade, e deixava de fora a
+ * pergunta mais cara de errar: "o sinal da Marina caiu?". O dado existe em
+ * `transactions` desde sempre; nenhuma tela perguntava.
+ *
+ * Descritiva, não cobrança: o ALTAR não sabe se houve acordo, adiamento ou
+ * pagamento por fora. A ação é abrir o Financeiro.
+ */
+function LinhaDoDinheiro({ vencido }: { vencido: Vencidos }) {
+  // `undefined` é "ainda não sei" — e uma linha de dinheiro que pisca na tela
+  // toda manhã é pior do que meio segundo de espera.
+  if (!vencido?.temAlgo) return null;
+
+  const partes: string[] = [];
+  if (vencido.aReceber.quantidade > 0) {
+    partes.push(
+      `${vencido.aReceber.quantidade === 1 ? "1 a receber" : `${vencido.aReceber.quantidade} a receber`} · ${brl.format(vencido.aReceber.total)}`,
+    );
+  }
+  if (vencido.aPagar.quantidade > 0) {
+    partes.push(
+      `${vencido.aPagar.quantidade === 1 ? "1 a pagar" : `${vencido.aPagar.quantidade} a pagar`} · ${brl.format(vencido.aPagar.total)}`,
+    );
+  }
+
+  return (
+    <Link
+      to="/financeiro"
+      className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-accent/50 cursor-pointer border-b border-border"
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        <Wallet className="size-4 text-primary flex-shrink-0" />
+        <p className="text-sm truncate">
+          <span className="font-medium">Venceu e não foi liquidado</span>
+          <span className="text-muted-foreground"> · {partes.join(" · ")}</span>
+        </p>
+      </div>
+      <ChevronRight className="size-4 text-muted-foreground flex-shrink-0" />
+    </Link>
+  );
+}
+
 export function AttentionBoard() {
   const eventos = useQuery(api.dashboard.getAttentionBoard);
+  // As três fontes ficam no PAI porque o estado vazio depende das três. Com a
+  // consulta dentro de cada linha, o cartão exibia "2 a receber · R$ 43.500" e
+  // logo abaixo "Nada pedindo atenção agora" — as duas coisas ao mesmo tempo.
+  const funil = useQuery(api.funil.getFollowUp);
+  const vencido = useQuery(api.financeiro.getVencidos);
 
   if (eventos === undefined) {
     return (
@@ -73,6 +131,11 @@ export function AttentionBoard() {
     );
   }
 
+  // Só é vazio quando as TRÊS não têm nada a dizer. Consulta ainda carregando
+  // não conta como "nada": é silêncio, não resposta.
+  const vazio =
+    eventos.length === 0 && !vencido?.temAlgo && (funil?.total ?? 0) === 0;
+
   return (
     <div className="bg-card rounded-xl border border-border overflow-hidden">
       <div className="px-5 py-4 border-b border-border">
@@ -80,19 +143,20 @@ export function AttentionBoard() {
           <AlertTriangle className="size-4 text-primary" /> Precisam da sua atenção
         </h2>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Eventos próximos com alguma pendência registrada
+          Eventos, oportunidades e dinheiro com alguma pendência registrada
         </p>
       </div>
 
-      <LinhaDoFunil />
+      <LinhaDoDinheiro vencido={vencido} />
+      <LinhaDoFunil funil={funil} />
 
-      {eventos.length === 0 ? (
+      {vazio ? (
         <div className="px-5 py-8 text-center">
           <CheckCircle2 className="size-6 text-green-600 dark:text-green-500 mx-auto" />
           <p className="text-sm font-medium mt-2">Nada pedindo atenção agora</p>
           <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
-            Nenhum evento próximo tem compra, conferência ou fornecedor pendente. Assim que
-            algo ficar em aberto, aparece aqui.
+            Nenhum evento próximo com pendência, nenhuma oportunidade parada e nada
+            vencido no Financeiro. Assim que algo ficar em aberto, aparece aqui.
           </p>
         </div>
       ) : (

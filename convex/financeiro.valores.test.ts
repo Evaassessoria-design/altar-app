@@ -353,3 +353,58 @@ describe("o lançamento de outra empresa é intocável", () => {
     ).rejects.toThrow(/não encontrado/i);
   });
 });
+
+// ═════════════════════════════════ O QUE VENCEU E NÃO FOI LIQUIDADO
+
+describe("os vencidos do painel da manhã", () => {
+  it("só enxerga o que é da própria empresa", async () => {
+    const { t, dona } = await cenario();
+    const outra = await autenticarComo(t, {
+      nome: "Outra", email: "outra@ex.com", role: "user", subject: "auth|outra",
+    });
+    await dona.mutation(api.financeiro.addTransaction, {
+      ...lancamento, amount: 43_500, isPaid: false, date: "2020-01-10",
+    });
+    expect((await dona.query(api.financeiro.getVencidos, {})).aReceber.quantidade).toBe(1);
+    expect((await outra.query(api.financeiro.getVencidos, {})).temAlgo).toBe(false);
+  });
+
+  it("marcar como recebido tira do painel", async () => {
+    const { dona } = await cenario();
+    const id = await dona.mutation(api.financeiro.addTransaction, {
+      ...lancamento, amount: 43_500, isPaid: false, date: "2020-01-10",
+    });
+    expect((await dona.query(api.financeiro.getVencidos, {})).temAlgo).toBe(true);
+    await dona.mutation(api.financeiro.togglePaid, { id });
+    expect((await dona.query(api.financeiro.getVencidos, {})).temAlgo).toBe(false);
+  });
+
+  it("lançamento futuro não aparece como vencido", async () => {
+    // Data bem à frente para o teste não virar bomba-relógio quando o
+    // calendário passar por ela.
+    const { dona } = await cenario();
+    await dona.mutation(api.financeiro.addTransaction, {
+      ...lancamento, amount: 1_000, isPaid: false, date: "2099-12-31",
+    });
+    expect((await dona.query(api.financeiro.getVencidos, {})).temAlgo).toBe(false);
+  });
+
+  it("separa o que ela recebe do que ela paga", async () => {
+    const { dona } = await cenario();
+    await dona.mutation(api.financeiro.addTransaction, {
+      ...lancamento, amount: 43_500, isPaid: false, date: "2020-01-10",
+    });
+    await dona.mutation(api.financeiro.addTransaction, {
+      ...lancamento, type: "expense", category: "Flores",
+      amount: 17_000, isPaid: false, date: "2020-01-05",
+    });
+    const r = await dona.query(api.financeiro.getVencidos, {});
+    expect(r.aReceber).toEqual({ quantidade: 1, total: 43_500 });
+    expect(r.aPagar).toEqual({ quantidade: 1, total: 17_000 });
+  });
+
+  it("sem sessão não responde nada", async () => {
+    const { t } = await cenario();
+    await expect(t.query(api.financeiro.getVencidos, {})).rejects.toThrow();
+  });
+});

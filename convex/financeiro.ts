@@ -3,6 +3,8 @@ import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { requireEventOwner, requireUser } from "./lib/identity";
 import { emCentavos, motivoDoValorInvalido, somaEmDinheiro } from "./lib/dinheiro";
+import { dinheiroVencido } from "./lib/dinheiroVencido";
+import { dataDoDia } from "./lib/dataDoDia";
 
 const txType = v.union(v.literal("income"), v.literal("expense"));
 
@@ -73,6 +75,27 @@ export const getSummary = query({
       pendingIncome,
       months,
     };
+  },
+});
+
+/**
+ * O que venceu e não foi liquidado — para o painel da manhã.
+ *
+ * Separada de `getSummary` de propósito: aquele resumo alimenta a TELA do
+ * Financeiro e carrega seis meses de histórico; esta responde a uma pergunta
+ * só, e é lida no Dashboard toda vez que ele abre.
+ *
+ * As regras vivem em lib/dinheiroVencido.ts, puras e testadas.
+ */
+export const getVencidos = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    const txs = await ctx.db
+      .query("transactions")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    return dinheiroVencido(txs, dataDoDia());
   },
 });
 

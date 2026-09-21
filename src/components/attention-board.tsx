@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { AlertTriangle, CheckCircle2, ChevronRight, Users } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
+import { prazoDoEvento } from "@/lib/prazo-do-evento.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // "PRECISAM DA SUA ATENÇÃO"
@@ -14,11 +15,6 @@ import { cn } from "@/lib/utils.ts";
 // gerou. As regras vivem em convex/lib/attention.ts, puras e testadas.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function diasTexto(dias: number): string {
-  if (dias === 0) return "é hoje";
-  if (dias === 1) return "amanhã";
-  return `em ${dias} dias`;
-}
 
 /**
  * Uma linha só para o funil inteiro.
@@ -110,16 +106,26 @@ export function AttentionBoard() {
                 >
                   {ev.nome}
                 </Link>
-                <span
-                  className={cn(
-                    "text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0",
-                    ev.nivel === "urgente"
-                      ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                      : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
-                  )}
-                >
-                  {diasTexto(ev.diasAte)}
-                </span>
+                {(() => {
+                  // A etiqueta é do PRAZO, não do nível: um evento que já
+                  // aconteceu saía em âmbar de "atenção", no mesmo tom de um
+                  // que ainda vai acontecer — e escrito "em -3 dias".
+                  const prazo = prazoDoEvento(ev.diasAte);
+                  return (
+                    <span
+                      className={cn(
+                        "text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0",
+                        prazo.tom === "passado"
+                          ? "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                          : ev.nivel === "urgente"
+                            ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                            : "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
+                      )}
+                    >
+                      {prazo.texto}
+                    </span>
+                  );
+                })()}
               </div>
 
               <ul className="mt-2 space-y-1">

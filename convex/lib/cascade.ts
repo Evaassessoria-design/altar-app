@@ -106,6 +106,16 @@ export async function deleteEventCascade(
     .withIndex("by_event", (q) => q.eq("eventId", eventId))
     .collect();
 
+  // Comprovantes financeiros são arquivos, e `transactions` entra na lista de
+  // "linhas sem arquivo" logo abaixo — então os arquivos precisam sair AQUI,
+  // antes. Sem isto, apagar o evento deixaria o PDF do PIX no storage para
+  // sempre, sem linha nenhuma que soubesse dele.
+  for (const tx of transactions) {
+    for (const c of tx.comprovantes ?? []) {
+      if (await safeDeleteFile(ctx, c.storageId)) files += 1;
+    }
+  }
+
   for (const row of [
     ...briefings,
     ...checklistItems,
@@ -439,6 +449,14 @@ export async function deleteUserDataCascade(
     .query("transactions")
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .collect();
+
+  // Mesma regra da cascata do evento: os comprovantes saem antes das linhas.
+  // Lançamento avulso (sem `eventId`) só é alcançado por aqui.
+  for (const tx of transactions) {
+    for (const c of tx.comprovantes ?? []) {
+      if (await safeDeleteFile(ctx, c.storageId)) files += 1;
+    }
+  }
 
   for (const row of [...teamMembers, ...notifications, ...transactions, ...materials, ...compositions, ...collectionAdjustments, ...collectionReservations, ...collectionItems]) {
     await ctx.db.delete(row._id);

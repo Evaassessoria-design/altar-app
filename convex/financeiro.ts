@@ -1,12 +1,25 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { requireEventOwner, requireUser } from "./lib/identity";
 import { emCentavos, motivoDoValorInvalido, somaEmDinheiro } from "./lib/dinheiro";
 import { dinheiroVencido } from "./lib/dinheiroVencido";
 import { dataDoDia } from "./lib/dataDoDia";
+import { requireActiveAccess } from "./lib/accessGuard";
+import { safeDeleteFile } from "./lib/cascade";
+import { limparCampos } from "./lib/limparCampos";
 
 const txType = v.union(v.literal("income"), v.literal("expense"));
+
+/**
+ * Teto de comprovantes por lançamento.
+ *
+ * Não é preocupação com o limite de 1 MiB da linha do Convex — dez anexos são
+ * ~1,5 KB de metadado. É que um lançamento com trinta comprovantes é sinal de
+ * que alguém está usando o campo para outra coisa, e a tela ficaria ilegível.
+ */
+export const LIMITE_DE_COMPROVANTES = 10;
 
 /** Recusa o valor que não pode ser gravado, com o recado que a tela mostra. */
 function exigirValor(valor: number) {
@@ -174,6 +187,201 @@ export const togglePaid = mutation({
   },
 });
 
+// ═════════════════════════════════════════════════════════════════════════════
+// FECHAMENTO DO RECEBIMENTO E COMPROVANTES
+//
+// ── O PEDIDO ────────────────────────────────────────────────────────────────
+// "Precisamos de um espaço para colocar os comprovantes no financeiro dos
+// noivos." Quem pediu recebe em parcelas e precisa provar, meses depois, que
+// a terceira entrou — para a cliente, para o contador, para si mesma.
+//
+// ── O QUE ISTO NÃO É ────────────────────────────────────────────────────────
+// Não existe tabela de parcelas no ALTAR, e esta rodada não cria uma. Cada
+// parcela JÁ É uma linha de `transactions` com `category: "Contrato"` —
+// `createReceivablesFromContract` as cria assim desde a leitura do contrato
+// por IA. Comprovante é um campo a mais na linha que já existe.
+//
+// ── A SEPARAÇÃO QUE NÃO PODE BORRAR ─────────────────────────────────────────
+// ANEXAR COMPROVANTE NÃO MARCA COMO PAGO. São mutations diferentes porque são
+// decisões diferentes: o comprovante é EVIDÊNCIA, o `isPaid` é a decisão dela.
+// Acoplar as duas faria um anexo errado virar uma baixa errada — e baixa
+// errada é dinheiro que o sistema afirma ter entrado.
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * O lançamento é meu?
+ *
+ * `NOT_FOUND`, nunca `FORBIDDEN`: lançamento de outra conta não existe, e a
+ * resposta não pode revelar que existe. É o padrão do repositório inteiro.
+ *
+ * Recebe o `user` já resolvido em vez de chamar `requireUser` aqui dentro: a
+ * trava de `tenant.isolation.test.ts` lê o CORPO de cada função pública
+ * procurando o nome do guarda, e guarda escondido dentro de helper não é
+ * auditável de fora. O teste estava certo — esta forma é a que ele pede.
+ */
+async function meuLancamento(
+  ctx: MutationCtx,
+  user: { _id: Id<"users"> },
+  id: Id<"transactions">,
+) {
+  const tx = await ctx.db.get(id);
+  if (!tx || tx.userId !== user._id) {
+    throw new ConvexError({ message: "Lançamento não encontrado", code: "NOT_FOUND" });
+  }
+  return tx;
+}
+
+/**
+ * Autorização de upload de comprovante.
+ *
+ * Exige ACESSO ATIVO, como todo upload do ALTAR (`lib/accessGuard.ts`):
+ * storage é cobrado, e conta bloqueada não sobe arquivo novo. Ler e baixar o
+ * que já existe continua liberado — é o caminho de volta.
+ */
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireActiveAccess(ctx);
+    return ctx.storage.generateUploadUrl();
+  },
+});
+
+/**
+ * O fechamento do recebimento: quando entrou, como entrou, e a observação.
+ *
+ * Separada de `updateTransaction` porque responde outra pergunta — aquela
+ * edita o lançamento (valor, vencimento, categoria), esta registra o que
+ * aconteceu com o dinheiro. `null` limpa, pela convenção de `limparCampos`.
+ *
+ * `isPaid` é opcional aqui: dá para anotar a forma de pagamento sem dar baixa,
+ * e dá para dar baixa sem informar mais nada.
+ */
+export const registrarPagamento = mutation({
+  args: {
+    id: v.id("transactions"),
+    isPaid: v.optional(v.boolean()),
+    paidAt: v.optional(v.union(v.string(), v.null())),
+    paymentMethod: v.optional(v.union(v.string(), v.null())),
+    notes: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    await meuLancamento(ctx, user, args.id);
+    const { id, ...campos } = args;
+    const limpo = limparCampos({
+      ...campos,
+      paidAt: typeof campos.paidAt === "string" ? campos.paidAt.trim() || null : campos.paidAt,
+      paymentMethod:
+        typeof campos.paymentMethod === "string"
+          ? campos.paymentMethod.trim() || null
+          : campos.paymentMethod,
+      notes: typeof campos.notes === "string" ? campos.notes.trim() || null : campos.notes,
+    });
+    await ctx.db.patch(id, limpo);
+  },
+});
+
+/**
+ * Anexa um comprovante. NÃO toca em `isPaid` — ver o cabeçalho acima.
+ *
+ * O arquivo já está no storage quando chega aqui; o que esta mutation faz é
+ * DIZER que ele pertence a este lançamento. Um `storageId` vindo do navegador
+ * não prova posse de nada (o Convex não escopa storage por conta), e é por
+ * isso que a única proteção real é esta: só o dono do lançamento grava nele, e
+ * o comprovante não tem id próprio que alguém pudesse endereçar de fora.
+ */
+export const anexarComprovante = mutation({
+  args: {
+    id: v.id("transactions"),
+    storageId: v.id("_storage"),
+    filename: v.string(),
+    contentType: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const tx = await meuLancamento(ctx, user, args.id);
+
+    const atuais = tx.comprovantes ?? [];
+    // Mesmo arquivo anexado duas vezes (toque repetido, reenvio) não vira duas
+    // linhas na lista.
+    if (atuais.some((c) => c.storageId === args.storageId)) {
+      return { total: atuais.length };
+    }
+    if (atuais.length >= LIMITE_DE_COMPROVANTES) {
+      throw new ConvexError({
+        code: "LIMITE",
+        message: `Um lançamento aceita até ${LIMITE_DE_COMPROVANTES} comprovantes.`,
+      });
+    }
+
+    await ctx.db.patch(args.id, {
+      comprovantes: [
+        ...atuais,
+        {
+          storageId: args.storageId,
+          filename: args.filename.trim() || "comprovante",
+          contentType: args.contentType?.trim() || undefined,
+          uploadedAt: new Date().toISOString(),
+        },
+      ],
+    });
+    return { total: atuais.length + 1 };
+  },
+});
+
+/**
+ * Remove UM comprovante, pelo arquivo.
+ *
+ * O arquivo sai com `safeDeleteFile`: o Convex LANÇA ao apagar arquivo
+ * inexistente, e uma mutation que lança aborta inteira — o comprovante
+ * continuaria listado, apontando para nada, e sem jeito de tirar da lista.
+ * É o mesmo defeito que a auditoria do pipeline de arquivos fechou.
+ */
+export const removerComprovante = mutation({
+  args: { id: v.id("transactions"), storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const tx = await meuLancamento(ctx, user, args.id);
+    const atuais = tx.comprovantes ?? [];
+    // Só apaga o arquivo se ele for DESTE lançamento. Sem esta conferência,
+    // um storageId qualquer vindo do navegador viraria uma exclusão de arquivo
+    // — inclusive de arquivo que não é dela.
+    if (!atuais.some((c) => c.storageId === args.storageId)) {
+      throw new ConvexError({ message: "Comprovante não encontrado", code: "NOT_FOUND" });
+    }
+
+    await safeDeleteFile(ctx, args.storageId);
+    await ctx.db.patch(args.id, {
+      comprovantes: atuais.filter((c) => c.storageId !== args.storageId),
+    });
+  },
+});
+
+/**
+ * Os comprovantes de UM lançamento, com URL para abrir e baixar.
+ *
+ * Query separada, e não campo da listagem: resolver URL de todo comprovante de
+ * toda linha do Financeiro seria uma chamada de storage por anexo em cada
+ * abertura da tela. A LISTA só precisa saber QUANTOS existem, e isso já está
+ * na própria linha.
+ */
+export const comprovantesDoLancamento = query({
+  args: { id: v.id("transactions") },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const tx = await ctx.db.get(args.id);
+    // Degrada para vazio: listagem não lança, é o padrão do Bloco 0.
+    if (!tx || tx.userId !== user._id) return [];
+
+    return Promise.all(
+      (tx.comprovantes ?? []).map(async (c) => ({
+        ...c,
+        url: await ctx.storage.getUrl(c.storageId),
+      })),
+    );
+  },
+});
+
 export const deleteTransaction = mutation({
   args: { id: v.id("transactions") },
   handler: async (ctx, args) => {
@@ -200,6 +408,11 @@ export const deleteTransaction = mutation({
       if (compra.userId !== user._id) continue;
       await ctx.db.patch(compra._id, { transactionId: undefined });
     }
+
+    // Os comprovantes são arquivos DESTE lançamento e não sobrevivem a ele:
+    // deixá-los seria storage órfão cobrado para sempre. `safeDeleteFile`
+    // porque arquivo que já sumiu não pode impedir a exclusão da linha.
+    for (const c of tx.comprovantes ?? []) await safeDeleteFile(ctx, c.storageId);
 
     await ctx.db.delete(args.id);
     return { vinculosLimpos: vinculadas.length };

@@ -41,6 +41,7 @@ import {
   Pencil,
   Trash2,
   Check,
+  Paperclip,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
@@ -48,6 +49,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ConvexError } from "convex/values";
 import { cn } from "@/lib/utils.ts";
+import { RecebimentoDialog } from "@/components/financeiro/recebimento-dialog.tsx";
+import {
+  contagemDeComprovantes,
+  pagoSemComprovante,
+  temComprovante,
+} from "@/lib/comprovante-financeiro.ts";
 import {
   BarChart,
   Bar,
@@ -236,6 +243,17 @@ function TxDialog({
   );
 }
 
+type Filtro = "all" | "income" | "expense" | "sem_comprovante";
+
+const FILTROS: readonly Filtro[] = ["all", "income", "expense", "sem_comprovante"];
+
+const ROTULO_DO_FILTRO: Record<Filtro, string> = {
+  all: "Todos",
+  income: "Receitas",
+  expense: "Despesas",
+  sem_comprovante: "Sem comprovante",
+};
+
 function fmt(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
@@ -278,7 +296,8 @@ export default function FinanceiroPage() {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Doc<"transactions"> | null>(null);
   const [deleting, setDeleting] = useState<Doc<"transactions"> | null>(null);
-  const [filter, setFilter] = useState<"all" | "income" | "expense">("all");
+  const [filter, setFilter] = useState<Filtro>("all");
+  const [recebimento, setRecebimento] = useState<Doc<"transactions"> | null>(null);
 
   const handleCreate = async (values: TxFormValues) => {
     try {
@@ -333,9 +352,13 @@ export default function FinanceiroPage() {
     }
   };
 
-  const filtered = (transactions ?? []).filter(
-    (t) => filter === "all" || t.type === filter,
+  const filtered = (transactions ?? []).filter((t) =>
+    filter === "sem_comprovante" ? pagoSemComprovante(t) : filter === "all" || t.type === filter,
   );
+  // A pergunta da decoradora: "quais recebimentos eu já dei baixa e ainda não
+  // tenho o documento?". Contada sobre o livro INTEIRO, não sobre o recorte
+  // aberto — senão o número mudaria conforme o filtro e deixaria de responder.
+  const semComprovante = (transactions ?? []).filter(pagoSemComprovante).length;
   // "Não há lançamento nenhum" e "este recorte não tem lançamento" são coisas
   // diferentes, e a tela dizia a primeira nas duas situações — com 200 linhas
   // no livro e o filtro em "Receitas", ela convidava a cadastrar o primeiro.
@@ -417,20 +440,26 @@ export default function FinanceiroPage() {
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h2 className="font-semibold">Lançamentos</h2>
           <div className="flex gap-2">
-            {(["all", "income", "expense"] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={cn(
-                  "inline-flex items-center justify-center min-h-9 sm:min-h-0 px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer",
-                  filter === f
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-card border border-border text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {f === "all" ? "Todos" : f === "income" ? "Receitas" : "Despesas"}
-              </button>
-            ))}
+            {FILTROS.map((f) => {
+              // O recorte de comprovante só existe quando há o que cobrar: um
+              // botão que sempre leva a "nenhum lançamento" é ruído.
+              if (f === "sem_comprovante" && semComprovante === 0) return null;
+              return (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={cn(
+                    "inline-flex items-center justify-center min-h-9 sm:min-h-0 px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer",
+                    filter === f
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-card border border-border text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {ROTULO_DO_FILTRO[f]}
+                  {f === "sem_comprovante" && ` (${semComprovante})`}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -508,11 +537,39 @@ export default function FinanceiroPage() {
                         Pendente
                       </span>
                     )}
+                    {/* Discreto de propósito: quem tem o documento não precisa
+                        de alarde, e quem não tem precisa de um lembrete, não
+                        de uma acusação. Só em RECEITA — despesa ainda não
+                        aceita comprovante, e o selo prometeria o que não há. */}
+                    {temComprovante(tx) && (
+                      <span className="flex-shrink-0 text-[10px] text-muted-foreground">
+                        <Paperclip className="inline size-3" aria-hidden />
+                      </span>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                     <span>{tx.category}</span>
                     <span>·</span>
-                    <span>{formatDateInput(tx.date)}</span>
+                    {/* Pago tem DUAS datas, e elas são perguntas diferentes:
+                        `date` é o vencimento, `paidAt` é quando entrou. A linha
+                        mostra a que importa naquele estado. */}
+                    <span>
+                      {tx.isPaid && tx.paidAt
+                        ? `recebido em ${formatDateInput(tx.paidAt)}`
+                        : formatDateInput(tx.date)}
+                    </span>
+                    {tx.isPaid && tx.paymentMethod && (
+                      <>
+                        <span>·</span>
+                        <span className="truncate">{tx.paymentMethod}</span>
+                      </>
+                    )}
+                    {pagoSemComprovante(tx) && (
+                      <>
+                        <span>·</span>
+                        <span className="text-amber-700 dark:text-amber-500">sem comprovante</span>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="text-right flex-shrink-0">
@@ -527,6 +584,17 @@ export default function FinanceiroPage() {
                   </p>
                 </div>
                 <div className="flex gap-1 flex-shrink-0">
+                  {/* Progressive disclosure: pagamento e comprovantes moram no
+                      diálogo, não no card. Cinquenta lançamentos com seis
+                      campos cada seriam uma tela impossível de ler. */}
+                  <button
+                    onClick={() => setRecebimento(tx)}
+                    aria-label={`Pagamento e comprovantes de ${tx.description}`}
+                    title={contagemDeComprovantes(tx.comprovantes?.length ?? 0) ?? "Pagamento e comprovantes"}
+                    className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer text-muted-foreground"
+                  >
+                    <Paperclip className="size-3.5" />
+                  </button>
                   <button
                     onClick={() => setEditing(tx)}
                     className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer text-muted-foreground"
@@ -545,6 +613,16 @@ export default function FinanceiroPage() {
           </div>
         )}
       </div>
+
+      {recebimento && (
+        <RecebimentoDialog
+          key={recebimento._id}
+          lancamento={
+            (transactions ?? []).find((t) => t._id === recebimento._id) ?? recebimento
+          }
+          onClose={() => setRecebimento(null)}
+        />
+      )}
 
       <TxDialog open={creating} onClose={() => setCreating(false)} title="Novo Lançamento" onSubmit={handleCreate} />
 

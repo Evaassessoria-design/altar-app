@@ -149,6 +149,23 @@ const tipoDeAjusteDeAcervo = v.union(
 
 const txType = v.union(v.literal("income"), v.literal("expense"));
 
+// ── COMPROVANTE DE UM LANCAMENTO ────────────────────────────────────────────
+// Evidencia do pagamento: o PDF do PIX, a foto do recibo, o print da
+// transferencia. Mora NO lancamento, como `assemblyItems.receita` mora no
+// item — nao ha tabela filha, e por isso nao ha id proprio que o navegador
+// pudesse mandar para alcancar o comprovante de outra conta.
+//
+// `filename` e `contentType` sao SNAPSHOT do que ela enviou: o storage nao
+// guarda nome, e sem isso a lista mostraria um identificador no lugar de
+// "pix-outubro.pdf".
+const comprovanteFinanceiro = v.object({
+  storageId: v.id("_storage"),
+  filename: v.string(),
+  /** MIME declarado pelo navegador. Ausente = tipo desconhecido, nao invente. */
+  contentType: v.optional(v.string()),
+  uploadedAt: v.string(),
+});
+
 const checklistPhase = v.union(v.literal("pre"), v.literal("post"));
 
 const photoCategory = v.union(
@@ -799,9 +816,39 @@ export default defineSchema({
     category: v.string(),
     description: v.string(),
     amount: v.number(),
+    /** VENCIMENTO. Quando foi pago de verdade e `paidAt`, abaixo. */
     date: v.string(),
     isPaid: v.boolean(),
     notes: v.optional(v.string()),
+    /**
+     * Quando o dinheiro entrou de verdade.
+     *
+     * AUSENTE = pago sem data informada, ou ainda nao pago. Nao ha backfill e
+     * `togglePaid` NAO preenche sozinho: dar baixa hoje num PIX que caiu na
+     * semana passada gravaria uma data errada, e data errada em financeiro e
+     * pior que data ausente.
+     *
+     * `date` continua sendo o VENCIMENTO. Sao perguntas diferentes: "quando
+     * era para entrar" e "quando entrou".
+     */
+    paidAt: v.optional(v.string()),
+    /**
+     * Forma de pagamento — TEXTO LIVRE, nao lista fechada.
+     *
+     * A leitura de contrato por IA (`ai.ts`) ja extrai este campo como texto
+     * livre e o mostra na revisao; fechar um enum aqui contradiria o formato
+     * que o produto ja produz — e deixaria de fora "permuta", "cheque" e o que
+     * mais aparecer. A tela sugere as formas comuns sem impedir as outras.
+     */
+    paymentMethod: v.optional(v.string()),
+    /**
+     * Os comprovantes deste lancamento. AUSENTE = nenhum.
+     *
+     * ANEXAR COMPROVANTE NAO MARCA COMO PAGO: comprovante e evidencia,
+     * `isPaid` e decisao dela. As duas coisas tem mutations separadas de
+     * proposito.
+     */
+    comprovantes: v.optional(v.array(comprovanteFinanceiro)),
   })
     .index("by_user", ["userId"])
     .index("by_user_date", ["userId", "date"])

@@ -329,3 +329,30 @@ export async function resolveTrialForNewUser(
     trialEndDate: trialEnd.toISOString(),
   };
 }
+
+/**
+ * O fornecedor existe, é meu, e é DESTE evento?
+ *
+ * Irmã de `requireEventPhoto` acima, e pelo mesmo motivo: `assemblyItems`
+ * aceita `supplierId` desde que a tabela existe, e NUNCA conferiu nada. O
+ * campo não era escrito por tela nenhuma, então não há dado ruim gravado —
+ * mas as funções do Convex são chamáveis direto do navegador, e um id de
+ * `eventSuppliers` de outra conta entrava no item sem uma pergunta sequer.
+ *
+ * Três perguntas outra vez: existe, é minha, e é deste evento. A segunda
+ * sozinha deixaria o fornecedor do casamento da Joana assinar o item de
+ * Marina — os dois eventos são dela, e mesmo assim é o fornecedor errado no
+ * Caderno errado.
+ */
+export async function requireEventSupplier(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<"users">,
+  eventId: Id<"events">,
+  supplierId: Id<"eventSuppliers"> | null | undefined,
+): Promise<void> {
+  if (!supplierId) return;
+  const fornecedor = await ctx.db.get(supplierId);
+  if (!fornecedor || fornecedor.userId !== userId || fornecedor.eventId !== eventId) {
+    throw new ConvexError({ code: "NOT_FOUND", message: "Fornecedor não encontrado" });
+  }
+}

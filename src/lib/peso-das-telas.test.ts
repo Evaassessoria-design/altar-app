@@ -51,7 +51,12 @@ describe("as três superfícies de miniatura usam a versão leve", () => {
 
 describe("a capa continua tendo UM ponteiro só", () => {
   it("nenhum segundo campo de capa foi criado", () => {
-    const schema = readFileSync("convex/schema.ts", "utf-8");
+    // `semComentarios` e não o arquivo cru: o schema EXPLICA a capa em mais de
+    // um lugar (o comentário dos ponteiros de foto do item cita
+    // `events.coverPhotoId` como precedente), e contar prosa faria este teste
+    // acusar um segundo campo que não existe. É a terceira vez que uma trava
+    // de leitura de fonte neste repositório tropeça no próprio comentário.
+    const schema = semComentarios("convex/schema.ts");
     expect((schema.match(/coverPhotoId/g) ?? []).length).toBe(1);
     for (const inventado of ["coverPreviewId", "coverStorageId", "coverPhotoStorageId"]) {
       expect(schema, `nasceu um segundo ponteiro: ${inventado}`).not.toContain(inventado);

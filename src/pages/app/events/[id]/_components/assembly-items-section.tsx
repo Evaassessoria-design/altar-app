@@ -1,5 +1,4 @@
-import { useRef, useState } from "react";
-import { useEnvioDeArquivo } from "@/hooks/use-upload.ts";
+import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
@@ -28,6 +27,11 @@ const TOM_CARREGAMENTO: Record<AssemblyStatus, string> = {
   retornou: "bg-green-50 text-green-800 border-green-300 dark:bg-green-900/25 dark:text-green-300 dark:border-green-800",
 };
 import { Checkbox } from "@/components/ui/checkbox.tsx";
+import { SeletorDeFoto } from "@/components/projeto/seletor-de-foto.tsx";
+import {
+  urlDeMiniatura,
+  type FotoResolvida,
+} from "@/convex/lib/fotoDoItem.ts";
 import {
   Plus,
   Trash2,
@@ -36,6 +40,8 @@ import {
   Package,
   ChevronDown,
   ChevronUp,
+  Images,
+  X,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -45,6 +51,7 @@ import {
 
 type Item = {
   _id: Id<"assemblyItems">;
+  eventId: Id<"events">;
   area: string;
   name: string;
   model?: string;
@@ -56,6 +63,10 @@ type Item = {
   includeInAssemblyReport: boolean;
   checkOnAssembly: boolean;
   operationalStatus?: string;
+  supplierId?: Id<"eventSuppliers">;
+  /** Já resolvidas pelo servidor — ver convex/lib/fotoDoItem.ts. */
+  referenceFoto: FotoResolvida;
+  contractedFoto: FotoResolvida;
   referencePhotoUrl?: string | null;
   contractedPhotoUrl?: string | null;
   /** A receita da Ficha Técnica. Só para avisar o que a exclusão leva junto. */
@@ -220,12 +231,14 @@ function ItemCard({
   onUpdate: ReturnType<typeof useMutation<typeof api.assemblyItems.update>>;
   onRemove: ReturnType<typeof useMutation<typeof api.assemblyItems.remove>>;
 }) {
-  const setPhoto = useMutation(api.assemblyItems.setPhoto);
-  const generateUploadUrl = useMutation(api.assemblyItems.generateUploadUrl);
-  const { enviar } = useEnvioDeArquivo(generateUploadUrl, { tipo: "imagem", aceitos: ["image/"] });
-  const [uploading, setUploading] = useState<"reference" | "contracted" | null>(null);
-  const refInput = useRef<HTMLInputElement>(null);
-  const contractedInput = useRef<HTMLInputElement>(null);
+  const clearPhoto = useMutation(api.assemblyItems.clearPhoto);
+  // Qual slot está com o seletor aberto. `null` = fechado.
+  const [escolhendo, setEscolhendo] = useState<"reference" | "contracted" | null>(null);
+  // Os fornecedores DESTE evento — a mesma lista da aba Fornecedores. Sem isto
+  // o campo era texto livre e "Móveis Bella" era digitado de novo em cada item.
+  const fornecedores = useQuery(api.suppliers.listByEvent, { eventId: item.eventId }) as
+    | { _id: Id<"eventSuppliers">; companyName: string }[]
+    | undefined;
 
   const statusAtual = effectiveAssemblyStatus(item);
 
@@ -237,21 +250,12 @@ function ItemCard({
     }
   };
 
-  const uploadPhoto = async (slot: "reference" | "contracted", file: File) => {
-    setUploading(slot);
+  const tirarFoto = async (slot: "reference" | "contracted") => {
     try {
-      const envio = await enviar(file);
-      if (!envio.ok) {
-        toast.error(envio.motivo);
-        return;
-      }
-      const storageId = envio.storageId;
-      await setPhoto({ id: item._id, slot, storageId });
-      toast.success("Foto salva.");
+      await clearPhoto({ id: item._id, slot });
+      toast.success("Foto removida do item.");
     } catch {
-      toast.error("Erro ao enviar a foto.");
-    } finally {
-      setUploading(null);
+      toast.error("Não foi possível remover a foto.");
     }
   };
 
@@ -259,9 +263,12 @@ function ItemCard({
     <div className="rounded-lg border border-border bg-card">
       {/* Resumo */}
       <div className="flex items-center gap-3 px-3 py-2.5">
-        {item.referencePhotoUrl ? (
+        {/* A miniatura usa a VERSÃO LEVE quando existe. Pelo caminho antigo
+            (arquivo próprio do item) ela não existe, e aí cai no original —
+            que é exatamente o que acontecia em todos os casos antes. */}
+        {urlDeMiniatura(item.referenceFoto) ? (
           <img loading="lazy" decoding="async"
-            src={item.referencePhotoUrl}
+            src={urlDeMiniatura(item.referenceFoto)!}
             alt=""
             className="size-10 rounded object-cover flex-shrink-0 border border-border"
           />
@@ -318,10 +325,21 @@ function ItemCard({
               value={item.ambiente ?? ""}
               onSave={(v) => void patch({ ambiente: v })}
             />
-            <Field
-              label="Fornecedor"
-              value={item.supplierName ?? ""}
-              onSave={(v) => void patch({ supplierName: v })}
+            <CampoFornecedor
+              item={item}
+              fornecedores={fornecedores}
+              onEscolher={(f) =>
+                void patch(
+                  f
+                    ? { supplierId: f._id, supplierName: f.companyName }
+                    : // Desvincular NÃO apaga o nome: ele é o histórico do que
+                      // valia quando o item foi cadastrado, do mesmo jeito que
+                      // `purchaseItems.supplier` e `assemblyItems.supplierName`
+                      // sempre foram. Some o vínculo, fica a anotação.
+                      { supplierId: null },
+                )
+              }
+              onDigitar={(v) => void patch({ supplierName: v, supplierId: null })}
             />
           </div>
 
@@ -335,23 +353,34 @@ function ItemCard({
             />
           </div>
 
-          {/* Fotos */}
+          {/* Fotos — da Galeria do evento, não de um upload paralelo. */}
           <div className="grid grid-cols-2 gap-3">
             <PhotoSlot
               label="Referência aprovada"
-              url={item.referencePhotoUrl}
-              uploading={uploading === "reference"}
-              inputRef={refInput}
-              onPick={(f) => void uploadPhoto("reference", f)}
+              foto={item.referenceFoto}
+              onEscolher={() => setEscolhendo("reference")}
+              onTirar={() => void tirarFoto("reference")}
             />
             <PhotoSlot
               label="Item contratado"
-              url={item.contractedPhotoUrl}
-              uploading={uploading === "contracted"}
-              inputRef={contractedInput}
-              onPick={(f) => void uploadPhoto("contracted", f)}
+              foto={item.contractedFoto}
+              onEscolher={() => setEscolhendo("contracted")}
+              onTirar={() => void tirarFoto("contracted")}
             />
           </div>
+
+          {escolhendo && (
+            <SeletorDeFoto
+              eventId={item.eventId}
+              itemId={item._id}
+              slot={escolhendo}
+              ambienteDoItem={item.ambiente}
+              selecionada={
+                (escolhendo === "reference" ? item.referenceFoto : item.contractedFoto).photoId
+              }
+              onClose={() => setEscolhendo(null)}
+            />
+          )}
 
           {/* Flags */}
           <div className="space-y-2 pt-1">
@@ -435,46 +464,122 @@ function Field({
 
 function PhotoSlot({
   label,
-  url,
-  uploading,
-  inputRef,
-  onPick,
+  foto,
+  onEscolher,
+  onTirar,
 }: {
   label: string;
-  url?: string | null;
-  uploading: boolean;
-  inputRef: React.RefObject<HTMLInputElement | null>;
-  onPick: (file: File) => void;
+  foto: FotoResolvida;
+  onEscolher: () => void;
+  onTirar: () => void;
 }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs">{label}</Label>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) onPick(f);
-          e.target.value = "";
-        }}
-      />
+      <div className="flex items-center justify-between gap-1">
+        <Label className="text-xs truncate">{label}</Label>
+        {foto.origem && (
+          <button
+            onClick={onTirar}
+            aria-label={`Remover ${label}`}
+            // Alvo de 24 px num canto apertado: menor que isso erra no polegar.
+            className="cursor-pointer text-muted-foreground hover:text-destructive p-1 -m-1"
+          >
+            <X className="size-3.5" />
+          </button>
+        )}
+      </div>
       <button
-        onClick={() => inputRef.current?.click()}
-        disabled={uploading}
+        onClick={onEscolher}
         className="w-full h-24 rounded-lg border border-dashed border-border hover:border-primary transition-colors cursor-pointer overflow-hidden flex items-center justify-center bg-muted/30"
       >
-        {uploading ? (
-          <Loader2 className="size-5 animate-spin text-muted-foreground" />
-        ) : url ? (
-          <img src={url} alt={label} className="w-full h-full object-cover" />
+        {urlDeMiniatura(foto) ? (
+          <img
+            src={urlDeMiniatura(foto)!}
+            alt={label}
+            loading="lazy"
+            decoding="async"
+            className="w-full h-full object-cover"
+          />
         ) : (
           <span className="flex flex-col items-center gap-1 text-xs text-muted-foreground">
             <ImagePlus className="size-5" /> Adicionar
           </span>
         )}
       </button>
+      {foto.origem === "proprio" && (
+        // Enviada pelo caminho antigo: o arquivo é só deste item e não está na
+        // Galeria. Dizer isso é o que dá sentido ao botão de trocar.
+        <p className="text-[10px] text-muted-foreground leading-tight">
+          Enviada só neste item — não está na Galeria.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * O fornecedor do item, escolhido entre os que JÁ ESTÃO no evento.
+ *
+ * `<select>` nativo de propósito: no celular ele abre a roda do sistema, que é
+ * o melhor seletor que existe naquele aparelho, não fica embaixo do teclado e
+ * não precisa de um segundo diálogo por cima do primeiro.
+ *
+ * `supplierName` continua gravado junto com o vínculo. Ele é o SNAPSHOT do que
+ * valia quando o item foi cadastrado — é o que mantém legível o Caderno de um
+ * evento cujo fornecedor foi removido depois.
+ */
+function CampoFornecedor({
+  item,
+  fornecedores,
+  onEscolher,
+  onDigitar,
+}: {
+  item: Item;
+  fornecedores?: { _id: Id<"eventSuppliers">; companyName: string }[];
+  onEscolher: (f: { _id: Id<"eventSuppliers">; companyName: string } | null) => void;
+  onDigitar: (v: string) => void;
+}) {
+  const lista = fornecedores ?? [];
+  // Nome gravado que não corresponde a nenhum fornecedor do evento: continua
+  // valendo como anotação. Esconder o texto porque ele não está na lista seria
+  // apagar o trabalho dela da tela sem apagar do banco.
+  const soltoo = !item.supplierId && (item.supplierName ?? "").trim();
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">Fornecedor</Label>
+      <select
+        value={item.supplierId ?? ""}
+        onChange={(e) => {
+          const escolhido = lista.find((f) => f._id === e.target.value);
+          onEscolher(escolhido ?? null);
+        }}
+        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs md:text-sm cursor-pointer"
+      >
+        <option value="">
+          {soltoo ? `${soltoo} (anotação)` : "Sem fornecedor"}
+        </option>
+        {lista.map((f) => (
+          <option key={f._id} value={f._id}>
+            {f.companyName}
+          </option>
+        ))}
+      </select>
+      {lista.length === 0 && (
+        <p className="text-[10px] text-muted-foreground leading-tight">
+          Nenhum fornecedor neste evento ainda. Cadastre em Fornecedores, ou anote abaixo.
+        </p>
+      )}
+      {!item.supplierId && (
+        <Input
+          defaultValue={item.supplierName ?? ""}
+          placeholder="Ou anote o nome"
+          className="h-8 text-sm"
+          onBlur={(e) => {
+            if (e.target.value !== (item.supplierName ?? "")) onDigitar(e.target.value);
+          }}
+        />
+      )}
     </div>
   );
 }

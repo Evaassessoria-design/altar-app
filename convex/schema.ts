@@ -1267,9 +1267,31 @@ export default defineSchema({
     supplierName: v.optional(v.string()),
     ambiente: v.optional(v.string()),
     notes: v.optional(v.string()),
-    // Duas fotos com papéis distintos: o que foi aprovado × o que foi contratado.
+    // ── AS DUAS FOTOS DO ITEM ───────────────────────────────────────────────
+    // Papéis distintos e deliberados: o que foi APROVADO pela cliente × o que
+    // foi efetivamente CONTRATADO. São perguntas diferentes, e a segunda é a
+    // que evita a discussão no dia da montagem.
+    //
+    // ── POR QUE EXISTEM DUAS FORMAS DE GUARDAR CADA UMA ─────────────────────
+    // Os `...StorageId` são o caminho ANTIGO: o item era dono exclusivo de um
+    // arquivo enviado por ele mesmo. Funciona, e continua funcionando — mas
+    // produzia a mesma imagem duas vezes no storage quando ela já estava na
+    // Galeria, e essa cópia nascia sem `ambiente`, sem `projectScope`, sem
+    // legenda e SEM VERSÃO LEVE: a miniatura de 40 px baixava o original.
+    //
+    // Os `...PhotoId` são o caminho de hoje: um PONTEIRO para a linha da
+    // Galeria, na mesma forma de `events.coverPhotoId`. A Galeria continua
+    // dona do arquivo — apagar o item NÃO apaga a foto, e apagar a foto limpa
+    // o ponteiro (`gallery.deletePhoto`) em vez de deixar lixo apontando para
+    // o vazio.
+    //
+    // PRECEDÊNCIA, escrita uma vez em `lib/fotoDoItem.ts` e lida por todo
+    // mundo: o ponteiro manda quando resolve; senão cai no arquivo próprio.
+    // Item antigo continua abrindo exatamente como abria, sem backfill.
     referencePhotoStorageId: v.optional(v.id("_storage")),
     contractedPhotoStorageId: v.optional(v.id("_storage")),
+    referencePhotoId: v.optional(v.id("eventPhotos")),
+    contractedPhotoId: v.optional(v.id("eventPhotos")),
     includeInAssemblyReport: v.boolean(),
     // ATENCAO: `checkOnAssembly` NAO e estado. E preferencia de IMPRESSAO —
     // marca quais itens ganham caixinha na ficha de montagem em PDF. O ponto

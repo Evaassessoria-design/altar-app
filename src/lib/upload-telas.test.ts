@@ -48,11 +48,25 @@ describe("nenhuma tela repete os três passos", () => {
       "src/pages/app/events/[id]/page.tsx",
       "src/pages/app/events/[id]/fornecedores/page.tsx",
       "src/pages/app/events/[id]/_components/event-documents.tsx",
-      "src/pages/app/events/[id]/_components/assembly-items-section.tsx",
+      // A foto do item de montagem mudou de endereço: quem envia agora é o
+      // SELETOR, porque a imagem nasce na Galeria e o item só aponta para
+      // ela. A proteção veio junto — o que não pode voltar a existir é um
+      // envio de foto que não passe pelo hook.
+      "src/components/projeto/seletor-de-foto.tsx",
       "src/pages/app/funil/_components/lead-documents.tsx",
     ];
     const semHook = esperadas.filter((f) => !codigoDe(f).includes("useEnvioDeArquivo"));
     expect(semHook).toEqual([]);
+  });
+
+  it("o item de montagem não tem mais um caminho de upload só dele", () => {
+    // Era o defeito: a mesma imagem entrava duas vezes no ALTAR, e a cópia de
+    // dentro do item nascia sem ambiente, sem escopo, sem legenda e SEM
+    // versão leve. Hoje o item aponta para a Galeria, e o único envio que
+    // existe é o do seletor — que grava em `eventPhotos`.
+    const secao = codigoDe("src/pages/app/events/[id]/_components/assembly-items-section.tsx");
+    expect(secao).not.toContain("assemblyItems.generateUploadUrl");
+    expect(secao).not.toContain('type="file"');
   });
 });
 

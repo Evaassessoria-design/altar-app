@@ -191,7 +191,10 @@ export async function deleteEventCascade(
   }
 
   // Item de montagem guarda duas fotos com papéis distintos (referência
-  // aprovada × o que foi de fato contratado). As duas saem.
+  // aprovada × o que foi de fato contratado). Os ARQUIVOS PRÓPRIOS dele saem
+  // aqui; os ponteiros `referencePhotoId`/`contractedPhotoId` não precisam de
+  // tratamento porque as fotos da Galeria deste evento já saíram no bloco 2,
+  // com os arquivos delas, e a linha do item some na sequência.
   const assemblyItems = await ctx.db
     .query("assemblyItems")
     .withIndex("by_event", (q) => q.eq("eventId", eventId))

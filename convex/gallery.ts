@@ -230,6 +230,32 @@ export const deletePhoto = mutation({
       await ctx.db.patch(photo.eventId, { coverPhotoId: undefined });
     }
 
+    // ── OS ITENS QUE USAVAM ESTA FOTO SAEM ANTES TAMBÉM ────────────────────
+    // Desde que o item de montagem pode APONTAR para uma foto da Galeria
+    // (`assemblyItems.setPhotoDaGaleria`), apagar a foto pode deixar ponteiro
+    // quebrado em vários itens — a mesma dívida que a capa acima já evitava,
+    // multiplicada.
+    //
+    // A leitura degrada sozinha (`lib/fotoDoItem.ts` ignora ponteiro que não
+    // resolve e cai no arquivo próprio), então isto não é o que impede a tela
+    // de quebrar: é o que impede o BANCO de guardar uma mentira. Sem limpar,
+    // ninguém consegue dizer depois se o item nunca teve foto ou se a foto
+    // dele sumiu.
+    //
+    // A varredura é pelo índice `by_event` — os itens de UM evento, dezenas no
+    // pior caso. Um índice novo por ponteiro custaria escrita em toda criação
+    // de item para servir a um caminho que roda quando se apaga uma foto.
+    const itens = await ctx.db
+      .query("assemblyItems")
+      .withIndex("by_event", (q) => q.eq("eventId", photo.eventId))
+      .collect();
+    for (const item of itens) {
+      const limpar: Record<string, undefined> = {};
+      if (item.referencePhotoId === args.id) limpar.referencePhotoId = undefined;
+      if (item.contractedPhotoId === args.id) limpar.contractedPhotoId = undefined;
+      if (Object.keys(limpar).length > 0) await ctx.db.patch(item._id, limpar);
+    }
+
     // ── OS DOIS ARQUIVOS SAEM, E A LINHA SAI DE QUALQUER JEITO ───────────
     // `safeDeleteFile` em vez de `ctx.storage.delete` porque o Convex LANÇA
     // ao apagar arquivo inexistente ("Delete on non-existent doc") — e a

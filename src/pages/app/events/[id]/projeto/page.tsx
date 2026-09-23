@@ -12,6 +12,7 @@ import { PROJECT_SCOPES, scopeMeta, AVISO_REFERENCIA, type ProjectScope } from "
 import {
   agruparPorAmbiente,
   fotoDoItem,
+  fotosPresasAItens,
   type ItemDoProjeto,
 } from "@/lib/decoration-project.ts";
 import {
@@ -79,6 +80,9 @@ export default function ProjetoDecoracaoPage() {
   const projeto = montarProjetoVisual(
     agruparPorAmbiente(lista),
     (fotos ?? []) as unknown as FotoDoProjeto[],
+    // A imagem que já ilustra um item não se repete na prateleira do mesmo
+    // ambiente — duas vezes a mesma foto, lado a lado, lê como erro.
+    fotosPresasAItens(lista),
   );
   const totalItens = lista.length;
   const totalFotos = totalDeImagens(projeto);

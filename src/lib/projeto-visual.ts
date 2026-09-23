@@ -152,6 +152,14 @@ export type ProjetoVisual<T> = {
 export function montarProjetoVisual<T>(
   grupos: readonly GrupoDeAmbiente<T>[],
   fotos: readonly FotoDoProjeto[],
+  /**
+   * Fotos que já aparecem presas a um item (`fotosPresasAItens`).
+   *
+   * Elas saem das prateleiras — não some informação, ela só deixa de ser
+   * mostrada duas vezes no mesmo bloco. Ausente = nenhuma, que é o
+   * comportamento de antes de o item poder apontar para a Galeria.
+   */
+  jaNosItens?: ReadonlySet<string>,
 ): ProjetoVisual<T> {
   const ambientes = grupos.map((g) =>
     vazio<T>(g.key, g.label, g.emoji, g.itens, g.categoria),
@@ -165,6 +173,9 @@ export function montarProjetoVisual<T>(
   const extras: AmbienteVisual<T>[] = [];
 
   for (const foto of fotos) {
+    // A foto que ilustra a "Cadeira Dior" não volta na prateleira de
+    // referências da Cerimônia. Ver `fotosPresasAItens`.
+    if (jaNosItens?.has(foto._id)) continue;
     const chave = chaveDoAmbiente(foto.ambiente);
     if (!chave) {
       guardar(semAmbiente, foto);

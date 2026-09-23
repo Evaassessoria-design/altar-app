@@ -88,7 +88,9 @@ describe("cada tela mantém o próprio teto e os próprios tipos", () => {
 
   it("e imagem continua imagem, com o filtro de tipo", () => {
     for (const p of [
-      "src/pages/app/events/[id]/_components/assembly-items-section.tsx",
+      // Ver `upload-telas.test.ts`: a foto do item passou a nascer na Galeria,
+      // e quem envia é o seletor. O teto e o filtro de tipo vieram junto.
+      "src/components/projeto/seletor-de-foto.tsx",
       "src/pages/app/events/[id]/planta/page.tsx",
       "src/pages/app/events/[id]/fornecedores/page.tsx",
       "src/pages/app/configuracoes/page.tsx",

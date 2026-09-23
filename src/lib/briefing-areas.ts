@@ -297,3 +297,35 @@ export function resolveAreasForAudience(
   }
   return areas;
 }
+
+
+/**
+ * A área tem texto escrito nos campos antigos?
+ *
+ * ── A CONTRADIÇÃO SILENCIOSA QUE ISTO EXPÕE ─────────────────────────────────
+ * O convite "criar itens a partir do briefing" é idempotente: depois que
+ * "Cadeira Dior" virou item, ele para de oferecer. Correto — e cria um estado
+ * novo que ninguém comenta.
+ *
+ * "Quantidade de Cadeiras: 120" continua escrito ali. Ela ajusta o ITEM para
+ * 130, e o campo de texto segue dizendo 120, para sempre, sem nada na tela
+ * apontando qual dos dois o produto usa. O Caderno sai com 130, a Folha de
+ * Carregamento sai com 130, o PDF dos noivos sai com 130 — e o relatório
+ * interno do evento sai com 120.
+ *
+ * A correção NÃO é apagar o texto: é anotação dela, e pode conter o que o item
+ * não comporta ("as douradas, as prateadas ficam de reserva"). É DIZER que
+ * aquilo é anotação.
+ */
+export function areaTemTextoAntigo(
+  area: BriefingArea,
+  briefing: Partial<BriefingFields> | null | undefined,
+): boolean {
+  if (!briefing || !area.supportsItems) return false;
+  return area.groups.some((g) =>
+    g.fields.some((f) => {
+      const v = briefing[f.key];
+      return typeof v === "string" && v.trim().length > 0;
+    }),
+  );
+}

@@ -12,7 +12,11 @@ import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { toast } from "sonner";
 import { ArrowLeft, Save, ChevronRight, Sparkles, FileDown, Loader2, Truck, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
-import { BRIEFING_AREAS, type BriefingFields } from "@/lib/briefing-areas.ts";
+import {
+  BRIEFING_AREAS,
+  areaTemTextoAntigo,
+  type BriefingFields,
+} from "@/lib/briefing-areas.ts";
 
 /**
  * Converte a logo em data URL para o jsPDF.
@@ -121,6 +125,17 @@ export default function EventBriefingPage() {
       ),
     [briefing, items, activeArea],
   );
+
+  // Os itens estruturados DESTA área. É o que decide qual dos dois avisos a
+  // tela mostra — o convite para converter, ou o lembrete de que o texto é
+  // anotação.
+  const itensDaArea = (items ?? []).filter(
+    (i) => i.area === BRIEFING_AREAS[activeArea]?.key,
+  );
+  const textoEItemConvivem =
+    itensDaArea.length > 0 &&
+    convertiveis.length === 0 &&
+    areaTemTextoAntigo(BRIEFING_AREAS[activeArea], briefing);
 
   // Planta premium mais recente concluída — vira o mapa do caderno. Se não
   // existir, a seção simplesmente não aparece no PDF.
@@ -376,6 +391,24 @@ export default function EventBriefingPage() {
                       <Sparkles className="size-3.5" /> Criar itens
                     </Button>
                   </div>
+                )}
+
+                {/* ── QUANDO OS DOIS COEXISTEM ───────────────────────────────
+                    Convertido o texto em item, o convite acima some — e o
+                    campo continua escrito, para sempre, sem nada dizendo qual
+                    dos dois o produto usa. Ela ajusta o item para 130 e o
+                    texto segue dizendo 120.
+
+                    Apagar o texto seria errado: é anotação dela, e pode
+                    conter o que o item não comporta ("as douradas; as
+                    prateadas ficam de reserva"). O certo é DIZER que é
+                    anotação. */}
+                {textoEItemConvivem && (
+                  <p className="mb-5 text-xs text-muted-foreground border-l-2 border-border pl-2.5 leading-snug">
+                    Esta área já tem {itensDaArea.length === 1 ? "1 item" : `${itensDaArea.length} itens`}{" "}
+                    cadastrado{itensDaArea.length === 1 ? "" : "s"}. Os campos abaixo valem como{" "}
+                    <strong>anotação</strong> — quem monta, compra e apresenta lê os itens.
+                  </p>
                 )}
 
                 <div className="space-y-6">

@@ -427,6 +427,24 @@ export default defineSchema({
     // ── Comercial (tudo OPCIONAL e aditivo) ─────────────────────────────────
     // Reaproveitados na conversao em evento, para nao redigitar o que a
     // decoradora ja anotou durante a negociacao.
+    /**
+     * LEGADO. Nunca foi escrito por tela nenhuma e nunca foi lido por nada.
+     *
+     * Entrou no schema junto com os outros campos comerciais e ficou órfão: a
+     * auditoria da jornada encontrou o campo aceito por `funil.create` e
+     * `funil.updateLead`, gravável pela API, e sem um único consumidor. Um
+     * campo assim é pior que ausência — a próxima pessoa liga um formulário
+     * nele e passa uma semana procurando por que o dado não aparece.
+     *
+     * Os argumentos saíram das mutations, que é o que fechava a porta. O CAMPO
+     * fica: remover do schema invalidaria qualquer documento que já o tivesse
+     * gravado, e este ambiente não tem como conferir a base. Removê-lo é uma
+     * decisão para quem puder olhar os dados.
+     *
+     * O segundo nome de um casal não some do produto por causa disto: o nome
+     * do evento ("Marina & Gabriel") sempre foi quem carregou os dois, e é ele
+     * que sai na capa do Projeto Visual.
+     */
     partnerName: v.optional(v.string()),
     venue: v.optional(v.string()),
     city: v.optional(v.string()),

@@ -17,7 +17,11 @@ import { Label } from "@/components/ui/label.tsx";
 import { Checkbox } from "@/components/ui/checkbox.tsx";
 import { CheckCircle2, Loader2, Sparkles } from "lucide-react";
 import { areaByKey, type BriefingFields } from "@/lib/briefing-areas.ts";
-import { suggestAssemblyItems, type SuggestedItem } from "@/lib/assembly-suggestions.ts";
+import {
+  suggestAssemblyItems,
+  type ItemJaExistente,
+  type SuggestedItem,
+} from "@/lib/assembly-suggestions.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SUGERIR → MOSTRAR → REVISAR → CONFIRMAR → CRIAR.
@@ -30,15 +34,21 @@ type Row = SuggestedItem & { selected: boolean };
 export function SuggestItemsDialog({
   eventId,
   briefing,
+  jaExistentes,
   onClose,
 }: {
   eventId: Id<"events">;
   briefing: Partial<BriefingFields> | null | undefined;
+  /** O que o evento já tem — o convite não reoferece o que ela já criou. */
+  jaExistentes?: readonly ItemJaExistente[];
   onClose: () => void;
 }) {
   const createMany = useMutation(api.assemblyItems.createMany);
+  // `useState` com inicializador: a lista é calculada UMA vez, na abertura.
+  // Recalcular a cada render faria as linhas que ela editou voltarem ao texto
+  // do briefing no meio da revisão.
   const [rows, setRows] = useState<Row[]>(() =>
-    suggestAssemblyItems(briefing).map((s) => ({ ...s, selected: true })),
+    suggestAssemblyItems(briefing, jaExistentes).map((s) => ({ ...s, selected: true })),
   );
   const [saving, setSaving] = useState(false);
 
@@ -92,8 +102,9 @@ export function SuggestItemsDialog({
 
         {rows.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            Ainda não há dados no briefing suficientes para sugerir itens. Preencha campos
-            como tipo e quantidade de mesas e cadeiras.
+            Nada de novo para sugerir. Ou o briefing ainda não tem o que virar item —
+            tipo e quantidade de mesas e cadeiras, tipos de flores — ou tudo o que ele
+            descreve já está na lista de itens deste evento.
           </p>
         ) : (
           <div className="space-y-3">

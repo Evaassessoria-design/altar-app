@@ -53,6 +53,7 @@ import { MarcaAltar } from "@/components/marca-altar.tsx";
 // menu em tempo de execucao.
 const ICONES: Record<RotaDeMenu, LucideIcon> = {
   "/dashboard": Home,
+  "/escritorio": Sparkles,
   "/agenda": CalendarClock,
   "/eventos": CalendarDays,
   "/fornecedores": Building2,

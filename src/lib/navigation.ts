@@ -15,6 +15,13 @@ export type NavItem = { to: string; label: string };
 /** Menu lateral (desktop). Ordem = ordem do dia de trabalho. */
 export const NAV_ITEMS = [
   { to: "/dashboard", label: "Início" },
+  // O Escritório vem LOGO DEPOIS do Início, e antes da agenda, porque é a
+  // pergunta que se faz antes de abrir qualquer módulo: "o que precisa de mim
+  // hoje?". Enterrá-lo no fim da lista o transformaria numa curiosidade.
+  //
+  // NÃO é a Central: aquela é a operação do SaaS ALTAR, só para
+  // administradores, e continua fora do menu da decoradora.
+  { to: "/escritorio", label: "Escritório" },
   { to: "/agenda", label: "Agenda" },
   { to: "/eventos", label: "Eventos" },
   { to: "/fornecedores", label: "Fornecedores" },
@@ -56,6 +63,9 @@ export const BOTTOM_NAV_ITEMS = [
  * não existe.
  */
 export const MORE_MENU_ITEMS = [
+  // No celular a barra inferior está no teto de quatro, então o Escritório
+  // entra aqui — e vem primeiro, pela mesma razão que abre o menu lateral.
+  { to: "/escritorio", label: "Escritório" },
   // A agenda é a tela mais consultada FORA do escritório — precisa existir no
   // celular. A barra inferior já está no teto de quatro, então ela entra aqui.
   { to: "/agenda", label: "Agenda" },

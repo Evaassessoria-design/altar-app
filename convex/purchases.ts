@@ -294,6 +294,16 @@ export const registerCost = mutation({
       // de "pago". Quem paga é ela, no Financeiro, onde há data, forma e
       // comprovante para registrar isso direito.
       isPaid: false,
+      // ── DE ONDE ESTE DINHEIRO VEIO ─────────────────────────────────────
+      // Gravado UMA VEZ, no nascimento, e nunca mais tocado. É o que
+      // sobrevive ao cancelamento da compra (que desfaz o vínculo
+      // operacional) e à exclusão dela (que apaga a linha apontada). Ver o
+      // comentário de `transactions.origemDaCompra` no schema.
+      origemDaCompra: {
+        purchaseItemId: item._id,
+        nome: item.name,
+        registradaEm: dataDoDia(),
+      },
     });
     await ctx.db.patch(args.id, { transactionId });
     return { transactionId, criado: true };

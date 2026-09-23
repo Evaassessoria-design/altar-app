@@ -849,6 +849,43 @@ export default defineSchema({
      * proposito.
      */
     comprovantes: v.optional(v.array(comprovanteFinanceiro)),
+    /**
+     * De qual COMPRA esta despesa nasceu. Só PROCEDÊNCIA HISTÓRICA.
+     *
+     * ── O BURACO QUE ISTO FECHA ─────────────────────────────────────────────
+     * `purchaseItems.transactionId` é o vínculo OPERACIONAL: enquanto existe,
+     * editar a compra atualiza a despesa. Cancelar a compra e escolher MANTER
+     * a despesa desfaz esse vínculo de propósito — compra cancelada não pode
+     * continuar comandando um lançamento.
+     *
+     * Só que, desfeito o vínculo, a despesa perdia também a informação de que
+     * tinha nascido daquela compra. Sobrava R$ 12.400 no livro sem ninguém
+     * conseguir dizer de onde vieram.
+     *
+     * ── POR QUE NÃO É SÓ UM ID ──────────────────────────────────────────────
+     * O precedente do repositório é `assemblyItems.compositionId`, que guarda
+     * procedência com um id e nenhuma leitura operacional. Aqui um id sozinho
+     * não bastaria: o caminho "manter a despesa e excluir a compra" apaga a
+     * linha apontada, e a procedência morreria junto — exatamente no caso em
+     * que ela é mais necessária.
+     *
+     * Por isso o NOME vai junto, copiado no momento do lançamento. É a mesma
+     * solução de `assemblyItems.supplierName` e de `componenteDaReceita.nome`:
+     * cópia é o que mantém o histórico legível depois que a origem some.
+     *
+     * ── O QUE ELE NUNCA FAZ ─────────────────────────────────────────────────
+     * Não recria vínculo, não é lido por cálculo nenhum, não é índice e não
+     * reativa sincronização. AUSENTE = lançamento criado à mão no Financeiro,
+     * ou anterior a este campo — que é o estado de todos os de hoje.
+     */
+    origemDaCompra: v.optional(
+      v.object({
+        /** Pode já não existir: a compra foi excluída e a despesa ficou. */
+        purchaseItemId: v.optional(v.id("purchaseItems")),
+        nome: v.string(),
+        registradaEm: v.string(),
+      }),
+    ),
   })
     .index("by_user", ["userId"])
     .index("by_user_date", ["userId", "date"])

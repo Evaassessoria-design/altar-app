@@ -6,6 +6,7 @@ import { comCarimbo } from "./lib/ultimaAtualizacao";
 import { dataDoDia } from "./lib/dataDoDia";
 import { emCentavos, motivoDoValorInvalido } from "./lib/dinheiro";
 import { rotuloDoTipoDeEvento } from "./lib/tiposDeEvento";
+import { convidadosDoBriefing } from "./lib/convidados";
 import {
   estaVencida,
   faltaParaEnviar,
@@ -297,6 +298,14 @@ export const create = mutation({
       throw new ConvexError({ code: "NOT_FOUND", message: "Evento não encontrado" });
     }
 
+    // Só quando a proposta nasce de um evento: sem evento não há briefing.
+    const briefing = event
+      ? await ctx.db
+          .query("briefings")
+          .withIndex("by_event", (q) => q.eq("eventId", event._id))
+          .unique()
+      : null;
+
     const clienteNome = event?.clientName ?? lead?.clientName ?? "";
     const titulo = args.titulo?.trim() || `Proposta — ${clienteNome || "novo evento"}`;
 
@@ -313,7 +322,16 @@ export const create = mutation({
       eventoTipo: rotuloDoTipoDeEvento(event?.type ?? lead?.eventType),
       eventoData: event?.date ?? lead?.eventDate,
       eventoLocal: event?.location ?? lead?.venue,
-      eventoConvidados: lead?.guestCount,
+      // ── O NÚMERO DE CONVIDADOS NÃO SE PERDE NA SEGUNDA VOLTA ──────────────
+      // Lia só o lead. Uma proposta criada a partir do EVENTO — o caso do
+      // aditivo, da segunda proposta, do cliente que voltou — nascia sem
+      // convidados, embora `briefings.guestCount` estivesse preenchido desde a
+      // conversão. Ela redigitava um número que o sistema já tinha.
+      //
+      // O lead continua tendo precedência: ele é número gravado, o briefing é
+      // texto livre. E texto que diz uma FAIXA ("150 a 180") não vira número —
+      // ver `convidadosDoBriefing`.
+      eventoConvidados: lead?.guestCount ?? convidadosDoBriefing(briefing?.guestCount),
       itens: [],
       status: "rascunho",
       createdAt: new Date().toISOString(),

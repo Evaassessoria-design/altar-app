@@ -303,7 +303,7 @@ describe("conta bloqueada continua enxergando os próprios dados", () => {
     const { sessao } = await contaBloqueadaComEvento(t, estado);
 
     const lancamentos = await sessao.query(api.financeiro.listTransactions, {});
-    expect(lancamentos.length).toBeGreaterThan(0);
+    expect(lancamentos.itens.length).toBeGreaterThan(0);
   });
 
   it("mas continua SEM criar evento novo — o bloqueio é o que custa", async () => {

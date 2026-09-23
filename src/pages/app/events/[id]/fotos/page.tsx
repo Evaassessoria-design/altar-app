@@ -39,6 +39,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog.tsx";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog.tsx";
+import { AcervoDeFotos } from "@/components/projeto/acervo-de-fotos.tsx";
 
 type Category = "antes" | "montagem" | "evento" | "desmontagem";
 
@@ -105,6 +113,33 @@ export default function GaleriaPage() {
   const deletePhoto = useMutation(api.gallery.deletePhoto);
   const updatePhoto = useMutation(api.gallery.updatePhoto);
   const atualizarEvento = useMutation(api.events.update);
+  const reaproveitar = useMutation(api.gallery.reaproveitar);
+  const [abrindoAcervo, setAbrindoAcervo] = useState(false);
+  const [trazendo, setTrazendo] = useState(false);
+
+  /**
+   * Traz uma foto de outro evento para a pasta deste.
+   *
+   * Ela nasce como "antes" e SEM classificação — escopo é decisão comercial
+   * sobre ESTE projeto, e herdar "contratado" de outro casamento afirmaria
+   * que a cliente de hoje comprou aquilo. Quem decide isso é ela, aqui.
+   */
+  const trazerDoAcervo = async (photoId: Id<"eventPhotos">) => {
+    setTrazendo(true);
+    try {
+      await reaproveitar({ photoId, paraEventoId: eventId });
+      toast.success("Foto trazida para este evento.");
+      setAbrindoAcervo(false);
+    } catch (e) {
+      toast.error(
+        e instanceof ConvexError
+          ? (e.data as { message: string }).message
+          : "Não foi possível trazer esta foto.",
+      );
+    } finally {
+      setTrazendo(false);
+    }
+  };
 
   /**
    * A capa do Projeto Visual.
@@ -411,9 +446,49 @@ export default function GaleriaPage() {
               <Upload className="size-4" />
               Escolher arquivos
             </Button>
+            {/* ── A TERCEIRA PORTA ────────────────────────────────────────
+                "Já fiz esse arco em 2024" era uma frase que o produto não
+                sabia ouvir: a Galeria só respondia pelo evento aberto, e
+                cinco anos de trabalho ficavam em álbuns lacrados.
+
+                Trazer do acervo NÃO envia nada: cria uma linha neste evento
+                apontando para o mesmo arquivo. A conta de storage não cresce
+                e o 4G do galpão não é usado para reenviar o que já está lá. */}
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setAbrindoAcervo(true)}
+              disabled={uploading}
+              className="cursor-pointer gap-1.5 min-h-11"
+            >
+              <Images className="size-4" />
+              Meu acervo
+            </Button>
           </div>
         </div>
       </motion.div>
+
+      {abrindoAcervo && (
+        <Dialog open onOpenChange={(o) => !o && !trazendo && setAbrindoAcervo(false)}>
+          {/* `svh` e não `vh`: no Safari do iPhone a barra de endereço faz
+              `vh` prometer uma altura que a tela não tem, e o rodapé do
+              diálogo fica embaixo do navegador. */}
+          <DialogContent className="max-w-2xl max-h-[85svh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Meu acervo de fotos</DialogTitle>
+              <DialogDescription>
+                As imagens dos seus outros eventos. Trazer uma para cá não envia arquivo
+                nenhum — é o mesmo arquivo, com uma classificação própria daqui.
+              </DialogDescription>
+            </DialogHeader>
+            <AcervoDeFotos
+              excetoEventoId={eventId}
+              ocupado={trazendo}
+              onEscolher={(photoId) => void trazerDoAcervo(photoId)}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Category tabs */}
       <div className="flex gap-1 overflow-x-auto pb-0.5">

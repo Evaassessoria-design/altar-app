@@ -807,7 +807,27 @@ export default defineSchema({
     ambiente: v.optional(v.string()),
   })
     .index("by_event", ["eventId"])
-    .index("by_event_category", ["eventId", "category"]),
+    .index("by_event_category", ["eventId", "category"])
+    // ── A GALERIA COMO ACERVO DA EMPRESA, NÃO ÁLBUM DO EVENTO ───────────────
+    // Até aqui `eventPhotos` só sabia responder "as fotos DESTE casamento".
+    // Cinco anos de trabalho ficavam em setenta álbuns lacrados: a decoradora
+    // não tinha como achar o arco de oliveiras que fez em 2024 para mostrar à
+    // cliente de hoje.
+    //
+    // O repositório já resolveu essa mesma pergunta três vezes para outras
+    // entidades — `materials.ondeEUsado`, `compositions.ondeEUsada`,
+    // `supplierCatalog.listEventsForSupplier`. Faltava para as imagens, que
+    // são o ativo mais valioso de quem decora.
+    .index("by_user", ["userId"])
+    // ── DUAS LINHAS PODEM APONTAR PARA O MESMO ARQUIVO ──────────────────────
+    // Reaproveitar uma foto em outro evento cria uma LINHA nova (que é dela,
+    // com o ambiente e a classificação daquele evento) apontando para o
+    // MESMO `storageId`. Nenhum byte é copiado.
+    //
+    // O preço disso é que apagar deixou de poder assumir posse exclusiva do
+    // arquivo: sem este índice, excluir a foto de 2024 quebraria a de 2026 em
+    // silêncio. Ver `arquivoAindaEmUso` em `lib/cascade.ts`.
+    .index("by_user_storage", ["userId", "storageId"]),
 
   transactions: defineTable({
     userId: v.id("users"),

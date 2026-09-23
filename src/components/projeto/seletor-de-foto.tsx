@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { ImagePlus, Loader2, Check, Upload } from "lucide-react";
+import { AcervoDeFotos } from "@/components/projeto/acervo-de-fotos.tsx";
 import { cn } from "@/lib/utils.ts";
 import { useEnvioDeArquivo } from "@/hooks/use-upload.ts";
 import { gerarPreview, urlDeExibicao } from "@/lib/imagem-reduzida.ts";
@@ -36,6 +37,15 @@ import { gerarPreview, urlDeExibicao } from "@/lib/imagem-reduzida.ts";
 // mantinha a Galeria incompleta. Além disso o caminho da Galeria é o único que
 // gera VERSÃO LEVE — pelo caminho antigo, a miniatura de 40 px baixava o
 // original inteiro.
+//
+// ── A TERCEIRA PORTA: O ACERVO DA EMPRESA ───────────────────────────────────
+// "Já fiz esse arco em 2024" era uma frase que o produto não sabia ouvir. A
+// Galeria só respondia pelo evento aberto, e cinco anos de trabalho ficavam em
+// álbuns lacrados.
+//
+// A aba "Meus outros eventos" traz a foto sem subir nada: `reaproveitar` cria
+// uma LINHA no evento de destino apontando para o MESMO arquivo. Ela entra na
+// Galeria daqui — com legenda e ambiente — e só então é apontada pelo item.
 //
 // ── O QUE NÃO É PREENCHIDO SOZINHO ──────────────────────────────────────────
 // `projectScope` NÃO é herdado do papel do slot. "Referência aprovada" no item
@@ -80,8 +90,42 @@ export function SeletorDeFoto({
     aceitos: ["image/"],
   });
 
+  const reaproveitar = useMutation(api.gallery.reaproveitar);
+
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [trabalhando, setTrabalhando] = useState<"enviando" | "vinculando" | null>(null);
+  const [aba, setAba] = useState<"evento" | "acervo">("evento");
+
+  /**
+   * Traz a foto de outro evento e aponta o item para ela.
+   *
+   * Dois passos, nesta ordem, porque cada um responde por uma coisa:
+   * `reaproveitar` põe a imagem na Galeria DESTE evento (onde ela ganha
+   * ambiente e classificação próprios), e `setPhotoDaGaleria` prende ao item.
+   * O item nunca aponta para foto de outro evento — `requireEventPhoto` faz
+   * essa pergunta no servidor e recusaria.
+   */
+  const trazerDoAcervo = async (photoId: Id<"eventPhotos">) => {
+    setTrabalhando("vinculando");
+    try {
+      const daqui = await reaproveitar({
+        photoId,
+        paraEventoId: eventId,
+        ambiente: ambienteDoItem?.trim() || undefined,
+      });
+      await setPhotoDaGaleria({ id: itemId, slot, photoId: daqui });
+      toast.success("Foto trazida do seu acervo.");
+      onClose();
+    } catch (e) {
+      toast.error(
+        e instanceof ConvexError
+          ? (e.data as { message: string }).message
+          : "Não foi possível trazer esta foto.",
+      );
+    } finally {
+      setTrabalhando(null);
+    }
+  };
 
   const escolher = async (photoId: Id<"eventPhotos">) => {
     setTrabalhando("vinculando");
@@ -186,7 +230,40 @@ export function SeletorDeFoto({
           {trabalhando === "enviando" ? "Enviando…" : "Enviar nova foto"}
         </Button>
 
-        {fotos === undefined ? (
+        {/* Duas fontes, uma tela. Um segundo diálogo por cima deste seria
+            exatamente o que não cabe num telefone. */}
+        <div className="flex gap-1 rounded-lg bg-muted p-1">
+          {([
+            ["evento", "Deste evento"],
+            ["acervo", "Meus outros eventos"],
+          ] as const).map(([valor, rotulo]) => (
+            <button
+              key={valor}
+              onClick={() => setAba(valor)}
+              disabled={ocupado}
+              // `flex-1` + `h-9`: dois alvos largos, que é o que o polegar
+              // acerta. Rótulo longo não quebra a caixa porque cada um ocupa
+              // metade exata.
+              className={cn(
+                "flex-1 h-9 rounded-md text-sm font-medium transition-colors cursor-pointer",
+                aba === valor
+                  ? "bg-background shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {rotulo}
+            </button>
+          ))}
+        </div>
+
+
+        {aba === "acervo" ? (
+          <AcervoDeFotos
+            excetoEventoId={eventId}
+            ocupado={ocupado}
+            onEscolher={(photoId) => void trazerDoAcervo(photoId)}
+          />
+        ) : fotos === undefined ? (
           <div className="py-10 flex justify-center">
             <Loader2 className="size-5 animate-spin text-muted-foreground" />
           </div>

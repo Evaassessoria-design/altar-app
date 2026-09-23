@@ -1848,6 +1848,92 @@ export default defineSchema({
   // Na Fase 1 `podeEnviarSemAprovacao` devolve `false` para TODOS os níveis,
   // inclusive "autonomo": gravar o nível aqui não liga envio nenhum. A tabela
   // existe para que a Fase 2 seja mudança de DADO, não reescrita de código.
+  // ── O ESCRITÓRIO DE IA DA DECORADORA ───────────────────────────────────────
+  // UMA tabela, e ela é da DECORADORA — não da operação do ALTAR.
+  //
+  // ── POR QUE NÃO REAPROVEITAR `adminWorkItems` ──────────────────────────────
+  // Porque aquela tabela é do Matheus: `requireAdmin` em todas as funções, sem
+  // `userId` de tenant, e o dono dela é a operação do SaaS. Guardar o pedido da
+  // decoradora ali misturaria os dois negócios numa linha só — e a primeira
+  // consulta que esquecesse o filtro mostraria o trabalho de uma conta para
+  // outra. São dois produtos que compartilham arquitetura, não dados.
+  //
+  // ── POR QUE NÃO EXISTE TABELA DE AGENTES ───────────────────────────────────
+  // Agente é PRODUTO, não dado: os sete vivem em `lib/escritorio/agentes.ts`.
+  // Uma tabela pediria cadastro que ninguém quer fazer e obrigaria cada conta a
+  // ter sete linhas semeadas, com a primeira que falhasse virando uma conta sem
+  // equipe.
+  agentTasks: defineTable({
+    /** A DONA. Nunca vem do navegador — é sempre a sessão. */
+    userId: v.id("users"),
+    /** O que ela escreveu, como escreveu. */
+    pedido: v.string(),
+    /**
+     * Quem cuidou. Sempre preenchido, inclusive quando ela deixou o ALTAR
+     * escolher — o histórico precisa dizer QUEM respondeu, não "alguém".
+     */
+    agenteId: v.string(),
+    /**
+     * O ALTAR escolheu, ou ela apontou?
+     *
+     * A tela diz "encaminhado para o Financeiro" só no primeiro caso. Afirmar
+     * isso quando foi ela quem escolheu seria o produto se dando crédito pelo
+     * trabalho dela.
+     */
+    roteadoAutomaticamente: v.boolean(),
+    /**
+     * Poucos estados, e nenhum deles é de BPM.
+     *
+     *   queued     criada, esperando o executor
+     *   running    o executor começou
+     *   completed  respondeu
+     *   failed     não respondeu, e `erro` diz por quê em português
+     *   refused    o semáforo recusou — ver `cor`
+     */
+    status: v.union(
+      v.literal("queued"),
+      v.literal("running"),
+      v.literal("completed"),
+      v.literal("failed"),
+      v.literal("refused"),
+    ),
+    /** O veredicto do semáforo (`lib/escritorio/semaforo.ts`). */
+    cor: v.union(v.literal("verde"), v.literal("amarelo"), v.literal("vermelho")),
+    /** O que tornou o pedido amarelo ou vermelho. Ausente = verde. */
+    motivoDaCor: v.optional(v.string()),
+    /** A resposta. Ausente enquanto não terminou. */
+    resultado: v.optional(v.string()),
+    /**
+     * O erro, JÁ TRADUZIDO. Nunca a mensagem crua do provedor: ela pode
+     * carregar URL de gateway, nome de modelo e — no pior caso — pedaço de
+     * chave. Ver `erroSeguro` no executor.
+     */
+    erro: v.optional(v.string()),
+    /**
+     * As fontes consultadas, pelos ids de `lib/escritorio/agentes.ts`.
+     *
+     * A tela traduz por `ROTULO_DA_FONTE`. Guardar o id e não o rótulo permite
+     * mudar o texto sem reescrever histórico.
+     */
+    fontesConsultadas: v.optional(v.array(v.string())),
+    /**
+     * Quem redigiu: o modelo, ou o redator determinístico local.
+     *
+     * Gravado SEMPRE, e mostrado quando é `mock`. A decoradora precisa poder
+     * distinguir — os NÚMEROS são reais nos dois casos (vêm das mesmas
+     * consultas), mas o texto de um não passou por modelo nenhum.
+     */
+    provedor: v.optional(v.union(v.literal("modelo"), v.literal("local"))),
+    /** Tokens, quando o provedor informa. Sem provedor, ausente. */
+    tokensEntrada: v.optional(v.number()),
+    tokensSaida: v.optional(v.number()),
+    criadoEm: v.number(),
+    iniciadoEm: v.optional(v.number()),
+    concluidoEm: v.optional(v.number()),
+  })
+    // "Meus trabalhos recentes", que é a única leitura que a tela faz.
+    .index("by_user", ["userId"]),
+
   adminAutonomyPolicy: defineTable({
     vertical,
     channel,

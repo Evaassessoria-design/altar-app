@@ -47,6 +47,15 @@ describe("nenhuma tabela paralela ao que já existe", () => {
     ["documents", "contracts + leadDocuments já são a Pasta do Evento"],
     ["eventFiles", "idem"],
     ["vendors", "suppliers + eventSuppliers já respondem por fornecedor"],
+    // O Escritório de IA: os sete agentes vivem em código
+    // (`lib/escritorio/agentes.ts`), não em cadastro. Uma tabela obrigaria
+    // cada conta a ter sete linhas semeadas, com a primeira que falhasse
+    // virando uma conta sem equipe.
+    ["agents", "os agentes são constante, não cadastro"],
+    ["agentes", "idem"],
+    ["aiAgents", "idem"],
+    ["agentRuns", "agentTasks já guarda pedido, status, resultado e histórico"],
+    ["agentMessages", "o Escritório não é um chat — não há turno para guardar"],
   ])("não existe tabela `%s` (%s)", (nome) => {
     expect(TABELAS, `nasceu uma tabela paralela: ${nome}`).not.toContain(nome);
   });
@@ -54,7 +63,13 @@ describe("nenhuma tabela paralela ao que já existe", () => {
   it("a contagem de tabelas não cresceu sem que alguém reparasse", () => {
     // Não é um teto: é um marco. Quem acrescentar uma tabela atualiza este
     // número no mesmo commit, e aí a revisão vê a tabela nova.
-    expect(TABELAS.length).toBe(37);
+    //
+    // 37 → 38: `agentTasks`, o Escritório de IA da decoradora. É UMA tabela, e
+    // ela existe porque as administrativas (`adminWorkItems`, `adminApprovals`)
+    // são do outro produto — `requireAdmin` em tudo, sem `userId` de tenant.
+    // Guardar o pedido da decoradora ali misturaria os dois negócios numa
+    // linha só.
+    expect(TABELAS.length).toBe(38);
   });
 });
 

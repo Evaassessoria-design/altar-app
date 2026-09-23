@@ -1136,6 +1136,39 @@ export default defineSchema({
     margemPercentual: v.optional(v.number()),
     /** Fornecedor preferencial. NUNCA obrigatório: a compra pode ser em outro. */
     supplierId: v.optional(v.id("suppliers")),
+    /**
+     * A FOTO DO MATERIAL — para a cliente saber o que é "lisianthus".
+     *
+     * ── POR QUE AQUI, E NÃO NO EVENTO ────────────────────────────────────────
+     * "Rosa", "Lisianthus", "Boca-de-leão", "Eucalipto" é uma lista que não diz
+     * quase nada para quem não trabalha com flor. A imagem que resolve isso é
+     * sempre a MESMA — lisianthus branco é lisianthus branco no casamento de
+     * setembro e no de março. Pendurá-la no evento obrigaria a decoradora a
+     * subir a mesma foto a cada casamento, e é exatamente o trabalho repetido
+     * que o catálogo existe para eliminar.
+     *
+     * O material é o vocabulário compartilhado (receita, consolidado e compra
+     * já falam por ele); a foto é parte desse vocabulário. Um envio, todos os
+     * eventos.
+     *
+     * ── NÃO É A GALERIA, E NÃO COMPETE COM ELA ───────────────────────────────
+     * `eventPhotos` é a biblioteca visual DAQUELE evento: referência de
+     * ambiente, montagem, resultado. Isto aqui é ilustração de INSUMO, não
+     * registro de evento — "é esta flor", não "é assim que o altar vai ficar".
+     * Por isso não tem `ambiente`, `projectScope` nem fase.
+     *
+     * ── UM ARQUIVO, NÃO DOIS ─────────────────────────────────────────────────
+     * Sem `previewStorageId` ao lado, ao contrário de `eventPhotos`: lá o
+     * original é o trabalho dela e precisa sobreviver inteiro. Aqui o arquivo
+     * só existe para ilustrar um item de catálogo, desenhado pequeno, e a
+     * versão reduzida É o que se quer guardar. A redução continua sendo a do
+     * navegador (`lib/imagem-reduzida.ts`); falhando, sobe o original e
+     * funciona igual.
+     *
+     * AUSENTE = material sem foto, que é o estado de todo material já
+     * cadastrado. Sem backfill, e a tela mostra o nome como sempre mostrou.
+     */
+    fotoStorageId: v.optional(v.id("_storage")),
     notes: v.optional(v.string()),
     /** Fora do catálogo ativo sem perder as receitas que já o citam. */
     archived: v.optional(v.boolean()),

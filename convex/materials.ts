@@ -1,6 +1,8 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireUser } from "./lib/identity";
+import { requireActiveAccess } from "./lib/accessGuard";
+import { safeDeleteFile } from "./lib/cascade";
 import { limparCampos } from "./lib/limparCampos";
 import { comCarimbo } from "./lib/ultimaAtualizacao";
 import { chaveDoMaterial, normalizeName } from "./lib/materiais";
@@ -76,7 +78,88 @@ export const list = query({
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .collect();
     const visiveis = args.incluirArquivados ? todos : todos.filter((m) => !m.archived);
-    return visiveis.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+    const ordenados = visiveis.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+    // A URL sai resolvida aqui, como em `gallery.listPhotos`: pedi-la depois,
+    // material a material, seria uma consulta por linha da tela. Só quem TEM
+    // foto custa uma chamada — num catálogo recém-criado, nenhuma.
+    return Promise.all(
+      ordenados.map(async (m) => ({
+        ...m,
+        fotoUrl: m.fotoStorageId ? await ctx.storage.getUrl(m.fotoStorageId) : null,
+      })),
+    );
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A FOTO DO MATERIAL
+//
+// Um envio por material, reaproveitado em todos os eventos. Ver o campo
+// `materials.fotoStorageId` no schema para o porquê de a foto morar no
+// catálogo e não no evento.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Autorização de envio da foto do material.
+ *
+ * Exige ACESSO ATIVO como todo upload do ALTAR (`lib/accessGuard.ts`): storage
+ * é cobrado, e conta bloqueada não sobe arquivo novo. Ler e editar o catálogo
+ * que já existe continua liberado — é o caminho de volta.
+ */
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireActiveAccess(ctx);
+    return ctx.storage.generateUploadUrl();
+  },
+});
+
+/**
+ * Define (ou troca) a foto deste material.
+ *
+ * O arquivo já está no storage quando chega aqui; o que esta mutation faz é
+ * DIZER que ele ilustra este material. Um `storageId` vindo do navegador não
+ * prova posse de nada — o Convex não escopa storage por conta —, e é por isso
+ * que a única proteção real é a mesma de `financeiro.anexarComprovante`: só o
+ * dono do material escreve nele, e a foto não tem id próprio que alguém
+ * pudesse endereçar de fora.
+ *
+ * TROCAR APAGA A ANTERIOR. Sem isto, cada correção de foto deixaria um arquivo
+ * cobrado para sempre sem nenhuma linha que soubesse dele — e trocar a foto de
+ * uma rosa é coisa que se faz até acertar. `safeDeleteFile` porque arquivo que
+ * já sumiu não pode impedir a troca.
+ */
+export const definirFoto = mutation({
+  args: { id: v.id("materials"), storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const material = await ctx.db.get(args.id);
+    if (!material || material.userId !== user._id)
+      throw new ConvexError({ code: "NOT_FOUND", message: "Material não encontrado" });
+
+    // Reenviar o MESMO arquivo não pode apagá-lo: sem esta comparação, um
+    // toque repetido no botão deixaria o material apontando para um arquivo
+    // recém-destruído.
+    if (material.fotoStorageId && material.fotoStorageId !== args.storageId) {
+      await safeDeleteFile(ctx, material.fotoStorageId);
+    }
+    await ctx.db.patch(args.id, comCarimbo({ fotoStorageId: args.storageId }));
+  },
+});
+
+/** Tira a foto do material e apaga o arquivo. Idempotente: sem foto, não faz nada. */
+export const removerFoto = mutation({
+  args: { id: v.id("materials") },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const material = await ctx.db.get(args.id);
+    if (!material || material.userId !== user._id)
+      throw new ConvexError({ code: "NOT_FOUND", message: "Material não encontrado" });
+    if (!material.fotoStorageId) return { removida: false };
+
+    await safeDeleteFile(ctx, material.fotoStorageId);
+    await ctx.db.patch(args.id, comCarimbo({ fotoStorageId: undefined }));
+    return { removida: true };
   },
 });
 

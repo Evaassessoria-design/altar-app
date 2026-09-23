@@ -458,6 +458,14 @@ export async function deleteUserDataCascade(
     }
   }
 
+  // A foto do material é arquivo, e `materials` entra no laço de linhas logo
+  // abaixo — então ela sai AQUI, antes. Mesma regra dos comprovantes: sem
+  // isto, excluir a conta deixaria a foto de cada rosa no storage para sempre,
+  // cobrada e sem nenhuma linha que soubesse dela.
+  for (const material of materials) {
+    if (await safeDeleteFile(ctx, material.fotoStorageId)) files += 1;
+  }
+
   for (const row of [...teamMembers, ...notifications, ...transactions, ...materials, ...compositions, ...collectionAdjustments, ...collectionReservations, ...collectionItems]) {
     await ctx.db.delete(row._id);
     documents += 1;

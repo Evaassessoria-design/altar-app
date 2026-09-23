@@ -73,6 +73,11 @@ export default function ProjetoDecoracaoPage() {
   // aqui. Só três campos deste briefing são lidos, e quem decide quais é
   // `conceito-do-evento.ts` — a linha inteira tem campo interno dentro.
   const briefing = useQuery(api.briefing.getBriefing, { eventId });
+  // As flores e materiais do projeto, JÁ construídos para a cliente: nome,
+  // categoria e a foto do catálogo. Consulta própria de propósito — a ficha
+  // consolidada carrega custo, margem e fornecedor, e esta é a tela que ela
+  // vira para a noiva. Ver `fichaTecnica.materiaisParaOProjeto`.
+  const materiaisDoEvento = useQuery(api.fichaTecnica.materiaisParaOProjeto, { eventId });
   const atualizar = useMutation(api.assemblyItems.update);
 
   const lista = (itens ?? []) as unknown as ItemDoProjeto[];
@@ -82,6 +87,9 @@ export default function ProjetoDecoracaoPage() {
   );
   const totalItens = lista.length;
   const totalFotos = totalDeImagens(projeto);
+  // A seção some quando não há ficha técnica nenhuma — evento novo não tem
+  // material, e uma grade vazia não é informação.
+  const materiais = materiaisDoEvento ?? [];
   // O briefing entra no carregamento junto com o resto: o conceito fica logo
   // abaixo da capa, e aparecer depois empurraria a tela para baixo na cara de
   // quem está olhando.
@@ -516,6 +524,68 @@ export default function ProjetoDecoracaoPage() {
                 decoding="async"
                 className="w-full bg-muted object-contain"
               />
+            </section>
+          )}
+
+          {/* ── FLORES E MATERIAIS ───────────────────────────────────────────
+              "Rosa, lisianthus, boca-de-leão, eucalipto" não significa quase
+              nada para quem não trabalha com flor — e a decisão da noiva é
+              VISUAL. A saída era mandar foto por WhatsApp ou montar um quadro
+              no Canva, a cada casamento, com a informação já cadastrada aqui.
+
+              A foto vem do CATÁLOGO: um envio por material, reaproveitado em
+              todo evento. E a lista vem de uma consulta PRÓPRIA, construída
+              campo a campo — custo, margem, cobertura e fornecedor não são
+              escondidos na renderização, eles não existem no que chega aqui.
+              Ver `convex/lib/materiaisDoProjeto.ts`.
+
+              Quantidade fica de fora: "185 hastes" carrega a margem de
+              segurança da compra e viraria promessa sobre um número que existe
+              para proteger a execução. */}
+          {materiais.length > 0 && (
+            <section className="rounded-xl border border-border bg-card p-5">
+              <div className="mb-3 flex items-baseline justify-between gap-3">
+                <h2 className="font-serif text-lg leading-tight">Flores e materiais</h2>
+                <Link
+                  to={`/eventos/${id}/ficha-tecnica`}
+                  className="flex-shrink-0 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Ficha técnica
+                </Link>
+              </div>
+              {/* Três colunas em 320px dão ~77px por quadro — o bastante para
+                  reconhecer a flor. Abre para seis no computador. */}
+              <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6">
+                {materiais.map((m) => (
+                  <li key={m.nome} className="min-w-0">
+                    {m.fotoUrl ? (
+                      <img
+                        src={m.fotoUrl}
+                        alt={m.nome}
+                        loading="lazy"
+                        decoding="async"
+                        className="aspect-square w-full rounded-lg bg-muted object-cover"
+                      />
+                    ) : (
+                      // Sem foto NÃO some da lista: o material faz parte do
+                      // projeto, e escondê-lo faria a seção mentir sobre o que
+                      // foi escolhido. Quadro tipográfico, como a capa sem
+                      // foto — nunca uma caixa quebrada.
+                      <div className="flex aspect-square w-full items-center justify-center rounded-lg bg-muted px-1 text-center">
+                        <span className="font-serif text-[11px] leading-tight text-muted-foreground break-words">
+                          {m.nome}
+                        </span>
+                      </div>
+                    )}
+                    <p className="mt-1 text-xs leading-tight break-words">{m.nome}</p>
+                    {m.categoria && (
+                      <p className="text-[10px] leading-tight text-muted-foreground break-words">
+                        {m.categoria}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
             </section>
           )}
 

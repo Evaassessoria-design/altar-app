@@ -94,6 +94,13 @@ const UPLOADS = [
   ["itens de montagem", api.assemblyItems.generateUploadUrl],
   ["logo do fornecedor", api.suppliers.generateUploadUrl],
   ["croqui da planta", api.layoutRenders.generateUploadUrl],
+  // `financeiro` já exigia acesso ativo no código e não estava nesta lista:
+  // a trava existia, a PROVA de que ela existe, não. Uma remoção distraída
+  // passaria sem nenhum teste vermelho.
+  ["comprovante financeiro", api.financeiro.generateUploadUrl],
+  // A foto do material é o envio mais novo do ALTAR — entra aqui no mesmo
+  // gesto em que nasce, e não numa auditoria futura.
+  ["foto do material", api.materials.generateUploadUrl],
 ] as const;
 
 const BLOQUEADAS: Estado[] = ["trial_vencido", "cancelada", "inadimplente_fora_da_tolerancia"];
@@ -177,6 +184,8 @@ describe("a guarda e a documentação dela não divergem", () => {
     "assemblyItems",
     "suppliers",
     "layoutRenders",
+    "financeiro",
+    "materials",
   ])("%s.generateUploadUrl exige acesso ativo no código", (modulo) => {
     const fonte = readFileSync(`convex/${modulo}.ts`, "utf-8");
     const bloco = fonte.slice(fonte.indexOf("export const generateUploadUrl"));

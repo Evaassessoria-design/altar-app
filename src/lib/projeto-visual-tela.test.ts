@@ -80,12 +80,42 @@ describe("a tela LÊ a galeria, não guarda imagem", () => {
       "api.assemblyItems.listByEvent",
       "api.briefing.getBriefing",
       "api.events.get",
+      // As flores e materiais do projeto. Consulta PRÓPRIA, e não um recorte
+      // de `fichaTecnica.getFicha`: aquela carrega custo estimado, margem,
+      // cobertura e compras vinculadas, e esta é a tela que ela vira para a
+      // noiva. A fronteira mora na transformação, nunca na renderização.
+      "api.fichaTecnica.materiaisParaOProjeto",
       "api.gallery.listPhotos",
       "api.layoutRenders.listByEvent",
     ]);
     // Cada uma UMA vez: repetição é o primeiro sintoma de consulta dentro de
     // laço.
     expect(new Set(chamadas).size).toBe(chamadas.length);
+  });
+
+  it("as flores chegam pela consulta da CLIENTE, nunca pela ficha consolidada", () => {
+    // `getFicha` devolve `custoEstimado`, `margemPercentual`, `cobertura` e
+    // `comprasVinculadas`. Esta é a tela que a decoradora vira para a noiva:
+    // trocar a consulta por aquela mandaria a margem da empresa pela rede e
+    // deixaria a proteção dependendo de ninguém escrever `...linha` na tela.
+    expect(CODIGO, "a tela do projeto passou a ler a ficha consolidada").not.toContain(
+      "fichaTecnica.getFicha",
+    );
+    expect(CODIGO).toContain("fichaTecnica.materiaisParaOProjeto");
+  });
+
+  it("e a seção não imprime quantidade — número de compra não é promessa", () => {
+    // "185 hastes" carrega a margem de segurança (flor quebra no transporte).
+    // Impresso para a cliente, vira compromisso sobre um número que existe
+    // para proteger a execução.
+    const i = CODIGO.indexOf("Flores e materiais");
+    expect(i, "a seção de flores sumiu da tela").toBeGreaterThan(-1);
+    const secao = CODIGO.slice(i, CODIGO.indexOf("</section>", i));
+    for (const proibido of ["quantidade", "necessario", "custo", "margem"]) {
+      expect(secao.toLowerCase(), `a seção mostra ${proibido} para a cliente`).not.toContain(
+        proibido,
+      );
+    }
   });
 });
 

@@ -13,6 +13,7 @@ import {
   type ComposicaoNoEvento,
 } from "./lib/fichaTecnica";
 import { ehObrigacaoDeMontagem } from "./lib/escopoDoProjeto";
+import { materiaisDoProjeto } from "./lib/materiaisDoProjeto";
 import { effectivePurchaseStatus } from "./lib/purchaseStatus";
 import { normalizeName } from "./lib/materiais";
 
@@ -103,6 +104,16 @@ export const getFicha = query({
       );
     }
 
+    // ── POR QUE A FOTO DO MATERIAL NÃO ENTRA AQUI ────────────────────────────
+    // Ela existe (`materials.fotoStorageId`) e alimenta o Projeto Visual, mas
+    // resolvê-la nesta consulta exigiria uma leitura por material — o N+1 que
+    // `fichaTecnica.hostil.test.ts` proíbe nominalmente nesta função, e com
+    // razão: esta é a consulta quente da Ficha Técnica, aberta a cada visita.
+    //
+    // A alternativa seria ler o catálogo INTEIRO da empresa para achar quinze
+    // fotos, que é trazer o histórico todo para responder uma pergunta
+    // pequena. Quem precisa das fotos é a tela da cliente, e ela tem consulta
+    // própria (`materiaisParaOProjeto`), com custo proporcional à ficha.
     const consolidado = linhas.map((linha) => {
       const vinculadas = compras.filter(
         (c) => linha.materialId && c.materialId === linha.materialId && (c.unit ?? "") === linha.unidade,
@@ -164,6 +175,54 @@ export const getFicha = query({
         pendencias: consolidado.filter((l) => l.precisaDeAtencao).length,
       },
     };
+  },
+});
+
+/**
+ * AS FLORES E MATERIAIS DO PROJETO — a versão que a cliente pode ver.
+ *
+ * ── POR QUE UMA CONSULTA PRÓPRIA, E NÃO UM RECORTE DE `getFicha` ────────────
+ * `getFicha` devolve custo estimado, margem, cobertura, compras vinculadas e
+ * as origens de cada linha. O Projeto Visual é a tela que ela VIRA PARA A
+ * NOIVA — mandar tudo aquilo pela rede e esconder na renderização é
+ * exatamente o que a regra 7 do README proíbe, e pela razão de sempre: o
+ * objeto continua lá para quem abrir o inspetor, e um `...linha` distraído
+ * numa rodada futura publica a margem da empresa.
+ *
+ * Aqui o custo não chega a existir no objeto que sai. A construção campo a
+ * campo mora em `lib/materiaisDoProjeto.ts`, pura e testada, do mesmo jeito
+ * que `paraOCliente` sustenta a fronteira da proposta comercial.
+ *
+ * ── NÃO É UMA SEGUNDA FONTE DE VERDADE ──────────────────────────────────────
+ * A consolidação é a MESMA função (`consolidarMateriais`) com o MESMO filtro
+ * de escopo (`ehObrigacaoDeMontagem`). O que muda é a projeção, não o cálculo:
+ * a ficha e o projeto nunca podem discordar sobre o que está no projeto.
+ */
+export const materiaisParaOProjeto = query({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    // Listagem degrada para vazio em vez de lançar — o padrão do repositório.
+    const event = await getOwnedEvent(ctx, args.eventId);
+    if (!event) return [];
+
+    const itens = await ctx.db
+      .query("assemblyItems")
+      .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+      .collect();
+    const linhas = consolidarMateriais(paraCalculo(itens as never), ehObrigacaoDeMontagem);
+
+    // Uma leitura por material DISTINTO com receita — dezenas, não o catálogo
+    // inteiro da empresa.
+    const fotos = new Map<string, string | null>();
+    for (const id of new Set(
+      linhas.map((l) => l.materialId).filter((id): id is string => Boolean(id)),
+    )) {
+      const material = await ctx.db.get(id as Id<"materials">);
+      if (!material || material.userId !== event.userId || !material.fotoStorageId) continue;
+      fotos.set(id, await ctx.storage.getUrl(material.fotoStorageId));
+    }
+
+    return materiaisDoProjeto(linhas, (id) => fotos.get(id) ?? null);
   },
 });
 

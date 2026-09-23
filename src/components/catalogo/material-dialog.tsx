@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import { useMutation } from "convex/react";
 import { ConvexError } from "convex/values";
 import { toast } from "sonner";
-import { Archive } from "lucide-react";
+import { Archive, Image as ImageIcon } from "lucide-react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel";
 import { TIPOS_DE_MATERIAL, UNIDADES } from "@/convex/lib/materiais.ts";
 import { valorDigitado } from "@/lib/valor-digitado.ts";
+import { useEnvioDeArquivo } from "@/hooks/use-upload.ts";
+import { gerarPreview } from "@/lib/imagem-reduzida.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
@@ -55,6 +57,8 @@ export type MaterialEditavel = {
   custoReferencia?: number;
   margemPercentual?: number;
   archived?: boolean;
+  /** Resolvida por `materials.list`. Ausente = material sem foto. */
+  fotoUrl?: string | null;
 };
 
 type Props = {
@@ -92,6 +96,13 @@ function numeroOpcional(texto: string): number | null | "erro" {
 export function MaterialDialog({ material, onClose }: Props) {
   const atualizar = useMutation(api.materials.update);
   const arquivar = useMutation(api.materials.setArchived);
+  const gerarUrl = useMutation(api.materials.generateUploadUrl);
+  const definirFoto = useMutation(api.materials.definirFoto);
+  const removerFoto = useMutation(api.materials.removerFoto);
+  const { enviar, enviando } = useEnvioDeArquivo(gerarUrl, {
+    tipo: "imagem",
+    aceitos: ["image/"],
+  });
 
   const [nome, setNome] = useState("");
   const [categoria, setCategoria] = useState("");
@@ -185,14 +196,108 @@ export function MaterialDialog({ material, onClose }: Props) {
     }
   };
 
+  // ── A FOTO SALVA NA HORA, FORA DO "SALVAR" ────────────────────────────────
+  // Mesma escolha da capa do evento na Galeria: um botão que grava em dois
+  // lugares deixa metade salva quando a outra metade falha. O arquivo já subiu
+  // para o storage quando chegamos aqui — adiar o vínculo até o "Salvar" só
+  // criaria a chance de ele nunca acontecer.
+  const escolherFoto = async (arquivo: File) => {
+    // A versão leve é o que fica. Ao contrário da Galeria, aqui o original não
+    // é o trabalho dela — é ilustração de catálogo, desenhada pequena. Quando
+    // o navegador não consegue reduzir (HEIC no Android), sobe o original e
+    // funciona igual.
+    const paraEnviar = (await gerarPreview(arquivo)) ?? arquivo;
+    const r = await enviar(paraEnviar);
+    if (!r.ok) {
+      toast.error(r.motivo);
+      return;
+    }
+    try {
+      await definirFoto({ id: material._id, storageId: r.storageId });
+      toast.success("Foto do material salva. Ela vale para todos os eventos.");
+    } catch (e) {
+      comErro(e);
+    }
+  };
+
+  const tirarFoto = async () => {
+    try {
+      await removerFoto({ id: material._id });
+      toast.success("Foto removida.");
+    } catch (e) {
+      comErro(e);
+    }
+  };
+
   return (
     <Dialog open onOpenChange={(aberto) => !aberto && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editar material</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-3">
+          {/* ── A FOTO ──────────────────────────────────────────────────────
+              "Rosa, lisianthus, boca-de-leão, eucalipto" não diz nada para
+              quem não trabalha com flor. A imagem mora no CATÁLOGO porque
+              lisianthus é lisianthus em todo casamento — um envio, todos os
+              eventos. Ver `materials.fotoStorageId`. */}
+          <div className="flex items-center gap-3">
+            {material.fotoUrl ? (
+              <img
+                src={material.fotoUrl}
+                alt={`Foto de ${material.nome}`}
+                loading="lazy"
+                decoding="async"
+                className="size-20 flex-shrink-0 rounded-lg border border-border object-cover"
+              />
+            ) : (
+              <div className="flex size-20 flex-shrink-0 items-center justify-center rounded-lg border border-dashed border-border text-muted-foreground">
+                <ImageIcon className="size-5" aria-hidden />
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-muted-foreground">
+                A foto ajuda a cliente a ver o que é <strong>{material.nome}</strong>. Vale
+                para todos os eventos — não precisa enviar de novo a cada casamento.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {/* `<label>` com input escondido: alvo de 36px de altura, que o
+                    polegar acerta. `capture` de propósito NÃO entra — no
+                    galpão ela escolhe do álbum tanto quanto fotografa. */}
+                <label
+                  className={`inline-flex h-9 cursor-pointer items-center rounded-md border border-input px-3 text-xs font-medium hover:bg-accent ${
+                    enviando ? "pointer-events-none opacity-60" : ""
+                  }`}
+                >
+                  {enviando ? "Enviando…" : material.fotoUrl ? "Trocar foto" : "Enviar foto"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    disabled={enviando}
+                    onChange={(e) => {
+                      const arquivo = e.target.files?.[0];
+                      // Limpa o valor: escolher o MESMO arquivo duas vezes
+                      // seguidas não dispara `change` se o valor continuar lá.
+                      e.target.value = "";
+                      if (arquivo) void escolherFoto(arquivo);
+                    }}
+                  />
+                </label>
+                {material.fotoUrl && (
+                  <Button
+                    variant="ghost"
+                    onClick={() => void tirarFoto()}
+                    className="h-9 cursor-pointer px-3 text-xs text-muted-foreground hover:text-destructive"
+                  >
+                    Remover
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div>
             <Label htmlFor="mat-nome" className="text-xs">
               Nome

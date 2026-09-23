@@ -435,3 +435,50 @@ describe("resolverFotoDoItem — a precedência em si", () => {
     expect(urlDeMiniatura(SEM_FOTO)).toBeNull();
   });
 });
+
+// ── O FORNECEDOR CASADO NA CONVERSÃO ─────────────────────────────────────────
+// O convite do briefing traz o fornecedor como TEXTO (`furnitureSupplier` é um
+// campo de texto). Criar o item com o nome solto faria a decoradora escolher o
+// fornecedor de novo, item a item, para alguém que já está no evento.
+//
+// O casamento por nome acontece na TELA, mas o que ele produz — um `supplierId`
+// — passa pela guarda do servidor como qualquer outro. É isso que este bloco
+// protege: a conveniência da tela não afrouxa a regra de posse.
+describe("o vínculo de fornecedor vindo da conversão obedece à mesma guarda", () => {
+  it("um `supplierId` do próprio evento entra no lote", async () => {
+    const { dona, ids, t } = await cenario();
+    await dona.mutation(api.assemblyItems.createMany, {
+      eventId: ids.marina,
+      items: [
+        {
+          area: "furniture", name: "Cadeira Dior dourada",
+          supplierName: "Móveis Bella", supplierId: ids.fornecedorDeMarina,
+          includeInAssemblyReport: true, checkOnAssembly: true, visibility: "equipe",
+        },
+      ],
+    });
+    const criado = (await t.run((ctx: MutationCtx) =>
+      ctx.db.query("assemblyItems").collect(),
+    )).find((i) => i.name === "Cadeira Dior dourada");
+    expect(criado?.supplierId).toBe(ids.fornecedorDeMarina);
+    expect(criado?.supplierName).toBe("Móveis Bella");
+  });
+
+  it("o nome sem vínculo continua valendo como anotação", async () => {
+    const { dona, ids, t } = await cenario();
+    await dona.mutation(api.assemblyItems.createMany, {
+      eventId: ids.marina,
+      items: [
+        {
+          area: "flowers", name: "Rosa branca", supplierName: "Floricultura que não cadastrei",
+          includeInAssemblyReport: true, checkOnAssembly: true, visibility: "equipe",
+        },
+      ],
+    });
+    const criado = (await t.run((ctx: MutationCtx) =>
+      ctx.db.query("assemblyItems").collect(),
+    )).find((i) => i.name === "Rosa branca");
+    expect(criado?.supplierId).toBeUndefined();
+    expect(criado?.supplierName).toBe("Floricultura que não cadastrei");
+  });
+});

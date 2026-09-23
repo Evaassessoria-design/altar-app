@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
 import { ConvexError } from "convex/values";
@@ -31,6 +31,10 @@ import {
 
 type Row = SuggestedItem & { selected: boolean };
 
+/** Nome comparável: sem acento, sem caixa, sem espaço sobrando. */
+const chaveDoNome = (n: string) =>
+  n.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+
 export function SuggestItemsDialog({
   eventId,
   briefing,
@@ -44,6 +48,27 @@ export function SuggestItemsDialog({
   onClose: () => void;
 }) {
   const createMany = useMutation(api.assemblyItems.createMany);
+  // ── "MÓVEIS BELLA" É DIGITADO UMA VEZ ────────────────────────────────────
+  // A sugestão traz o fornecedor como TEXTO, porque ela vem de um campo de
+  // texto do briefing (`furnitureSupplier`, `flowerSupplier`). Criar o item
+  // com o nome solto faria a decoradora escolher o fornecedor de novo, item a
+  // item, depois — para um fornecedor que já está cadastrado no evento.
+  //
+  // Aqui o nome é casado com a lista do próprio evento. Casamento por NOME é
+  // uma heurística, e o repositório desconfia delas — mas o risco é contido:
+  // acerto vira vínculo, erro vira nada, e o nome continua gravado como
+  // anotação nos dois casos. Nenhum fornecedor é criado, nenhum é alterado.
+  const fornecedores = useQuery(api.suppliers.listByEvent, { eventId }) as
+    | { _id: Id<"eventSuppliers">; companyName: string }[]
+    | undefined;
+
+  const vinculoPara = (nome?: string) => {
+    if (!nome || !fornecedores) return undefined;
+    const alvo = chaveDoNome(nome);
+    const achados = fornecedores.filter((f) => chaveDoNome(f.companyName) === alvo);
+    // Duas empresas com o mesmo nome no mesmo evento: não escolhemos por ela.
+    return achados.length === 1 ? achados[0]._id : undefined;
+  };
   // `useState` com inicializador: a lista é calculada UMA vez, na abertura.
   // Recalcular a cada render faria as linhas que ela editou voltarem ao texto
   // do briefing no meio da revisão.
@@ -71,6 +96,7 @@ export function SuggestItemsDialog({
           quantity: r.quantity,
           unit: r.unit?.trim() || undefined,
           supplierName: r.supplierName?.trim() || undefined,
+          supplierId: vinculoPara(r.supplierName),
           ambiente: r.ambiente?.trim() || undefined,
           notes: r.notes?.trim() || undefined,
           includeInAssemblyReport: r.includeInAssemblyReport,

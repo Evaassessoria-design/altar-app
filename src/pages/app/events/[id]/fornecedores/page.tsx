@@ -660,11 +660,17 @@ function EntregasDoFornecedor({
                 {i.unit ? ` ${i.unit}` : ""}
               </span>
             ) : null}
-            {/* `min-w-0` + `truncate`: "Cadeira Dior dourada com assento de
-                linho off-white" não pode empurrar a largura do diálogo. */}
+            {/* Quem encolhe é o NOME e o AMBIENTE; a quantidade, não — ela é
+                o número que a pessoa está conferindo.
+
+                `flex-shrink-0` junto de `truncate` seria contraditório: o
+                elemento se recusa a encolher e ao mesmo tempo promete cortar,
+                e o resultado é a linha estourando a largura do diálogo num
+                telefone de 320 px. "Cadeira Dior dourada com assento de linho
+                off-white · Jardim das oliveiras" é um caso real. */}
             <span className="min-w-0 truncate">{i.name}</span>
             {i.ambiente && (
-              <span className="text-xs text-muted-foreground truncate flex-shrink-0">
+              <span className="min-w-0 truncate text-xs text-muted-foreground">
                 · {i.ambiente}
               </span>
             )}

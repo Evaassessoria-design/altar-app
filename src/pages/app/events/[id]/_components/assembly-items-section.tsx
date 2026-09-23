@@ -481,10 +481,13 @@ function PhotoSlot({
           <button
             onClick={onTirar}
             aria-label={`Remover ${label}`}
-            // Alvo de 24 px num canto apertado: menor que isso erra no polegar.
-            className="cursor-pointer text-muted-foreground hover:text-destructive p-1 -m-1"
+            // O ÍCONE é pequeno, o ALVO não é: `size-8` dá 32 px de área
+            // tocável e `-mr-1.5` a puxa de volta para a borda, para o
+            // tamanho do alvo não empurrar o rótulo. Um `p-1` num ícone de
+            // 14 px daria 22 px, que erra no polegar num item de lista.
+            className="cursor-pointer text-muted-foreground hover:text-destructive size-8 -mr-1.5 -my-1 flex items-center justify-center flex-shrink-0"
           >
-            <X className="size-3.5" />
+            <X className="size-4" />
           </button>
         )}
       </div>

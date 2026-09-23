@@ -412,7 +412,7 @@ export const deletePurchase = mutation({
     // Agora é escolha dela, com o retrato do que está em jogo. Sem vínculo,
     // ou com vínculo quebrado, nada muda: exclui direto, como sempre.
     await exigirDecisaoSobreADespesa(ctx, item, args.despesa, "excluir");
-    if (item.transactionId) await aplicarDecisao(ctx, item, args.despesa ?? "manter");
+    if (item.transactionId) await aplicarDecisao(ctx, item, args.despesa ?? "manter", "excluir");
 
     await ctx.db.delete(args.id);
     return { despesa: item.transactionId ? (args.despesa ?? "manter") : null };
@@ -467,6 +467,7 @@ async function aplicarDecisao(
   ctx: MutationCtx,
   item: Doc<"purchaseItems">,
   decisao: "manter" | "remover",
+  acao: "cancelar" | "excluir",
 ) {
   if (!item.transactionId) return;
   const lancamento = await ctx.db.get(item.transactionId);
@@ -477,10 +478,25 @@ async function aplicarDecisao(
       // se perde escrito na tela.
       for (const c of lancamento.comprovantes ?? []) await safeDeleteFile(ctx, c.storageId);
       await ctx.db.delete(item.transactionId);
+    } else {
+      // ── A DESPESA PASSA A LEMBRAR DE ONDE VEIO ──────────────────────────
+      // O vínculo operacional some na linha abaixo, e tem de sumir: enquanto
+      // ele existe, a compra cancelada é uma inconsistência que cala a margem
+      // do evento. Mas ele era a ÚNICA coisa que ligava esta despesa àquela
+      // compra — soltar sem mais nada deixava no livro uma linha órfã que,
+      // meses depois, ninguém sabe se ainda vale.
+      //
+      // Então a procedência é gravada AQUI, no único instante em que ela
+      // ainda é conhecida. Snapshot, não ponteiro: a compra pode estar sendo
+      // excluída nesta mesma mutation. Ver `transactions.origemCompra`.
+      await ctx.db.patch(item.transactionId, {
+        origemCompra: {
+          nome: item.name,
+          desfecho: acao === "cancelar" ? ("cancelada" as const) : ("excluida" as const),
+          em: dataDoDia(),
+        },
+      });
     }
-    // `manter` não apaga nada. Só solta o vínculo abaixo — assim a despesa
-    // sobrevive com pagamento e comprovantes, e a compra cancelada deixa de
-    // aparecer como inconsistência (`canceladaComLancamento`).
   }
   await ctx.db.patch(item._id, { transactionId: undefined });
 }
@@ -516,7 +532,7 @@ export const setPurchaseStatus = mutation({
     );
 
     if (args.status === "cancelado" && args.despesa) {
-      await aplicarDecisao(ctx, item, args.despesa);
+      await aplicarDecisao(ctx, item, args.despesa, "cancelar");
       return { despesa: args.despesa };
     }
 

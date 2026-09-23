@@ -849,6 +849,45 @@ export default defineSchema({
      * proposito.
      */
     comprovantes: v.optional(v.array(comprovanteFinanceiro)),
+    /**
+     * De onde esta despesa veio, depois que a compra que a gerou saiu de cena.
+     *
+     * ── PROVENIÊNCIA NÃO É VÍNCULO ──────────────────────────────────────────
+     * O VÍNCULO OPERACIONAL é `purchaseItems.transactionId`: é ele que torna
+     * `registerCost` idempotente, que faz a despesa seguir a compra e que o
+     * painel lê para acusar divergência. Ele PRECISA sumir quando a compra é
+     * cancelada ou excluída e a decoradora escolhe manter o custo — enquanto
+     * existir, a compra cancelada aparece como inconsistência
+     * (`canceladaComLancamento`) e a margem do evento se cala para sempre.
+     *
+     * Mas soltar o vínculo apagava também a PROCEDÊNCIA: a despesa continuava
+     * no livro sem nada dizendo que nasceu daquela compra. Meses depois,
+     * "Cadeiras — Empresa X · R$ 4.000" é uma linha órfã que ninguém sabe se
+     * ainda vale. Mesmo papel de `assemblyItems.compositionId`, que guarda a
+     * origem da receita sem nunca dirigir comportamento.
+     *
+     * AUSENTE = a despesa não veio de uma compra desfeita. É o estado de todo
+     * lançamento que já existe, de todo lançamento avulso e de toda despesa
+     * cuja compra continua viva e vinculada — nessa, quem responde "de onde
+     * veio?" é o vínculo, que ainda está lá. Sem backfill.
+     *
+     * É SNAPSHOT, e por isso não guarda id: a compra pode ter sido excluída, e
+     * um ponteiro para linha que não existe mais convida a navegação que
+     * quebra. O que um humano precisa ler é o nome e o que aconteceu.
+     *
+     * NADA LÊ ISTO PARA DECIDIR. Não entra em `custoDoEvento`, não muda soma,
+     * não reconstrói vínculo. É memória.
+     */
+    origemCompra: v.optional(
+      v.object({
+        /** Como a compra se chamava no momento em que o vínculo foi desfeito. */
+        nome: v.string(),
+        /** O que aconteceu com ela. */
+        desfecho: v.union(v.literal("cancelada"), v.literal("excluida")),
+        /** Dia civil "AAAA-MM-DD" em que o vínculo foi desfeito. */
+        em: v.string(),
+      }),
+    ),
   })
     .index("by_user", ["userId"])
     .index("by_user_date", ["userId", "date"])

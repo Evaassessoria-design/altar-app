@@ -55,6 +55,7 @@ import {
   pagoSemComprovante,
   temComprovante,
 } from "@/lib/comprovante-financeiro.ts";
+import { origemDaDespesa } from "@/lib/origem-da-despesa.ts";
 import {
   BarChart,
   Bar,
@@ -568,6 +569,17 @@ export default function FinanceiroPage() {
                       <>
                         <span>·</span>
                         <span className="text-amber-700 dark:text-amber-500">sem comprovante</span>
+                      </>
+                    )}
+                    {/* A despesa que sobreviveu à compra diz isso. Sem esta
+                        linha, o custo mantido de uma compra cancelada vira,
+                        meses depois, um lançamento órfão que ninguém sabe se
+                        ainda vale. Não é vínculo: a compra pode nem existir
+                        mais, e por isso nada aqui é clicável. */}
+                    {origemDaDespesa(tx) && (
+                      <>
+                        <span>·</span>
+                        <span className="truncate">{origemDaDespesa(tx)}</span>
                       </>
                     )}
                   </div>

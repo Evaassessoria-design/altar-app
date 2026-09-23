@@ -25,6 +25,30 @@ const semComentarios = (p: string) =>
     .filter((l) => !l.trim().startsWith("//"))
     .join("\n");
 
+/**
+ * O corpo de uma função, do `{` que abre ao `}` que fecha.
+ *
+ * Antes isto era `slice(i, i + 700)`, e a janela fixa media o tamanho do
+ * código em vez do que ele faz: acrescentar oito linhas a `aplicarDecisao`
+ * empurrou `transactionId: undefined` para fora da janela e o teste passou a
+ * acusar uma regressão que não existia. Um guarda que quebra quando a função
+ * cresce ensina a mexer no teste — que é justamente o que ele deveria impedir.
+ *
+ * Conta chaves. Não entende string nem regex com chave solta dentro, e não
+ * precisa: estas são funções de servidor, sem JSX.
+ */
+function corpoDaFuncao(fonte: string, assinatura: string): string {
+  const inicio = fonte.indexOf(assinatura);
+  if (inicio < 0) throw new Error(`não achei "${assinatura}" — a função foi renomeada?`);
+  const abre = fonte.indexOf("{", inicio);
+  let profundidade = 0;
+  for (let i = abre; i < fonte.length; i++) {
+    if (fonte[i] === "{") profundidade++;
+    else if (fonte[i] === "}" && --profundidade === 0) return fonte.slice(inicio, i + 1);
+  }
+  throw new Error(`"${assinatura}" não fecha — a fonte está truncada?`);
+}
+
 const COMPRAS = semComentarios("src/pages/app/compras/page.tsx");
 const PAINEL = semComentarios("src/pages/app/compras/_components/painel-de-compras.tsx");
 const DECISAO = semComentarios("src/components/compras/decisao-da-despesa.tsx");
@@ -100,17 +124,35 @@ describe("a decisão sobre o dinheiro", () => {
   });
 
   it("'manter' desvincula em vez de apagar", () => {
-    const i = PURCHASES.indexOf("async function aplicarDecisao");
-    const corpo = PURCHASES.slice(i, i + 700);
+    const corpo = corpoDaFuncao(PURCHASES, "async function aplicarDecisao");
     expect(corpo).toMatch(/if \(decisao === "remover"\)/);
     expect(corpo).toContain("transactionId: undefined");
   });
 
   it("'remover' leva os comprovantes, com safeDeleteFile", () => {
-    const i = PURCHASES.indexOf("async function aplicarDecisao");
-    const corpo = PURCHASES.slice(i, i + 700);
+    const corpo = corpoDaFuncao(PURCHASES, "async function aplicarDecisao");
     expect(corpo).toContain("safeDeleteFile");
     expect(corpo).toContain("lancamento.comprovantes");
+  });
+
+  it("e 'manter' grava a procedência ANTES de soltar o vínculo", () => {
+    // A despesa sobrevive à compra; sem isto ela vira uma linha órfã no livro
+    // que ninguém sabe, meses depois, se ainda vale. Dentro do `else` de
+    // propósito: em "remover" não sobra despesa para lembrar de nada.
+    const corpo = corpoDaFuncao(PURCHASES, "async function aplicarDecisao");
+    expect(corpo).toContain("origemCompra");
+    const origem = corpo.indexOf("origemCompra");
+    const solta = corpo.indexOf("transactionId: undefined");
+    expect(origem, "soltou o vínculo antes de guardar de onde veio").toBeLessThan(solta);
+  });
+
+  it("e a procedência NÃO dirige comportamento: nada a lê para decidir", () => {
+    // `origemCompra` é memória, como `assemblyItems.compositionId`. Se alguma
+    // condição passar a depender dela, a despesa volta a carregar vínculo com
+    // outro nome — e a compra cancelada volta a calar a margem do evento.
+    for (const fonte of [PURCHASES, semComentarios("convex/lib/custoDoEvento.ts")]) {
+      expect(fonte).not.toMatch(/if\s*\([^)]*origemCompra/);
+    }
   });
 
   it("e o diálogo nomeia o que se perde", () => {

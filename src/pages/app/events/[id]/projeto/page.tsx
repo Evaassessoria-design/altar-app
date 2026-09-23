@@ -1,10 +1,11 @@
+import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Layers, ImageOff } from "lucide-react";
+import { ArrowLeft, ArrowRight, Layers, ImageOff, FileDown, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button.tsx";
 import { cn } from "@/lib/utils.ts";
 import { formatEventDateLong } from "@/lib/event-date.ts";
@@ -21,6 +22,10 @@ import {
   type FotoDoProjeto,
 } from "@/lib/projeto-visual.ts";
 import { conceitoDoEvento, linhaDoConceito } from "@/lib/conceito-do-evento.ts";
+import {
+  montarApresentacao,
+  apresentacaoTemConteudo,
+} from "@/lib/apresentacao-do-projeto.ts";
 import { urlDeExibicao } from "@/lib/imagem-reduzida.ts";
 import { PrateleiraDeFotos } from "@/components/projeto/prateleira-de-fotos.tsx";
 import { labelDoTipoDeEvento } from "@/lib/event-types.ts";
@@ -146,6 +151,51 @@ export default function ProjetoDecoracaoPage() {
   const galeriaDo = (ambiente: string) =>
     ambiente ? `${galeria}?ambiente=${encodeURIComponent(ambiente)}` : galeria;
 
+  /**
+   * A apresentação, derivada do MESMO projeto que a tela desenha.
+   *
+   * Calculada aqui, e não dentro do gerador, para que a trava de "o que pode
+   * ir para a cliente" (`apresentacao-do-projeto.ts`) seja a mesma coisa que
+   * decide se o botão aparece. Um botão que gera um PDF vazio é pior do que
+   * um botão ausente.
+   */
+  const apresentacao = montarApresentacao(projeto, fotoDoItem);
+  const podeApresentar = apresentacaoTemConteudo(apresentacao);
+  const [gerando, setGerando] = useState(false);
+
+  const empresa = useQuery(api.users.getCurrentUser);
+
+  const exportarApresentacao = async () => {
+    if (!event) return;
+    setGerando(true);
+    try {
+      const { generateProjetoVisualPDF } = await import(
+        "@/lib/generate-projeto-visual-pdf.ts"
+      );
+      await generateProjetoVisualPDF({
+        evento: {
+          name: event.name,
+          date: event.date,
+          location: event.location,
+          clientName: event.clientName,
+          tipoLabel: labelDoTipoDeEvento(event.type),
+        },
+        apresentacao,
+        conceito,
+        // O ORIGINAL da capa, não a versão leve: a capa ocupa um terço da
+        // folha impressa, e 1400 px de largura ali já aparece. As demais
+        // imagens do documento saem da miniatura, que é o que o corpo pede.
+        capaUrl: capa?.url ?? null,
+        empresa: empresa ?? null,
+      });
+      toast.success("Apresentação gerada.");
+    } catch {
+      toast.error("Não foi possível gerar a apresentação.");
+    } finally {
+      setGerando(false);
+    }
+  };
+
   const mudarEscopo = async (itemId: Id<"assemblyItems">, scope: ProjectScope | "") => {
     try {
       // `null`, e não `undefined`: `undefined` é descartado no transporte e o
@@ -217,6 +267,38 @@ export default function ProjetoDecoracaoPage() {
               .filter((v) => v && v !== "—")
               .join("  ·  ")}
           </p>
+        )}
+
+        {/* ── O DOCUMENTO QUE VAI PARA A CLIENTE ─────────────────────────
+            Até aqui, a melhor coisa que o ALTAR sabe montar só existia
+            dentro da conta dela: para mostrar o projeto, ela virava a tela
+            do notebook. O PDF é uma LEITURA desta mesma tela — não há
+            editor paralelo, tabela nova nem moodboard separado.
+
+            Só aparece quando há o que apresentar: um botão que gera um
+            documento vazio é pior do que um botão ausente. */}
+        {!carregando && podeApresentar && (
+          <div className="pt-2">
+            <Button
+              variant="secondary"
+              onClick={() => void exportarApresentacao()}
+              disabled={gerando}
+              // `h-10` e largura cheia no celular: é um botão que ela aperta
+              // na frente da cliente, muitas vezes com o telefone na mão.
+              className="cursor-pointer gap-2 h-10 w-full sm:w-auto"
+            >
+              {gerando ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <FileDown className="size-4" />
+              )}
+              {gerando ? "Gerando…" : "Apresentação em PDF"}
+            </Button>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Para mostrar aos clientes. Sai sem valores, sem fornecedor e sem nota
+              interna.
+            </p>
+          </div>
         )}
       </header>
 

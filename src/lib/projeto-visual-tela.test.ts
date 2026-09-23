@@ -82,6 +82,10 @@ describe("a tela LÊ a galeria, não guarda imagem", () => {
       "api.events.get",
       "api.gallery.listPhotos",
       "api.layoutRenders.listByEvent",
+      // A identidade da empresa para o PDF de apresentação — timbre, cor e
+      // contato. Degrada para o padrão do ALTAR se não chegar, e por isso NÃO
+      // entra em `carregando`: a tela não espera por ela para desenhar.
+      "api.users.getCurrentUser",
     ]);
     // Cada uma UMA vez: repetição é o primeiro sintoma de consulta dentro de
     // laço.

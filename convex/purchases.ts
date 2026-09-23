@@ -1,4 +1,5 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { getOwnedEvent, requireEventOwner, requireTeamMember, requireUser } from "./lib/identity";
@@ -10,6 +11,7 @@ import {
 import { limparCampos } from "./lib/limparCampos";
 import { emCentavos, motivoDoValorInvalido } from "./lib/dinheiro";
 import { comCarimbo } from "./lib/ultimaAtualizacao";
+import { safeDeleteFile } from "./lib/cascade";
 import { dataDoDia } from "./lib/dataDoDia";
 import { valorDaCompra } from "./lib/custoDoEvento";
 
@@ -22,6 +24,17 @@ const purchaseStatus = v.union(
   v.literal("recebido"),
   v.literal("cancelado"),
 );
+
+/**
+ * O que fazer com a despesa quando a compra sai de cena.
+ *
+ *   manter  → a despesa continua existindo SOZINHA, sem vínculo. O dinheiro
+ *             saiu; o registro dele não pode sumir porque a compra mudou de
+ *             ideia. É o que preserva pagamento e comprovante.
+ *   remover → a despesa é apagada, com os comprovantes dela. Só faz sentido
+ *             quando nada foi movimentado.
+ */
+const decisaoSobreADespesa = v.union(v.literal("manter"), v.literal("remover"));
 
 export const listPurchases = query({
   args: { eventId: v.id("events") },
@@ -153,6 +166,71 @@ export const addPurchase = mutation({
   },
 });
 
+// ═════════════════════════════════════════════════════════════════════════════
+// O QUE A COMPRA MANDA NO LANÇAMENTO, E O QUE ELA NÃO ENCOSTA
+//
+// ── A DIVISÃO ───────────────────────────────────────────────────────────────
+// Da COMPRA vêm: quanto, de quem, de que categoria e para quando. São dados
+// operacionais — corrigir o preço de uma compra tem de chegar ao livro, senão
+// a margem do evento sai afirmada sobre um número velho.
+//
+// Do PAGAMENTO vêm: `isPaid`, `paidAt`, `paymentMethod`, `notes` e os
+// `comprovantes`. Esses são decisão dela, tomada no Financeiro, e NADA que
+// acontece em Compras pode sobrescrevê-los.
+//
+// A divisão não é estética. Antes, `registerCost` reaplicava `isPaid` no
+// `patch` — então corrigir o preço de uma compra já paga DESMARCAVA o
+// pagamento dela. Silenciosamente.
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** Os campos que a COMPRA dita. Nenhum deles é do pagamento. */
+function camposDaCompra(item: Doc<"purchaseItems">) {
+  return {
+    type: "expense" as const,
+    category: item.category?.trim() || "Compras",
+    description: item.supplier?.trim()
+      ? `${item.name} — ${item.supplier.trim()}`
+      : item.name,
+    amount: valorDaCompra(item),
+    // O vencimento combinado com o fornecedor. Sem ele, hoje.
+    date: item.dueDate?.trim() || dataDoDia(),
+    eventId: item.eventId,
+  };
+}
+
+/**
+ * A despesa segue a compra — se já existir uma.
+ *
+ * ── POR QUE ISTO EXISTE ─────────────────────────────────────────────────────
+ * Ela corrigia o preço de R$ 400 para R$ 450, via o número novo na tela, e o
+ * livro continuava com 400. O sistema até DETECTAVA (`valorDivergente`, em
+ * lib/custoDoEvento.ts) — e a correção era ela clicar de novo em um botão
+ * cuja existência ninguém explica. Agora a correção chega sozinha.
+ *
+ * ── O QUE ELA NUNCA FAZ ─────────────────────────────────────────────────────
+ * NÃO CRIA lançamento. Sem `transactionId`, editar uma compra continua não
+ * pondo nada no livro — quem decide que a despesa existe é `registerCost`.
+ *
+ * NÃO RECRIA vínculo quebrado. Se o ponteiro aponta para um lançamento que a
+ * decoradora apagou no Financeiro, ela apagou de propósito; ressuscitar seria
+ * desfazer a decisão dela sem avisar. O painel continua mostrando o vínculo
+ * quebrado, que é a verdade.
+ *
+ * NÃO ENCOSTA NO PAGAMENTO. Ver o cabeçalho acima.
+ */
+async function sincronizarLancamento(
+  ctx: MutationCtx,
+  item: Doc<"purchaseItems">,
+): Promise<boolean> {
+  if (!item.transactionId) return false;
+  const lancamento = await ctx.db.get(item.transactionId);
+  if (!lancamento || lancamento.userId !== item.userId) return false;
+  if (valorDaCompra(item) <= 0) return false;
+
+  await ctx.db.patch(item.transactionId, camposDaCompra(item));
+  return true;
+}
+
 /**
  * Lança (ou reajusta) o custo desta compra no livro-caixa.
  *
@@ -190,27 +268,11 @@ export const registerCost = mutation({
     if (valor <= 0) {
       throw new ConvexError({
         code: "BAD_REQUEST",
-        message: "Informe o preço da compra antes de lançar no financeiro.",
+        message: "Informe o preço da compra antes de registrar o custo.",
       });
     }
 
-    // A data do lançamento é o vencimento quando existe — é a data que a
-    // decoradora combinou com o fornecedor. Sem ela, hoje.
-    const data = item.dueDate?.trim() || dataDoDia();
-
-    const campos = {
-      type: "expense" as const,
-      category: item.category?.trim() || "Compras",
-      description: item.supplier?.trim()
-        ? `${item.name} — ${item.supplier.trim()}`
-        : item.name,
-      amount: valor,
-      date: data,
-      // "Recebido" é o único estado em que a mercadoria chegou. Antes disso a
-      // despesa existe mas não está liquidada.
-      isPaid: status === "recebido",
-      eventId: item.eventId,
-    };
+    const campos = camposDaCompra(item);
 
     // Reaproveita o lançamento existente — este `if` é a idempotência.
     if (item.transactionId) {
@@ -224,6 +286,14 @@ export const registerCost = mutation({
     const transactionId = await ctx.db.insert("transactions", {
       userId: user._id,
       ...campos,
+      // ── COMPRAR NÃO É PAGAR ────────────────────────────────────────────
+      // Nasce SEMPRE em aberto. `purchaseStatus.ts` já dizia por escrito que
+      // são perguntas diferentes — "dá para receber sem ter pago (boleto a
+      // prazo) e para pagar sem ter recebido (sinal antecipado)" — e esta
+      // função contradizia o próprio módulo usando "recebido" como sinônimo
+      // de "pago". Quem paga é ela, no Financeiro, onde há data, forma e
+      // comprovante para registrar isso direito.
+      isPaid: false,
     });
     await ctx.db.patch(args.id, { transactionId });
     return { transactionId, criado: true };
@@ -299,6 +369,12 @@ export const updatePurchase = mutation({
       ? { ...limpos, isPurchased: isPurchasedForStatus(args.status) }
       : limpos;
     await ctx.db.patch(id, comCarimbo(patch));
+
+    // Corrigiu preço, quantidade, fornecedor ou vencimento? A despesa que já
+    // existe acompanha, sem ela precisar clicar em nada de novo. Compra sem
+    // despesa continua sem despesa.
+    const depois = (await ctx.db.get(id))!;
+    await sincronizarLancamento(ctx, depois);
   },
 });
 
@@ -310,32 +386,36 @@ export const togglePurchase = mutation({
     if (!item || item.userId !== user._id)
       throw new ConvexError({ message: "Item não encontrado", code: "NOT_FOUND" });
     await ctx.db.patch(args.id, comCarimbo({ isPurchased: !item.isPurchased }));
+    // Não mexe em dinheiro nenhum: marcar "comprado" não cria despesa, e a
+    // despesa que já existe não muda de valor por causa disto.
   },
 });
 
 export const deletePurchase = mutation({
-  args: { id: v.id("purchaseItems") },
+  args: {
+    id: v.id("purchaseItems"),
+    /** Só lido quando há custo registrado. Ausente, a mutation pede a decisão. */
+    despesa: v.optional(decisaoSobreADespesa),
+  },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const item = await ctx.db.get(args.id);
     if (!item || item.userId !== user._id)
       throw new ConvexError({ message: "Item não encontrado", code: "NOT_FOUND" });
 
-    // ── A DESPESA QUE ESTA COMPRA GEROU SAI JUNTO ────────────────────────────
-    // Antes, apagar a compra deixava a despesa órfã no Financeiro: a linha
-    // "Rosas — R$ 400" sumia de Compras e os R$ 400 continuavam pesando na
-    // margem para sempre, sem nada que os ligasse de volta a coisa alguma.
+    // ── A DESPESA QUE ESTA COMPRA GEROU NÃO SOME SOZINHA ─────────────────────
+    // Antes, apagar a compra apagava a despesa junto, calada. Fazia sentido
+    // enquanto a despesa era só um número — mas ela passou a poder estar
+    // PAGA e a carregar COMPROVANTE, e aí apagar em silêncio destrói o
+    // documento que prova um pagamento que aconteceu de verdade.
     //
-    // Só o lançamento que ELA gerou (o do vínculo) — nunca um que a
-    // decoradora tenha criado à mão. É a mesma regra de `unregisterCost`.
-    if (item.transactionId) {
-      const lancamento = await ctx.db.get(item.transactionId);
-      if (lancamento && lancamento.userId === user._id) {
-        await ctx.db.delete(item.transactionId);
-      }
-    }
+    // Agora é escolha dela, com o retrato do que está em jogo. Sem vínculo,
+    // ou com vínculo quebrado, nada muda: exclui direto, como sempre.
+    await exigirDecisaoSobreADespesa(ctx, item, args.despesa, "excluir");
+    if (item.transactionId) await aplicarDecisao(ctx, item, args.despesa ?? "manter");
+
     await ctx.db.delete(args.id);
-    return { lancamentoRemovido: Boolean(item.transactionId) };
+    return { despesa: item.transactionId ? (args.despesa ?? "manter") : null };
   },
 });
 
@@ -349,17 +429,101 @@ export const deletePurchase = mutation({
  * NÃO toca em pagamento: `transactions.isPaid` é outro assunto, e é lá que o
  * dinheiro vive.
  */
+/**
+ * A despesa vinculada existe e alguém precisa decidir o que fazer com ela?
+ *
+ * Devolve `null` quando não há nada a decidir. Quando há, lança com o retrato
+ * do que está em jogo — a tela usa isso para PERGUNTAR com as palavras certas
+ * ("esta despesa já está paga e tem 1 comprovante") em vez de uma frase
+ * genérica que não ajuda ninguém a decidir.
+ */
+async function exigirDecisaoSobreADespesa(
+  ctx: MutationCtx,
+  item: Doc<"purchaseItems">,
+  decisao: "manter" | "remover" | undefined,
+  acao: "cancelar" | "excluir",
+) {
+  if (!item.transactionId) return null;
+  const lancamento = await ctx.db.get(item.transactionId);
+  // Vínculo quebrado não é decisão: não há despesa para preservar.
+  if (!lancamento || lancamento.userId !== item.userId) return null;
+  if (decisao) return lancamento;
+
+  throw new ConvexError({
+    code: "DECISAO_NECESSARIA",
+    message:
+      acao === "cancelar"
+        ? "Esta compra tem um custo registrado no financeiro. Diga o que fazer com ele."
+        : "Esta compra tem um custo registrado no financeiro. Diga o que fazer com ele antes de excluir.",
+    acao,
+    valor: lancamento.amount,
+    pago: lancamento.isPaid,
+    comprovantes: lancamento.comprovantes?.length ?? 0,
+  });
+}
+
+/** Aplica a decisão. `manter` DESVINCULA — a despesa vira registro próprio. */
+async function aplicarDecisao(
+  ctx: MutationCtx,
+  item: Doc<"purchaseItems">,
+  decisao: "manter" | "remover",
+) {
+  if (!item.transactionId) return;
+  const lancamento = await ctx.db.get(item.transactionId);
+  if (lancamento && lancamento.userId === item.userId) {
+    if (decisao === "remover") {
+      // Os comprovantes são arquivos desta despesa e saem com ela. Nunca em
+      // silêncio: chegar aqui exigiu escolha explícita, com o retrato do que
+      // se perde escrito na tela.
+      for (const c of lancamento.comprovantes ?? []) await safeDeleteFile(ctx, c.storageId);
+      await ctx.db.delete(item.transactionId);
+    }
+    // `manter` não apaga nada. Só solta o vínculo abaixo — assim a despesa
+    // sobrevive com pagamento e comprovantes, e a compra cancelada deixa de
+    // aparecer como inconsistência (`canceladaComLancamento`).
+  }
+  await ctx.db.patch(item._id, { transactionId: undefined });
+}
+
 export const setPurchaseStatus = mutation({
-  args: { id: v.id("purchaseItems"), status: purchaseStatus },
+  args: {
+    id: v.id("purchaseItems"),
+    status: purchaseStatus,
+    /**
+     * Só é lido ao CANCELAR uma compra que tem custo registrado. Ausente
+     * nesse caso, a mutation recusa e pede a decisão — nunca escolhe sozinha.
+     */
+    despesa: v.optional(decisaoSobreADespesa),
+  },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
     const item = await ctx.db.get(args.id);
     if (!item || item.userId !== user._id) {
       throw new ConvexError({ message: "Item não encontrado", code: "NOT_FOUND" });
     }
+
+    // ── CANCELAR É O ÚNICO ESTADO QUE DESFAZ A COMPRA ────────────────────
+    // Sair de "comprado" para "cotação" é correção de cadastro; a despesa
+    // continua valendo. Cancelar é dizer que a compra não aconteceu — e aí
+    // alguém precisa decidir o que foi feito do dinheiro.
+    if (args.status === "cancelado") {
+      await exigirDecisaoSobreADespesa(ctx, item, args.despesa, "cancelar");
+    }
+
     await ctx.db.patch(
       args.id,
       comCarimbo({ status: args.status, isPurchased: isPurchasedForStatus(args.status) }),
     );
+
+    if (args.status === "cancelado" && args.despesa) {
+      await aplicarDecisao(ctx, item, args.despesa);
+      return { despesa: args.despesa };
+    }
+
+    // Mudou de estado sem cancelar: a despesa que já existe acompanha o que
+    // a compra diz — e continua sem encostar em pagamento.
+    const depois = (await ctx.db.get(args.id))!;
+    await sincronizarLancamento(ctx, depois);
+    return { despesa: null };
   },
 });

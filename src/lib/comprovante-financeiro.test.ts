@@ -103,7 +103,18 @@ describe("a tela separa evidência de decisão", () => {
   });
 
   it("e a tela diz, em português, que anexar não dá baixa", () => {
-    expect(DIALOGO).toMatch(/não marca como recebido/i);
+    // A frase é montada com o verbo do TIPO — "recebido" na receita, "pago"
+    // na despesa —, e por isso o teste olha a construção, não o literal.
+    expect(DIALOGO).toMatch(/não marca como\{" "\}/);
+    expect(DIALOGO).toContain("{VERBO.toLowerCase()}");
+  });
+
+  it("e o vocabulário muda com o tipo, no MESMO componente", () => {
+    // Duplicar a tela para trocar duas palavras faria as duas divergirem na
+    // primeira correção. Ninguém diz "recebi" de uma compra de flores.
+    expect(DIALOGO).toContain('lancamento.type === "expense"');
+    expect(DIALOGO).toMatch(/const VERBO = despesa \? "Pago" : "Recebido"/);
+    expect(DIALOGO).toContain("{VERBO} em");
   });
 });
 

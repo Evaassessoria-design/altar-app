@@ -59,6 +59,14 @@ export function RecebimentoDialog({
     aceitos: MIMES_DE_COMPROVANTE,
   });
 
+  // ── O MESMO DIÁLOGO, AS PALAVRAS CERTAS ──────────────────────────────
+  // Receita e despesa respondem a mesma pergunta — entrou ou saiu, quando,
+  // como, e qual documento prova — mas ninguém diz "recebi" de uma compra de
+  // flores. Um componente só, um vocabulário por tipo: duplicar a tela para
+  // trocar duas palavras faria as duas divergirem na primeira correção.
+  const despesa = lancamento.type === "expense";
+  const VERBO = despesa ? "Pago" : "Recebido";
+
   const [pago, setPago] = useState(lancamento.isPaid);
   const [pagoEm, setPagoEm] = useState(lancamento.paidAt ?? "");
   const [forma, setForma] = useState(lancamento.paymentMethod ?? "");
@@ -149,13 +157,13 @@ export function RecebimentoDialog({
               onChange={(e) => setPago(e.target.checked)}
               className="size-4 cursor-pointer accent-primary"
             />
-            <span className="text-sm font-medium">Recebido</span>
+            <span className="text-sm font-medium">{VERBO}</span>
           </label>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <label htmlFor="pago-em" className="text-xs font-medium">
-                Recebido em
+                {VERBO} em
               </label>
               <input
                 id="pago-em"
@@ -197,7 +205,11 @@ export function RecebimentoDialog({
               id="obs-pagamento"
               value={observacao}
               onChange={(e) => setObservacao(e.target.value)}
-              placeholder="Recebido em duas transferências, recibo enviado por e-mail..."
+              placeholder={
+                despesa
+                  ? "Pago na entrega, nota enviada por e-mail..."
+                  : "Recebido em duas transferências, recibo enviado por e-mail..."
+              }
               rows={2}
             />
           </div>
@@ -223,8 +235,8 @@ export function RecebimentoDialog({
             <p className="text-xs text-muted-foreground">Carregando…</p>
           ) : lista.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              Nenhum comprovante anexado. Anexar não marca como recebido — são coisas
-              diferentes.
+              Nenhum comprovante anexado. Anexar não marca como{" "}
+              {VERBO.toLowerCase()} — são coisas diferentes.
             </p>
           ) : (
             <ul className="space-y-1.5">

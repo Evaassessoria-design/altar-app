@@ -29,6 +29,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ConvexError } from "convex/values";
 import { cn } from "@/lib/utils.ts";
+import {
+  DecisaoDaDespesa,
+  type DecisaoPendente,
+} from "@/components/compras/decisao-da-despesa.tsx";
 import { paraOCampo, valorDigitado } from "@/lib/valor-digitado.ts";
 import { formatEventDayOnly, hojeDateKey } from "@/lib/event-date.ts";
 import { StatusSelect } from "@/components/status-select.tsx";
@@ -293,7 +297,7 @@ function EventSection({
   onEdit: (item: Doc<"purchaseItems">) => void;
   onToggle: (id: Id<"purchaseItems">) => void;
   onDelete: (item: Doc<"purchaseItems">) => void;
-  onSetStatus: (id: Id<"purchaseItems">, status: PurchaseStatus) => void;
+  onSetStatus: (item: Doc<"purchaseItems">, status: PurchaseStatus) => void;
   onLancarCusto: (id: Id<"purchaseItems">) => void;
   onDesfazerCusto: (id: Id<"purchaseItems">, nome: string) => void;
 }) {
@@ -397,7 +401,7 @@ function EventSection({
                         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mt-1">
                           <StatusPill
                             item={item}
-                            onChange={(status) => onSetStatus(item._id, status)}
+                            onChange={(status) => onSetStatus(item, status)}
                           />
                           {item.quantity && (
                             <span>{item.quantity}{item.unit ? ` ${item.unit}` : ""}</span>
@@ -423,18 +427,18 @@ function EventSection({
                               type="button"
                               onClick={() => void onDesfazerCusto(item._id, item.name)}
                               className="inline-flex items-center gap-1 min-h-9 sm:min-h-0 text-green-700 dark:text-green-400 hover:underline cursor-pointer"
-                              title="Está no financeiro — clique para remover o lançamento"
+                              title="O custo está no financeiro — clique para tirar de lá"
                             >
-                              <Check className="size-3" /> no financeiro
+                              <Check className="size-3" /> custo registrado
                             </button>
                           ) : (
                             !!item.unitPrice && (
                               <button
                                 onClick={() => onLancarCusto(item._id)}
                                 className="text-primary hover:underline cursor-pointer"
-                                title="Cria o lançamento de despesa deste item"
+                                title="Registra o custo desta compra no financeiro"
                               >
-                                · lançar no financeiro
+                                · registrar custo
                               </button>
                             )
                           )}
@@ -508,6 +512,17 @@ function ComprasContent() {
   const unregisterCost = useMutation(api.purchases.unregisterCost);
   const setPurchaseStatus = useMutation(api.purchases.setPurchaseStatus);
 
+  /**
+   * A decisão pendente sobre o custo de uma compra que vai sair de cena.
+   *
+   * O servidor RECUSA cancelar ou excluir enquanto ninguém disser o que fazer
+   * com o dinheiro já registrado — e devolve o retrato do que está em jogo.
+   * A tela só pergunta com as palavras que vieram de lá.
+   */
+  const [decisao, setDecisao] = useState<
+    (DecisaoPendente & { item: Doc<"purchaseItems"> }) | null
+  >(null);
+
   const [addingToEvent, setAddingToEvent] = useState<Id<"events"> | null>(null);
   const [editing, setEditing] = useState<Doc<"purchaseItems"> | null>(null);
 
@@ -535,13 +550,13 @@ function ComprasContent() {
     try {
       const r = await registerCost({ id });
       toast.success(
-        r.criado ? "Lançado no financeiro!" : "Lançamento atualizado no financeiro.",
+        r.criado ? "Custo registrado no financeiro!" : "Custo atualizado no financeiro.",
       );
     } catch (e) {
       toast.error(
         e instanceof ConvexError
           ? (e.data as { message: string }).message
-          : "Erro ao lançar no financeiro.",
+          : "Não foi possível registrar o custo.",
       );
     }
   };
@@ -560,8 +575,8 @@ function ComprasContent() {
   const handleDesfazerCusto = async (id: Id<"purchaseItems">, nome: string) => {
     if (
       !window.confirm(
-        `Remover do Financeiro o lançamento de "${nome}"? A compra continua aqui, e o ` +
-          "lançamento é apagado. Não há como desfazer.",
+        `Tirar do financeiro o custo de "${nome}"? A compra continua aqui, e o custo ` +
+          "sai do financeiro. Não há como desfazer.",
       )
     ) {
       return;
@@ -570,14 +585,14 @@ function ComprasContent() {
       const r = await unregisterCost({ id });
       toast.success(
         r.removido
-          ? "Lançamento removido do financeiro. A compra continua na lista."
-          : "Esta compra já não tinha lançamento no financeiro.",
+          ? "Custo removido do financeiro. A compra continua na lista."
+          : "Esta compra já não tinha custo registrado.",
       );
     } catch (e) {
       toast.error(
         e instanceof ConvexError
           ? (e.data as { message: string }).message
-          : "Erro ao remover o lançamento.",
+          : "Não foi possível tirar o custo do financeiro.",
       );
     }
   };
@@ -668,13 +683,53 @@ function ComprasContent() {
     }
   };
 
+  /** O servidor pediu uma decisão sobre o custo? Devolve o retrato dela. */
+  const pedidoDeDecisao = (
+    e: unknown,
+    item: Doc<"purchaseItems">,
+  ): (DecisaoPendente & { item: Doc<"purchaseItems"> }) | null => {
+    if (!(e instanceof ConvexError)) return null;
+    const d = e.data as Partial<DecisaoPendente> & { code?: string };
+    if (d.code !== "DECISAO_NECESSARIA") return null;
+    return {
+      item,
+      nome: item.name,
+      acao: d.acao ?? "cancelar",
+      valor: d.valor ?? 0,
+      pago: d.pago ?? false,
+      comprovantes: d.comprovantes ?? 0,
+    };
+  };
+
   // Mudar a situação é o gesto mais frequente da lista — mutation própria, um
   // clique, sem abrir diálogo. Ela mantém `isPurchased` coerente no servidor.
-  const handleSetStatus = async (id: Id<"purchaseItems">, status: PurchaseStatus) => {
+  const handleSetStatus = async (
+    item: Doc<"purchaseItems">,
+    status: PurchaseStatus,
+    despesa?: "manter" | "remover",
+  ) => {
+    const id = item._id;
     try {
-      await setPurchaseStatus({ id, status });
-      toast.success(`Item marcado como ${PURCHASE_STATUS_LABEL[status].toLowerCase()}.`);
-    } catch {
+      await setPurchaseStatus({ id, status, despesa });
+      // ── O MOMENTO "COMPREI" ───────────────────────────────────────────
+      // Não cria nada sozinho: necessidade, cotação e aprovado não põem
+      // dinheiro no livro, e compra gerada pela Ficha Técnica também não.
+      // Quando a aquisição VIRA compra e há preço, o caminho aparece no
+      // mesmo gesto — um toque, e ela não precisa descobrir que existe uma
+      // tela chamada Financeiro esperando por ela.
+      const podeRegistrar =
+        status === "comprado" && !!item.unitPrice && !item.transactionId;
+      toast.success(`Item marcado como ${PURCHASE_STATUS_LABEL[status].toLowerCase()}.`, {
+        action: podeRegistrar
+          ? { label: "Registrar custo", onClick: () => void handleLancarCusto(id) }
+          : undefined,
+      });
+    } catch (e) {
+      const pendente = pedidoDeDecisao(e, item);
+      if (pendente) {
+        setDecisao(pendente);
+        return;
+      }
       toast.error("Não foi possível mudar a situação do item.");
     }
   };
@@ -703,25 +758,32 @@ function ComprasContent() {
    * A pergunta nomeia o item e só menciona o lançamento quando ele existe —
    * avisar de uma perda que não vai acontecer ensina a ignorar o aviso.
    */
-  const handleDelete = async (item: Doc<"purchaseItems">) => {
-    const tambemOFinanceiro = item.transactionId
-      ? " A despesa que ela lançou no Financeiro é apagada junto."
-      : "";
-    if (
-      !window.confirm(
-        `Excluir "${item.name}" das compras?${tambemOFinanceiro} Não há como desfazer.`,
-      )
-    ) {
+  const handleDelete = async (
+    item: Doc<"purchaseItems">,
+    despesa?: "manter" | "remover",
+  ) => {
+    // Sem custo registrado, a pergunta é a de sempre. COM custo registrado, o
+    // servidor recusa e devolve o retrato — e aí quem pergunta é o diálogo,
+    // que sabe dizer se a despesa já está paga e quantos comprovantes tem.
+    // Perguntar duas vezes ensinaria a clicar sem ler.
+    if (!item.transactionId && !window.confirm(`Excluir "${item.name}" das compras? Não há como desfazer.`)) {
       return;
     }
     try {
-      const r = await deletePurchase({ id: item._id });
+      const r = await deletePurchase({ id: item._id, despesa });
       toast.success(
-        r.lancamentoRemovido
-          ? "Compra excluída, e a despesa saiu do Financeiro."
-          : "Compra excluída.",
+        r.despesa === "remover"
+          ? "Compra excluída, e o custo saiu do financeiro."
+          : r.despesa === "manter"
+            ? "Compra excluída. O custo continua no financeiro."
+            : "Compra excluída.",
       );
     } catch (e) {
+      const pendente = pedidoDeDecisao(e, item);
+      if (pendente) {
+        setDecisao(pendente);
+        return;
+      }
       toast.error(
         e instanceof ConvexError
           ? (e.data as { message: string }).message
@@ -821,6 +883,21 @@ function ComprasContent() {
         </div>
       )}
 
+      {/* A única pergunta que o ALTAR não pode responder sozinho: o que fazer
+          com o dinheiro já registrado quando a compra sai de cena. */}
+      {decisao && (
+        <DecisaoDaDespesa
+          pendente={decisao}
+          onFechar={() => setDecisao(null)}
+          onEscolher={(escolha) => {
+            const { item, acao } = decisao;
+            setDecisao(null);
+            if (acao === "cancelar") void handleSetStatus(item, "cancelado", escolha);
+            else void handleDelete(item, escolha);
+          }}
+        />
+      )}
+
       <PurchaseDialog
         open={!!addingToEvent}
         onClose={() => setAddingToEvent(null)}
@@ -870,7 +947,7 @@ function EventSectionWithData({
   onEdit: (item: Doc<"purchaseItems">) => void;
   onToggle: (id: Id<"purchaseItems">) => void;
   onDelete: (item: Doc<"purchaseItems">) => void;
-  onSetStatus: (id: Id<"purchaseItems">, status: PurchaseStatus) => void;
+  onSetStatus: (item: Doc<"purchaseItems">, status: PurchaseStatus) => void;
   onLancarCusto: (id: Id<"purchaseItems">) => void;
   onDesfazerCusto: (id: Id<"purchaseItems">, nome: string) => void;
 }) {

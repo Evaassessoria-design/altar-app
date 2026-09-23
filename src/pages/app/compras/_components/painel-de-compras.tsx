@@ -159,12 +159,12 @@ export function PainelDeCompras() {
           ativo={situacao === "aguardando"}
           onClick={() => setSituacao("aguardando")}
         />
-        {/* Ponte com o Bloco A: enquanto houver compra fora do livro, a margem
+        {/* Enquanto houver compra com preço e sem custo registrado, a margem
             do evento não pode ser afirmada. O número aqui é o mesmo que o
             financeiro usa para se recusar a calcular margem. */}
         <Cartao
           icone={<Wallet className="size-3.5" />}
-          rotulo="Fora do financeiro"
+          rotulo="Custo a registrar"
           valor={String(resumo.foraDoLivro)}
           detalhe={resumo.valorForaDoLivro > 0 ? MOEDA(resumo.valorForaDoLivro) : undefined}
           alerta={resumo.foraDoLivro > 0}
@@ -213,7 +213,7 @@ export function PainelDeCompras() {
             {situacao === "atrasadas"
               ? "Nenhuma compra passou do prazo."
               : situacao === "foraDoLivro"
-                ? "Todas as compras com preço já estão no financeiro."
+                ? "Toda compra com preço já teve o custo registrado."
                 : "Nenhuma compra nesta situação."}
           </p>
         </div>
@@ -256,11 +256,13 @@ export function PainelDeCompras() {
                               até {formatEventDayOnly(item.dueDate)}
                             </span>
                           )}
-                          {/* Só afirma "fora do financeiro" quando há preço:
-                              sem preço não existe lançamento a fazer. */}
+                          {/* Só cobra quando há preço: sem preço não existe
+                              custo a registrar. E "custo não registrado" fala
+                              do trabalho dela — "fora do livro" falava da
+                              arquitetura do sistema. */}
                           {valor !== null && !item.transactionId && status !== "cancelado" && (
                             <span className="text-xs text-amber-700 dark:text-amber-400">
-                              fora do financeiro
+                              custo não registrado
                             </span>
                           )}
                         </div>

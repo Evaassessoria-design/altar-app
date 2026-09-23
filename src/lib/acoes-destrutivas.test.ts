@@ -139,10 +139,23 @@ describe("excluir uma compra avisa do que sai junto", () => {
     expect(confirma, "confirma DEPOIS de apagar").toBeLessThan(chama);
   });
 
-  it("nomeia o lançamento do Financeiro — não fala de 'este registro'", () => {
+  it("nomeia o custo do Financeiro — não fala de 'este registro'", () => {
+    // O aviso MUDOU DE LUGAR e ficou mais forte: com custo registrado, o
+    // servidor recusa a exclusão e a decisão acontece num diálogo que sabe
+    // dizer quanto é, se já está pago e quantos comprovantes tem. A proteção
+    // é a mesma — avisar do que se perde, com nome — e agora mora aqui.
+    const DECISAO = ler("src/components/compras/decisao-da-despesa.tsx");
+    expect(DECISAO).toMatch(/financeiro/i);
+    expect(DECISAO).toMatch(/desfazer/i);
+    expect(DECISAO, "não diz quanto dinheiro está em jogo").toMatch(/pendente\.valor/);
+    expect(DECISAO, "não diz se já foi pago").toMatch(/pago/);
+    expect(DECISAO, "não diz que há comprovante a perder").toMatch(/comprovante/i);
+  });
+
+  it("e a compra SEM custo registrado continua avisando na hora", () => {
     const i = COMPRAS.indexOf("const handleDelete");
     const corpo = COMPRAS.slice(i, i + 1600);
-    expect(corpo).toMatch(/Financeiro/);
+    expect(corpo).toMatch(/window\.confirm/);
     expect(corpo).toMatch(/desfazer/i);
   });
 
@@ -155,11 +168,12 @@ describe("excluir uma compra avisa do que sai junto", () => {
   });
 
   it("e o resultado diz o que de fato aconteceu", () => {
-    // A mutation devolve `lancamentoRemovido`. Um "Item removido." fixo
-    // esconderia que o dinheiro saiu do livro.
+    // A mutation devolve `despesa`: "remover", "manter" ou null. Um "Item
+    // removido." fixo esconderia o que foi feito do dinheiro.
     const i = COMPRAS.indexOf("const handleDelete");
     const corpo = COMPRAS.slice(i, i + 1600);
-    expect(corpo).toMatch(/lancamentoRemovido/);
+    expect(corpo).toMatch(/r\.despesa === "remover"/);
+    expect(corpo).toMatch(/r\.despesa === "manter"/);
   });
 
   it("os dois botões da linha são alvo de dedo, não de mouse", () => {

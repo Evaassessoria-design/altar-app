@@ -50,6 +50,8 @@ import {
   Star,
   Search,
   Copy,
+  FileText,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -681,6 +683,63 @@ function EntregasDoFornecedor({
   );
 }
 
+/**
+ * Os documentos deste fornecedor NESTE evento.
+ *
+ * ── SEM SEGUNDO GERENCIADOR DE ARQUIVOS ─────────────────────────────────────
+ * É a MESMA consulta da Pasta do Evento (`contracts.listDocuments`), filtrada
+ * pela etiqueta que o documento já carrega. Nenhum upload novo, nenhuma
+ * tabela, nenhuma exclusão própria: enviar e apagar continuam acontecendo na
+ * Pasta, que é onde a decoradora já sabe procurar.
+ *
+ * Junto com "o que ele entrega", é o que faz a ficha responder a pergunta que
+ * ela faz antes de ligar: quem é, o que combinei, e onde está o papel.
+ */
+function DocumentosDoFornecedor({
+  eventId,
+  supplierId,
+}: {
+  eventId: Id<"events">;
+  supplierId: Id<"eventSuppliers">;
+}) {
+  const documentos = useQuery(api.contracts.listDocuments, { eventId });
+  const meus = (documentos ?? []).filter((d) => d.supplierId === supplierId);
+  if (meus.length === 0) return null;
+
+  return (
+    <div className="border-t border-border pt-3">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+        Documentos
+      </p>
+      <ul className="space-y-1.5">
+        {meus.map((d) => (
+          <li key={d._id} className="flex items-center gap-2">
+            <FileText className="size-3.5 text-muted-foreground flex-shrink-0" />
+            {/* `min-w-0` na coluna de texto: nome de arquivo é longo e não
+                pode empurrar o botão de abrir para fora do diálogo. */}
+            <span className="min-w-0 flex-1 truncate text-sm">{d.filename}</span>
+            {d.url && (
+              <a
+                href={d.url}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Abrir ${d.filename}`}
+                // 32 px de alvo: menor que isso erra no polegar.
+                className="size-8 -my-1 flex items-center justify-center rounded-lg hover:bg-accent text-muted-foreground cursor-pointer flex-shrink-0"
+              >
+                <ExternalLink className="size-4" />
+              </a>
+            )}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-1.5 text-[11px] text-muted-foreground">
+        Enviados na Pasta do evento.
+      </p>
+    </div>
+  );
+}
+
 function SupplierDetail({
   supplier,
   eventId,
@@ -748,6 +807,8 @@ function SupplierDetail({
           {/* O id do VÍNCULO (`eventSuppliers._id`), não o do catálogo:
               `assemblyItems.supplierId` aponta para o fornecedor NESTE evento. */}
           <EntregasDoFornecedor eventId={eventId} supplierId={supplier._id} />
+
+          <DocumentosDoFornecedor eventId={eventId} supplierId={supplier._id} />
 
           {/* 3. Situação neste evento (status + próxima ação + alinhamentos) */}
           <div className="border-t border-border pt-3">

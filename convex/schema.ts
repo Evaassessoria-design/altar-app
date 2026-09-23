@@ -653,6 +653,27 @@ export default defineSchema({
     storageId: v.id("_storage"),
     filename: v.string(),
     uploadedAt: v.string(),
+    /**
+     * De QUEM é este documento, quando ele é de alguém.
+     *
+     * ── POR QUE AQUI, E NÃO NUMA TABELA NOVA ────────────────────────────────
+     * A Pasta do Evento já resolve documento bem: um lugar, um caminho de
+     * envio, uma exclusão, e ela já funde `contracts` com os documentos
+     * herdados do lead. Criar um segundo gerenciador só para o fornecedor
+     * seria o erro que este repositório já cometeu três vezes.
+     *
+     * O que faltava era uma ETIQUETA. Com ela, a ficha da Móveis Bella passa a
+     * responder "o que foi contratado + quais documentos existem + quais itens
+     * ele entrega" sem nenhuma estrutura nova.
+     *
+     * AUSENTE = documento do EVENTO, não de um fornecedor — que é o estado de
+     * todos os documentos já enviados. Sem backfill.
+     *
+     * Aponta para `eventSuppliers` (o fornecedor NESTE evento), como
+     * `assemblyItems.supplierId` — e não para o catálogo: um orçamento é
+     * daquele casamento, não da empresa em geral.
+     */
+    supplierId: v.optional(v.id("eventSuppliers")),
     kind: v.optional(
       v.union(
         v.literal("contract"),

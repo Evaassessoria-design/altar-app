@@ -1,7 +1,12 @@
 // Convex V8 runtime — mutations and queries for AI/contract features
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { getOwnedEvent, requireEventOwner, requireIdentity } from "./lib/identity";
+import {
+  getOwnedEvent,
+  requireEventOwner,
+  requireEventSupplier,
+  requireIdentity,
+} from "./lib/identity";
 import { safeDeleteFile } from "./lib/cascade";
 import { requireActiveAccess } from "./lib/accessGuard";
 
@@ -48,21 +53,37 @@ export const saveContract = mutation({
     storageId: v.id("_storage"),
     filename: v.string(),
     kind: v.optional(documentKind),
+    /** De qual fornecedor é. Ausente = documento do evento. */
+    supplierId: v.optional(v.id("eventSuppliers")),
   },
   handler: async (ctx, args) => {
     // Apaga o documento anterior do mesmo tipo (inclusive do storage) — só pode
     // rodar depois de confirmar que o evento é do usuário.
     const { user } = await requireEventOwner(ctx, args.eventId);
+    // O fornecedor precisa ser DESTE evento. Mesma guarda de `assemblyItems`:
+    // sem ela, um id do navegador etiquetaria o documento com o fornecedor de
+    // outro casamento — ou de outra conta.
+    await requireEventSupplier(ctx, user._id, args.eventId, args.supplierId);
+
     const kind = args.kind ?? "contract";
     const existing = await ctx.db
       .query("contracts")
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
       .collect();
     for (const c of existing) {
-      if (effectiveKind(c.kind) === kind) {
-        // O contrato antigo sai mesmo que o arquivo dele já não exista: sem
-        // isto, um storageId órfão trancava a SUBSTITUIÇÃO do documento, e a
-        // decoradora não conseguia subir o contrato novo.
+      // ── A SUBSTITUIÇÃO É POR TIPO **E** POR DONO ───────────────────────
+      // Antes, subir um segundo "Orçamento" apagava o primeiro — o que estava
+      // certo quando só havia um orçamento por evento. Com a etiqueta de
+      // fornecedor deixa de estar: o orçamento da Móveis Bella e o da
+      // Floricultura Florescer são os dois orçamentos DIFERENTES, e o segundo
+      // envio destruiria o primeiro em silêncio.
+      //
+      // Documento sem fornecedor continua substituindo documento sem
+      // fornecedor, exatamente como antes.
+      if (effectiveKind(c.kind) === kind && c.supplierId === args.supplierId) {
+        // O documento antigo sai mesmo que o arquivo dele já não exista: sem
+        // isto, um storageId órfão trancava a SUBSTITUIÇÃO, e a decoradora não
+        // conseguia subir o contrato novo.
         await safeDeleteFile(ctx, c.storageId);
         await ctx.db.delete(c._id);
       }
@@ -74,6 +95,7 @@ export const saveContract = mutation({
       filename: args.filename,
       uploadedAt: new Date().toISOString(),
       kind: args.kind,
+      supplierId: args.supplierId,
     });
   },
 });
@@ -104,11 +126,24 @@ export const listDocuments = query({
       .query("contracts")
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
       .collect();
+    // Os nomes dos fornecedores numa leitura só — a ficha e a Pasta mostram
+    // "Orçamento.pdf · Móveis Bella", e buscar um a um seria N+1.
+    const fornecedores = new Map(
+      (
+        await ctx.db
+          .query("eventSuppliers")
+          .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+          .collect()
+      ).map((f) => [f._id as string, f.companyName]),
+    );
+
     return Promise.all(
       docs.map(async (d) => ({
         ...d,
         kind: effectiveKind(d.kind),
         url: await ctx.storage.getUrl(d.storageId),
+        /** Nome do fornecedor dono do documento. Ausente = do evento. */
+        supplierName: d.supplierId ? fornecedores.get(d.supplierId) : undefined,
       })),
     );
   },

@@ -39,16 +39,24 @@ export type DecisaoPendente = {
 const moeda = (centavos: number) =>
   centavos.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-/** "já está paga e tem 2 comprovantes" — ou `null` quando não há o que dizer. */
+/**
+ * "Essa despesa já está paga e possui 2 comprovantes." — frase inteira, ou
+ * `null` quando não há nada a acrescentar.
+ *
+ * Frase própria, e não um pedaço colado na anterior: emendada em "O custo de
+ * R$ 400,00 está registrado no financeiro", saía "o custo... está paga".
+ * Concordância errada num aviso sobre dinheiro faz a pessoa reler em vez de
+ * decidir.
+ */
 function retratoDaDespesa(d: DecisaoPendente): string | null {
   const partes: string[] = [];
   if (d.pago) partes.push("já está paga");
   if (d.comprovantes > 0) {
     partes.push(
-      d.comprovantes === 1 ? "tem 1 comprovante" : `tem ${d.comprovantes} comprovantes`,
+      d.comprovantes === 1 ? "possui 1 comprovante" : `possui ${d.comprovantes} comprovantes`,
     );
   }
-  return partes.length > 0 ? partes.join(" e ") : null;
+  return partes.length > 0 ? `Essa despesa ${partes.join(" e ")}.` : null;
 }
 
 export function DecisaoDaDespesa({
@@ -62,6 +70,17 @@ export function DecisaoDaDespesa({
 }) {
   const retrato = retratoDaDespesa(pendente);
   const verbo = pendente.acao === "cancelar" ? "Cancelar" : "Excluir";
+  // O que de fato é preservado — nem mais, nem menos. Prometer "o pagamento e
+  // os comprovantes" numa despesa que só tem um dos dois soa genérico e
+  // ensina a não ler o aviso.
+  const preservado = [
+    pendente.pago ? "o pagamento" : null,
+    pendente.comprovantes > 0
+      ? pendente.comprovantes === 1
+        ? "o comprovante"
+        : "os comprovantes"
+      : null,
+  ].filter(Boolean) as string[];
 
   return (
     <AlertDialog open onOpenChange={(aberto) => !aberto && onFechar()}>
@@ -72,8 +91,7 @@ export function DecisaoDaDespesa({
           </AlertDialogTitle>
           <AlertDialogDescription>
             O custo de <strong>{moeda(pendente.valor)}</strong> está registrado no
-            financeiro
-            {retrato ? ` e ${retrato}` : ""}. O que fazer com ele?
+            financeiro.{retrato ? ` ${retrato}` : ""} O que deseja fazer?
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -87,7 +105,11 @@ export function DecisaoDaDespesa({
             Manter o custo no financeiro
           </AlertDialogAction>
           <p className="px-1 text-xs text-muted-foreground">
-            O dinheiro saiu e o registro fica — com pagamento e comprovantes.
+            {/* Só promete preservar o que existe: "com pagamento e
+                comprovantes" numa despesa em aberto e sem anexo afirmaria
+                duas coisas que não estão lá. */}
+            O dinheiro saiu e o registro dele continua no financeiro
+            {preservado.length > 0 ? `, com ${preservado.join(" e ")}` : ""}.
             {pendente.acao === "cancelar"
               ? " A compra fica cancelada."
               : " A compra é excluída."}

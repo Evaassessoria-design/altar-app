@@ -1,12 +1,16 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import type { Doc, Id } from "./_generated/dataModel";
+import {
+  identidadeDoFornecedor,
+  separarPatch,
+} from "./lib/fornecedorDoEvento";
 import { ConvexError } from "convex/values";
 import { requireEventOwner, requireIdentity, requireUser } from "./lib/identity";
 import { safeDeleteFile } from "./lib/cascade";
 import { requireActiveAccess } from "./lib/accessGuard";
 import { dedupKey, normalizeName, normalizePhone } from "./lib/supplierIdentity";
 import type { MutationCtx } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fornecedores do evento (Dossiê operacional + perfil). Isolamento por usuário:
@@ -67,16 +71,51 @@ const profileArgs = {
 export const listByEvent = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
-    await requireEventOwner(ctx, args.eventId);
+    const { user } = await requireEventOwner(ctx, args.eventId);
     const rows = await ctx.db
       .query("eventSuppliers")
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
       .collect();
+
+    // ── O CATÁLOGO ENTRA AQUI — E SÓ AGORA ───────────────────────────────────
+    // O schema afirma desde que `supplierId` existe que "as telas leem daqui e
+    // só consultam o catálogo quando há vínculo". A segunda metade nunca
+    // aconteceu: esta consulta lia `eventSuppliers` e ponto. Corrigir o
+    // telefone da floricultura no catálogo não chegava a evento NENHUM, nem
+    // aos que ainda vão acontecer — e ela ligava para o número errado.
+    //
+    // Uma leitura por fornecedor DISTINTO, não por linha: o mesmo fornecedor
+    // costuma aparecer em várias categorias do mesmo evento.
+    const vinculados = new Set(
+      rows.map((s) => s.supplierId).filter((id): id is Id<"suppliers"> => !!id),
+    );
+    const catalogo = new Map<string, Doc<"suppliers">>();
+    for (const id of vinculados) {
+      const doCatalogo = await ctx.db.get(id);
+      // Vínculo que não resolve é ignorado, não é erro: a leitura cai na cópia
+      // do evento, que é exatamente o comportamento de antes desta rodada.
+      if (doCatalogo && doCatalogo.userId === user._id) catalogo.set(id, doCatalogo);
+    }
+
     return Promise.all(
-      rows.map(async (s) => ({
-        ...s,
-        logoUrl: s.logoStorageId ? await ctx.storage.getUrl(s.logoStorageId) : null,
-      })),
+      rows.map(async (s) => {
+        // `identidadeDoFornecedor` decide CAMPO A CAMPO — um catálogo com o
+        // telefone preenchido e o Instagram vazio não apaga o Instagram que
+        // estava no evento. Ver convex/lib/fornecedorDoEvento.ts.
+        const identidade = identidadeDoFornecedor(
+          s,
+          s.supplierId ? catalogo.get(s.supplierId) : null,
+        );
+        const resolvido = { ...s, ...identidade };
+        return {
+          ...resolvido,
+          logoUrl: resolvido.logoStorageId
+            ? await ctx.storage.getUrl(resolvido.logoStorageId)
+            : null,
+          /** A identidade veio do catálogo? A tela usa para dizer onde editar. */
+          doCatalogo: s.supplierId ? catalogo.has(s.supplierId) : false,
+        };
+      }),
     );
   },
 });
@@ -251,6 +290,35 @@ export const update = mutation({
       throw new ConvexError({ message: "Fornecedor não encontrado", code: "NOT_FOUND" });
     }
     const { id, ...fields } = args;
+
+    // ── CORRIGIR O TELEFONE UMA VEZ, NÃO UMA VEZ POR EVENTO ─────────────────
+    // Sem isto, a correção feita na tela do evento ficava só naquele evento — e
+    // o catálogo, que é de onde os OUTROS eventos passaram a ler, continuava
+    // errado. A decoradora teria de corrigir duas vezes, e ninguém corrige
+    // duas vezes.
+    //
+    // Só campos de IDENTIDADE sobem (como falar com ele, como ele se
+    // apresenta). O COMBINADO daquele evento — condição, observação, dados de
+    // pagamento, situação — fica onde sempre esteve: mudar isso no catálogo
+    // reescreveria o que foi negociado num casamento que já aconteceu.
+    if (supplier.supplierId) {
+      const doCatalogo = await ctx.db.get(supplier.supplierId);
+      if (doCatalogo && doCatalogo.userId === user._id) {
+        const { paraOCatalogo, paraOEvento } = separarPatch(fields);
+        if (Object.keys(paraOCatalogo).length > 0) {
+          await ctx.db.patch(doCatalogo._id, {
+            ...paraOCatalogo,
+            updatedAt: new Date().toISOString(),
+          });
+        }
+        // A cópia no evento é atualizada TAMBÉM, e de propósito: ela continua
+        // sendo o fallback de leitura, e deixá-la velha faria a tela voltar ao
+        // número errado no dia em que o vínculo se perdesse.
+        await ctx.db.patch(id, fields);
+        return;
+      }
+    }
+
     await ctx.db.patch(id, fields);
   },
 });

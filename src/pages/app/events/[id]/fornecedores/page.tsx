@@ -509,6 +509,20 @@ function SupplierForm({
             </div>
           </div>
 
+          {/* ── ONDE A CORREÇÃO VAI PARAR ──────────────────────────────────
+              Telefone, e-mail, contato, redes e endereço são do FORNECEDOR, e
+              a correção sobe para o catálogo — vale em todos os eventos dele.
+              Dizer isso aqui é o que impede a surpresa: sem o aviso, ela
+              corrige um número e não entende por que ele mudou em outro
+              casamento. O que é combinado DESTE evento (situação, condição,
+              observação, dados de pagamento) continua só aqui. */}
+          {isEdit && initial?.supplierId && (
+            <p className="text-xs text-muted-foreground border-l-2 border-primary/40 pl-2.5 leading-snug">
+              Contato, redes e endereço valem para <strong>todos os eventos</strong> deste
+              fornecedor. O combinado deste evento fica só aqui.
+            </p>
+          )}
+
           {/* Redes e endereço */}
           <Section title="Redes & endereço">
             <div className="grid grid-cols-2 gap-3">
@@ -602,14 +616,75 @@ function SupplierForm({
 
 // ── Detalhe ───────────────────────────────────────────────────────────────────
 
+/**
+ * O que este fornecedor entrega NESTE evento.
+ *
+ * ── A PERGUNTA QUE NÃO TINHA RESPOSTA ───────────────────────────────────────
+ * Ela abre a ficha da Móveis Bella antes de ligar e quer saber o que combinou:
+ * "120 cadeiras Dior, 15 mesas redondas, 2 lounges". Até aqui a ficha mostrava
+ * contato, situação e alinhamentos — nada do que ele entrega. A informação já
+ * existia em `assemblyItems`, presa aos itens, e ninguém a juntava por
+ * fornecedor.
+ *
+ * É LEITURA dos mesmos itens de montagem. Nenhum cadastro novo, nenhum vínculo
+ * novo: os itens já sabem de quem são desde que o fornecedor passou a ser
+ * escolhido em vez de digitado.
+ */
+function EntregasDoFornecedor({
+  eventId,
+  supplierId,
+}: {
+  eventId: Id<"events">;
+  /** O vínculo deste evento — `eventSuppliers._id`, que é para onde o item aponta. */
+  supplierId?: Id<"eventSuppliers">;
+}) {
+  const itens = useQuery(api.assemblyItems.listByEvent, { eventId });
+  // Sem vínculo não há o que somar: o item guarda o NOME como anotação, e
+  // casar por nome erraria com duas grafias da mesma empresa — o defeito que
+  // `lib/supplierIdentity.ts` já documentou.
+  if (!supplierId) return null;
+  const meus = (itens ?? []).filter((i) => i.supplierId === supplierId);
+  if (meus.length === 0) return null;
+
+  return (
+    <div className="border-t border-border pt-3">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+        O que ele entrega neste evento
+      </p>
+      <ul className="space-y-1">
+        {meus.map((i) => (
+          <li key={i._id} className="flex items-baseline gap-2 text-sm">
+            {i.quantity ? (
+              <span className="font-medium tabular-nums flex-shrink-0">
+                {i.quantity}
+                {i.unit ? ` ${i.unit}` : ""}
+              </span>
+            ) : null}
+            {/* `min-w-0` + `truncate`: "Cadeira Dior dourada com assento de
+                linho off-white" não pode empurrar a largura do diálogo. */}
+            <span className="min-w-0 truncate">{i.name}</span>
+            {i.ambiente && (
+              <span className="text-xs text-muted-foreground truncate flex-shrink-0">
+                · {i.ambiente}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function SupplierDetail({
   supplier,
+  eventId,
   onClose,
   onEdit,
   onChangeStatus,
   onAddAlignment,
 }: {
   supplier: SupplierRow;
+  eventId: Id<"events">;
   onClose: () => void;
   onEdit: () => void;
   onChangeStatus: (status: SupplierStatus) => void;
@@ -663,6 +738,10 @@ function SupplierDetail({
               {supplier.email && <CopyRow label="E-mail" value={supplier.email} />}
             </div>
           </div>
+
+          {/* O id do VÍNCULO (`eventSuppliers._id`), não o do catálogo:
+              `assemblyItems.supplierId` aponta para o fornecedor NESTE evento. */}
+          <EntregasDoFornecedor eventId={eventId} supplierId={supplier._id} />
 
           {/* 3. Situação neste evento (status + próxima ação + alinhamentos) */}
           <div className="border-t border-border pt-3">
@@ -1139,6 +1218,7 @@ export default function FornecedoresPage() {
       {detailLive && (
         <SupplierDetail
           supplier={detailLive}
+          eventId={eventId}
           onClose={() => setDetail(null)}
           onEdit={() => { setForm({ mode: "edit", supplier: detailLive }); setDetail(null); }}
           onChangeStatus={(status) => void handleChangeStatus(detailLive, status)}

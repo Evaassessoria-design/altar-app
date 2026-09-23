@@ -67,6 +67,11 @@ export default function EventBriefingPage() {
   const checklist = useQuery(api.briefing.getChecklist, { eventId, phase: "pre" });
   const health = useQuery(api.health.getEventHealth, { eventId });
   const renders = useQuery(api.layoutRenders.listByEvent, { eventId });
+  // As peças do acervo reservadas — o segundo bloco da Folha de Carregamento.
+  // A folha perguntava "o que vai no caminhão?" e respondia só metade: o
+  // número que SAIU e o que VOLTOU já estavam gravados na reserva e viviam
+  // noutra tela, que quem está no galpão com a prancheta não vai abrir.
+  const acervo = useQuery(api.acervo.doEvento, { eventId });
   // Identidade da empresa para o documento. Ambas degradam para null e o
   // caderno sai igualmente completo, só com o padrão do ALTAR.
   const empresa = useQuery(api.users.getCurrentUser);
@@ -137,6 +142,17 @@ export default function EventBriefingPage() {
       await (await import("@/lib/generate-loading-pdf.ts")).generateLoadingPDF({
         event,
         items: (items ?? []) as never,
+        // Reserva sem item resolvido (peça excluída do acervo depois de
+        // reservada) é descartada em `montarPecasDoAcervo`: linha sem nome na
+        // prancheta não ajuda ninguém a conferir.
+        acervo: (acervo?.reservas ?? []).map((r) => ({
+          _id: r._id,
+          nome: r.item?.nome ?? "",
+          unidade: r.item?.unidade,
+          quantidade: r.quantidade,
+          saiu: r.saiu,
+          voltou: r.voltou,
+        })),
         empresa: empresa ?? null,
         responsible: health?.responsible,
         responsiblePhone: responsavelTelefone,

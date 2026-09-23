@@ -5,9 +5,11 @@ import { formatEventDayOnly } from "./event-date.ts";
 import { chaveDoAmbiente } from "./decoration-project.ts";
 import {
   montarFolhaDeCarregamento,
+  montarPecasDoAcervo,
   quantidadeTexto,
   resumoDoRetorno,
   type ItemDeCarregamento,
+  type PecaDoAcervo,
 } from "./loading-sheet.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -36,6 +38,18 @@ const HEADER_H = 26;
 export type LoadingPdfData = {
   event: { name: string; date?: string; location?: string; clientName?: string };
   items: ItemDeCarregamento[];
+  /**
+   * As peças do ACERVO reservadas para este evento.
+   *
+   * Bloco separado dos itens de montagem, e não uma lista fundida: o item é o
+   * que se MONTA ("Arranjo baixo ×20") e a peça é o que SAI DO GALPÃO ("Vaso
+   * âmbar ×60"). Juntar os dois produziria contagem dupla e uma prancheta em
+   * que ninguém sabe o que conferir. Ver `montarPecasDoAcervo`.
+   *
+   * Ausente = evento sem reserva de acervo, e a folha sai exatamente como
+   * saía antes.
+   */
+  acervo?: PecaDoAcervo[];
   empresa?: EmpresaLike | null;
   responsible?: string;
   responsiblePhone?: string;
@@ -45,6 +59,7 @@ export async function generateLoadingPDF(data: LoadingPdfData): Promise<void> {
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const identidade = resolveIdentidade(data.empresa);
   const folha = montarFolhaDeCarregamento(data.items);
+  const pecas = montarPecasDoAcervo(data.acervo ?? []);
 
   // ── Cabeçalho ─────────────────────────────────────────────────────────────
   doc.setFillColor(...identidade.cor);
@@ -191,8 +206,72 @@ export async function generateLoadingPDF(data: LoadingPdfData): Promise<void> {
     y += 3;
   }
 
+  // ── AS PEÇAS DO ACERVO ────────────────────────────────────────────────────
+  // Aqui os números são REAIS, não caixas de marcar: `saiu` e `voltou` estão
+  // gravados na reserva, e a folha imprime o que já se sabe para quem estiver
+  // conferindo no galpão poder comparar com o que está vendo.
+  if (pecas.linhas.length > 0) {
+    garantirEspaco(22);
+    y += 4;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(30, 30, 30);
+    doc.text("PEÇAS DO ACERVO", MARGIN, y);
+    y += 4;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(120, 120, 120);
+    doc.text("O que sai do galpão e precisa voltar para a prateleira.", MARGIN, y);
+    y += 5;
+
+    doc.setFontSize(7);
+    doc.setTextColor(120, 120, 120);
+    doc.text("PEÇA", X_ITEM, y);
+    doc.text("RESERVADO", X_QTD, y);
+    doc.text("SAIU", X_SIT, y);
+    doc.text("VOLTOU", X_SAIU, y);
+    doc.text("FALTA", X_VOLTOU, y);
+    y += 2;
+    doc.setDrawColor(200, 200, 200);
+    doc.line(MARGIN, y, PAGE_W - MARGIN, y);
+    y += 5;
+
+    for (const peca of pecas.linhas) {
+      garantirEspaco(9);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(30, 30, 30);
+      const nome = doc.splitTextToSize(peca.nome, X_QTD - X_ITEM - 4)[0] as string;
+      doc.text(nome, X_ITEM, y);
+
+      const un = peca.unidade ? ` ${peca.unidade}` : "";
+      doc.setFontSize(8.5);
+      doc.text(`${peca.quantidade}${un}`, X_QTD, y);
+      // Traço, e não zero: "ainda não saiu" e "saiu zero" são a mesma coisa
+      // na prática, mas um `0` impresso parece uma contagem já feita.
+      doc.text(peca.saiu === undefined ? "—" : `${peca.saiu}`, X_SIT, y);
+      doc.text(peca.voltou === undefined ? "—" : `${peca.voltou}`, X_SAIU, y);
+
+      if (peca.faltaVoltar > 0) {
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(190, 90, 60);
+        doc.text(`${peca.faltaVoltar}`, X_VOLTOU, y);
+      } else {
+        doc.setTextColor(120, 120, 120);
+        doc.text("—", X_VOLTOU, y);
+      }
+
+      y += 7;
+      doc.setDrawColor(235, 235, 235);
+      doc.line(MARGIN, y - 3, PAGE_W - MARGIN, y - 3);
+    }
+    y += 3;
+  }
+
   // ── O que ficou em aberto ─────────────────────────────────────────────────
-  const pendencia = resumoDoRetorno(folha);
+  // Conta as duas listas: um vaso que não voltou é tão pendente quanto um item
+  // de montagem que não voltou, e quem lê o rodapé quer o número inteiro.
+  const pendencia = resumoDoRetorno(folha, pecas.faltamVoltar);
   if (pendencia) {
     garantirEspaco(14);
     y += 2;

@@ -211,7 +211,7 @@ function AppLayoutInner() {
       <aside className="hidden md:flex flex-col w-64 bg-card border-r border-border">
         <div className="px-6 py-5 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <MarcaAltar className="size-8 rounded-xl" />
+            <MarcaAltar className="size-8" />
             <span className="text-xl font-bold tracking-tight">ALTAR</span>
           </div>
           <NotificationCenter />
@@ -257,7 +257,7 @@ function AppLayoutInner() {
         {/* Mobile header */}
         <header className="md:hidden flex items-center justify-between px-4 py-3 bg-card border-b border-border">
           <div className="flex items-center gap-2">
-            <MarcaAltar className="size-7 rounded-lg" />
+            <MarcaAltar className="size-7" />
             <span className="text-lg font-bold tracking-tight">ALTAR</span>
           </div>
           <div className="flex items-center gap-1">

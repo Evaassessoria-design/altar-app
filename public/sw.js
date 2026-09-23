@@ -1,8 +1,12 @@
 // `altar-v2`: a versão sobe junto com a identidade. Sem isso, quem já tem o
 // aplicativo instalado continuaria servindo do cache os ícones antigos — o
 // print de 860×1600 — e a marca nova não chegaria nunca.
-const CACHE_NAME = "altar-v2";
-const urlsToCache = ["/", "/icon/icon-192.png", "/brand/altar-simbolo-192.png"];
+// `altar-v3`: sem a virada de versão, o aparelho que já tem o ALTAR instalado
+// continuaria servindo do cache o símbolo COM a placa bege — o defeito que o
+// teste no iPhone registrou —, e a correção não apareceria para quem mais
+// precisa dela. O `activate` abaixo apaga todo cache com nome diferente.
+const CACHE_NAME = "altar-v3";
+const urlsToCache = ["/", "/icon/icon-192.png", "/brand/altar-simbolo.png"];
 
 // Install event - cache core assets
 //

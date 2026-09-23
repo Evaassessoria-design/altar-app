@@ -181,7 +181,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           {/* A porta de entrada mostrava só a palavra. O símbolo aqui é o que
               diz, antes de qualquer texto, que a pessoa chegou no lugar certo
               — e é a mesma marca do ícone que ela tocou na tela inicial. */}
-          <MarcaAltar className="mx-auto mb-3 size-14 rounded-2xl" />
+          <MarcaAltar className="mx-auto mb-3 size-14" />
           <h1 className="text-3xl font-bold">ALTAR</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Gestão para decoradores de eventos

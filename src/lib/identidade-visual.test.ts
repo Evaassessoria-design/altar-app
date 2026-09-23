@@ -75,7 +75,7 @@ describe("os ícones que o manifest não cobre", () => {
     ["public/icon/favicon-16.png", 16],
     ["public/icon/favicon-32.png", 32],
     ["public/icon/favicon-48.png", 48],
-    ["public/brand/altar-simbolo-192.png", 192],
+    ["public/brand/altar-simbolo.png", 512],
   ];
 
   it.each(ESPERADOS)("%s é quadrado e mede %i", (caminho, lado) => {
@@ -152,7 +152,7 @@ describe("a marca tem um lugar só no código", () => {
 
   it("o componente aponta para o símbolo oficial", () => {
     const fonte = readFileSync("src/components/marca-altar.tsx", "utf-8");
-    expect(fonte).toContain("/brand/altar-simbolo-192.png");
+    expect(fonte).toContain("/brand/altar-simbolo.png");
   });
 });
 

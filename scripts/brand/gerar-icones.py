@@ -100,6 +100,46 @@ def tile(sim: Image.Image, lado: int, ocupacao: float, fundo) -> Image.Image:
     return tela
 
 
+def simbolo_sem_placa(sim: Image.Image, lado: int, fundo, margem: float = 0.04) -> Image.Image:
+    """
+    O símbolo SEM a placa bege — o traço sozinho, com fundo transparente.
+
+    ── POR QUE ESTA DERIVAÇÃO EXISTE ───────────────────────────────────────
+    O teste no iPhone mostrou o defeito: na interface, o símbolo com placa,
+    dentro de uma caixa arredondada por CSS, produzia TRÊS molduras
+    encaixadas — a caixa do CSS, a placa bege, e o arco (que é parte do
+    desenho). A 32 px aquilo lê como "uma telinha dentro de uma bolinha", e
+    não como uma marca.
+
+    A placa está CERTA no ícone instalado: um ícone de app precisa de fundo
+    opaco, senão o sistema operacional desenha o vazio. Está ERRADA na
+    interface, onde a superfície do produto já é o fundo.
+
+    O alfa vem da distância até o bege da própria arte — o traço fica opaco,
+    o bege vira transparente, e a anti-serrilha do desenho original é
+    preservada nas bordas. NADA é redesenhado: é a mesma tinta, recortada.
+    """
+    lado_util = int(lado * (1 - margem * 2))
+    escala = lado_util / max(sim.size)
+    novo = (max(1, round(sim.width * escala)), max(1, round(sim.height * escala)))
+    redim = sim.resize(novo, Image.LANCZOS).convert("RGB")
+
+    tela = Image.new("RGBA", (lado, lado), (0, 0, 0, 0))
+    recorte = Image.new("RGBA", novo, (0, 0, 0, 0))
+    origem = redim.load()
+    destino = recorte.load()
+    for y in range(novo[1]):
+        for x in range(novo[0]):
+            r, g, b = origem[x, y]
+            # Quanto o pixel se afasta do bege: 0 = fundo, cheio = traço.
+            distancia = max(abs(r - fundo[0]), abs(g - fundo[1]), abs(b - fundo[2]))
+            alfa = min(255, round(distancia * 255 / 90))
+            if alfa:
+                destino[x, y] = (r, g, b, alfa)
+    tela.paste(recorte, ((lado - novo[0]) // 2, (lado - novo[1]) // 2), recorte)
+    return tela
+
+
 def main() -> None:
     arte = Image.open(ARTE).convert("RGB")
     fundo = bege_da_arte(arte)
@@ -130,7 +170,10 @@ def main() -> None:
     # 192px para um chip de 28–32px: sobra resolução para tela retina e não se
     # paga meio mega de PNG no 4G do galpão por causa de um logo de 32 pixels.
     # Recorte mais justo que o do PWA — aqui não há máscara nenhuma cortando.
-    gerados.append((MARCA / "altar-simbolo-192.png", tile(sim, 192, 0.88, fundo)))
+    # A INTERFACE usa o símbolo SEM placa. 512 px porque ele é desenhado de 16
+    # a 56 px em telas de até 3x — gerar no maior uso evita reamostrar para
+    # cima. Ver `simbolo_sem_placa` para o porquê de não ter fundo.
+    gerados.append((MARCA / "altar-simbolo.png", simbolo_sem_placa(sim, 512, fundo)))
 
     for caminho, img in gerados:
         img.save(caminho, "PNG", optimize=True)

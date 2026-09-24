@@ -235,9 +235,15 @@ As nove fontes que ele alcança: `financeiro.getSummary`, `financeiro.getVencido
 17. Quais leads valem um follow-up antes do fim da semana?
 18. Que peças do acervo estão paradas há tempo demais?
 19. Compare o orçamento previsto e o gasto dos próximos eventos.
-20. Escreva um rascunho de mensagem de follow-up para este lead. *(amarelo —
-    sai como rascunho, marcado, e não é enviado)*
-21. Escreva a descrição de um post sobre o último evento entregue. *(amarelo)*
+20. Escreva um rascunho de mensagem de follow-up para este lead.
+21. Escreva a descrição de um post sobre o último evento entregue.
+
+> Estas duas saem **verdes**, e não amarelas como este documento afirmava
+> antes. O semáforo lê **verbos de envio** — "envie", "mande", "dispare" — e
+> não o assunto: redigir é análise, e nada sai porque não existe porta de
+> saída no Assistente. *"Envie o retorno para o lead"* é que fica amarelo.
+> A correção importa para a live: quem demonstrasse esperando o selo de
+> rascunho veria verde no palco.
 
 ### 🟨 Possível com pequena adaptação — o dado existe, falta ligar a fonte
 

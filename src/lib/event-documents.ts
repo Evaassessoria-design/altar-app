@@ -7,8 +7,14 @@
 // nunca mostrava a pasta.
 //
 // IMPORTANTE, e visível na tela: `contracts.saveContract` SUBSTITUI o
-// documento do mesmo tipo. É um arquivo por tipo, não um histórico. A tela
-// avisa em vez de deixar a pessoa descobrir perdendo o anterior.
+// documento do mesmo lugar, e o lugar é o par (TIPO, FORNECEDOR). Um arquivo
+// por lugar, não um histórico — a tela avisa em vez de deixar a pessoa
+// descobrir perdendo o anterior.
+//
+// O fornecedor entrou nessa conta porque sem ele o teto era de CINCO arquivos
+// por casamento: um contrato, um aditivo, um orçamento, uma referência e um
+// "outro". Com três fornecedores mandando contrato e orçamento, o segundo
+// apagava o primeiro e o resto da papelada ia para o Drive.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type DocumentKind = "contract" | "addendum" | "budget" | "reference" | "other";

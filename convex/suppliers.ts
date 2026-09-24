@@ -281,6 +281,27 @@ export const remove = mutation({
     if (supplier.supplierId === undefined) {
       await safeDeleteFile(ctx, supplier.logoStorageId);
     }
+
+    // ── O CONTRATO ASSINADO NÃO MORRE COM O CARTÃO DO FORNECEDOR ────────────
+    // Os documentos que vieram desta contratação continuam sendo papelada do
+    // EVENTO: o orçamento aprovado e o contrato assinado provam o que foi
+    // combinado, e tirar a empresa da lista não desfaz nem uma coisa nem
+    // outra. O VÍNCULO é limpo, o arquivo fica — a mesma regra 3 da cascata
+    // ("referências para o que morreu são LIMPAS, não apagadas") e a mesma
+    // decisão que `deleteLeadCascade` já tomou para a proposta do funil.
+    //
+    // A busca é por evento, que é o índice que existe, e os documentos de um
+    // evento são poucos.
+    const documentos = await ctx.db
+      .query("contracts")
+      .withIndex("by_event", (q) => q.eq("eventId", supplier.eventId))
+      .collect();
+    for (const doc of documentos) {
+      if (doc.supplierId === args.id) {
+        await ctx.db.patch(doc._id, { supplierId: undefined });
+      }
+    }
+
     await ctx.db.delete(args.id);
   },
 });

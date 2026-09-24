@@ -4,6 +4,7 @@ import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import { SupplierCatalogPicker } from "../_components/supplier-catalog-picker.tsx";
+import { DocumentosDoFornecedor } from "@/components/fornecedores/documentos-do-fornecedor.tsx";
 import type { Doc, Id } from "@/convex/_generated/dataModel.d.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
@@ -700,6 +701,17 @@ function SupplierDetail({
             ) : (
               <p className="text-xs text-muted-foreground">Nenhum alinhamento registrado.</p>
             )}
+
+            {/* ── O QUE VEIO DESTA CONTRATAÇÃO ────────────────────────────
+                Contrato e orçamento ficam onde ela pensa neles: no
+                fornecedor. É a MESMA Pasta do Evento — um registro só, que
+                aparece nos dois lugares. Ver
+                `components/fornecedores/documentos-do-fornecedor.tsx`. */}
+            <DocumentosDoFornecedor
+              eventId={supplier.eventId}
+              supplierId={supplier._id}
+              companyName={supplier.companyName}
+            />
 
             {alignments.length > 1 && (
               <Section title="Histórico de alinhamentos">

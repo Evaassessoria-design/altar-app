@@ -48,7 +48,12 @@ export function EventDocuments({ eventId }: { eventId: Id<"events"> }) {
   const [tipo, setTipo] = useState<DocumentKind>("contract");
   const [enviando, setEnviando] = useState(false);
 
-  const jaTemDesteTipo = documentos?.some((d) => (d.kind ?? "contract") === tipo) ?? false;
+  // Só os documentos SEM fornecedor: é o único lugar que esta tela ocupa. O
+  // orçamento da floricultura não é substituído por um anexado daqui, e
+  // avisar que seria mandaria a decoradora procurar um conflito que não
+  // existe — ou, pior, desistir de anexar.
+  const jaTemDesteTipo =
+    documentos?.some((d) => !d.supplierId && (d.kind ?? "contract") === tipo) ?? false;
 
   const handleUpload = async (file: File | undefined) => {
     if (!file) return;
@@ -107,6 +112,14 @@ export function EventDocuments({ eventId }: { eventId: Id<"events"> }) {
                   <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
                     {labelDoTipo(doc.kind)}
                   </span>
+                  {/* De QUEM veio. Sem isto, três orçamentos na pasta seriam
+                      três linhas indistinguíveis — e a decoradora teria de
+                      abrir cada PDF para saber qual é o da floricultura. */}
+                  {doc.supplierName && (
+                    <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full font-medium break-words">
+                      {doc.supplierName}
+                    </span>
+                  )}
                   <p className="text-sm font-medium truncate">{doc.filename}</p>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">

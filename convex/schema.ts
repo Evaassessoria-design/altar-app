@@ -653,6 +653,34 @@ export default defineSchema({
     storageId: v.id("_storage"),
     filename: v.string(),
     uploadedAt: v.string(),
+    /**
+     * De QUEM veio este documento, quando veio de um fornecedor do evento.
+     *
+     * ── O DEFEITO QUE ISTO FECHA ─────────────────────────────────────────────
+     * `saveContract` substitui o documento do MESMO tipo — o que fazia a Pasta
+     * do Evento guardar, no máximo, um contrato, um orçamento, um aditivo, uma
+     * referência e um "outro". CINCO ARQUIVOS POR CASAMENTO.
+     *
+     * Um casamento tem empresa de móveis, floricultura e iluminação, e cada
+     * uma manda contrato e orçamento. Anexar o segundo orçamento APAGAVA o
+     * primeiro — com aviso na tela, mas apagava. O resto ia para o Drive e
+     * para o WhatsApp, que é exatamente o que o ALTAR existe para acabar.
+     *
+     * Com este campo a substituição passa a ser por (tipo, fornecedor): o
+     * orçamento da empresa de móveis substitui o orçamento DELA, e não o da
+     * floricultura.
+     *
+     * AUSENTE = documento do evento, sem dono específico. É o estado de todo
+     * documento já anexado, e o comportamento deles não muda: continuam
+     * ocupando um "slot sem fornecedor" por tipo, como sempre ocuparam. Sem
+     * backfill — não dá para adivinhar de qual fornecedor veio um PDF.
+     *
+     * Aponta para `eventSuppliers` (o fornecedor NESTE evento), não para o
+     * catálogo: o documento é da contratação, não da empresa. Remover o
+     * fornecedor do evento LIMPA este vínculo e NÃO apaga o arquivo — contrato
+     * assinado não some porque alguém arrumou a lista de fornecedores.
+     */
+    supplierId: v.optional(v.id("eventSuppliers")),
     kind: v.optional(
       v.union(
         v.literal("contract"),

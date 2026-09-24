@@ -14,7 +14,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty.tsx";
-import { BookMarked, Layers, Pencil, Search } from "lucide-react";
+import { BookMarked, Image as ImageIcon, Layers, Pencil, Search } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
 import { abreviarUnidade, TIPOS_DE_MATERIAL } from "@/convex/lib/materiais.ts";
 import {
@@ -195,6 +195,30 @@ function AbaMateriais({ verArquivados }: { verArquivados: boolean }) {
               )}
             >
               <div className="flex items-start justify-between gap-3">
+                {/* ── A FOTO QUE JÁ VINHA E A TELA DESCARTAVA ──────────────
+                    `materials.list` devolve `fotoUrl` desde que o material
+                    passou a ter imagem. A lista mostrava só texto — e depois
+                    de cadastrar cinquenta flores, descobrir QUAIS já têm foto
+                    exigia abrir o diálogo de cada uma.
+
+                    A caixa vazia aparece de propósito: é ela que mostra o que
+                    falta. Um espaço em branco esconderia a pendência. */}
+                {m.fotoUrl ? (
+                  <img
+                    src={m.fotoUrl}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    className="mt-0.5 size-9 flex-shrink-0 rounded-md border border-border object-cover"
+                  />
+                ) : (
+                  <div
+                    className="mt-0.5 flex size-9 flex-shrink-0 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground"
+                    title="Sem foto"
+                  >
+                    <ImageIcon className="size-3.5" aria-hidden />
+                  </div>
+                )}
                 <button
                   onClick={() => setAberto(aberto === m._id ? null : m._id)}
                   className="min-w-0 flex-1 cursor-pointer text-left"

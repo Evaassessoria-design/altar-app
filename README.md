@@ -114,6 +114,7 @@ ALTAR_DEMO                               ← só no projeto de demonstração
 | Funil comercial e documentos do lead | `convex/funil.ts`, `leadDocuments.ts` |
 | **Proposta comercial** (o documento da CLIENTE) | `convex/propostas.ts`, `lib/propostaComercial.ts` — a fronteira de audiência vive na transformação, não na tela; veja `docs/proposta-comercial.md` |
 | Fornecedores (catálogo e por evento) | `convex/supplierCatalog.ts`, `suppliers.ts` |
+| Documentos do evento e da contratação | `convex/contracts.ts` — o slot é (tipo, fornecedor); anexar acontece na Pasta do Evento OU dentro do fornecedor, e é o mesmo registro |
 | Equipe e escala | `convex/team.ts` |
 | Ficha técnica (materiais, composições, receita) | `convex/fichaTecnica.ts`, `materials.ts`, `compositions.ts` |
 | Catálogo (a mesma base, em tela própria) | `/catalogo`, `src/components/catalogo/*` — os diálogos são os MESMOS da ficha técnica, importados dos dois lugares |
@@ -188,6 +189,10 @@ Estas não são preferências. Cada uma existe por causa de um defeito real.
    escondidos na renderização — eles não existem no objeto que sai. A
    pré-visualização e o PDF consomem o MESMO objeto, e o Orçamento, que é
    interno, diz isso no título, no rodapé e no nome do arquivo.
+   A mesma disciplina vale para as **flores e materiais do Projeto Visual**
+   (`convex/lib/materiaisDoProjeto.ts`): a linha consolidada da Ficha Técnica
+   carrega custo, margem e cobertura, e a tela que ela vira para a noiva lê uma
+   consulta própria — `fichaTecnica.materiaisParaOProjeto` —, nunca `getFicha`.
 8. **Exclusão apaga mesmo.** `convex/lib/cascade.ts` é a fonte única: some a
    linha, somem os filhos e somem os arquivos no storage. Tabela nova com
    `eventId` que não entrar ali quebra `cascade.test.ts`.

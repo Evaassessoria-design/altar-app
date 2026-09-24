@@ -3,7 +3,7 @@
 Como o produto representa, hoje, o trabalho de uma empresa de decoração — e
 onde ele ainda só organiza em vez de mostrar.
 
-Datado de 21/09/2026, conferido contra o código em `b94c891`.
+Datado de 23/09/2026, conferido contra o código em `e021f7b`.
 
 ---
 
@@ -24,6 +24,14 @@ que já é de outro.
 A regra que mantém isso: **um dado, um dono.** A foto pertence à Galeria; o
 Projeto Visual a exibe. Classificar na Galeria muda o Projeto no mesmo
 instante, porque é o mesmo registro — não há cópia.
+
+E desde a rodada do ponteiro isso vale também para o **item de montagem**: ele
+pode APONTAR para uma foto da Galeria em vez de carregar uma cópia própria
+(§2). A Galeria continua sendo o único lugar que sobe, classifica e apaga.
+
+A foto do **material** é a exceção declarada, e por um motivo: ela não é do
+evento. Lisianthus é lisianthus em todo casamento, então mora no catálogo
+(§9d) — ilustração de insumo, não registro de evento.
 
 ---
 
@@ -87,6 +95,22 @@ Esta é a distinção central do domínio, e **ela não precisou de tabela nova*
 
 E em `assemblyItems` a mesma distinção existe por item, com dois campos
 separados: `referencePhotoStorageId` e `contractedPhotoStorageId`.
+
+### A foto do item podia ser a mesma da Galeria — e não era
+
+Esses dois campos eram `storageId` CRU. Para pendurar num item de montagem uma
+foto que já estava na Galeria, a decoradora tinha de **enviar o mesmo arquivo
+de novo**: dois uploads no 4G do sítio, dois arquivos cobrados, e duas
+verdades — reclassificar a foto na Galeria não mexia na cópia presa ao item.
+
+`referencePhotoId` / `contractedPhotoId` são o mesmo **ponteiro** que
+`events.coverPhotoId` já usava. Os dois caminhos convivem e são exclusivos por
+slot: gravar um limpa o outro. A leitura prefere o ponteiro, cai no arquivo
+próprio (o estado de tudo que já existe) e resolve os ponteiros com **uma**
+consulta por evento — e só quando algum item de fato aponta.
+
+Da foto da Galeria sai a **versão leve**: a miniatura do Caderno tem 22mm.
+`gallery.deletePhoto` limpa os itens antes de apagar, como já limpava a capa.
 
 ### O defeito que estava no meio
 
@@ -520,6 +544,77 @@ rodada do ambiente acabou de tirar daqui. **Continua pendente de decisão**
 
 ---
 
+## 9d. Flores e materiais — a cliente vê o que significa lisianthus
+
+A decoradora escreve "Rosa, Lisianthus, Boca-de-leão, Eucalipto". Para quem não
+trabalha com flor isso é uma lista de palavras, e a decisão da noiva é
+**visual**. A saída era mandar foto por WhatsApp ou montar um quadro no Canva —
+de novo a cada casamento, com a informação já cadastrada aqui dentro.
+
+### A foto mora no CATÁLOGO, não no evento
+
+`materials.fotoStorageId`. Lisianthus branco é o mesmo em setembro e em março:
+pendurar a imagem no evento obrigaria a subir a mesma foto a cada casamento,
+que é o trabalho repetido que o catálogo existe para eliminar. **Um envio,
+todos os eventos.**
+
+**Um arquivo, não dois.** Ao contrário de `eventPhotos`, aqui o original não é
+o trabalho dela — é ilustração desenhada pequena. A redução do navegador
+(`imagem-reduzida.ts`) **é** o que se guarda; falhando, sobe o original.
+
+Não compete com a Galeria: aquilo é a biblioteca visual DAQUELE evento
+(ambiente, montagem, resultado); isto é ilustração de INSUMO. Por isso não tem
+`ambiente`, `projectScope` nem fase.
+
+### A fronteira de audiência é uma TRANSFORMAÇÃO
+
+A linha consolidada da Ficha Técnica carrega `custoEstimado`,
+`margemPercentual`, `cobertura` e `comprasVinculadas`. O Projeto Visual é a
+tela que ela vira para a noiva.
+
+Por isso a seção lê uma consulta PRÓPRIA — `fichaTecnica.materiaisParaOProjeto`
+—, construída campo a campo em `convex/lib/materiaisDoProjeto.ts`. O custo **não
+chega a existir** no objeto que sai, e há teste que falha se uma chave nova
+aparecer. É a mesma disciplina de `paraOCliente`, e é a resposta ao que a §10
+cobrava: a fronteira mora na transformação, nunca na renderização.
+
+**Quantidade fica de fora de propósito.** "185 hastes" carrega a margem de
+segurança da compra e viraria promessa sobre um número que existe para proteger
+a execução.
+
+`getFicha` **não** ganhou a foto: resolvê-la ali seria uma leitura por linha —
+o N+1 que `fichaTecnica.hostil.test.ts` proíbe nominalmente naquela função, que
+é a consulta quente da tela.
+
+---
+
+## 9e. A pasta do evento cabia cinco arquivos
+
+`saveContract` substituía o documento do MESMO TIPO. Com um contrato, um
+aditivo, um orçamento, uma referência e um "outro", o teto de um casamento
+inteiro era **cinco arquivos**.
+
+Um casamento tem empresa de móveis, floricultura e iluminação, e cada uma manda
+contrato e orçamento. Anexar o segundo orçamento **apagava o primeiro** — com
+aviso na tela, mas apagava. O resto ia para o Drive e para o WhatsApp.
+
+`contracts.supplierId` muda o slot de TIPO para **(TIPO, FORNECEDOR)**.
+Documento sem fornecedor mantém o slot que sempre teve: a regra só ACRESCENTA
+lugares, e nada já anexado muda de comportamento.
+
+- **`getContract` ignora contrato de fornecedor.** É ele que a leitura por IA
+  interpreta para extrair parcelas — ler o contrato da empresa de móveis como
+  se fosse o do casamento criaria contas a receber que nunca existiram.
+- **Anexar acontece onde ela pensa**: dentro do fornecedor. Não há cópia — é a
+  mesma tabela, e o documento aparece nos dois lugares porque é o mesmo
+  registro.
+- **O nome do fornecedor é resolvido na LEITURA.** Gravá-lo criaria uma segunda
+  verdade que envelhece na primeira correção de razão social.
+- **Remover o fornecedor limpa o vínculo e não apaga nada.** Contrato assinado
+  não some porque alguém arrumou a lista de fornecedores.
+
+---
+
 ## 9c. O que continua NÃO implementado
 
 Para não restar dúvida depois desta rodada:
@@ -527,7 +622,10 @@ Para não restar dúvida depois desta rodada:
 - **Biblioteca de inspirações** — não existe. Nenhuma tabela, nenhuma tela.
   A especificação está no relatório da rodada de design, não no código.
 - **PDF do Projeto Visual** — não existe. Continua faltando `visibility` em
-  `eventPhotos` (§10).
+  `eventPhotos` (§10). O que a rodada das flores resolveu foi a fronteira dos
+  MATERIAIS (§9d), que é um eixo diferente: material não tem legenda que ela
+  escreveu para si mesma, e a lista sai de uma transformação campo a campo. A
+  FOTO continua sem audiência declarada, e é ela que trava o documento.
 - **Moodboard, paleta automática, extração de cor, IA sobre imagem** — nada
   disso foi construído.
 - **Redesenho dos PDFs** — nenhum dos seis foi tocado nesta rodada.

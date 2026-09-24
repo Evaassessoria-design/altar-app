@@ -58,7 +58,7 @@ import { cn } from "@/lib/utils.ts";
 import { valorDigitado } from "@/lib/valor-digitado.ts";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { formatEventDayOnly } from "@/lib/event-date.ts";
 // Os quatro estágios originais mantêm o mesmo id — lead já gravado continua
@@ -336,11 +336,23 @@ function LeadCard({
   onDragEnd,
   onDropBefore,
   proposta,
+  abrirConversao,
+  aoFecharConversao,
 }: {
   lead: Doc<"leads">;
   isDragging: boolean;
   /** A proposta mais recente deste lead. Ausente = ainda não há nenhuma. */
   proposta?: { quantidade: number; ultima: ResumoDeProposta };
+  /**
+   * Chegou da tela da proposta aceita, pedindo para converter ESTE lead.
+   *
+   * Ela vinha de "Aceita — crie o evento pelo Funil" e caía num quadro com
+   * quarenta cartões, para procurar o dela e clicar em "Criar Evento". O
+   * endereço já sabia de quem era a proposta; faltava carregar essa
+   * informação. Mesmo precedente do `?ambiente=` da Galeria.
+   */
+  abrirConversao?: boolean;
+  aoFecharConversao?: () => void;
   onEdit: (lead: Doc<"leads">) => void;
   onDelete: (lead: Doc<"leads">) => void;
   onMoveStage: (lead: Doc<"leads">, stage: Stage) => void;
@@ -572,8 +584,17 @@ function LeadCard({
         </button>
       </div>
 
-      {converting && (
-        <ConvertDialog lead={lead} open={converting} onClose={() => setConverting(false)} />
+      {(converting || abrirConversao) && (
+        <ConvertDialog
+          lead={lead}
+          open
+          onClose={() => {
+            setConverting(false);
+            // Limpa o endereço junto: sem isto, fechar o diálogo e recarregar
+            // a página o abriria de novo, e ela ficaria presa nele.
+            aoFecharConversao?.();
+          }}
+        />
       )}
 
       {documentos && (
@@ -603,11 +624,16 @@ function KanbanColumn({
   onColumnDragOver,
   onDropColumn,
   propostas,
+  converterLeadId,
+  aoFecharConversao,
 }: {
   stage: typeof STAGES[number];
   leads: Doc<"leads">[];
   /** Resumo por lead, vindo de UMA consulta feita no topo da página. */
   propostas: Record<string, { quantidade: number; ultima: ResumoDeProposta }>;
+  /** Lead que o endereço pediu para converter (`/funil?converter=<id>`). */
+  converterLeadId: Id<"leads"> | null;
+  aoFecharConversao: () => void;
   draggingId: Id<"leads"> | null;
   isDragOver: boolean;
   onAdd: (stage: Stage) => void;
@@ -665,6 +691,8 @@ function KanbanColumn({
             onDragEnd={onDragEnd}
             onDropBefore={onDropBefore}
             proposta={propostas[lead._id]}
+            abrirConversao={converterLeadId === lead._id}
+            aoFecharConversao={aoFecharConversao}
           />
         ))}
         {leads.length === 0 && (
@@ -698,6 +726,23 @@ export default function FunilPage() {
   const [deleting, setDeleting] = useState<Doc<"leads"> | null>(null);
   const [dragging, setDragging] = useState<Doc<"leads"> | null>(null);
   const [dragOverStage, setDragOverStage] = useState<Stage | null>(null);
+
+  // ── "ACEITA — CRIE O EVENTO" CHEGA NO CARTÃO CERTO ────────────────────────
+  // A tela da proposta aceita mandava para `/funil` e a decoradora caía num
+  // quadro com quarenta cartões, para procurar o dela e clicar em "Criar
+  // Evento". O endereço já sabia de quem era a proposta.
+  //
+  // O id vem da URL e é conferido contra os leads que o SERVIDOR devolveu: id
+  // forjado, de outra conta ou de lead apagado simplesmente não casa com
+  // nenhum cartão, e nada abre. A conversão em si continua passando pelos
+  // guardas de sempre.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const converterLeadId = (searchParams.get("converter") ?? null) as Id<"leads"> | null;
+  const limparConversaoDaUrl = () => {
+    const proximos = new URLSearchParams(searchParams);
+    proximos.delete("converter");
+    setSearchParams(proximos, { replace: true });
+  };
 
   /**
    * O orçamento do lead, ou `null` quando não dá para ler.
@@ -869,6 +914,8 @@ export default function FunilPage() {
               leads={leadsById[stage.id]}
               draggingId={dragging?._id ?? null}
               isDragOver={dragOverStage === stage.id}
+              converterLeadId={converterLeadId}
+              aoFecharConversao={limparConversaoDaUrl}
               onAdd={(s) => setCreating(s)}
               onEdit={setEditing}
               onDelete={setDeleting}

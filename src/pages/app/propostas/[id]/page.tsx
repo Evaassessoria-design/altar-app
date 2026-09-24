@@ -295,8 +295,15 @@ export default function PropostaPage() {
             <>
               <span>Oportunidade de {proposta.vinculo.nome} no funil.</span>
               {proposta.status === "aceita" && (
-                <Link to="/funil" className="text-primary hover:underline">
-                  Aceita — crie o evento pelo Funil
+                // O endereço leva o lead junto: sem isso ela caía num quadro
+                // com quarenta cartões para procurar o dela. O Funil abre a
+                // conversão DESTE lead — e um id que não casar com nenhum
+                // cartão simplesmente não abre nada.
+                <Link
+                  to={`/funil?converter=${proposta.vinculo.id}`}
+                  className="text-primary hover:underline"
+                >
+                  Aceita — criar o evento
                 </Link>
               )}
             </>

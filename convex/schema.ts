@@ -844,6 +844,39 @@ export default defineSchema({
     ),
     /** Ambiente a que a imagem se refere (cerimonia, mesa do bolo, bar...). */
     ambiente: v.optional(v.string()),
+    /**
+     * PARA QUEM esta foto pode aparecer.
+     *
+     * ── O EIXO QUE FALTAVA ───────────────────────────────────────────────────
+     * `projectScope` responde "o que a imagem É no projeto" e `category`
+     * responde "quando ela foi tirada". Nenhum dos dois responde "quem pode
+     * ver" — e desde que existe um PDF que sai da empresa para os noivos, essa
+     * pergunta precisa de resposta própria.
+     *
+     * Sem este campo, o documento usava `category === "antes"` como PROXY de
+     * audiência. O proxy falha no caso que mais importa: a foto do problema —
+     * o fornecedor mandou a cor errada, a peça chegou torta — é tirada ANTES
+     * do evento, não tem classificação nenhuma, e ia impressa para a noiva.
+     *
+     * `assemblyItems.visibility` já existia com este papel. O vocabulário aqui
+     * é o MESMO de propósito: item e foto respondem à mesma pergunta e
+     * precisam usar as mesmas palavras nos documentos.
+     *
+     * ── AUSENTE = O COMPORTAMENTO DE HOJE ────────────────────────────────────
+     * Ausente significa "nunca foi marcada como interna" — NÃO significa "ela
+     * aprovou". A distinção importa: a foto continua passando pelos filtros de
+     * escopo e fase como sempre passou, e este campo só acrescenta uma porta
+     * de saída explícita.
+     *
+     * O contrário — ausente valendo "interno" — esvaziaria o documento de
+     * todos os eventos que já existem. Trocar o padrão de um campo novo por
+     * uma regressão silenciosa em dado antigo é exatamente o que "campo novo
+     * nasce opcional" existe para impedir. Sem backfill.
+     *
+     * Sem `"equipe"`: nenhuma superfície distingue foto só-da-equipe hoje, e
+     * alargar a união é aditivo no dia em que distinguir.
+     */
+    visibility: v.optional(v.union(v.literal("interno"), v.literal("cliente"))),
   })
     .index("by_event", ["eventId"])
     .index("by_event_category", ["eventId", "category"])

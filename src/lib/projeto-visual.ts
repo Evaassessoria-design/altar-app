@@ -44,6 +44,11 @@ export type FotoDoProjeto = {
   ambiente?: string;
   category: string;
   projectScope?: string;
+  /**
+   * PARA QUEM a foto pode aparecer. Ausente = nunca foi marcada como interna,
+   * que é o estado de toda foto já enviada. Ver `eventPhotos.visibility`.
+   */
+  visibility?: string;
 };
 
 /**

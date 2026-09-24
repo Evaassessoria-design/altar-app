@@ -201,3 +201,139 @@ describe("o gerador não tem como falar de dinheiro", () => {
     expect(GERADOR).not.toContain("doc.save(");
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// A LEGENDA E A AUDIÊNCIA DA FOTO
+//
+// Duas frestas que a proteção de TIPO não fecha, porque as duas são de LINHA:
+// o texto que veio junto da foto, e a foto que veio por um ponteiro.
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** As legendas que saíram impressas, em todos os ambientes. */
+const legendasDe = (a: ReturnType<typeof montar>) =>
+  a.ambientes.flatMap((amb) => amb.imagens.map((i) => i.legenda));
+
+describe("a legenda interna não vai no documento", () => {
+  it("legenda de foto SEM CLASSIFICAÇÃO não é impressa", () => {
+    // `caption` é o que ela escreve para si mesma na Galeria: "refazer, ficou
+    // torto", "conferir com a Flora". Sem classificação é o estado da maioria
+    // das fotos — e era justamente o que vazava.
+    const a = montar(
+      [item({ ambiente: "Cerimônia" })],
+      [foto({ ambiente: "Cerimônia", caption: "refazer, ficou torto" })],
+    );
+    expect(legendasDe(a)).toEqual([undefined]);
+  });
+
+  it("nem a de foto marcada como REFERÊNCIA", () => {
+    const a = montar(
+      [item({ ambiente: "Cerimônia" })],
+      [foto({ ambiente: "Cerimônia", projectScope: "referencia", caption: "pedir orçamento" })],
+    );
+    expect(legendasDe(a)).toEqual([undefined]);
+  });
+
+  it("mas a de foto INCLUSO vai — é a única que exigiu um gesto deliberado", () => {
+    const a = montar(
+      [item({ ambiente: "Cerimônia" })],
+      [foto({ ambiente: "Cerimônia", projectScope: "incluso", caption: "Arranjo alto do altar" })],
+    );
+    expect(legendasDe(a)).toEqual(["Arranjo alto do altar"]);
+  });
+
+  it("e nenhum texto interno atravessa o objeto inteiro", () => {
+    const a = montar(
+      [item({ ambiente: "Cerimônia" })],
+      [
+        foto({ _id: "f1", ambiente: "Cerimônia", caption: "fornecedor entregou errado" }),
+        foto({ _id: "f2", ambiente: "Cerimônia", projectScope: "referencia", caption: "caro demais" }),
+      ],
+    );
+    const serializado = JSON.stringify(a);
+    expect(serializado).not.toContain("entregou errado");
+    expect(serializado).not.toContain("caro demais");
+  });
+});
+
+describe("foto marcada como SÓ PARA MIM não aparece", () => {
+  it("nem sendo `antes` e sem nenhuma outra restrição", () => {
+    // É o caso que o proxy `category === "antes"` deixava passar: a foto do
+    // problema é tirada antes do evento como qualquer referência.
+    expect(fotoVaiParaOsNoivos(foto({ visibility: "interno" }))).toBe(false);
+    const a = montar(
+      [item({ ambiente: "Cerimônia" })],
+      [foto({ ambiente: "Cerimônia", visibility: "interno" })],
+    );
+    expect(a.ambientes.flatMap((amb) => amb.imagens)).toEqual([]);
+  });
+
+  it("e a marcação vence até a classificação de contratado", () => {
+    expect(
+      fotoVaiParaOsNoivos(foto({ visibility: "interno", projectScope: "incluso" })),
+    ).toBe(false);
+  });
+
+  it("ausente continua entrando — nenhuma foto já enviada muda de comportamento", () => {
+    expect(fotoVaiParaOsNoivos(foto({}))).toBe(true);
+    expect(fotoVaiParaOsNoivos(foto({ visibility: "cliente" }))).toBe(true);
+  });
+});
+
+describe("a foto do ITEM passa pela mesma porta das prateleiras", () => {
+  /** Um item que aponta para uma foto da Galeria, como a tela resolve. */
+  const itemApontando = (photoId: string, ambiente = "Cerimônia") =>
+    item({
+      ambiente,
+      contractedFoto: {
+        url: "/o.jpg",
+        previewUrl: "/l.jpg",
+        origem: "galeria",
+        photoId,
+      },
+    });
+
+  const fotosDosItens = (a: ReturnType<typeof montar>) =>
+    a.ambientes.flatMap((amb) => amb.itens.map((i) => i.fotoUrl));
+
+  it("item visível NÃO carrega foto marcada como só para mim", () => {
+    // O item foi aprovado; a IMAGEM não. Antes ela entrava de carona, porque
+    // ninguém perguntava nada sobre a linha apontada.
+    const a = montar(
+      [itemApontando("f9")],
+      [foto({ _id: "f9", ambiente: "Cerimônia", visibility: "interno" })],
+    );
+    expect(fotosDosItens(a)).toEqual([null]);
+  });
+
+  it("nem foto de EXECUÇÃO", () => {
+    const a = montar(
+      [itemApontando("f9")],
+      [foto({ _id: "f9", ambiente: "Cerimônia", category: "evento" })],
+    );
+    expect(fotosDosItens(a)).toEqual([null]);
+  });
+
+  it("nem foto `nao_incluso`", () => {
+    const a = montar(
+      [itemApontando("f9")],
+      [foto({ _id: "f9", ambiente: "Cerimônia", projectScope: "nao_incluso" })],
+    );
+    expect(fotosDosItens(a)).toEqual([null]);
+  });
+
+  it("mas carrega a foto que pode aparecer", () => {
+    const a = montar(
+      [itemApontando("f9")],
+      [foto({ _id: "f9", ambiente: "Cerimônia", projectScope: "incluso" })],
+    );
+    expect(fotosDosItens(a)).toEqual(["/l.jpg"]);
+  });
+
+  it("e o arquivo PRÓPRIO do item continua passando", () => {
+    // Nunca esteve na Galeria e não tem eixo de audiência nenhum. O item já
+    // foi aprovado; negar a foto dele tiraria do documento imagens que sempre
+    // estiveram lá, sem defeito que justificasse.
+    const a = montar([item({ ambiente: "Cerimônia", contractedPhotoUrl: "/proprio.jpg" })]);
+    expect(fotosDosItens(a)).toEqual(["/proprio.jpg"]);
+  });
+});

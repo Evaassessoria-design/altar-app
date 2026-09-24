@@ -98,6 +98,16 @@ export function itemVaiParaOsNoivos(item: ItemDoProjeto): boolean {
 
 /** A foto pode ser mostrada à cliente? */
 export function fotoVaiParaOsNoivos(foto: FotoDoProjeto): boolean {
+  // ── A PORTA EXPLÍCITA, ANTES DE QUALQUER PROXY ──────────────────────────
+  // `eventPhotos.visibility` é o único campo que responde "para quem isto
+  // pode aparecer". Os dois testes abaixo respondem outras perguntas — o que
+  // a imagem é no projeto, e quando ela foi tirada — e vinham sendo usados
+  // como substitutos.
+  //
+  // O substituto falhava no caso que mais importa: a foto do problema (o
+  // fornecedor mandou a cor errada, a peça chegou torta) é tirada ANTES do
+  // evento, não tem classificação nenhuma, e saía impressa para a noiva.
+  if (foto.visibility === "interno") return false;
   if (foto.projectScope === "nao_incluso") return false;
   // Execução responde "o que aconteceu"; este documento responde "o que vamos
   // fazer". As duas juntas fazem a apresentação parecer um álbum.
@@ -118,7 +128,19 @@ function imagensDe(ambiente: AmbienteVisual<unknown>) {
       // mais que suficiente — mas quem escolhe é quem chama, passando a foto
       // já resolvida. Aqui só repassamos o que veio.
       url: f.previewUrl || f.url || "",
-      legenda: f.caption?.trim() || undefined,
+      // ── A LEGENDA SÓ SAI DO QUE ELA CUROU ──────────────────────────────
+      // `caption` é texto livre que a decoradora escreve PARA SI MESMA na
+      // Galeria: "refazer, ficou torto", "conferir com a Flora". Toda
+      // legenda vinha impressa sob a imagem, no documento que leva o nome e
+      // o contato da empresa no rodapé.
+      //
+      // `incluso` é a única classificação que exige um gesto deliberado
+      // dizendo "isto está no projeto contratado". Só nessas a legenda
+      // acompanha. Foto de inspiração e foto ainda não classificada vão sem
+      // texto — a imagem já diz o que precisa dizer, e o silêncio aqui não
+      // custa nada a ninguém.
+      legenda:
+        f.projectScope === "incluso" ? f.caption?.trim() || undefined : undefined,
       ehReferencia,
     }))
     .filter((i) => i.url);
@@ -132,16 +154,73 @@ function imagensDe(ambiente: AmbienteVisual<unknown>) {
  * leitura dos itens. Se a decoradora mudar a quantidade de 120 para 130 na
  * lista de itens, o papel seguinte sai com 130 — sem ninguém sincronizar nada.
  */
+/**
+ * Todas as fotos do projeto, indexadas pela linha da Galeria.
+ *
+ * Existe por causa do caminho que escapava: a foto de um ITEM não vem das
+ * prateleiras, vem de um ponteiro (`referencePhotoId` / `contractedPhotoId`)
+ * já resolvido em URL pela tela. Com a URL sozinha não dá para perguntar se
+ * aquela linha pode ser mostrada — e o item passava a imagem adiante sem que
+ * ninguém perguntasse.
+ *
+ * O índice devolve a linha inteira, e aí a MESMA `fotoVaiParaOsNoivos` decide.
+ * Uma segunda regra para a foto do item divergiria da regra da prateleira, e a
+ * que divergisse seria a do documento impresso.
+ */
+function fotosPorId(projeto: ProjetoVisual<ItemDoProjeto>): Map<string, FotoDoProjeto> {
+  const indice = new Map<string, FotoDoProjeto>();
+  const guardar = (fotos: readonly FotoDoProjeto[]) => {
+    for (const f of fotos) indice.set(f._id, f);
+  };
+  for (const a of [...projeto.ambientes, projeto.semAmbiente]) {
+    guardar(a.referencias);
+    guardar(a.contratadas);
+    guardar(a.execucao);
+    guardar(a.foraDoEscopo);
+    guardar(a.semClassificacao);
+  }
+  return indice;
+}
+
 export function montarApresentacao(
   projeto: ProjetoVisual<ItemDoProjeto>,
   /** Como desenhar a foto de um item — a precedência já resolvida pela tela. */
-  fotoDoItem: (item: ItemDoProjeto) => { url: string | null; ehReferencia: boolean },
+  fotoDoItem: (item: ItemDoProjeto) => {
+    url: string | null;
+    ehReferencia: boolean;
+    /** A linha da Galeria, quando a foto veio de lá. */
+    photoId?: string;
+  },
 ): ApresentacaoDoProjeto {
   const ambientes: AmbienteParaOsNoivos[] = [];
+  const porId = fotosPorId(projeto);
+
+  /**
+   * A foto do item, depois de passar pela mesma fronteira das prateleiras.
+   *
+   * ── O CAMINHO QUE ESCAPAVA ────────────────────────────────────────────────
+   * Desde que o item aponta para a Galeria em vez de guardar cópia própria, um
+   * item visível podia exibir uma foto `nao_incluso`, uma foto de execução ou
+   * uma foto marcada como interna: o `itemVaiParaOsNoivos` aprovava o ITEM, e
+   * a imagem entrava de carona sem ninguém perguntar nada sobre ela.
+   *
+   * Arquivo PRÓPRIO do item continua passando: ele não tem eixo de audiência
+   * nenhum, nunca esteve na Galeria, e o item já foi aprovado. Negá-lo tiraria
+   * do documento fotos que sempre estiveram lá, sem defeito que o justifique.
+   */
+  const fotoVisivelDoItem = (item: ItemDoProjeto) => {
+    const foto = fotoDoItem(item);
+    if (!foto.photoId) return foto;
+    const daGaleria = porId.get(foto.photoId);
+    // Ponteiro que não resolve: a tela já degradou para o arquivo próprio ou
+    // para nada. Não é aqui que se decide isso.
+    if (!daGaleria) return foto;
+    return fotoVaiParaOsNoivos(daGaleria) ? foto : { ...foto, url: null };
+  };
 
   for (const a of projeto.ambientes) {
     const itens = a.itens.filter(itemVaiParaOsNoivos).map((item) => {
-      const foto = fotoDoItem(item);
+      const foto = fotoVisivelDoItem(item);
       return {
         nome: item.name.trim(),
         quantidade: quantidadeTexto(item),

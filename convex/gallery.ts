@@ -173,6 +173,17 @@ export const updatePhoto = mutation({
       v.union(v.literal("incluso"), v.literal("referencia"), v.literal("nao_incluso")),
     ),
     ambiente: v.optional(v.string()),
+    /**
+     * PARA QUEM a foto pode aparecer — eixo separado do escopo e da fase.
+     *
+     * `null` LIMPA a marcação e devolve a foto ao comportamento padrão. Sem
+     * isso, marcar uma foto como interna por engano seria irreversível: o
+     * `undefined` some no transporte e o pedido de desmarcar nunca chegaria
+     * ao servidor. É a mesma convenção de `lib/limparCampos.ts`.
+     */
+    visibility: v.optional(
+      v.union(v.literal("interno"), v.literal("cliente"), v.null()),
+    ),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
@@ -196,10 +207,16 @@ export const updatePhoto = mutation({
       category?: typeof args.category;
       projectScope?: typeof args.projectScope;
       ambiente?: string;
+      visibility?: "interno" | "cliente" | undefined;
     } = {};
     if (args.caption !== undefined) patch.caption = args.caption;
     if (args.category !== undefined) patch.category = args.category;
     if (args.projectScope !== undefined) patch.projectScope = args.projectScope;
+    // `null` LIMPA; ausente não mexe. Desmarcar precisa ser possível — ver o
+    // argumento acima.
+    if (args.visibility !== undefined) {
+      patch.visibility = args.visibility === null ? undefined : args.visibility;
+    }
     // `""` LIMPA o ambiente; ausente não mexe. A distinção é a convenção da
     // casa (lib/limparCampos.ts) e aqui ela importa: uma foto pode deixar de
     // pertencer a um ambiente.

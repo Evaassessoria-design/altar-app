@@ -252,3 +252,82 @@ describe("a tela oferece o caminho que o dado sempre teve", () => {
     expect(TELA).toContain("Ver todos os ambientes");
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// "SÓ PARA MIM" — O EIXO DE AUDIÊNCIA DA FOTO
+//
+// `projectScope` diz o que a imagem É no projeto; `category` diz QUANDO ela
+// foi tirada. Nenhum dos dois diz PARA QUEM ela pode aparecer — e desde que
+// existe um PDF que sai da empresa para os noivos, o documento vinha usando
+// `category === "antes"` como substituto.
+//
+// O substituto falha no caso que mais importa: a foto do problema (o
+// fornecedor mandou a cor errada) é tirada antes do evento, não tem
+// classificação nenhuma, e ia impressa.
+// ═════════════════════════════════════════════════════════════════════════════
+describe("a foto pode ser marcada como interna", () => {
+  const linha = (t: Awaited<ReturnType<typeof cenario>>["t"], id: Id<"eventPhotos">) =>
+    t.run((ctx: MutationCtx) => ctx.db.get(id));
+
+  it("marcar grava, e a leitura devolve", async () => {
+    const { t, dona, ids } = await cenario();
+    await dona.mutation(api.gallery.updatePhoto, {
+      id: ids.fotoDaDona,
+      visibility: "interno",
+    });
+    expect((await linha(t, ids.fotoDaDona))!.visibility).toBe("interno");
+
+    const listadas = await dona.query(api.gallery.listPhotos, { eventId: ids.eventoDaDona });
+    expect(listadas.find((f) => f._id === ids.fotoDaDona)!.visibility).toBe("interno");
+  });
+
+  it("DESMARCAR é possível — `null` limpa", async () => {
+    // Sem isto, marcar por engano seria irreversível: `undefined` some no
+    // transporte e o pedido de desmarcar nunca chegaria ao servidor.
+    const { t, dona, ids } = await cenario();
+    await dona.mutation(api.gallery.updatePhoto, { id: ids.fotoDaDona, visibility: "interno" });
+    await dona.mutation(api.gallery.updatePhoto, { id: ids.fotoDaDona, visibility: null });
+    expect((await linha(t, ids.fotoDaDona))!.visibility).toBeUndefined();
+  });
+
+  it("ausente é o padrão, e não vira 'interno' sozinho", async () => {
+    // Nenhuma foto já enviada muda de comportamento. Se o ausente valesse
+    // "interno", o documento de todo evento que já existe sairia vazio.
+    const { t, dona, ids } = await cenario();
+    await dona.mutation(api.gallery.updatePhoto, {
+      id: ids.fotoDaDona,
+      caption: "Mesa posta",
+    });
+    expect((await linha(t, ids.fotoDaDona))!.visibility).toBeUndefined();
+  });
+
+  it("classificar não apaga a marcação, e marcar não apaga a classificação", async () => {
+    // São eixos separados: mexer num não pode zerar o outro em silêncio.
+    const { t, dona, ids } = await cenario();
+    await dona.mutation(api.gallery.updatePhoto, {
+      id: ids.fotoDaDona, visibility: "interno", projectScope: "referencia",
+    });
+    await dona.mutation(api.gallery.updatePhoto, { id: ids.fotoDaDona, ambiente: "Bar" });
+
+    const depois = (await linha(t, ids.fotoDaDona))!;
+    expect(depois.visibility).toBe("interno");
+    expect(depois.projectScope).toBe("referencia");
+    expect(depois.ambiente).toBe("Bar");
+  });
+
+  it("a rival não marca a foto da dona", async () => {
+    const { t, rival, ids } = await cenario();
+    await expect(
+      rival.mutation(api.gallery.updatePhoto, { id: ids.fotoDaDona, visibility: "interno" }),
+    ).rejects.toThrow(/permiss/i);
+    expect((await linha(t, ids.fotoDaDona))!.visibility).toBeUndefined();
+  });
+
+  it("nem a dona desmarca a foto da rival", async () => {
+    const { t, dona, ids } = await cenario();
+    await expect(
+      dona.mutation(api.gallery.updatePhoto, { id: ids.fotoAlheia, visibility: null }),
+    ).rejects.toThrow(/permiss/i);
+    expect((await linha(t, ids.fotoAlheia))!.visibility).toBeUndefined();
+  });
+});

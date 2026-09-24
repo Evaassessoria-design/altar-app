@@ -173,6 +173,8 @@ export default function GaleriaPage() {
   const [editingCaption, setEditingCaption] = useState<Id<"eventPhotos"> | null>(null);
   const [captionText, setCaptionText] = useState("");
   const [scopeValue, setScopeValue] = useState<ProjectScope | null>(null);
+  /** "Só para mim" — `eventPhotos.visibility === "interno"`. */
+  const [soParaMim, setSoParaMim] = useState(false);
   const [ambienteTexto, setAmbienteTexto] = useState("");
   const [draggingOver, setDraggingOver] = useState(false);
 
@@ -268,6 +270,9 @@ export default function GaleriaPage() {
         // String vazia LIMPA o ambiente. `undefined` não mexeria, e aí tirar
         // uma foto do ambiente errado seria impossível.
         ambiente: ambienteTexto.trim(),
+        // `null` LIMPA a marcação, pelo mesmo motivo: `undefined` some no
+        // transporte e desmarcar "só para mim" seria impossível.
+        visibility: soParaMim ? "interno" : null,
       });
       toast.success("Foto classificada.");
       // Fecha SO no sucesso. Fechando no `finally`, uma falha de rede levava
@@ -634,6 +639,16 @@ export default function GaleriaPage() {
                       {scopeMeta(photo.projectScope)!.label}
                     </div>
                   )}
+                  {/* Marcar e não conseguir ver o que está marcado obrigaria a
+                      abrir foto por foto para saber o que sai no documento —
+                      exatamente a conferência que o selo existe para poupar.
+                      Fica embaixo à esquerda: os outros dois cantos já são da
+                      capa e da classificação. */}
+                  {photo.visibility === "interno" && (
+                    <div className="absolute bottom-2 left-2 rounded bg-foreground/80 px-1.5 py-0.5 text-[10px] font-semibold text-background">
+                      Só para mim
+                    </div>
+                  )}
                   {/* Overlay actions */}
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2 gap-1">
                     {photo.caption && (
@@ -641,7 +656,7 @@ export default function GaleriaPage() {
                     )}
                     <div className="flex gap-1 ml-auto">
                       <button
-                        onClick={(e) => { e.stopPropagation(); setEditingCaption(photo._id); setCaptionText(photo.caption ?? ""); setScopeValue((photo.projectScope as ProjectScope | undefined) ?? null); setAmbienteTexto(photo.ambiente ?? ""); }}
+                        onClick={(e) => { e.stopPropagation(); setEditingCaption(photo._id); setCaptionText(photo.caption ?? ""); setScopeValue((photo.projectScope as ProjectScope | undefined) ?? null); setAmbienteTexto(photo.ambiente ?? ""); setSoParaMim(photo.visibility === "interno"); }}
                         className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors cursor-pointer"
                         title="Editar legenda"
                       >
@@ -829,6 +844,35 @@ export default function GaleriaPage() {
                     item contratado.
                   </p>
                 )}
+
+                {/* ── SÓ PARA MIM ───────────────────────────────────────────
+                    O eixo que faltava. "Classificação" responde o que a foto
+                    É no projeto; isto responde QUEM pode vê-la.
+
+                    Antes, a única forma de esconder a foto do problema — o
+                    fornecedor mandou a cor errada, a peça chegou torta — era
+                    não guardá-la, ou mentir sobre a fase dela. Ela é tirada
+                    antes do evento, como toda referência, e ia junto no PDF
+                    que leva o nome da empresa no rodapé.
+
+                    Caixa, e não uma terceira fileira de pílulas: a pergunta é
+                    de sim ou não, e mais uma fileira aqui embaralharia os
+                    dois eixos que a tela acabou de separar. */}
+                <label className="flex cursor-pointer items-start gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    checked={soParaMim}
+                    onChange={(e) => setSoParaMim(e.target.checked)}
+                    className="mt-0.5 size-4 cursor-pointer accent-primary"
+                  />
+                  <span className="text-xs">
+                    Só para mim
+                    <span className="block text-muted-foreground">
+                      Fica na galeria e no evento, e não entra no projeto nem nos
+                      documentos que vão para a cliente.
+                    </span>
+                  </span>
+                </label>
               </div>
 
               {/* ── O AMBIENTE ────────────────────────────────────────────

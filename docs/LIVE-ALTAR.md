@@ -76,7 +76,7 @@ Abre a ficha da **Mobiliário Casa Rara**: contato, situação, **o que ele entr
 neste evento**, documentos.
 > *"Antes de ligar para ele, está tudo numa tela só."*
 
-### 6. A equipe de IA · 6 min — **Escritório**
+### 6. A equipe de IA · 6 min — **Assistente**
 > *"Isso aqui é novo."*
 Escreve, ao vivo: **"Organize meu dia e me diga o que precisa da minha atenção."**
 Mostra a resposta e o **"Onde consultei"**.
@@ -96,7 +96,7 @@ Volta ao Dashboard.
 | # | O quê | Por que funciona |
 |---|---|---|
 | 1 | O PDF do Projeto Visual abrindo | material de venda saindo do trabalho já feito |
-| 2 | A recusa do Escritório | confiança vale mais que capacidade |
+| 2 | A recusa do Assistente | confiança vale mais que capacidade |
 | 3 | "Onde consultei" | prova que não é chute |
 | 4 | O selo inspiração × contratado | resolve uma dor que ela conhece na pele |
 
@@ -123,9 +123,9 @@ fundador, condição por indicação. O produto suporta `trial`, `beta` com praz
 
 | Risco | Gravidade | Mitigação |
 |---|---|---|
-| **Conta demo com trial vencido** — o Escritório e a criação de evento recusam | **ALTA** | pôr a conta em `internal` antes da live (`admin.setUserAccess`) |
+| **Conta demo com trial vencido** — o Assistente e a criação de evento recusam | **ALTA** | pôr a conta em `internal` antes da live (`admin.setUserAccess`) |
 | **Demo sem fotos** — Galeria e Projeto Visual ficam sem imagem; o PDF sai sem capa | **ALTA** | subir de 10 a 15 fotos reais na conta demo e escolher a capa |
-| Escritório sem chave de IA | MÉDIA | responde pela redação local e **diz isso na tela**; os números continuam reais |
+| Assistente sem chave de IA | MÉDIA | responde pela redação local e **diz isso na tela**; os números continuam reais |
 | Internet cair no meio | MÉDIA | ter gravação de tela das cenas 3 e 6 |
 | Perguntarem preço sem oferta definida | MÉDIA | decidir antes |
 | Perguntarem "e o WhatsApp?" | BAIXA | responder com honestidade: existe a Central, o envio está fechado por decisão |

@@ -77,7 +77,7 @@ Acrescentar dois literais a uma união opcional **não quebra registro nenhum** 
 
 ## 5. O Comercial IA — o que ele faz e o que nunca fará sozinho
 
-Reaproveita **inteiro** o Escritório de IA que já existe: catálogo de agentes,
+Reaproveita **inteiro** o Assistente de IA que já existe: catálogo de agentes,
 semáforo, plano de consulta, executor sem acesso ao banco.
 
 | Capacidade | Cor | V2 |

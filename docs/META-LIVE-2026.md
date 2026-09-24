@@ -9,7 +9,7 @@ Realizar a **live de apresentação do ALTAR para decoradores** na semana de
 
 1. **Produto estável** — nada quebrado nos caminhos demonstrados
 2. **Demonstração excelente** — a conta Marina & Gabriel contando uma história
-3. **Escritório de IA funcionando de verdade** — homologado, não só verde no teste
+3. **Assistente de IA funcionando de verdade** — homologado, não só verde no teste
 4. **Aquisição preparada** — saber de onde veio quem chegar
 5. **Onboarding simples** — do cadastro ao primeiro evento sem ajuda
 6. **Experiência mobile confiável** — a live será assistida no celular
@@ -61,8 +61,8 @@ O que não legitima: *"o mercado validou"*.
 ## IA
 | Item | Estado |
 |---|---|
-| Escritório: 7 agentes, semáforo, roteador, executor | **PRONTO** (código) |
-| **`agentTasks` publicada no Convex DEV** | **BLOQUEADO** — sem deployment acessível |
+| Assistente: 7 agentes, semáforo, roteador, executor | **PRONTO** (código) |
+| **`assistantTasks` publicada no Convex DEV** | **BLOQUEADO** — sem deployment acessível |
 | **Smoke test dos 9 pedidos** | **BLOQUEADO** — depende do acima |
 | Chave de IA no DEV | **PENDENTE DE DECISÃO** — sem ela responde pela redação local, e diz isso |
 

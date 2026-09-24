@@ -21,7 +21,7 @@ segurança, convenções, módulos e como testar estão lá, e é lá que se atu
 
 Este arquivo guarda só o que costuma ser esquecido no meio de uma tarefa.
 
-## As cinco travas
+## As seis travas
 
 1. **PROD é `mellow-goose-539`. Não se toca.** DEV é `healthy-pika-907`.
    Confirme o alvo antes de qualquer `convex deploy`, `env set` ou `run`.
@@ -33,6 +33,10 @@ Este arquivo guarda só o que costuma ser esquecido no meio de uma tarefa.
 4. **Envio externo da Central tem uma porta só** (`communicationsOutbox`) e ela
    está fechada. Não ligue, não contorne, não aumente autonomia da IA.
 5. **A Central não enxerga `leads`** — esses são clientes da decoradora.
+6. **Escritório ≠ Assistente.** `/escritorio` é o painel do NEGÓCIO ALTAR
+   (`requirePlatformOwner`, uma conta só). `/assistente` é a IA da decoradora
+   sobre a empresa dela. Ninguém vira dono da plataforma por ser admin, interno,
+   beta ou dono do próprio tenant.
 
 ## Como escrever aqui
 

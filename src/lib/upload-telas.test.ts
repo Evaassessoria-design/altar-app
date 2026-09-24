@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
-import { execSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
+import { arquivosDeTela } from "../vitest.arquivos.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TRAVA — ANEXAR ARQUIVO ACONTECE EM UM LUGAR SÓ
@@ -11,10 +11,7 @@ import { describe, expect, it } from "vitest";
 // aparecia depois — longe da causa, parecendo problema do formulário.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TELAS = execSync(
-  "find src/pages src/components -name '*.tsx' -not -name '*.test.tsx'",
-  { encoding: "utf-8" },
-).trim().split("\n").filter(Boolean);
+const TELAS = arquivosDeTela();
 
 const codigoDe = (f: string) =>
   readFileSync(f, "utf-8")

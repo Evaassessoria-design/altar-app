@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { execSync } from "node:child_process";
+import { arquivosQueContem } from "../vitest.arquivos.ts";
 import { describe, expect, it } from "vitest";
 import { BRIEFING_AREAS, areaByKey, areaTemTextoAntigo } from "./briefing-areas.ts";
 
@@ -92,13 +92,9 @@ describe("partnerName: a porta foi fechada", () => {
   });
 
   it("nenhuma tela passou a usá-lo", () => {
-    // `--exclude=*.test.*`: este arquivo CITA o campo para proibi-lo, e sem a
-    // exclusão a trava acusaria a si mesma. É a quinta vez que uma leitura de
-    // fonte neste repositório tropeça no próprio texto.
-    const achados = execSync(
-      "grep -rl partnerName src --exclude=*.test.ts --exclude=*.test.tsx || true",
-      { encoding: "utf-8" },
-    ).trim();
-    expect(achados).toBe("");
+    // A exclusão dos arquivos de teste mora no helper: esta trava CITA o campo
+    // para proibi-lo, e sem ela acusaria a si mesma. É a quinta vez que uma
+    // leitura de fonte neste repositório tropeça no próprio texto.
+    expect(arquivosQueContem("partnerName")).toEqual([]);
   });
 });

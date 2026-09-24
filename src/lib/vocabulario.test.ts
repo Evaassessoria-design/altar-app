@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { globSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { comBarraNormal } from "../vitest.arquivos.ts";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // O QUE A DECORADORA LÊ
@@ -35,7 +36,13 @@ function textoVisivel(fonte: string): string[] {
   return textos.map((t) => t.replace(/\s+/g, " ").trim());
 }
 
-const TELAS = globSync("src/pages/app/**/*.tsx").filter((f) => !f.includes(".test."));
+// `comBarraNormal`: no Windows o `globSync` devolve `src\pagespp\...`, e as
+// asserções abaixo comparam com o caminho escrito à mão, de barra normal. Sem
+// isto a trava acusava que a palavra "lead" tinha escapado para outra tela —
+// quando o que escapara era a barra invertida.
+const TELAS = globSync("src/pages/app/**/*.tsx")
+  .map(comBarraNormal)
+  .filter((f) => !f.includes(".test."));
 
 describe("nenhum slug de enum chega à tela", () => {
   // Os valores gravados de `events.type`. A tradução existe desde que um

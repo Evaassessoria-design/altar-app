@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
-import { execSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
+import { paginasInternasDoEvento } from "../vitest.arquivos.ts";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // O EVENTO É O CENTRO — E TODA TELA DELE DIZ DE QUAL EVENTO SE TRATA
@@ -18,10 +18,7 @@ import { describe, expect, it } from "vitest";
 // Todas as outras já voltavam pelo NOME do evento, e é o padrão.
 // ═════════════════════════════════════════════════════════════════════════════
 
-const TELAS_DO_EVENTO = execSync(
-  "find 'src/pages/app/events/[id]' -mindepth 2 -name 'page.tsx'",
-  { encoding: "utf-8" },
-).trim().split("\n").filter(Boolean);
+const TELAS_DO_EVENTO = paginasInternasDoEvento();
 
 const ler = (caminho: string) => readFileSync(caminho, "utf-8");
 

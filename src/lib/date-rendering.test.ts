@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
-import { execSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
+import { arquivosDeTela } from "../vitest.arquivos.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TRAVA — NENHUMA TELA FORMATA DATA NA MÃO
@@ -19,13 +19,7 @@ import { describe, expect, it } from "vitest";
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Telas e componentes — o que roda dentro do React. */
-const TELAS = execSync(
-  "find src/pages src/components -name '*.tsx' -not -name '*.test.tsx'",
-  { encoding: "utf-8" },
-)
-  .trim()
-  .split("\n")
-  .filter(Boolean);
+const TELAS = arquivosDeTela();
 
 /** O arquivo sem comentários: a prosa aqui em cima cita os padrões proibidos. */
 function codigoDe(arquivo: string): string {

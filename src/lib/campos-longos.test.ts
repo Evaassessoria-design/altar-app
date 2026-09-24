@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
-import { execSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
+import { arquivosDeTela } from "../vitest.arquivos.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TRAVA — TEXTO LIVRE NÃO MORA EM CAMPO DE UMA LINHA
@@ -17,13 +17,7 @@ import { describe, expect, it } from "vitest";
 // decoração"). Campo curto continua `<Input>` de propósito.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TELAS = execSync(
-  "find src/pages src/components -name '*.tsx' -not -name '*.test.tsx'",
-  { encoding: "utf-8" },
-)
-  .trim()
-  .split("\n")
-  .filter(Boolean);
+const TELAS = arquivosDeTela();
 
 function codigoDe(arquivo: string): string {
   return readFileSync(arquivo, "utf-8")

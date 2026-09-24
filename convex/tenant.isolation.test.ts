@@ -109,9 +109,9 @@ const MODULOS = [
   // que vigia o resto do produto não vigiava justamente o documento que vai
   // para a cliente.
   "propostas",
-  // O Escritório de IA entra desde o primeiro dia: é a superfície mais nova a
-  // ler dado de negócio, e a que mais depende de a posse vir da sessão.
-  "escritorio",
+  // O Assistente da decoradora entra desde o primeiro dia: é a superfície mais
+  // nova a ler dado de negócio, e a que mais depende de a posse vir da sessão.
+  "assistente",
   "orcamento",
   "layoutRenders",
   "dashboard",

@@ -1,9 +1,9 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { classificarPedido } from "@/convex/lib/escritorio/semaforo.ts";
-import { rotear } from "@/convex/lib/escritorio/roteamento.ts";
-import { planoDeConsulta } from "@/convex/lib/escritorio/plano.ts";
-import { AGENTES, agentePorId, FONTES } from "@/convex/lib/escritorio/agentes.ts";
+import { classificarPedido } from "@/convex/lib/assistente/semaforo.ts";
+import { rotear } from "@/convex/lib/assistente/roteamento.ts";
+import { planoDeConsulta } from "@/convex/lib/assistente/plano.ts";
+import { AGENTES, agentePorId, FONTES } from "@/convex/lib/assistente/agentes.ts";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // AS FRONTEIRAS DO ESCRITÓRIO, LIDAS NA FONTE
@@ -26,8 +26,8 @@ const semComentarios = (p: string) =>
     .filter((l) => !l.trim().startsWith("//"))
     .join("\n");
 
-const EXECUTOR = semComentarios("convex/escritorioExecutor.ts");
-const DADOS = semComentarios("convex/escritorio.ts");
+const EXECUTOR = semComentarios("convex/assistenteExecutor.ts");
+const DADOS = semComentarios("convex/assistente.ts");
 
 describe("o executor não entrega o banco ao modelo", () => {
   it("não acessa `ctx.db` — nem poderia: é uma action", () => {
@@ -52,7 +52,7 @@ describe("o executor não entrega o banco ao modelo", () => {
     // As três do ciclo de vida, e nada mais.
     for (const m of mutations) {
       expect(m, `mutation inesperada: ${m}`).toMatch(
-        /^internal\.escritorio\.(marcarRodando|concluir|falhar)$/,
+        /^internal\.assistente\.(marcarRodando|concluir|falhar)$/,
       );
     }
     expect(mutations.length).toBeGreaterThan(0);
@@ -166,9 +166,9 @@ describe("a camada de dados é da decoradora, não da Central", () => {
 });
 
 describe("a tela não mostra o que é interno", () => {
-  const telas = readdirSync("src/pages/app/escritorio", { recursive: true, encoding: "utf-8" })
+  const telas = readdirSync("src/pages/app/assistente", { recursive: true, encoding: "utf-8" })
     .filter((f) => typeof f === "string" && f.endsWith(".tsx"))
-    .map((f) => `src/pages/app/escritorio/${f}`);
+    .map((f) => `src/pages/app/assistente/${f}`);
 
   it("nenhuma tela do Escritório imprime prompt, modelo ou nome de consulta", () => {
     for (const tela of telas) {
@@ -183,7 +183,7 @@ describe("a tela não mostra o que é interno", () => {
   });
 
   it("as fontes são traduzidas por rótulo — nunca o id técnico na tela", () => {
-    const fonte = semComentarios("src/pages/app/escritorio/_components/trabalho-aberto.tsx");
+    const fonte = semComentarios("src/pages/app/assistente/_components/trabalho-aberto.tsx");
     expect(fonte).toContain("ROTULO_DA_FONTE");
     expect(fonte).not.toContain('"financeiro.vencidos"');
   });
@@ -191,7 +191,7 @@ describe("a tela não mostra o que é interno", () => {
 
 // ── OS SETE CENÁRIOS DO PRODUTO ─────────────────────────────────────────────
 // Provados no nível das REGRAS, que é onde a decisão acontece. O caminho de
-// banco está em `convex/escritorio.isolamento.test.ts`.
+// banco está em `convex/assistente.isolamento.test.ts`.
 describe("cenários", () => {
   it.each([
     ["A", "Quais recebimentos estão vencidos?", "financeiro", "verde"],

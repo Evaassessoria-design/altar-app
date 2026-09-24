@@ -1,306 +1,175 @@
-import { useState } from "react";
-import { useMutation, useQuery, useAction } from "convex/react";
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
-import type { Doc, Id } from "@/convex/_generated/dataModel.d.ts";
-import { ConvexError } from "convex/values";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button.tsx";
-import { Textarea } from "@/components/ui/textarea.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
-import { cn } from "@/lib/utils.ts";
-import { Loader2, Send, CircleSlash, AlertCircle, CheckCircle2 } from "lucide-react";
-import { TrabalhoAberto } from "./_components/trabalho-aberto.tsx";
+import { Building2, Users, TrendingUp, DollarSign, CalendarDays, Radio } from "lucide-react";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ESCRITÓRIO DE IA — A TELA
+// ═════════════════════════════════════════════════════════════════════════════
+// ESCRITÓRIO ALTAR — a mesa de quem administra o NEGÓCIO.
 //
-// ── O QUE ELA PRECISA COMUNICAR EM CINCO SEGUNDOS ───────────────────────────
-// "Escrevo o que preciso e minha equipe trabalha."
+// Não é o Assistente. O Assistente (/assistente) é a IA da decoradora,
+// trabalhando sobre a empresa DELA. Esta tela é o outro lado: a carteira de
+// assinantes do ALTAR, a cobrança, os interessados da landing.
 //
-// Por isso a caixa de texto vem ANTES dos cartões de agente. A pergunta da
-// decoradora nunca é "quem faz isso?" — é "preciso que alguém faça isso". O
-// ALTAR descobre quem; os cartões existem para ela saber que a equipe existe e
-// o que cada um alcança, não para ela ter de escolher.
-//
-// ── O QUE ESTA TELA NÃO É ───────────────────────────────────────────────────
-// Não é um chat. Não há histórico de conversa, não há "digitando…", não há
-// turno. É uma caixa de DELEGAÇÃO e uma lista de TRABALHOS — o vocabulário de
-// quem tem equipe, não o de quem usa um robô.
-//
-// Também não é a Central: aquela é a operação do SaaS ALTAR, atrás de
-// `requireAdmin`, e continua onde estava.
-// ─────────────────────────────────────────────────────────────────────────────
+// ── ESTA TELA NÃO É A TRAVA ─────────────────────────────────────────────────
+// O redirecionamento abaixo é cortesia: evita que alguém fique olhando uma
+// tela vazia. Quem trava é `requirePlatformOwner`, no backend, em toda função
+// de `convex/escritorio.ts` — porque quem digita a URL não passa pelo menu, e
+// quem chama a função pelo cliente Convex não passa nem pela tela.
+// ═════════════════════════════════════════════════════════════════════════════
 
-const EXEMPLOS = [
-  "O que precisa da minha atenção hoje?",
-  "Quais recebimentos estão vencidos?",
-  "Quais leads estão sem retorno?",
-  "Como estão meus próximos eventos?",
-  "Tenho alguma compra urgente?",
-] as const;
+const emReais = (v: number) =>
+  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-type Tarefa = Doc<"agentTasks">;
-
-/** Hora curta. Data só quando não é hoje — no mesmo dia ela atrapalha. */
-function quando(ms: number): string {
-  const d = new Date(ms);
-  const hoje = new Date();
-  const mesmoDia =
-    d.getDate() === hoje.getDate() &&
-    d.getMonth() === hoje.getMonth() &&
-    d.getFullYear() === hoje.getFullYear();
-  return mesmoDia
-    ? d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-    : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
-}
-
-export default function EscritorioPage() {
-  const equipe = useQuery(api.escritorio.equipe, {});
-  const historico = useQuery(api.escritorio.listar, {});
-  const delegar = useMutation(api.escritorio.delegar);
-  const executar = useAction(api.escritorioExecutor.executar);
-
-  const [pedido, setPedido] = useState("");
-  const [agenteId, setAgenteId] = useState<string>("");
-  const [enviando, setEnviando] = useState(false);
-  const [aberto, setAberto] = useState<Id<"agentTasks"> | null>(null);
-
-  const enviar = async () => {
-    const texto = pedido.trim();
-    if (!texto) return;
-    setEnviando(true);
-    try {
-      const taskId = await delegar({ pedido: texto, agenteId: agenteId || undefined });
-      setPedido("");
-      // O trabalho já aparece no histórico (a consulta é reativa) enquanto a
-      // action corre. Ela não fica olhando para um botão girando.
-      setAberto(taskId as Id<"agentTasks">);
-      await executar({ taskId: taskId as Id<"agentTasks"> });
-    } catch (e) {
-      toast.error(
-        e instanceof ConvexError
-          ? (e.data as { message: string }).message
-          : "Não foi possível delegar agora.",
-      );
-    } finally {
-      setEnviando(false);
-    }
-  };
-
-  const tarefas = historico?.tarefas ?? [];
-
+function Numero({
+  icone: Icone,
+  rotulo,
+  valor,
+  detalhe,
+}: {
+  icone: typeof Users;
+  rotulo: string;
+  valor: string;
+  detalhe?: string;
+}) {
   return (
-    <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-6">
-      <header className="space-y-1">
-        <h1 className="font-serif text-2xl md:text-3xl leading-tight">Escritório</h1>
-        <p className="text-sm text-muted-foreground">
-          Sua equipe lê o que já está no ALTAR e responde. Ela analisa e organiza — não
-          envia mensagem, não mexe em dinheiro e não apaga nada.
-        </p>
-      </header>
-
-      {/* ── A CAIXA ────────────────────────────────────────────────────────
-          Vem antes de tudo. É a única coisa que ela precisa entender. */}
-      <section className="space-y-3 rounded-xl border border-border bg-card p-4">
-        <Textarea
-          value={pedido}
-          onChange={(e) => setPedido(e.target.value)}
-          placeholder="Escreva o que você precisa. Ex.: organize meu dia e me diga o que precisa da minha atenção."
-          rows={3}
-          // `text-base` no celular: abaixo de 16px o iOS dá zoom ao focar, e a
-          // tela inteira salta na cara de quem está escrevendo.
-          className="text-base resize-none min-h-24"
-        />
-
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={agenteId}
-            onChange={(e) => setAgenteId(e.target.value)}
-            aria-label="Quem cuida deste pedido"
-            // `<select>` nativo: no celular abre a roda do sistema, que é o
-            // melhor seletor daquele aparelho, e não fica embaixo do teclado.
-            className="h-11 flex-1 min-w-40 rounded-md border border-input bg-transparent px-3 text-base md:text-sm cursor-pointer"
-          >
-            <option value="">O ALTAR escolhe quem cuida</option>
-            {(equipe ?? []).map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.nome}
-              </option>
-            ))}
-          </select>
-
-          <Button
-            onClick={() => void enviar()}
-            disabled={enviando || !pedido.trim()}
-            // `h-11` e largura cheia no celular: é o botão principal da tela.
-            className="cursor-pointer gap-2 h-11 w-full sm:w-auto"
-          >
-            {enviando ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-            {enviando ? "Trabalhando…" : "Delegar"}
-          </Button>
-        </div>
-
-        <div className="flex flex-wrap gap-1.5">
-          {EXEMPLOS.map((ex) => (
-            <button
-              key={ex}
-              onClick={() => setPedido(ex)}
-              disabled={enviando}
-              // `min-h-9` + `text-xs`: alvo tocável sem virar botão gordo.
-              className="min-h-9 rounded-full border border-border px-3 text-xs text-muted-foreground hover:border-primary/50 hover:text-foreground transition-colors cursor-pointer text-left"
-            >
-              {ex}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {/* ── A EQUIPE ───────────────────────────────────────────────────────
-          Cartões compactos. Existem para ela saber quem existe e o que cada
-          um alcança — não para escolher a cada pedido. */}
-      <section className="space-y-3">
-        <h2 className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-          Sua equipe
-        </h2>
-        {equipe === undefined ? (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-20 w-full rounded-lg" />
-            ))}
-          </div>
-        ) : (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {equipe.map((a) => {
-              const emAndamento = tarefas.find(
-                (t) => t.agenteId === a.id && (t.status === "queued" || t.status === "running"),
-              );
-              return (
-                <button
-                  key={a.id}
-                  onClick={() => setAgenteId(a.id)}
-                  className={cn(
-                    "text-left rounded-lg border p-3 transition-colors cursor-pointer",
-                    agenteId === a.id
-                      ? "border-primary bg-primary/5"
-                      : "border-border bg-card hover:border-primary/40",
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="font-medium text-sm truncate">{a.nome}</p>
-                    {emAndamento ? (
-                      <span className="flex items-center gap-1 text-[10px] text-primary flex-shrink-0">
-                        <Loader2 className="size-3 animate-spin" /> trabalhando
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-muted-foreground flex-shrink-0">
-                        disponível
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">{a.funcao}</p>
-                  {/* `line-clamp-2`: descrição longa não faz um cartão ficar
-                      com o dobro da altura do vizinho. */}
-                  <p className="mt-1 text-xs text-muted-foreground/90 line-clamp-2">
-                    {a.descricao}
-                  </p>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {/* ── OS TRABALHOS ───────────────────────────────────────────────── */}
-      <section className="space-y-3">
-        <h2 className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-          Trabalhos recentes
-        </h2>
-
-        {historico === undefined ? (
-          <div className="space-y-2">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-14 w-full rounded-lg" />
-            ))}
-          </div>
-        ) : tarefas.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-            Nada por aqui ainda. Escreva o primeiro pedido acima — um dos exemplos serve.
-          </p>
-        ) : (
-          <>
-            <ul className="space-y-2">
-              {tarefas.map((t) => (
-                <li key={t._id}>
-                  <LinhaDoTrabalho
-                    tarefa={t}
-                    nomeDoAgente={(equipe ?? []).find((a) => a.id === t.agenteId)?.nome}
-                    onAbrir={() => setAberto(t._id)}
-                  />
-                </li>
-              ))}
-            </ul>
-            {historico.temMais && (
-              // A tela nunca afirma o que não sabe.
-              <p className="text-xs text-muted-foreground">
-                {tarefas.length} trabalhos carregados (há mais).
-              </p>
-            )}
-          </>
-        )}
-      </section>
-
-      {aberto && (
-        <TrabalhoAberto
-          taskId={aberto}
-          nomeDoAgente={(equipe ?? []).find(
-            (a) => a.id === tarefas.find((t) => t._id === aberto)?.agenteId,
-          )?.nome}
-          onClose={() => setAberto(null)}
-        />
-      )}
+    <div className="rounded-xl border bg-card p-4">
+      <div className="flex items-center gap-2 text-muted-foreground">
+        <Icone className="h-4 w-4" />
+        <span className="text-xs uppercase tracking-wide">{rotulo}</span>
+      </div>
+      <p className="mt-2 text-2xl font-semibold tabular-nums">{valor}</p>
+      {detalhe ? <p className="mt-1 text-xs text-muted-foreground">{detalhe}</p> : null}
     </div>
   );
 }
 
-function LinhaDoTrabalho({
-  tarefa,
-  nomeDoAgente,
-  onAbrir,
-}: {
-  tarefa: Tarefa;
-  nomeDoAgente?: string;
-  onAbrir: () => void;
-}) {
-  const trabalhando = tarefa.status === "queued" || tarefa.status === "running";
-  return (
-    <button
-      onClick={onAbrir}
-      className="w-full text-left rounded-lg border border-border bg-card px-3 py-2.5 hover:border-primary/40 transition-colors cursor-pointer"
-    >
-      <div className="flex items-start gap-2.5">
-        <span className="mt-0.5 flex-shrink-0">
-          {trabalhando ? (
-            <Loader2 className="size-4 animate-spin text-primary" />
-          ) : tarefa.status === "refused" ? (
-            <CircleSlash className="size-4 text-muted-foreground" />
-          ) : tarefa.status === "failed" ? (
-            <AlertCircle className="size-4 text-amber-600" />
-          ) : (
-            <CheckCircle2 className="size-4 text-primary" />
-          )}
-        </span>
-        {/* `min-w-0`: pedido longo é truncado em vez de estourar a linha. */}
-        <div className="min-w-0 flex-1">
-          <p className="text-sm truncate">{tarefa.pedido}</p>
-          <p className="text-[11px] text-muted-foreground truncate">
-            {nomeDoAgente ?? "Equipe"}
-            {tarefa.roteadoAutomaticamente && " · encaminhado pelo ALTAR"}
-            {" · "}
-            {quando(tarefa.criadoEm)}
-            {trabalhando && " · trabalhando"}
-          </p>
+export default function EscritorioPage() {
+  const navigate = useNavigate();
+  const souDono = useQuery(api.escritorio.souDono);
+  // Só pergunta o panorama depois de saber que pode: uma chamada de quem não é
+  // dono responderia NOT_FOUND e viraria erro de tela sem motivo.
+  const panorama = useQuery(api.escritorio.panorama, souDono === true ? {} : "skip");
+
+  useEffect(() => {
+    if (souDono === false) navigate("/dashboard");
+  }, [souDono, navigate]);
+
+  if (souDono !== true) {
+    return (
+      <div className="space-y-4 p-6">
+        <Skeleton className="h-8 w-56" />
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 rounded-xl" />
+          ))}
         </div>
       </div>
-    </button>
+    );
+  }
+
+  return (
+    <div className="space-y-6 p-4 sm:p-6">
+      <header className="space-y-1">
+        <div className="flex items-center gap-2">
+          <Building2 className="h-5 w-5" />
+          <h1 className="text-xl font-semibold">Escritório ALTAR</h1>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          O negócio ALTAR — carteira, cobrança e interessados. Nenhum dado de cliente
+          de decoradora aparece aqui.
+        </p>
+      </header>
+
+      {panorama === undefined ? (
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 rounded-xl" />
+          ))}
+        </div>
+      ) : (
+        <>
+          <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <Numero
+              icone={Users}
+              rotulo="Contas"
+              valor={String(panorama.negocio.total)}
+              detalhe={
+                panorama.leitura.haMaisUsuarios
+                  ? `${panorama.leitura.usuariosLidos} lidas (há mais)`
+                  : undefined
+              }
+            />
+            <Numero
+              icone={DollarSign}
+              rotulo="MRR"
+              valor={emReais(panorama.negocio.mrr)}
+              detalhe={`${panorama.negocio.active} assinaturas ativas`}
+            />
+            <Numero
+              icone={TrendingUp}
+              rotulo="Conversão"
+              valor={`${panorama.negocio.conversionRate}%`}
+              detalhe="de quem chegou ao fim do teste"
+            />
+            <Numero
+              icone={CalendarDays}
+              rotulo="Eventos"
+              valor={String(panorama.negocio.eventsTotal)}
+              detalhe={
+                panorama.leitura.haMaisEventos
+                  ? `${panorama.leitura.eventosLidos} lidos (há mais)`
+                  : "em todas as contas"
+              }
+            />
+          </section>
+
+          <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <Numero icone={Radio} rotulo="Em teste" valor={String(panorama.negocio.trial)} />
+            <Numero
+              icone={Radio}
+              rotulo="Inadimplentes"
+              valor={String(panorama.negocio.overdue)}
+              detalhe={`${panorama.negocio.overdueBlocked} já bloqueadas`}
+            />
+            <Numero icone={Radio} rotulo="Teste vencido" valor={String(panorama.negocio.expired)} />
+            <Numero icone={Radio} rotulo="Canceladas" valor={String(panorama.negocio.cancelled)} />
+          </section>
+
+          <section className="space-y-3">
+            <h2 className="text-sm font-medium">Interessados no ALTAR</h2>
+            <p className="text-xs text-muted-foreground">
+              Quem pediu demonstração ou beta pela landing. São decoradoras interessadas
+              no ALTAR — não confundir com os leads de uma decoradora, que são clientes
+              dela e não aparecem aqui.
+            </p>
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <Numero icone={Users} rotulo="Novos" valor={String(panorama.interessados.novo)} />
+              <Numero
+                icone={Users}
+                rotulo="Contatados"
+                valor={String(panorama.interessados.contatado)}
+              />
+              <Numero
+                icone={Users}
+                rotulo="Convertidos"
+                valor={String(panorama.interessados.convertido)}
+              />
+              <Numero
+                icone={Users}
+                rotulo="Descartados"
+                valor={String(panorama.interessados.descartado)}
+              />
+            </div>
+          </section>
+
+          <p className="text-xs text-muted-foreground">
+            O Escritório de IA interno — comercial, marketing, CS e assinaturas do ALTAR —
+            ainda não existe. Quando vier, nasce aqui, atrás da mesma permissão.
+          </p>
+        </>
+      )}
+    </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
 import { ConvexError } from "convex/values";
@@ -17,7 +17,11 @@ import { Label } from "@/components/ui/label.tsx";
 import { Checkbox } from "@/components/ui/checkbox.tsx";
 import { CheckCircle2, Loader2, Sparkles } from "lucide-react";
 import { areaByKey, type BriefingFields } from "@/lib/briefing-areas.ts";
-import { suggestAssemblyItems, type SuggestedItem } from "@/lib/assembly-suggestions.ts";
+import {
+  suggestAssemblyItems,
+  type ItemJaExistente,
+  type SuggestedItem,
+} from "@/lib/assembly-suggestions.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SUGERIR → MOSTRAR → REVISAR → CONFIRMAR → CRIAR.
@@ -27,18 +31,49 @@ import { suggestAssemblyItems, type SuggestedItem } from "@/lib/assembly-suggest
 
 type Row = SuggestedItem & { selected: boolean };
 
+/** Nome comparável: sem acento, sem caixa, sem espaço sobrando. */
+const chaveDoNome = (n: string) =>
+  n.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+
 export function SuggestItemsDialog({
   eventId,
   briefing,
+  jaExistentes,
   onClose,
 }: {
   eventId: Id<"events">;
   briefing: Partial<BriefingFields> | null | undefined;
+  /** O que o evento já tem — o convite não reoferece o que ela já criou. */
+  jaExistentes?: readonly ItemJaExistente[];
   onClose: () => void;
 }) {
   const createMany = useMutation(api.assemblyItems.createMany);
+  // ── "MÓVEIS BELLA" É DIGITADO UMA VEZ ────────────────────────────────────
+  // A sugestão traz o fornecedor como TEXTO, porque ela vem de um campo de
+  // texto do briefing (`furnitureSupplier`, `flowerSupplier`). Criar o item
+  // com o nome solto faria a decoradora escolher o fornecedor de novo, item a
+  // item, depois — para um fornecedor que já está cadastrado no evento.
+  //
+  // Aqui o nome é casado com a lista do próprio evento. Casamento por NOME é
+  // uma heurística, e o repositório desconfia delas — mas o risco é contido:
+  // acerto vira vínculo, erro vira nada, e o nome continua gravado como
+  // anotação nos dois casos. Nenhum fornecedor é criado, nenhum é alterado.
+  const fornecedores = useQuery(api.suppliers.listByEvent, { eventId }) as
+    | { _id: Id<"eventSuppliers">; companyName: string }[]
+    | undefined;
+
+  const vinculoPara = (nome?: string) => {
+    if (!nome || !fornecedores) return undefined;
+    const alvo = chaveDoNome(nome);
+    const achados = fornecedores.filter((f) => chaveDoNome(f.companyName) === alvo);
+    // Duas empresas com o mesmo nome no mesmo evento: não escolhemos por ela.
+    return achados.length === 1 ? achados[0]._id : undefined;
+  };
+  // `useState` com inicializador: a lista é calculada UMA vez, na abertura.
+  // Recalcular a cada render faria as linhas que ela editou voltarem ao texto
+  // do briefing no meio da revisão.
   const [rows, setRows] = useState<Row[]>(() =>
-    suggestAssemblyItems(briefing).map((s) => ({ ...s, selected: true })),
+    suggestAssemblyItems(briefing, jaExistentes).map((s) => ({ ...s, selected: true })),
   );
   const [saving, setSaving] = useState(false);
 
@@ -61,6 +96,7 @@ export function SuggestItemsDialog({
           quantity: r.quantity,
           unit: r.unit?.trim() || undefined,
           supplierName: r.supplierName?.trim() || undefined,
+          supplierId: vinculoPara(r.supplierName),
           ambiente: r.ambiente?.trim() || undefined,
           notes: r.notes?.trim() || undefined,
           includeInAssemblyReport: r.includeInAssemblyReport,
@@ -92,8 +128,9 @@ export function SuggestItemsDialog({
 
         {rows.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            Ainda não há dados no briefing suficientes para sugerir itens. Preencha campos
-            como tipo e quantidade de mesas e cadeiras.
+            Nada de novo para sugerir. Ou o briefing ainda não tem o que virar item —
+            tipo e quantidade de mesas e cadeiras, tipos de flores — ou tudo o que ele
+            descreve já está na lista de itens deste evento.
           </p>
         ) : (
           <div className="space-y-3">

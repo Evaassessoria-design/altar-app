@@ -195,7 +195,7 @@ describe("as somas da tela", () => {
     await dona.mutation(api.financeiro.addTransaction, { ...lancamento, amount: 1500 });
     const resumo = await outra.query(api.financeiro.getSummary, {});
     expect(resumo.totalIncome).toBe(0);
-    expect(await outra.query(api.financeiro.listTransactions, {})).toHaveLength(0);
+    expect((await outra.query(api.financeiro.listTransactions, {})).itens).toHaveLength(0);
   });
 });
 

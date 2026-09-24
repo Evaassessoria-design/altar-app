@@ -51,6 +51,73 @@ export type LinhaDaFolha = ItemDeCarregamento & {
   emAberto: boolean;
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// AS PEÇAS DO ACERVO — O SEGUNDO BLOCO DA FOLHA
+//
+// ── POR QUE ELAS NÃO SÃO ITENS DE MONTAGEM ──────────────────────────────────
+// `assemblyItems` é o que se MONTA: "Arranjo baixo branco ×20". A reserva de
+// acervo é o que SAI DO GALPÃO: "Vaso âmbar ×60" — as peças de que aqueles
+// vinte arranjos são feitos, e que voltam para a prateleira depois.
+//
+// Fundir os dois numa lista só produziria contagem dupla e, pior, uma lista em
+// que ninguém sabe o que conferir: vinte arranjos ou sessenta vasos?
+//
+// ── E POR QUE ELAS PRECISAVAM ESTAR AQUI ────────────────────────────────────
+// A folha perguntava "o que vai no caminhão?" e respondia só metade. A outra
+// metade — o número que SAIU e o que VOLTOU — já estava gravada em
+// `collectionReservations.saiu` e `.voltou`, e vivia noutra tela. Quem está no
+// galpão com a prancheta precisava das duas ao mesmo tempo, e tinha de abrir o
+// celular para ver a segunda.
+//
+// Blocos separados, cabeçalhos diferentes, mesma folha. Planejamento e
+// conferência continuam sendo perguntas distintas — e as colunas dizem qual é
+// qual.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type PecaDoAcervo = {
+  _id: string;
+  nome: string;
+  unidade?: string;
+  /** Quanto foi prometido a este evento. */
+  quantidade: number;
+  /** Quanto saiu fisicamente. AUSENTE = nada saiu ainda. */
+  saiu?: number;
+  /** Quanto voltou. AUSENTE = nada voltou ainda. */
+  voltou?: number;
+};
+
+export type LinhaDoAcervo = PecaDoAcervo & {
+  /** Quanto ainda não voltou. `0` quando está tudo resolvido. */
+  faltaVoltar: number;
+};
+
+/**
+ * As peças do acervo, prontas para a folha.
+ *
+ * `faltaVoltar` é DERIVADO, nunca gravado — a regra é a mesma de
+ * `convex/lib/acervo.ts`, e um número guardado ao lado divergiria no primeiro
+ * retorno parcial.
+ *
+ * Reserva sem item resolvido (peça excluída do acervo depois da reserva) é
+ * descartada: uma linha sem nome na prancheta não ajuda ninguém a conferir.
+ */
+export function montarPecasDoAcervo(
+  reservas: readonly (PecaDoAcervo | null | undefined)[],
+): { linhas: LinhaDoAcervo[]; faltamVoltar: number } {
+  const linhas = reservas
+    .filter((r): r is PecaDoAcervo => !!r && !!r.nome?.trim())
+    .map((r) => ({
+      ...r,
+      // Só o que SAIU pode faltar voltar. Uma peça que nunca saiu não está
+      // pendente de retorno — está pendente de saída, que é outra coisa.
+      faltaVoltar: Math.max(0, (r.saiu ?? 0) - (r.voltou ?? 0)),
+    }));
+  return {
+    linhas,
+    faltamVoltar: linhas.filter((l) => l.faltaVoltar > 0).length,
+  };
+}
+
 export type FolhaDeCarregamento = {
   ambientes: GrupoDeAmbiente<LinhaDaFolha>[];
   total: number;
@@ -111,9 +178,14 @@ export function montarFolhaDeCarregamento(
  * `null` quando não há nada pendente — o silêncio é a boa notícia, e inventar
  * um "0 itens em aberto" só ocuparia espaço.
  */
-export function resumoDoRetorno(folha: FolhaDeCarregamento): string | null {
-  if (folha.naoVoltaram === 0) return null;
-  return folha.naoVoltaram === 1
+export function resumoDoRetorno(
+  folha: FolhaDeCarregamento,
+  /** Peças do acervo que saíram e não voltaram inteiras. */
+  pecasPendentes = 0,
+): string | null {
+  const total = folha.naoVoltaram + pecasPendentes;
+  if (total === 0) return null;
+  return total === 1
     ? "1 item saiu e ainda não voltou"
-    : `${folha.naoVoltaram} itens saíram e ainda não voltaram`;
+    : `${total} itens saíram e ainda não voltaram`;
 }

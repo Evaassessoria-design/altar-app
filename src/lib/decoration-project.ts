@@ -1,4 +1,5 @@
 import { chaveDoAmbiente } from "@/convex/lib/ambiente.ts";
+import { urlDeMiniatura, type FotoResolvida } from "@/convex/lib/fotoDoItem.ts";
 import { BRIEFING_AREAS } from "./briefing-areas.ts";
 import { scopeMeta, type ProjectScope } from "./photo-scope.ts";
 
@@ -44,6 +45,16 @@ export type ItemDoProjeto = {
   visibility: string;
   referencePhotoUrl?: string | null;
   contractedPhotoUrl?: string | null;
+  /**
+   * As duas fotos já RESOLVIDAS pelo servidor (ponteiro da Galeria × arquivo
+   * próprio do item). Ver convex/lib/fotoDoItem.ts.
+   *
+   * Opcionais porque o PDF do Caderno monta `ItemDoProjeto` a partir de um
+   * `Doc<"assemblyItems">` cru em alguns caminhos de teste. Ausentes, a
+   * leitura cai nas duas URLs acima — que continuam significando o original.
+   */
+  referenceFoto?: FotoResolvida;
+  contractedFoto?: FotoResolvida;
 };
 
 export type AmbienteDoProjeto = {
@@ -294,12 +305,56 @@ export function montarProjeto(itens: readonly ItemDoProjeto[]): AmbienteDoProjet
 export function fotoDoItem(item: ItemDoProjeto): {
   url: string | null;
   ehReferencia: boolean;
+  /** A linha da Galeria, quando a foto veio de lá. Serve para não repeti-la. */
+  photoId?: string;
 } {
   // Mesma precedência do Caderno de Montagem: o contratado manda.
-  const contratada = item.contractedPhotoUrl ?? null;
-  const referencia = item.referencePhotoUrl ?? null;
+  //
+  // A TELA recebe miniatura; o PDF e a tela cheia continuam usando o original.
+  // Quando as fotos resolvidas vêm do servidor, `urlDeMiniatura` prefere a
+  // versão leve — a grade do projeto deixou de baixar originais de 15 MB para
+  // desenhar um cartão de 120 px.
+  const contratada = item.contractedFoto
+    ? urlDeMiniatura(item.contractedFoto)
+    : (item.contractedPhotoUrl ?? null);
+  const referencia = item.referenceFoto
+    ? urlDeMiniatura(item.referenceFoto)
+    : (item.referencePhotoUrl ?? null);
+  const usouContratada = !!contratada;
   return {
     url: contratada ?? referencia,
-    ehReferencia: !contratada && !!referencia,
+    ehReferencia: !usouContratada && !!referencia,
+    photoId: usouContratada
+      ? item.contractedFoto?.photoId
+      : referencia
+        ? item.referenceFoto?.photoId
+        : undefined,
   };
+}
+
+/**
+ * As fotos da Galeria que JÁ estão sendo mostradas presas a um item.
+ *
+ * ── POR QUE ISTO PRECISA EXISTIR ────────────────────────────────────────────
+ * Desde que o item aponta para a Galeria em vez de guardar cópia própria, a
+ * MESMA linha de `eventPhotos` pode aparecer duas vezes no mesmo bloco do
+ * Projeto Visual: uma no cartão da "Cadeira Dior" e outra na prateleira de
+ * referências da Cerimônia, porque a foto também tem aquele ambiente.
+ *
+ * Duas vezes a mesma imagem, lado a lado, lê como erro — e num documento para
+ * os noivos lê como descuido. A prateleira mostra o que AINDA NÃO tem dono.
+ *
+ * Considera as DUAS fotos do item, não só a que está sendo desenhada: a foto
+ * de referência continua sendo daquele item mesmo quando o contratado a
+ * cobre no cartão.
+ */
+export function fotosPresasAItens(itens: readonly ItemDoProjeto[]): Set<string> {
+  const usadas = new Set<string>();
+  for (const item of itens) {
+    const ref = item.referenceFoto?.photoId;
+    const con = item.contractedFoto?.photoId;
+    if (ref) usadas.add(ref);
+    if (con) usadas.add(con);
+  }
+  return usadas;
 }

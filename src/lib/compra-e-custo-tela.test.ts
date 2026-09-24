@@ -135,23 +135,31 @@ describe("a decisão sobre o dinheiro", () => {
     expect(corpo).toContain("lancamento.comprovantes");
   });
 
-  it("e 'manter' grava a procedência ANTES de soltar o vínculo", () => {
-    // A despesa sobrevive à compra; sem isto ela vira uma linha órfã no livro
-    // que ninguém sabe, meses depois, se ainda vale. Dentro do `else` de
-    // propósito: em "remover" não sobra despesa para lembrar de nada.
-    const corpo = corpoDaFuncao(PURCHASES, "async function aplicarDecisao");
-    expect(corpo).toContain("origemCompra");
-    const origem = corpo.indexOf("origemCompra");
-    const solta = corpo.indexOf("transactionId: undefined");
-    expect(origem, "soltou o vínculo antes de guardar de onde veio").toBeLessThan(solta);
+  it("a procedência é gravada no NASCIMENTO, não na hora de desvincular", () => {
+    // `origemDaCompra` entra em `registerCost`, uma vez, e nunca mais é
+    // tocada. É o que a faz sobreviver aos dois caminhos que destroem o
+    // vínculo: cancelar a compra (solta o ponteiro) e excluí-la (apaga a
+    // linha apontada). Escrevê-la em `aplicarDecisao` pareceria equivalente e
+    // não é — o lançamento passaria meses sem saber de onde veio, e quem
+    // apagasse a despesa antes do cancelamento nunca teria a informação.
+    expect(corpoDaFuncao(PURCHASES, "export const registerCost")).toContain("origemDaCompra");
+  });
+
+  it("e 'aplicarDecisao' não a reescreve nem a apaga ao soltar o vínculo", () => {
+    // Gravada uma vez. Se esta função passar a mexer nela, a procedência vira
+    // estado mutável e deixa de ser memória.
+    expect(corpoDaFuncao(PURCHASES, "async function aplicarDecisao")).not.toContain(
+      "origemDaCompra",
+    );
   });
 
   it("e a procedência NÃO dirige comportamento: nada a lê para decidir", () => {
-    // `origemCompra` é memória, como `assemblyItems.compositionId`. Se alguma
-    // condição passar a depender dela, a despesa volta a carregar vínculo com
-    // outro nome — e a compra cancelada volta a calar a margem do evento.
+    // `origemDaCompra` é memória, como `assemblyItems.compositionId`. Se
+    // alguma condição passar a depender dela, a despesa volta a carregar
+    // vínculo com outro nome — e a compra cancelada volta a calar a margem do
+    // evento, que é exatamente o que desvincular existe para evitar.
     for (const fonte of [PURCHASES, semComentarios("convex/lib/custoDoEvento.ts")]) {
-      expect(fonte).not.toMatch(/if\s*\([^)]*origemCompra/);
+      expect(fonte).not.toMatch(/if\s*\([^)]*origemDaCompra/);
     }
   });
 

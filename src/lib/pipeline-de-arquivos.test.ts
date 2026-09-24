@@ -88,7 +88,9 @@ describe("cada tela mantém o próprio teto e os próprios tipos", () => {
 
   it("e imagem continua imagem, com o filtro de tipo", () => {
     for (const p of [
-      "src/pages/app/events/[id]/_components/assembly-items-section.tsx",
+      // Ver `upload-telas.test.ts`: a foto do item passou a nascer na Galeria,
+      // e quem envia é o seletor. O teto e o filtro de tipo vieram junto.
+      "src/components/projeto/seletor-de-foto.tsx",
       "src/pages/app/events/[id]/planta/page.tsx",
       "src/pages/app/events/[id]/fornecedores/page.tsx",
       "src/pages/app/configuracoes/page.tsx",
@@ -109,17 +111,55 @@ describe("a exclusão de arquivo passa pela regra única", () => {
     for (const p of ["convex/gallery.ts", "convex/assemblyItems.ts", "convex/contracts.ts"]) {
       const fonte = semComentarios(p);
       expect(fonte, `${p} apaga arquivo sem proteção`).not.toContain("ctx.storage.delete");
-      expect(fonte).toContain("safeDeleteFile");
+      // A Galeria não chama mais `safeDeleteFile` DIRETO: desde que a foto
+      // pode ser reaproveitada em outro evento, apagar exige antes perguntar
+      // se mais alguém aponta para o arquivo. As duas regras andam juntas em
+      // `apagarFotoDaGaleria`, e é por lá que ela passa.
+      expect(fonte).toMatch(/safeDeleteFile|apagarFotoDaGaleria/);
     }
   });
 
   it("e a linha é apagada DEPOIS dos arquivos, nunca antes", () => {
     // Apagar a linha primeiro e falhar no arquivo deixaria órfão sem dono
     // conhecido — ninguém saberia mais que aquele arquivo existiu.
-    const gallery = semComentarios("convex/gallery.ts");
-    const i = gallery.indexOf("safeDeleteFile(ctx, photo.storageId)");
-    const j = gallery.indexOf("ctx.db.delete(args.id)");
+    //
+    // A ordem mudou de endereço junto com a regra: quem apaga foto da Galeria
+    // agora é `apagarFotoDaGaleria`, em lib/cascade.ts, e os DOIS caminhos (a
+    // mutation e a cascata do evento) passam por ela.
+    const cascade = semComentarios("convex/lib/cascade.ts");
+    const fn = cascade.slice(cascade.indexOf("export async function apagarFotoDaGaleria"));
+    const i = fn.indexOf("safeDeleteFile(ctx, photo.storageId)");
+    const j = fn.indexOf("ctx.db.delete(photo._id)");
     expect(i).toBeGreaterThan(-1);
     expect(j).toBeGreaterThan(i);
+  });
+
+  it("o arquivo compartilhado por outra linha NÃO é apagado", () => {
+    // A regra que nasceu com o acervo: a foto de 2024 reaproveitada em 2026
+    // tem duas linhas e um arquivo só. Apagar a de 2024 quebraria a de 2026 em
+    // silêncio, e a decoradora só descobriria na frente da cliente.
+    const cascade = semComentarios("convex/lib/cascade.ts");
+    const fn = cascade.slice(cascade.indexOf("export async function apagarFotoDaGaleria"));
+    const pergunta = fn.indexOf("arquivoAindaEmUso");
+    const apaga = fn.indexOf("safeDeleteFile");
+    expect(pergunta, "ninguém pergunta se o arquivo ainda é usado").toBeGreaterThan(-1);
+    expect(apaga, "apaga antes de perguntar").toBeGreaterThan(pergunta);
+  });
+
+  it("a pergunta é feita DENTRO da conta, nunca fora dela", () => {
+    // O storage do Convex não é escopado por usuário. Varrer por `storageId`
+    // sem o `userId` deixaria uma conta descobrir que outra referencia o mesmo
+    // arquivo — e ainda faria a exclusão de uma depender da outra.
+    const cascade = semComentarios("convex/lib/cascade.ts");
+    const fn = cascade.slice(cascade.indexOf("export async function arquivoAindaEmUso"));
+    expect(fn).toContain('withIndex("by_user_storage"');
+    expect(fn).toContain('q.eq("userId", userId)');
+  });
+
+  it("a Galeria e a cascata do evento usam a MESMA função", () => {
+    // Duas implementações da mesma regra divergem, e a que divergir vai ser a
+    // que apaga a foto do evento que ainda está acontecendo.
+    expect(semComentarios("convex/gallery.ts")).toContain("apagarFotoDaGaleria(ctx, photo)");
+    expect(semComentarios("convex/lib/cascade.ts")).toContain("apagarFotoDaGaleria(ctx, photo)");
   });
 });

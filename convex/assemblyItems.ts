@@ -1,7 +1,22 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 import { ConvexError } from "convex/values";
-import { getOwnedEvent, requireEventOwner, requireIdentity, requireUser, getOptionalUser } from "./lib/identity";
+import {
+  getOwnedEvent,
+  requireEventOwner,
+  requireEventPhoto,
+  requireEventSupplier,
+  requireIdentity,
+  requireUser,
+  getOptionalUser,
+} from "./lib/identity";
+import {
+  resolverFotoDoItem,
+  SEM_FOTO,
+  type FotoDaGaleria,
+  type FotoResolvida,
+} from "./lib/fotoDoItem";
 import { requireActiveAccess } from "./lib/accessGuard";
 import { limparCampos } from "./lib/limparCampos";
 import { exigirQuantidadeGravavel } from "./lib/numeroGravavel";
@@ -61,69 +76,73 @@ export const generateUploadUrl = mutation({
 export const listByEvent = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
-    if (!(await getOwnedEvent(ctx, args.eventId))) return [];
+    const evento = await getOwnedEvent(ctx, args.eventId);
+    if (!evento) return [];
 
-    const rows = await ctx.db
-      .query("assemblyItems")
-      .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
-      .collect();
+    const rows = (
+      await ctx.db
+        .query("assemblyItems")
+        .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+        .collect()
+    ).sort((a, b) => a.order - b.order);
 
-    // ── AS FOTOS DA GALERIA, RESOLVIDAS DE UMA VEZ ───────────────────────────
-    // Um item pode APONTAR para uma foto da Galeria em vez de carregar um
-    // arquivo próprio (ver `assemblyItems.referencePhotoId`). Resolver isso com
-    // um `get` por item seria N+1 numa tela que abre toda visita ao evento.
+    // ── AS FOTOS DA GALERIA SÃO LIDAS DE UMA VEZ ─────────────────────────────
+    // Resolver o ponteiro dentro do laço seria N+1 — e pior, a MESMA foto
+    // usada por três itens (o que acontece o tempo todo: uma referência de
+    // cadeira serve à cerimônia e à recepção) pediria três leituras e três
+    // `getUrl` para o mesmo arquivo.
     //
-    // Uma consulta por evento, e só quando algum item de fato aponta: evento
-    // sem ponteiro nenhum — o estado de tudo que já existe — não paga nada.
-    const apontam = rows.some((i) => i.referencePhotoId || i.contractedPhotoId);
-    const galeria = apontam
-      ? new Map(
-          (
-            await ctx.db
-              .query("eventPhotos")
-              .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
-              .collect()
-          ).map((f) => [f._id, f]),
-        )
-      : new Map();
+    // `Set` primeiro, uma leitura por foto distinta, e o resto sai de um Map.
+    const apontadas = new Set<string>();
+    for (const item of rows) {
+      if (item.referencePhotoId) apontadas.add(item.referencePhotoId);
+      if (item.contractedPhotoId) apontadas.add(item.contractedPhotoId);
+    }
 
-    /**
-     * A URL de um slot. UMA regra, usada pelos dois — duas cópias divergiriam
-     * e um slot passaria a preferir coisa diferente do outro.
-     *
-     * O ponteiro manda; sem ele, o arquivo próprio do item. Ponteiro que
-     * sobreviveu a uma foto apagada vira "sem foto", nunca quadro quebrado.
-     *
-     * Da foto da Galeria sai a VERSÃO LEVE quando existe: a miniatura do
-     * Caderno tem 22mm, e baixar o original de 15 MB para desenhá-la é o
-     * desperdício que `imagem-reduzida.ts` existe para evitar.
-     */
-    const urlDoSlot = async (
-      photoId: (typeof rows)[number]["referencePhotoId"],
-      storageId: (typeof rows)[number]["referencePhotoStorageId"],
-    ) => {
-      if (photoId) {
-        const foto = galeria.get(photoId);
-        if (!foto) return null;
-        return ctx.storage.getUrl(foto.previewStorageId ?? foto.storageId);
-      }
-      return storageId ? ctx.storage.getUrl(storageId) : null;
-    };
+    const daGaleria = new Map<string, FotoDaGaleria>();
+    for (const id of apontadas) {
+      const foto = await ctx.db.get(id as Id<"eventPhotos">);
+      // Ponteiro que não resolve é IGNORADO, não é erro: a foto pode ter sido
+      // apagada por um caminho que não limpou o ponteiro, e o item degrada
+      // para o arquivo próprio em `resolverFotoDoItem`. Confirmar o evento
+      // aqui também impede que um ponteiro gravado antes desta guarda exista
+      // e traga para a tela a foto de OUTRO evento da mesma conta.
+      if (!foto || foto.userId !== evento.userId || foto.eventId !== args.eventId) continue;
+      daGaleria.set(id, {
+        _id: foto._id,
+        url: await ctx.storage.getUrl(foto.storageId),
+        previewUrl: foto.previewStorageId
+          ? await ctx.storage.getUrl(foto.previewStorageId)
+          : null,
+      });
+    }
 
     return Promise.all(
-      rows
-        .sort((a, b) => a.order - b.order)
-        .map(async (item) => ({
+      rows.map(async (item) => {
+        const referenceFoto = resolverFotoDoItem(
+          item.referencePhotoId ? daGaleria.get(item.referencePhotoId) : null,
+          item.referencePhotoStorageId
+            ? await ctx.storage.getUrl(item.referencePhotoStorageId)
+            : null,
+        );
+        const contractedFoto = resolverFotoDoItem(
+          item.contractedPhotoId ? daGaleria.get(item.contractedPhotoId) : null,
+          item.contractedPhotoStorageId
+            ? await ctx.storage.getUrl(item.contractedPhotoStorageId)
+            : null,
+        );
+        return {
           ...item,
-          referencePhotoUrl: await urlDoSlot(
-            item.referencePhotoId,
-            item.referencePhotoStorageId,
-          ),
-          contractedPhotoUrl: await urlDoSlot(
-            item.contractedPhotoId,
-            item.contractedPhotoStorageId,
-          ),
-        })),
+          referenceFoto,
+          contractedFoto,
+          // Os dois nomes antigos continuam existindo e continuam significando
+          // a MESMA coisa — a URL do original. O Caderno, o Projeto Visual e a
+          // Folha de Carregamento já os liam, e nenhum precisou mudar para a
+          // foto passar a vir da Galeria.
+          referencePhotoUrl: referenceFoto.url,
+          contractedPhotoUrl: contractedFoto.url,
+        };
+      }),
     );
   },
 });
@@ -144,6 +163,8 @@ export const create = mutation({
   args: { eventId: v.id("events"), area: v.string(), ...itemFields },
   handler: async (ctx, args) => {
     const { user } = await requireEventOwner(ctx, args.eventId);
+    // `supplierId` era aceito e nunca conferido. Ver `requireEventSupplier`.
+    await requireEventSupplier(ctx, user._id, args.eventId, args.supplierId);
     const existing = await ctx.db
       .query("assemblyItems")
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
@@ -172,6 +193,12 @@ export const createMany = mutation({
   },
   handler: async (ctx, args) => {
     const { user } = await requireEventOwner(ctx, args.eventId);
+    // TODOS os fornecedores são conferidos ANTES de gravar o primeiro item: um
+    // lote meio criado e meio recusado deixaria o evento num estado que
+    // ninguém pediu. Mesmo cuidado de `financeiro.createReceivablesFromContract`.
+    for (const item of args.items) {
+      await requireEventSupplier(ctx, user._id, args.eventId, item.supplierId);
+    }
     const existing = await ctx.db
       .query("assemblyItems")
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
@@ -239,6 +266,10 @@ export const update = mutation({
     // aqui atravessa o consolidado, a geração de compras e a folha de
     // carregamento. `null` continua LIMPANDO o campo (lib/limparCampos.ts).
     exigirQuantidadeGravavel(args.quantity, "Quantidade");
+    // O fornecedor precisa ser DESTE evento, e o evento é o do item — não o
+    // que o navegador disser. Sem isto, `update` era a porta lateral que
+    // escapava da guarda de `create`.
+    await requireEventSupplier(ctx, user._id, item.eventId, args.supplierId);
     const { id, ...fields } = args;
     await ctx.db.patch(id, {
       ...limparCampos(fields),
@@ -247,20 +278,11 @@ export const update = mutation({
   },
 });
 
-const slotValidator = v.union(v.literal("reference"), v.literal("contracted"));
-
-/** Os dois campos de um slot. Um item tem OU arquivo próprio OU ponteiro. */
-function camposDoSlot(slot: "reference" | "contracted") {
-  return slot === "reference"
-    ? { arquivo: "referencePhotoStorageId" as const, ponteiro: "referencePhotoId" as const }
-    : { arquivo: "contractedPhotoStorageId" as const, ponteiro: "contractedPhotoId" as const };
-}
-
-/** Define (ou troca) uma das duas fotos do item, com um arquivo NOVO. */
+/** Define (ou troca) uma das duas fotos do item. */
 export const setPhoto = mutation({
   args: {
     id: v.id("assemblyItems"),
-    slot: slotValidator,
+    slot: v.union(v.literal("reference"), v.literal("contracted")),
     storageId: v.id("_storage"),
   },
   handler: async (ctx, args) => {
@@ -270,7 +292,12 @@ export const setPhoto = mutation({
       throw new ConvexError({ message: "Item não encontrado", code: "NOT_FOUND" });
     }
 
-    const { arquivo, ponteiro } = camposDoSlot(args.slot);
+    const field =
+      args.slot === "reference"
+        ? "referencePhotoStorageId"
+        : "contractedPhotoStorageId";
+    const ponteiro =
+      args.slot === "reference" ? "referencePhotoId" : "contractedPhotoId";
 
     // Troca de foto: remove o arquivo anterior para não deixar órfão no storage.
     //
@@ -278,14 +305,16 @@ export const setPhoto = mutation({
     // aqui isso abortava a mutation inteira: a foto NOVA não era gravada, e a
     // decoradora via a antiga de volta depois de "trocar com sucesso". Mesma
     // regra que `lib/cascade.ts` já escreveu.
-    const previous = item[arquivo];
+    const previous = item[field];
     if (previous) await safeDeleteFile(ctx, previous);
 
     await ctx.db.patch(args.id, {
-      [arquivo]: args.storageId,
-      // Enviar arquivo novo DESFAZ o ponteiro: os dois juntos fariam a leitura
-      // preferir a foto da Galeria e a decoradora veria a antiga depois de
-      // enviar a nova.
+      [field]: args.storageId,
+      // As duas formas de ter foto são EXCLUSIVAS por papel: deixar o ponteiro
+      // de pé aqui faria a precedência de `lib/fotoDoItem.ts` devolver a foto
+      // da Galeria, e a decoradora veria a imagem ANTIGA depois de trocar com
+      // sucesso — exatamente o defeito que `safeDeleteFile` acima já corrigiu
+      // uma vez neste mesmo lugar.
       [ponteiro]: undefined,
       updatedAt: new Date().toISOString(),
     });
@@ -293,28 +322,28 @@ export const setPhoto = mutation({
 });
 
 /**
- * Aponta o slot para uma foto que JÁ ESTÁ NA GALERIA.
+ * Usa uma foto QUE JÁ ESTÁ NA GALERIA como referência ou como contratado.
  *
- * ── O TRABALHO QUE ISTO APAGA ───────────────────────────────────────────────
- * Ela sobe as fotos do projeto na Galeria, classifica cada uma por ambiente e
- * escopo — e, para pendurar uma delas num item de montagem, tinha de ENVIAR O
- * MESMO ARQUIVO DE NOVO. Dois uploads no 4G do sítio, dois arquivos cobrados,
- * e duas verdades: reclassificar na Galeria não mexia na cópia do item.
+ * ── O QUE ESTA MUTATION NÃO FAZ ─────────────────────────────────────────────
+ * NÃO COPIA ARQUIVO. Não chama `generateUploadUrl`, não toca em `_storage` e
+ * não cria uma segunda linha em `eventPhotos`. Ela grava um PONTEIRO — a
+ * Galeria continua sendo a dona do arquivo, como `events.coverPhotoId` já
+ * fazia para a capa.
  *
- * ── TRÊS PERGUNTAS, NÃO DUAS ────────────────────────────────────────────────
- * A foto existe, é da conta, E É DESTE EVENTO. A terceira não é zelo: sem ela,
- * o item de Marina & Gabriel podia exibir uma foto do casamento da Joana. Os
- * dois eventos são da mesma decoradora, nenhuma regra de posse é violada, e
- * ainda assim é a foto errada no documento errado. É a mesma lição que
- * `requireEventPhoto` aprendeu com a capa.
+ * É o ponto inteiro da rodada: a mesma imagem deixa de entrar duas vezes no
+ * ALTAR, e o item herda de graça a versão leve, o ambiente, a legenda e a
+ * classificação que a foto já carrega.
  *
- * O arquivo próprio anterior é APAGADO: o slot passou a ser um ponteiro, e
- * deixar o arquivo seria storage cobrado que nenhuma linha mais referencia.
+ * ── O ARQUIVO PRÓPRIO ANTIGO SAI ────────────────────────────────────────────
+ * Se o item tinha um arquivo só dele naquele papel, ele era EXCLUSIVO do item
+ * (ninguém mais aponta para ele) e vira lixo no instante em que o ponteiro
+ * assume. `safeDeleteFile` porque apagar arquivo NUNCA pode derrubar a
+ * gravação — `lib/cascade.ts`.
  */
-export const setPhotoFromGallery = mutation({
+export const setPhotoDaGaleria = mutation({
   args: {
     id: v.id("assemblyItems"),
-    slot: slotValidator,
+    slot: v.union(v.literal("reference"), v.literal("contracted")),
     photoId: v.id("eventPhotos"),
   },
   handler: async (ctx, args) => {
@@ -323,22 +352,59 @@ export const setPhotoFromGallery = mutation({
     if (!item || item.userId !== user._id) {
       throw new ConvexError({ message: "Item não encontrado", code: "NOT_FOUND" });
     }
+    // Três perguntas sobre a foto: existe, é minha, é DESTE evento. O evento é
+    // o do ITEM, não o que o navegador mandar — é o que impede a foto do
+    // casamento da Joana de ilustrar o item de Marina.
+    await requireEventPhoto(ctx, user._id, item.eventId, args.photoId);
 
-    const foto = await ctx.db.get(args.photoId);
-    if (!foto || foto.userId !== user._id || foto.eventId !== item.eventId) {
-      throw new ConvexError({ message: "Foto não encontrada", code: "NOT_FOUND" });
-    }
+    const field =
+      args.slot === "reference"
+        ? "referencePhotoStorageId"
+        : "contractedPhotoStorageId";
+    const ponteiro =
+      args.slot === "reference" ? "referencePhotoId" : "contractedPhotoId";
 
-    const { arquivo, ponteiro } = camposDoSlot(args.slot);
-    // O arquivo exclusivo do item sai — ninguém mais vai referenciá-lo. A foto
-    // da Galeria NÃO é tocada: ela é de lá, e apagá-la estragaria a galeria
-    // inteira e a capa do evento.
-    const previous = item[arquivo];
-    if (previous) await safeDeleteFile(ctx, previous);
+    const proprio = item[field];
+    if (proprio) await safeDeleteFile(ctx, proprio);
 
     await ctx.db.patch(args.id, {
-      [arquivo]: undefined,
       [ponteiro]: args.photoId,
+      [field]: undefined,
+      updatedAt: new Date().toISOString(),
+    });
+  },
+});
+
+/**
+ * Tira a foto do item, sem apagar nada que não seja dele.
+ *
+ * Arquivo próprio: sai do storage, porque o item era o único dono.
+ * Ponteiro para a Galeria: some só o ponteiro. A FOTO CONTINUA NA GALERIA —
+ * remover a cadeira do lounge não pode apagar a imagem do acervo do evento.
+ */
+export const clearPhoto = mutation({
+  args: {
+    id: v.id("assemblyItems"),
+    slot: v.union(v.literal("reference"), v.literal("contracted")),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const item = await ctx.db.get(args.id);
+    if (!item || item.userId !== user._id) {
+      throw new ConvexError({ message: "Item não encontrado", code: "NOT_FOUND" });
+    }
+    const field =
+      args.slot === "reference"
+        ? "referencePhotoStorageId"
+        : "contractedPhotoStorageId";
+    const ponteiro =
+      args.slot === "reference" ? "referencePhotoId" : "contractedPhotoId";
+
+    if (item[field]) await safeDeleteFile(ctx, item[field]);
+
+    await ctx.db.patch(args.id, {
+      [field]: undefined,
+      [ponteiro]: undefined,
       updatedAt: new Date().toISOString(),
     });
   },
@@ -352,8 +418,15 @@ export const remove = mutation({
     if (!item || item.userId !== user._id) {
       throw new ConvexError({ message: "Item não encontrado", code: "NOT_FOUND" });
     }
-    // As fotos pertencem exclusivamente ao item — saem junto. O item sai de
-    // qualquer jeito: arquivo que já não existe não pode impedir a exclusão.
+    // ── SÓ O QUE É DO ITEM SAI ───────────────────────────────────────────
+    // Os `...StorageId` são arquivos que o item enviou e dos quais ele é o
+    // único dono — saem junto. O item sai de qualquer jeito: arquivo que já
+    // não existe não pode impedir a exclusão.
+    //
+    // Os `...PhotoId` NÃO são tocados de propósito. Aquela foto é da Galeria
+    // do evento, pode estar sendo usada por outro item, pode ser a capa do
+    // Projeto Visual, e a decoradora nunca pediu para apagá-la. Excluir a
+    // cadeira do lounge não pode apagar a foto da cadeira.
     await safeDeleteFile(ctx, item.referencePhotoStorageId);
     await safeDeleteFile(ctx, item.contractedPhotoStorageId);
     await ctx.db.delete(args.id);

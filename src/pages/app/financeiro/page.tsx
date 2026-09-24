@@ -55,7 +55,6 @@ import {
   pagoSemComprovante,
   temComprovante,
 } from "@/lib/comprovante-financeiro.ts";
-import { origemDaDespesa } from "@/lib/origem-da-despesa.ts";
 import {
   BarChart,
   Bar,
@@ -288,7 +287,17 @@ function SummaryCard({
 
 export default function FinanceiroPage() {
   const summary = useQuery(api.financeiro.getSummary);
-  const transactions = useQuery(api.financeiro.listTransactions, {});
+  // Só os nomes, para a linha dizer de qual evento é o lançamento. A lista de
+  // eventos de uma conta é curta e esta tela já a carregaria de qualquer jeito
+  // se alguém filtrasse por evento.
+  const eventos = useQuery(api.events.list, {});
+  const nomeDoEvento = (id?: string) =>
+    id ? (eventos ?? []).find((e) => e._id === id)?.name : undefined;
+  const livro = useQuery(api.financeiro.listTransactions, {});
+  // A tela continua trabalhando com a lista; o que mudou é que ela agora SABE
+  // quando o livro não coube inteiro, e diz. Ver `LIMITE_DO_LIVRO`.
+  const transactions = livro?.itens;
+  const livroCortado = livro?.temMais ?? false;
   const addTransaction = useMutation(api.financeiro.addTransaction);
   const updateTransaction = useMutation(api.financeiro.updateTransaction);
   const deleteTransaction = useMutation(api.financeiro.deleteTransaction);
@@ -413,6 +422,18 @@ export default function FinanceiroPage() {
         </div>
       )}
 
+      {/* ── QUANDO O LIVRO NÃO COUBE INTEIRO ──────────────────────────────────
+          Um saldo apresentado como total da empresa, calculado sobre parte do
+          livro, é a mentira mais cara que esta tela pode contar. A tela diz o
+          recorte em vez de afirmar um número que não conferiu — mesma regra
+          que `supplierCatalog.panorama` já segue quando não consegue somar. */}
+      {summary?.incompleto && (
+        <p className="text-xs text-muted-foreground border-l-2 border-amber-400 pl-2.5 leading-snug">
+          Os totais acima consideram os <strong>{summary.limite} lançamentos mais
+          recentes</strong>. Seu histórico é maior que isso.
+        </p>
+      )}
+
       {/* Chart */}
       {summary !== undefined && summary.months.some((m) => m.income > 0 || m.expense > 0) && (
         <div className="bg-card border border-border rounded-xl p-5">
@@ -439,7 +460,16 @@ export default function FinanceiroPage() {
       {/* Transaction list */}
       <div>
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <h2 className="font-semibold">Lançamentos</h2>
+          <h2 className="font-semibold">
+            Lançamentos
+            {/* A tela nunca afirma o que não sabe. Com o livro cortado, "142"
+                seria um total; "142 carregados (há mais)" é o que ela viu. */}
+            {livroCortado && (
+              <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                {transactions?.length} carregados (há mais)
+              </span>
+            )}
+          </h2>
           <div className="flex gap-2">
             {FILTROS.map((f) => {
               // O recorte de comprovante só existe quando há o que cobrar: um
@@ -571,15 +601,29 @@ export default function FinanceiroPage() {
                         <span className="text-amber-700 dark:text-amber-500">sem comprovante</span>
                       </>
                     )}
-                    {/* A despesa que sobreviveu à compra diz isso. Sem esta
-                        linha, o custo mantido de uma compra cancelada vira,
-                        meses depois, um lançamento órfão que ninguém sabe se
-                        ainda vale. Não é vínculo: a compra pode nem existir
-                        mais, e por isso nada aqui é clicável. */}
-                    {origemDaDespesa(tx) && (
+                    {/* ── DE QUAL EVENTO É ESTE DINHEIRO ──────────────────
+                        `transactions.eventId` é gravado desde sempre — pelo
+                        import do contrato e pelo lançamento de uma compra — e
+                        esta tela nunca o mostrava. O livro-caixa de uma
+                        decoradora com quatro casamentos no mês era uma lista
+                        plana em que "Sinal" aparecia quatro vezes, idêntico. */}
+                    {nomeDoEvento(tx.eventId) && (
                       <>
                         <span>·</span>
-                        <span className="truncate">{origemDaDespesa(tx)}</span>
+                        <span className="truncate">{nomeDoEvento(tx.eventId)}</span>
+                      </>
+                    )}
+                    {/* ── E DE QUAL COMPRA ────────────────────────────────
+                        Procedência histórica, gravada no lançamento. Sobrevive
+                        ao cancelamento da compra e à exclusão dela — que é
+                        justamente quando ninguém mais conseguia dizer de onde
+                        os R$ 12.400 tinham vindo. */}
+                    {tx.origemDaCompra && (
+                      <>
+                        <span>·</span>
+                        <span className="truncate">
+                          da compra &ldquo;{tx.origemDaCompra.nome}&rdquo;
+                        </span>
                       </>
                     )}
                   </div>

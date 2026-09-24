@@ -427,6 +427,24 @@ export default defineSchema({
     // ── Comercial (tudo OPCIONAL e aditivo) ─────────────────────────────────
     // Reaproveitados na conversao em evento, para nao redigitar o que a
     // decoradora ja anotou durante a negociacao.
+    /**
+     * LEGADO. Nunca foi escrito por tela nenhuma e nunca foi lido por nada.
+     *
+     * Entrou no schema junto com os outros campos comerciais e ficou órfão: a
+     * auditoria da jornada encontrou o campo aceito por `funil.create` e
+     * `funil.updateLead`, gravável pela API, e sem um único consumidor. Um
+     * campo assim é pior que ausência — a próxima pessoa liga um formulário
+     * nele e passa uma semana procurando por que o dado não aparece.
+     *
+     * Os argumentos saíram das mutations, que é o que fechava a porta. O CAMPO
+     * fica: remover do schema invalidaria qualquer documento que já o tivesse
+     * gravado, e este ambiente não tem como conferir a base. Removê-lo é uma
+     * decisão para quem puder olhar os dados.
+     *
+     * O segundo nome de um casal não some do produto por causa disto: o nome
+     * do evento ("Marina & Gabriel") sempre foi quem carregou os dois, e é ele
+     * que sai na capa do Projeto Visual.
+     */
     partnerName: v.optional(v.string()),
     venue: v.optional(v.string()),
     city: v.optional(v.string()),
@@ -654,31 +672,24 @@ export default defineSchema({
     filename: v.string(),
     uploadedAt: v.string(),
     /**
-     * De QUEM veio este documento, quando veio de um fornecedor do evento.
+     * De QUEM é este documento, quando ele é de alguém.
      *
-     * ── O DEFEITO QUE ISTO FECHA ─────────────────────────────────────────────
-     * `saveContract` substitui o documento do MESMO tipo — o que fazia a Pasta
-     * do Evento guardar, no máximo, um contrato, um orçamento, um aditivo, uma
-     * referência e um "outro". CINCO ARQUIVOS POR CASAMENTO.
+     * ── POR QUE AQUI, E NÃO NUMA TABELA NOVA ────────────────────────────────
+     * A Pasta do Evento já resolve documento bem: um lugar, um caminho de
+     * envio, uma exclusão, e ela já funde `contracts` com os documentos
+     * herdados do lead. Criar um segundo gerenciador só para o fornecedor
+     * seria o erro que este repositório já cometeu três vezes.
      *
-     * Um casamento tem empresa de móveis, floricultura e iluminação, e cada
-     * uma manda contrato e orçamento. Anexar o segundo orçamento APAGAVA o
-     * primeiro — com aviso na tela, mas apagava. O resto ia para o Drive e
-     * para o WhatsApp, que é exatamente o que o ALTAR existe para acabar.
+     * O que faltava era uma ETIQUETA. Com ela, a ficha da Móveis Bella passa a
+     * responder "o que foi contratado + quais documentos existem + quais itens
+     * ele entrega" sem nenhuma estrutura nova.
      *
-     * Com este campo a substituição passa a ser por (tipo, fornecedor): o
-     * orçamento da empresa de móveis substitui o orçamento DELA, e não o da
-     * floricultura.
+     * AUSENTE = documento do EVENTO, não de um fornecedor — que é o estado de
+     * todos os documentos já enviados. Sem backfill.
      *
-     * AUSENTE = documento do evento, sem dono específico. É o estado de todo
-     * documento já anexado, e o comportamento deles não muda: continuam
-     * ocupando um "slot sem fornecedor" por tipo, como sempre ocuparam. Sem
-     * backfill — não dá para adivinhar de qual fornecedor veio um PDF.
-     *
-     * Aponta para `eventSuppliers` (o fornecedor NESTE evento), não para o
-     * catálogo: o documento é da contratação, não da empresa. Remover o
-     * fornecedor do evento LIMPA este vínculo e NÃO apaga o arquivo — contrato
-     * assinado não some porque alguém arrumou a lista de fornecedores.
+     * Aponta para `eventSuppliers` (o fornecedor NESTE evento), como
+     * `assemblyItems.supplierId` — e não para o catálogo: um orçamento é
+     * daquele casamento, não da empresa em geral.
      */
     supplierId: v.optional(v.id("eventSuppliers")),
     kind: v.optional(
@@ -835,7 +846,27 @@ export default defineSchema({
     ambiente: v.optional(v.string()),
   })
     .index("by_event", ["eventId"])
-    .index("by_event_category", ["eventId", "category"]),
+    .index("by_event_category", ["eventId", "category"])
+    // ── A GALERIA COMO ACERVO DA EMPRESA, NÃO ÁLBUM DO EVENTO ───────────────
+    // Até aqui `eventPhotos` só sabia responder "as fotos DESTE casamento".
+    // Cinco anos de trabalho ficavam em setenta álbuns lacrados: a decoradora
+    // não tinha como achar o arco de oliveiras que fez em 2024 para mostrar à
+    // cliente de hoje.
+    //
+    // O repositório já resolveu essa mesma pergunta três vezes para outras
+    // entidades — `materials.ondeEUsado`, `compositions.ondeEUsada`,
+    // `supplierCatalog.listEventsForSupplier`. Faltava para as imagens, que
+    // são o ativo mais valioso de quem decora.
+    .index("by_user", ["userId"])
+    // ── DUAS LINHAS PODEM APONTAR PARA O MESMO ARQUIVO ──────────────────────
+    // Reaproveitar uma foto em outro evento cria uma LINHA nova (que é dela,
+    // com o ambiente e a classificação daquele evento) apontando para o
+    // MESMO `storageId`. Nenhum byte é copiado.
+    //
+    // O preço disso é que apagar deixou de poder assumir posse exclusiva do
+    // arquivo: sem este índice, excluir a foto de 2024 quebraria a de 2026 em
+    // silêncio. Ver `arquivoAindaEmUso` em `lib/cascade.ts`.
+    .index("by_user_storage", ["userId", "storageId"]),
 
   transactions: defineTable({
     userId: v.id("users"),
@@ -878,42 +909,40 @@ export default defineSchema({
      */
     comprovantes: v.optional(v.array(comprovanteFinanceiro)),
     /**
-     * De onde esta despesa veio, depois que a compra que a gerou saiu de cena.
+     * De qual COMPRA esta despesa nasceu. Só PROCEDÊNCIA HISTÓRICA.
      *
-     * ── PROVENIÊNCIA NÃO É VÍNCULO ──────────────────────────────────────────
-     * O VÍNCULO OPERACIONAL é `purchaseItems.transactionId`: é ele que torna
-     * `registerCost` idempotente, que faz a despesa seguir a compra e que o
-     * painel lê para acusar divergência. Ele PRECISA sumir quando a compra é
-     * cancelada ou excluída e a decoradora escolhe manter o custo — enquanto
-     * existir, a compra cancelada aparece como inconsistência
-     * (`canceladaComLancamento`) e a margem do evento se cala para sempre.
+     * ── O BURACO QUE ISTO FECHA ─────────────────────────────────────────────
+     * `purchaseItems.transactionId` é o vínculo OPERACIONAL: enquanto existe,
+     * editar a compra atualiza a despesa. Cancelar a compra e escolher MANTER
+     * a despesa desfaz esse vínculo de propósito — compra cancelada não pode
+     * continuar comandando um lançamento.
      *
-     * Mas soltar o vínculo apagava também a PROCEDÊNCIA: a despesa continuava
-     * no livro sem nada dizendo que nasceu daquela compra. Meses depois,
-     * "Cadeiras — Empresa X · R$ 4.000" é uma linha órfã que ninguém sabe se
-     * ainda vale. Mesmo papel de `assemblyItems.compositionId`, que guarda a
-     * origem da receita sem nunca dirigir comportamento.
+     * Só que, desfeito o vínculo, a despesa perdia também a informação de que
+     * tinha nascido daquela compra. Sobrava R$ 12.400 no livro sem ninguém
+     * conseguir dizer de onde vieram.
      *
-     * AUSENTE = a despesa não veio de uma compra desfeita. É o estado de todo
-     * lançamento que já existe, de todo lançamento avulso e de toda despesa
-     * cuja compra continua viva e vinculada — nessa, quem responde "de onde
-     * veio?" é o vínculo, que ainda está lá. Sem backfill.
+     * ── POR QUE NÃO É SÓ UM ID ──────────────────────────────────────────────
+     * O precedente do repositório é `assemblyItems.compositionId`, que guarda
+     * procedência com um id e nenhuma leitura operacional. Aqui um id sozinho
+     * não bastaria: o caminho "manter a despesa e excluir a compra" apaga a
+     * linha apontada, e a procedência morreria junto — exatamente no caso em
+     * que ela é mais necessária.
      *
-     * É SNAPSHOT, e por isso não guarda id: a compra pode ter sido excluída, e
-     * um ponteiro para linha que não existe mais convida a navegação que
-     * quebra. O que um humano precisa ler é o nome e o que aconteceu.
+     * Por isso o NOME vai junto, copiado no momento do lançamento. É a mesma
+     * solução de `assemblyItems.supplierName` e de `componenteDaReceita.nome`:
+     * cópia é o que mantém o histórico legível depois que a origem some.
      *
-     * NADA LÊ ISTO PARA DECIDIR. Não entra em `custoDoEvento`, não muda soma,
-     * não reconstrói vínculo. É memória.
+     * ── O QUE ELE NUNCA FAZ ─────────────────────────────────────────────────
+     * Não recria vínculo, não é lido por cálculo nenhum, não é índice e não
+     * reativa sincronização. AUSENTE = lançamento criado à mão no Financeiro,
+     * ou anterior a este campo — que é o estado de todos os de hoje.
      */
-    origemCompra: v.optional(
+    origemDaCompra: v.optional(
       v.object({
-        /** Como a compra se chamava no momento em que o vínculo foi desfeito. */
+        /** Pode já não existir: a compra foi excluída e a despesa ficou. */
+        purchaseItemId: v.optional(v.id("purchaseItems")),
         nome: v.string(),
-        /** O que aconteceu com ela. */
-        desfecho: v.union(v.literal("cancelada"), v.literal("excluida")),
-        /** Dia civil "AAAA-MM-DD" em que o vínculo foi desfeito. */
-        em: v.string(),
+        registradaEm: v.string(),
       }),
     ),
   })
@@ -1180,10 +1209,12 @@ export default defineSchema({
      * eventos.
      *
      * ── NÃO É A GALERIA, E NÃO COMPETE COM ELA ───────────────────────────────
-     * `eventPhotos` é a biblioteca visual DAQUELE evento: referência de
-     * ambiente, montagem, resultado. Isto aqui é ilustração de INSUMO, não
-     * registro de evento — "é esta flor", não "é assim que o altar vai ficar".
-     * Por isso não tem `ambiente`, `projectScope` nem fase.
+     * `eventPhotos` é a biblioteca visual DAQUELE evento, e desde o acervo de
+     * imagens ela atravessa eventos da mesma empresa. Isto aqui é ilustração
+     * de INSUMO, não registro de evento — "é esta flor", não "é assim que o
+     * altar vai ficar". Por isso não tem `ambiente`, `projectScope` nem fase,
+     * e por isso o item de montagem continua apontando para `eventPhotos`
+     * (`referencePhotoId`), nunca para cá.
      *
      * ── UM ARQUIVO, NÃO DOIS ─────────────────────────────────────────────────
      * Sem `previewStorageId` ao lado, ao contrário de `eventPhotos`: lá o
@@ -1367,36 +1398,29 @@ export default defineSchema({
     supplierName: v.optional(v.string()),
     ambiente: v.optional(v.string()),
     notes: v.optional(v.string()),
-    // Duas fotos com papéis distintos: o que foi aprovado × o que foi contratado.
+    // ── AS DUAS FOTOS DO ITEM ───────────────────────────────────────────────
+    // Papéis distintos e deliberados: o que foi APROVADO pela cliente × o que
+    // foi efetivamente CONTRATADO. São perguntas diferentes, e a segunda é a
+    // que evita a discussão no dia da montagem.
     //
-    // ── O ARQUIVO PRÓPRIO DO ITEM ───────────────────────────────────────────
-    // Enviado direto no item. Exclusivo dele: sai no `remove` e na cascata.
+    // ── POR QUE EXISTEM DUAS FORMAS DE GUARDAR CADA UMA ─────────────────────
+    // Os `...StorageId` são o caminho ANTIGO: o item era dono exclusivo de um
+    // arquivo enviado por ele mesmo. Funciona, e continua funcionando — mas
+    // produzia a mesma imagem duas vezes no storage quando ela já estava na
+    // Galeria, e essa cópia nascia sem `ambiente`, sem `projectScope`, sem
+    // legenda e SEM VERSÃO LEVE: a miniatura de 40 px baixava o original.
+    //
+    // Os `...PhotoId` são o caminho de hoje: um PONTEIRO para a linha da
+    // Galeria, na mesma forma de `events.coverPhotoId`. A Galeria continua
+    // dona do arquivo — apagar o item NÃO apaga a foto, e apagar a foto limpa
+    // o ponteiro (`gallery.deletePhoto`) em vez de deixar lixo apontando para
+    // o vazio.
+    //
+    // PRECEDÊNCIA, escrita uma vez em `lib/fotoDoItem.ts` e lida por todo
+    // mundo: o ponteiro manda quando resolve; senão cai no arquivo próprio.
+    // Item antigo continua abrindo exatamente como abria, sem backfill.
     referencePhotoStorageId: v.optional(v.id("_storage")),
     contractedPhotoStorageId: v.optional(v.id("_storage")),
-    /**
-     * OU um PONTEIRO para uma foto que já está na Galeria.
-     *
-     * ── O DEFEITO: A MESMA FOTO, DUAS VEZES ─────────────────────────────────
-     * A decoradora subia as trinta fotos do projeto na Galeria, classificava
-     * cada uma por ambiente e escopo — e, para pendurar uma delas no item de
-     * montagem, tinha de ENVIAR O MESMO ARQUIVO DE NOVO. Dois uploads, dois
-     * arquivos cobrados, e duas verdades: classificar a foto na Galeria não
-     * mexia na cópia presa ao item.
-     *
-     * É o mesmo ponteiro que `events.coverPhotoId` já usa, e pela mesma razão:
-     * o arquivo continua sendo um só, e a foto do item herda o que a Galeria
-     * souber dela.
-     *
-     * ── OS DOIS CAMPOS SÃO EXCLUSIVOS ENTRE SI ──────────────────────────────
-     * Um slot tem OU arquivo próprio OU ponteiro, nunca os dois: gravar um
-     * limpa o outro (`assemblyItems.setPhoto` / `setPhotoFromGallery`). A
-     * leitura prefere o ponteiro e cai no arquivo próprio — que é o estado de
-     * todo item já cadastrado. Sem backfill.
-     *
-     * Ponteiro para foto apagada NÃO é estado válido: `gallery.deletePhoto`
-     * limpa os itens antes de apagar, como já limpa a capa. A leitura ainda
-     * degrada para "sem foto" se um ponteiro velho sobreviver.
-     */
     referencePhotoId: v.optional(v.id("eventPhotos")),
     contractedPhotoId: v.optional(v.id("eventPhotos")),
     includeInAssemblyReport: v.boolean(),
@@ -1859,6 +1883,92 @@ export default defineSchema({
   // Na Fase 1 `podeEnviarSemAprovacao` devolve `false` para TODOS os níveis,
   // inclusive "autonomo": gravar o nível aqui não liga envio nenhum. A tabela
   // existe para que a Fase 2 seja mudança de DADO, não reescrita de código.
+  // ── O ESCRITÓRIO DE IA DA DECORADORA ───────────────────────────────────────
+  // UMA tabela, e ela é da DECORADORA — não da operação do ALTAR.
+  //
+  // ── POR QUE NÃO REAPROVEITAR `adminWorkItems` ──────────────────────────────
+  // Porque aquela tabela é do Matheus: `requireAdmin` em todas as funções, sem
+  // `userId` de tenant, e o dono dela é a operação do SaaS. Guardar o pedido da
+  // decoradora ali misturaria os dois negócios numa linha só — e a primeira
+  // consulta que esquecesse o filtro mostraria o trabalho de uma conta para
+  // outra. São dois produtos que compartilham arquitetura, não dados.
+  //
+  // ── POR QUE NÃO EXISTE TABELA DE AGENTES ───────────────────────────────────
+  // Agente é PRODUTO, não dado: os sete vivem em `lib/escritorio/agentes.ts`.
+  // Uma tabela pediria cadastro que ninguém quer fazer e obrigaria cada conta a
+  // ter sete linhas semeadas, com a primeira que falhasse virando uma conta sem
+  // equipe.
+  agentTasks: defineTable({
+    /** A DONA. Nunca vem do navegador — é sempre a sessão. */
+    userId: v.id("users"),
+    /** O que ela escreveu, como escreveu. */
+    pedido: v.string(),
+    /**
+     * Quem cuidou. Sempre preenchido, inclusive quando ela deixou o ALTAR
+     * escolher — o histórico precisa dizer QUEM respondeu, não "alguém".
+     */
+    agenteId: v.string(),
+    /**
+     * O ALTAR escolheu, ou ela apontou?
+     *
+     * A tela diz "encaminhado para o Financeiro" só no primeiro caso. Afirmar
+     * isso quando foi ela quem escolheu seria o produto se dando crédito pelo
+     * trabalho dela.
+     */
+    roteadoAutomaticamente: v.boolean(),
+    /**
+     * Poucos estados, e nenhum deles é de BPM.
+     *
+     *   queued     criada, esperando o executor
+     *   running    o executor começou
+     *   completed  respondeu
+     *   failed     não respondeu, e `erro` diz por quê em português
+     *   refused    o semáforo recusou — ver `cor`
+     */
+    status: v.union(
+      v.literal("queued"),
+      v.literal("running"),
+      v.literal("completed"),
+      v.literal("failed"),
+      v.literal("refused"),
+    ),
+    /** O veredicto do semáforo (`lib/escritorio/semaforo.ts`). */
+    cor: v.union(v.literal("verde"), v.literal("amarelo"), v.literal("vermelho")),
+    /** O que tornou o pedido amarelo ou vermelho. Ausente = verde. */
+    motivoDaCor: v.optional(v.string()),
+    /** A resposta. Ausente enquanto não terminou. */
+    resultado: v.optional(v.string()),
+    /**
+     * O erro, JÁ TRADUZIDO. Nunca a mensagem crua do provedor: ela pode
+     * carregar URL de gateway, nome de modelo e — no pior caso — pedaço de
+     * chave. Ver `erroSeguro` no executor.
+     */
+    erro: v.optional(v.string()),
+    /**
+     * As fontes consultadas, pelos ids de `lib/escritorio/agentes.ts`.
+     *
+     * A tela traduz por `ROTULO_DA_FONTE`. Guardar o id e não o rótulo permite
+     * mudar o texto sem reescrever histórico.
+     */
+    fontesConsultadas: v.optional(v.array(v.string())),
+    /**
+     * Quem redigiu: o modelo, ou o redator determinístico local.
+     *
+     * Gravado SEMPRE, e mostrado quando é `mock`. A decoradora precisa poder
+     * distinguir — os NÚMEROS são reais nos dois casos (vêm das mesmas
+     * consultas), mas o texto de um não passou por modelo nenhum.
+     */
+    provedor: v.optional(v.union(v.literal("modelo"), v.literal("local"))),
+    /** Tokens, quando o provedor informa. Sem provedor, ausente. */
+    tokensEntrada: v.optional(v.number()),
+    tokensSaida: v.optional(v.number()),
+    criadoEm: v.number(),
+    iniciadoEm: v.optional(v.number()),
+    concluidoEm: v.optional(v.number()),
+  })
+    // "Meus trabalhos recentes", que é a única leitura que a tela faz.
+    .index("by_user", ["userId"]),
+
   adminAutonomyPolicy: defineTable({
     vertical,
     channel,

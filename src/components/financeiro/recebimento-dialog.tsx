@@ -21,7 +21,6 @@ import {
   MIMES_DE_COMPROVANTE,
   TIPOS_DE_COMPROVANTE,
 } from "@/lib/comprovante-financeiro.ts";
-import { detalheDaOrigem } from "@/lib/origem-da-despesa.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // O RECEBIMENTO, ABERTO
@@ -148,20 +147,6 @@ export function RecebimentoDialog({
             {fmt(lancamento.amount)} · vencimento {formatDateInput(lancamento.date)}
           </DialogDescription>
         </DialogHeader>
-
-        {/* ── DE ONDE ESTE CUSTO VEIO ──────────────────────────────────────
-            Só aparece na despesa que sobreviveu a uma compra desfeita. A
-            linha da lista diz a versão curta; aqui cabe o nome, a data e o
-            que foi preservado — que é o que ela precisa para decidir se
-            aquele dinheiro ainda faz sentido no livro.
-
-            Texto, não link: a compra pode ter sido excluída, e um botão que
-            leva a lugar nenhum é pior que nenhum botão. */}
-        {detalheDaOrigem(lancamento, formatDateInput) && (
-          <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
-            {detalheDaOrigem(lancamento, formatDateInput)}
-          </p>
-        )}
 
         {/* ── O PAGAMENTO ─────────────────────────────────────────────── */}
         <div className="space-y-3">

@@ -93,7 +93,12 @@ async function loadThumbnail(url: string, maxPx: number): Promise<Thumb | null> 
     const res = await fetch(url);
     if (!res.ok) return null;
     const blob = await res.blob();
-    const bitmap = await createImageBitmap(blob);
+    // `imageOrientation: "from-image"`: sem isto, toda foto tirada com o
+    // iPhone em RETRATO entrava no papel deitada. O navegador mostra certo na
+    // tela porque o `<img>` aplica a orientação EXIF; `createImageBitmap` não
+    // aplica por padrão, e o Caderno saía com a foto virada. Ver
+    // `lib/imagem-para-pdf.ts`, que é onde esta regra passou a morar.
+    const bitmap = await createImageBitmap(blob, { imageOrientation: "from-image" });
 
     const scale = Math.min(1, maxPx / Math.max(bitmap.width, bitmap.height));
     const w = Math.max(1, Math.round(bitmap.width * scale));

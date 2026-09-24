@@ -27,15 +27,44 @@ function exigirValor(valor: number) {
   if (motivo) throw new ConvexError({ code: "VALOR_INVALIDO", message: motivo });
 }
 
+/**
+ * O teto do livro-caixa.
+ *
+ * ── O QUE ACONTECIA SEM ELE ─────────────────────────────────────────────────
+ * `listTransactions` e `getSummary` faziam `.collect()` sobre TODO o histórico
+ * da conta, a cada abertura da tela. `transactions` é a tabela que mais cresce
+ * num produto assim — cada parcela de cada contrato, cada compra lançada, para
+ * sempre. Passado o limite de documentos por consulta do Convex, a tela não
+ * mostra um número errado: ela para de abrir.
+ *
+ * `propostas.ts` já tinha reconhecido exatamente este risco e escolhido este
+ * desenho ("uma decoradora com cinco anos de ALTAR acumula centenas"). O
+ * Financeiro era o único que não o tinha.
+ *
+ * ── E POR QUE A RESPOSTA DIZ QUE PAROU ──────────────────────────────────────
+ * Porque um total financeiro cortado em silêncio é pior que nenhum total. A
+ * resposta carrega `temMais`, e a tela escreve "500 lançamentos carregados (há
+ * mais)" em vez de afirmar um saldo que ela não conferiu. Mesma regra de
+ * `supplierCatalog.panorama`, que já diz quando não consegue somar.
+ */
+export const LIMITE_DO_LIVRO = 500;
+
 export const listTransactions = query({
   args: {},
   handler: async (ctx) => {
     const user = await requireUser(ctx);
-    const items = await ctx.db
+    // Pelo índice de DATA e em ordem decrescente: os mais recentes são os que
+    // a tela mostra primeiro, e assim o corte cai no passado distante em vez
+    // de cair onde ela está olhando. Ordenar depois de `collect()` exigia ler
+    // tudo para jogar fora quase tudo.
+    const itens = await ctx.db
       .query("transactions")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .collect();
-    return items.sort((a, b) => b.date.localeCompare(a.date));
+      .withIndex("by_user_date", (q) => q.eq("userId", user._id))
+      .order("desc")
+      .take(LIMITE_DO_LIVRO + 1);
+
+    const temMais = itens.length > LIMITE_DO_LIVRO;
+    return { itens: temMais ? itens.slice(0, LIMITE_DO_LIVRO) : itens, temMais };
   },
 });
 
@@ -43,10 +72,16 @@ export const getSummary = query({
   args: {},
   handler: async (ctx) => {
     const user = await requireUser(ctx);
-    const txs = await ctx.db
+    // MESMO teto e MESMA ordem da lista, de propósito: se o resumo somasse um
+    // conjunto e a lista mostrasse outro, os dois números da mesma tela
+    // discordariam e ninguém saberia qual acreditar.
+    const lidos = await ctx.db
       .query("transactions")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .collect();
+      .withIndex("by_user_date", (q) => q.eq("userId", user._id))
+      .order("desc")
+      .take(LIMITE_DO_LIVRO + 1);
+    const incompleto = lidos.length > LIMITE_DO_LIVRO;
+    const txs = incompleto ? lidos.slice(0, LIMITE_DO_LIVRO) : lidos;
 
     // `somaEmDinheiro` em vez de `reduce` cru por dois motivos: a sobra de
     // ponto flutuante (0.1 + 0.2), e o lançamento antigo que já esteja com
@@ -87,6 +122,16 @@ export const getSummary = query({
       profit: emCentavos(totalIncome - totalExpense),
       pendingIncome,
       months,
+      /**
+       * Os totais consideram só os lançamentos lidos?
+       *
+       * A tela PRECISA dizer isso. Um saldo apresentado como total da empresa,
+       * calculado sobre parte do livro, é a mentira mais cara que esta tela
+       * pode contar. Os seis meses continuam corretos em qualquer caso: eles
+       * são recentes, e o corte é no passado distante.
+       */
+      incompleto,
+      limite: LIMITE_DO_LIVRO,
     };
   },
 });

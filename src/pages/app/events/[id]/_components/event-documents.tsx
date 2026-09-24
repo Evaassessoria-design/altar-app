@@ -44,16 +44,24 @@ export function EventDocuments({ eventId }: { eventId: Id<"events"> }) {
   const { enviar } = useEnvioDeArquivo(generateUploadUrl, { tipo: "documento", aceitos: ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain"] });
   const saveContract = useMutation(api.contracts.saveContract);
 
+  // Os fornecedores DESTE evento — a etiqueta de quem é o documento. A mesma
+  // lista da aba Fornecedores; nada é cadastrado aqui.
+  const fornecedores = useQuery(api.suppliers.listByEvent, { eventId }) as
+    | { _id: Id<"eventSuppliers">; companyName: string }[]
+    | undefined;
+
   const inputRef = useRef<HTMLInputElement>(null);
   const [tipo, setTipo] = useState<DocumentKind>("contract");
+  const [de, setDe] = useState<Id<"eventSuppliers"> | "">("");
   const [enviando, setEnviando] = useState(false);
 
-  // Só os documentos SEM fornecedor: é o único lugar que esta tela ocupa. O
-  // orçamento da floricultura não é substituído por um anexado daqui, e
-  // avisar que seria mandaria a decoradora procurar um conflito que não
-  // existe — ou, pior, desistir de anexar.
+  // O aviso de substituição segue a MESMA regra do servidor: por tipo E por
+  // dono. Dizer "já existe um orçamento" quando o que existe é o da outra
+  // empresa assustaria à toa — e o envio não apagaria nada mesmo.
   const jaTemDesteTipo =
-    documentos?.some((d) => !d.supplierId && (d.kind ?? "contract") === tipo) ?? false;
+    documentos?.some(
+      (d) => (d.kind ?? "contract") === tipo && (d.supplierId ?? "") === de,
+    ) ?? false;
 
   const handleUpload = async (file: File | undefined) => {
     if (!file) return;
@@ -65,7 +73,13 @@ export function EventDocuments({ eventId }: { eventId: Id<"events"> }) {
         return;
       }
       const storageId = envio.storageId;
-      await saveContract({ eventId, storageId, filename: file.name, kind: tipo });
+      await saveContract({
+        eventId,
+        storageId,
+        filename: file.name,
+        kind: tipo,
+        supplierId: de || undefined,
+      });
       toast.success(`${labelDoTipo(tipo)} anexado à pasta do evento.`);
     } catch (e) {
       toast.error(
@@ -112,17 +126,13 @@ export function EventDocuments({ eventId }: { eventId: Id<"events"> }) {
                   <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
                     {labelDoTipo(doc.kind)}
                   </span>
-                  {/* De QUEM veio. Sem isto, três orçamentos na pasta seriam
-                      três linhas indistinguíveis — e a decoradora teria de
-                      abrir cada PDF para saber qual é o da floricultura. */}
-                  {doc.supplierName && (
-                    <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full font-medium break-words">
-                      {doc.supplierName}
-                    </span>
-                  )}
                   <p className="text-sm font-medium truncate">{doc.filename}</p>
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                  {/* De quem é o documento, quando é de alguém. É o que
+                      transforma uma pasta de arquivos numa pasta que se
+                      entende sem abrir cada um. */}
+                  {doc.supplierName ? `${doc.supplierName} · ` : ""}
                   Anexado em {formatTimestamp(doc.uploadedAt)}
                 </p>
               </div>
@@ -207,6 +217,24 @@ export function EventDocuments({ eventId }: { eventId: Id<"events"> }) {
             </option>
           ))}
         </select>
+
+        {/* Só aparece quando há fornecedor no evento: um seletor com uma
+            opção só é ruído numa tela que se usa com o polegar. */}
+        {(fornecedores?.length ?? 0) > 0 && (
+          <select
+            value={de}
+            onChange={(e) => setDe(e.target.value as Id<"eventSuppliers"> | "")}
+            aria-label="De qual fornecedor é este documento"
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm cursor-pointer sm:w-44"
+          >
+            <option value="">Do evento</option>
+            {(fornecedores ?? []).map((f) => (
+              <option key={f._id} value={f._id}>
+                {f.companyName}
+              </option>
+            ))}
+          </select>
+        )}
 
         <input
           ref={inputRef}

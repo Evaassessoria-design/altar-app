@@ -55,6 +55,92 @@ export async function safeDeleteFile(
   return true;
 }
 
+/**
+ * Este arquivo ainda é usado por OUTRA linha da galeria?
+ *
+ * ── POR QUE ISTO PASSOU A EXISTIR ───────────────────────────────────────────
+ * Até a Galeria virar acervo da empresa, cada `eventPhotos` era dona exclusiva
+ * do seu arquivo, e `safeDeleteFile` podia apagar sem perguntar.
+ *
+ * Reaproveitar uma foto de 2024 no evento de 2026 cria uma LINHA nova — com o
+ * ambiente e a classificação daquele evento — apontando para o MESMO
+ * `storageId`. Nenhum byte é copiado, e é esse o ganho. O preço é que apagar
+ * deixou de poder assumir posse exclusiva: excluir a foto de 2024 quebraria a
+ * de 2026 em silêncio, e a decoradora só descobriria ao abrir a apresentação
+ * na frente da cliente.
+ *
+ * A pergunta é feita pelo índice `by_user_storage`, dentro da conta e nunca
+ * fora dela: o storage do Convex NÃO é escopado por usuário, e varrer por
+ * `storageId` sem o `userId` deixaria uma conta descobrir que outra referencia
+ * o mesmo arquivo.
+ *
+ * `excetoEsta` é a linha que está sendo apagada agora — ela ainda existe no
+ * banco no momento da pergunta, e contá-la faria toda exclusão parecer
+ * compartilhada e nunca apagar arquivo nenhum.
+ */
+export async function arquivoAindaEmUso(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  storageId: Id<"_storage"> | undefined | null,
+  excetoEsta: Id<"eventPhotos">,
+): Promise<boolean> {
+  if (!storageId) return false;
+  const outras = await ctx.db
+    .query("eventPhotos")
+    .withIndex("by_user_storage", (q) => q.eq("userId", userId).eq("storageId", storageId))
+    .collect();
+  return outras.some((p) => p._id !== excetoEsta);
+}
+
+/**
+ * Apaga a linha da galeria e, SÓ SE mais ninguém apontar para eles, os
+ * arquivos dela.
+ *
+ * Os dois caminhos de exclusão — a mutation da Galeria e a cascata do evento —
+ * precisam exatamente da mesma regra. Escrita duas vezes, uma delas
+ * continuaria apagando arquivo compartilhado.
+ *
+ * Devolve quantos ARQUIVOS saíram (0, 1 ou 2), para a cascata contar.
+ */
+export async function apagarFotoDaGaleria(
+  ctx: MutationCtx,
+  photo: {
+    _id: Id<"eventPhotos">;
+    userId: Id<"users">;
+    storageId: Id<"_storage">;
+    previewStorageId?: Id<"_storage">;
+  },
+): Promise<number> {
+  // ── A PERGUNTA É FEITA UMA VEZ, SOBRE O ORIGINAL ─────────────────────────
+  // A versão leve NÃO é consultada por conta própria, e não é esquecimento: o
+  // índice `by_user_storage` cobre o campo `storageId`, e perguntar por ela ali
+  // não acharia nada — a linha reaproveitada apareceria como exclusiva, e a
+  // miniatura da outra sumiria em silêncio. Foi o que o teste pegou.
+  //
+  // Um segundo índice sobre `previewStorageId` resolveria, e seria custo de
+  // escrita em todo envio de foto para responder a uma pergunta que já tem
+  // resposta: a versão leve ANDA COLADA no original. `reaproveitar` copia os
+  // dois campos juntos, e `savePhoto` é o único caminho que grava o preview —
+  // não há update que o troque depois, então uma versão leve nunca pertence a
+  // outra foto. Compartilhado o original, compartilhada a leve.
+  const compartilhado = await arquivoAindaEmUso(
+    ctx,
+    photo.userId,
+    photo.storageId,
+    photo._id,
+  );
+
+  let arquivos = 0;
+  if (!compartilhado) {
+    if (photo.previewStorageId && (await safeDeleteFile(ctx, photo.previewStorageId))) {
+      arquivos += 1;
+    }
+    if (await safeDeleteFile(ctx, photo.storageId)) arquivos += 1;
+  }
+  await ctx.db.delete(photo._id);
+  return arquivos;
+}
+
 /** Resumo do que foi removido. Usado nos testes e no retorno das mutations. */
 export type CascadeSummary = {
   events: number;
@@ -135,12 +221,12 @@ export async function deleteEventCascade(
     .withIndex("by_event", (q) => q.eq("eventId", eventId))
     .collect();
   for (const photo of eventPhotos) {
-    // A versão leve sai junto — é arquivo desta foto, não registro próprio.
-    if (photo.previewStorageId && (await safeDeleteFile(ctx, photo.previewStorageId))) {
-      files += 1;
-    }
-    if (await safeDeleteFile(ctx, photo.storageId)) files += 1;
-    await ctx.db.delete(photo._id);
+    // ── O ARQUIVO PODE SER DE MAIS DE UM EVENTO ──────────────────────────
+    // Uma foto reaproveitada de um casamento anterior tem linha própria aqui
+    // e aponta para o mesmo arquivo. Apagar este evento não pode levar junto
+    // a imagem que o outro ainda mostra. `apagarFotoDaGaleria` faz a pergunta
+    // pelo índice — a MESMA regra que `gallery.deletePhoto` usa.
+    files += await apagarFotoDaGaleria(ctx, photo);
     documents += 1;
   }
 
@@ -191,7 +277,10 @@ export async function deleteEventCascade(
   }
 
   // Item de montagem guarda duas fotos com papéis distintos (referência
-  // aprovada × o que foi de fato contratado). As duas saem.
+  // aprovada × o que foi de fato contratado). Os ARQUIVOS PRÓPRIOS dele saem
+  // aqui; os ponteiros `referencePhotoId`/`contractedPhotoId` não precisam de
+  // tratamento porque as fotos da Galeria deste evento já saíram no bloco 2,
+  // com os arquivos delas, e a linha do item some na sequência.
   const assemblyItems = await ctx.db
     .query("assemblyItems")
     .withIndex("by_event", (q) => q.eq("eventId", eventId))

@@ -4,7 +4,6 @@ import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import { SupplierCatalogPicker } from "../_components/supplier-catalog-picker.tsx";
-import { DocumentosDoFornecedor } from "@/components/fornecedores/documentos-do-fornecedor.tsx";
 import type { Doc, Id } from "@/convex/_generated/dataModel.d.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
@@ -51,6 +50,8 @@ import {
   Star,
   Search,
   Copy,
+  FileText,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -510,6 +511,20 @@ function SupplierForm({
             </div>
           </div>
 
+          {/* ── ONDE A CORREÇÃO VAI PARAR ──────────────────────────────────
+              Telefone, e-mail, contato, redes e endereço são do FORNECEDOR, e
+              a correção sobe para o catálogo — vale em todos os eventos dele.
+              Dizer isso aqui é o que impede a surpresa: sem o aviso, ela
+              corrige um número e não entende por que ele mudou em outro
+              casamento. O que é combinado DESTE evento (situação, condição,
+              observação, dados de pagamento) continua só aqui. */}
+          {isEdit && initial?.supplierId && (
+            <p className="text-xs text-muted-foreground border-l-2 border-primary/40 pl-2.5 leading-snug">
+              Contato, redes e endereço valem para <strong>todos os eventos</strong> deste
+              fornecedor. O combinado deste evento fica só aqui.
+            </p>
+          )}
+
           {/* Redes e endereço */}
           <Section title="Redes & endereço">
             <div className="grid grid-cols-2 gap-3">
@@ -603,14 +618,138 @@ function SupplierForm({
 
 // ── Detalhe ───────────────────────────────────────────────────────────────────
 
+/**
+ * O que este fornecedor entrega NESTE evento.
+ *
+ * ── A PERGUNTA QUE NÃO TINHA RESPOSTA ───────────────────────────────────────
+ * Ela abre a ficha da Móveis Bella antes de ligar e quer saber o que combinou:
+ * "120 cadeiras Dior, 15 mesas redondas, 2 lounges". Até aqui a ficha mostrava
+ * contato, situação e alinhamentos — nada do que ele entrega. A informação já
+ * existia em `assemblyItems`, presa aos itens, e ninguém a juntava por
+ * fornecedor.
+ *
+ * É LEITURA dos mesmos itens de montagem. Nenhum cadastro novo, nenhum vínculo
+ * novo: os itens já sabem de quem são desde que o fornecedor passou a ser
+ * escolhido em vez de digitado.
+ */
+function EntregasDoFornecedor({
+  eventId,
+  supplierId,
+}: {
+  eventId: Id<"events">;
+  /** O vínculo deste evento — `eventSuppliers._id`, que é para onde o item aponta. */
+  supplierId?: Id<"eventSuppliers">;
+}) {
+  const itens = useQuery(api.assemblyItems.listByEvent, { eventId });
+  // Sem vínculo não há o que somar: o item guarda o NOME como anotação, e
+  // casar por nome erraria com duas grafias da mesma empresa — o defeito que
+  // `lib/supplierIdentity.ts` já documentou.
+  if (!supplierId) return null;
+  const meus = (itens ?? []).filter((i) => i.supplierId === supplierId);
+  if (meus.length === 0) return null;
+
+  return (
+    <div className="border-t border-border pt-3">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+        O que ele entrega neste evento
+      </p>
+      <ul className="space-y-1">
+        {meus.map((i) => (
+          <li key={i._id} className="flex items-baseline gap-2 text-sm">
+            {i.quantity ? (
+              <span className="font-medium tabular-nums flex-shrink-0">
+                {i.quantity}
+                {i.unit ? ` ${i.unit}` : ""}
+              </span>
+            ) : null}
+            {/* Quem encolhe é o NOME e o AMBIENTE; a quantidade, não — ela é
+                o número que a pessoa está conferindo.
+
+                `flex-shrink-0` junto de `truncate` seria contraditório: o
+                elemento se recusa a encolher e ao mesmo tempo promete cortar,
+                e o resultado é a linha estourando a largura do diálogo num
+                telefone de 320 px. "Cadeira Dior dourada com assento de linho
+                off-white · Jardim das oliveiras" é um caso real. */}
+            <span className="min-w-0 truncate">{i.name}</span>
+            {i.ambiente && (
+              <span className="min-w-0 truncate text-xs text-muted-foreground">
+                · {i.ambiente}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * Os documentos deste fornecedor NESTE evento.
+ *
+ * ── SEM SEGUNDO GERENCIADOR DE ARQUIVOS ─────────────────────────────────────
+ * É a MESMA consulta da Pasta do Evento (`contracts.listDocuments`), filtrada
+ * pela etiqueta que o documento já carrega. Nenhum upload novo, nenhuma
+ * tabela, nenhuma exclusão própria: enviar e apagar continuam acontecendo na
+ * Pasta, que é onde a decoradora já sabe procurar.
+ *
+ * Junto com "o que ele entrega", é o que faz a ficha responder a pergunta que
+ * ela faz antes de ligar: quem é, o que combinei, e onde está o papel.
+ */
+function DocumentosDoFornecedor({
+  eventId,
+  supplierId,
+}: {
+  eventId: Id<"events">;
+  supplierId: Id<"eventSuppliers">;
+}) {
+  const documentos = useQuery(api.contracts.listDocuments, { eventId });
+  const meus = (documentos ?? []).filter((d) => d.supplierId === supplierId);
+  if (meus.length === 0) return null;
+
+  return (
+    <div className="border-t border-border pt-3">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+        Documentos
+      </p>
+      <ul className="space-y-1.5">
+        {meus.map((d) => (
+          <li key={d._id} className="flex items-center gap-2">
+            <FileText className="size-3.5 text-muted-foreground flex-shrink-0" />
+            {/* `min-w-0` na coluna de texto: nome de arquivo é longo e não
+                pode empurrar o botão de abrir para fora do diálogo. */}
+            <span className="min-w-0 flex-1 truncate text-sm">{d.filename}</span>
+            {d.url && (
+              <a
+                href={d.url}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Abrir ${d.filename}`}
+                // 32 px de alvo: menor que isso erra no polegar.
+                className="size-8 -my-1 flex items-center justify-center rounded-lg hover:bg-accent text-muted-foreground cursor-pointer flex-shrink-0"
+              >
+                <ExternalLink className="size-4" />
+              </a>
+            )}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-1.5 text-[11px] text-muted-foreground">
+        Enviados na Pasta do evento.
+      </p>
+    </div>
+  );
+}
+
 function SupplierDetail({
   supplier,
+  eventId,
   onClose,
   onEdit,
   onChangeStatus,
   onAddAlignment,
 }: {
   supplier: SupplierRow;
+  eventId: Id<"events">;
   onClose: () => void;
   onEdit: () => void;
   onChangeStatus: (status: SupplierStatus) => void;
@@ -665,6 +804,12 @@ function SupplierDetail({
             </div>
           </div>
 
+          {/* O id do VÍNCULO (`eventSuppliers._id`), não o do catálogo:
+              `assemblyItems.supplierId` aponta para o fornecedor NESTE evento. */}
+          <EntregasDoFornecedor eventId={eventId} supplierId={supplier._id} />
+
+          <DocumentosDoFornecedor eventId={eventId} supplierId={supplier._id} />
+
           {/* 3. Situação neste evento (status + próxima ação + alinhamentos) */}
           <div className="border-t border-border pt-3">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Situação neste evento</p>
@@ -701,17 +846,6 @@ function SupplierDetail({
             ) : (
               <p className="text-xs text-muted-foreground">Nenhum alinhamento registrado.</p>
             )}
-
-            {/* ── O QUE VEIO DESTA CONTRATAÇÃO ────────────────────────────
-                Contrato e orçamento ficam onde ela pensa neles: no
-                fornecedor. É a MESMA Pasta do Evento — um registro só, que
-                aparece nos dois lugares. Ver
-                `components/fornecedores/documentos-do-fornecedor.tsx`. */}
-            <DocumentosDoFornecedor
-              eventId={supplier.eventId}
-              supplierId={supplier._id}
-              companyName={supplier.companyName}
-            />
 
             {alignments.length > 1 && (
               <Section title="Histórico de alinhamentos">
@@ -1151,6 +1285,7 @@ export default function FornecedoresPage() {
       {detailLive && (
         <SupplierDetail
           supplier={detailLive}
+          eventId={eventId}
           onClose={() => setDetail(null)}
           onEdit={() => { setForm({ mode: "edit", supplier: detailLive }); setDetail(null); }}
           onChangeStatus={(status) => void handleChangeStatus(detailLive, status)}

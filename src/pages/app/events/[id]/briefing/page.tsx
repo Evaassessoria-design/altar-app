@@ -2,7 +2,7 @@ import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
@@ -12,7 +12,11 @@ import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { toast } from "sonner";
 import { ArrowLeft, Save, ChevronRight, Sparkles, FileDown, Loader2, Truck, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
-import { BRIEFING_AREAS, type BriefingFields } from "@/lib/briefing-areas.ts";
+import {
+  BRIEFING_AREAS,
+  areaTemTextoAntigo,
+  type BriefingFields,
+} from "@/lib/briefing-areas.ts";
 
 /**
  * Converte a logo em data URL para o jsPDF.
@@ -38,6 +42,7 @@ async function carregarLogo(url: string | null | undefined): Promise<string | nu
 }
 import { AssemblyItemsSection } from "../_components/assembly-items-section.tsx";
 import { SuggestItemsDialog } from "../_components/suggest-items-dialog.tsx";
+import { suggestAssemblyItems } from "@/lib/assembly-suggestions.ts";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -66,6 +71,11 @@ export default function EventBriefingPage() {
   const checklist = useQuery(api.briefing.getChecklist, { eventId, phase: "pre" });
   const health = useQuery(api.health.getEventHealth, { eventId });
   const renders = useQuery(api.layoutRenders.listByEvent, { eventId });
+  // As peças do acervo reservadas — o segundo bloco da Folha de Carregamento.
+  // A folha perguntava "o que vai no caminhão?" e respondia só metade: o
+  // número que SAIU e o que VOLTOU já estavam gravados na reserva e viviam
+  // noutra tela, que quem está no galpão com a prancheta não vai abrir.
+  const acervo = useQuery(api.acervo.doEvento, { eventId });
   // Identidade da empresa para o documento. Ambas degradam para null e o
   // caderno sai igualmente completo, só com o padrão do ALTAR.
   const empresa = useQuery(api.users.getCurrentUser);
@@ -105,6 +115,28 @@ export default function EventBriefingPage() {
     }
   };
 
+  // As descrições DESTA área que ainda não viraram item. `suggestAssemblyItems`
+  // já sabe o que existe e não reoferece — então uma lista vazia significa
+  // literalmente "não há nada aqui que o produto não esteja usando".
+  const convertiveis = useMemo(
+    () =>
+      suggestAssemblyItems(briefing, items ?? []).filter(
+        (s) => s.area === BRIEFING_AREAS[activeArea]?.key,
+      ),
+    [briefing, items, activeArea],
+  );
+
+  // Os itens estruturados DESTA área. É o que decide qual dos dois avisos a
+  // tela mostra — o convite para converter, ou o lembrete de que o texto é
+  // anotação.
+  const itensDaArea = (items ?? []).filter(
+    (i) => i.area === BRIEFING_AREAS[activeArea]?.key,
+  );
+  const textoEItemConvivem =
+    itensDaArea.length > 0 &&
+    convertiveis.length === 0 &&
+    areaTemTextoAntigo(BRIEFING_AREAS[activeArea], briefing);
+
   // Planta premium mais recente concluída — vira o mapa do caderno. Se não
   // existir, a seção simplesmente não aparece no PDF.
   const mapUrl =
@@ -125,6 +157,17 @@ export default function EventBriefingPage() {
       await (await import("@/lib/generate-loading-pdf.ts")).generateLoadingPDF({
         event,
         items: (items ?? []) as never,
+        // Reserva sem item resolvido (peça excluída do acervo depois de
+        // reservada) é descartada em `montarPecasDoAcervo`: linha sem nome na
+        // prancheta não ajuda ninguém a conferir.
+        acervo: (acervo?.reservas ?? []).map((r) => ({
+          _id: r._id,
+          nome: r.item?.nome ?? "",
+          unidade: r.item?.unidade,
+          quantidade: r.quantidade,
+          saiu: r.saiu,
+          voltou: r.voltou,
+        })),
         empresa: empresa ?? null,
         responsible: health?.responsible,
         responsiblePhone: responsavelTelefone,
@@ -320,6 +363,54 @@ export default function EventBriefingPage() {
                   <h2 className="text-lg font-semibold">{area.label}</h2>
                 </div>
 
+                {/* ── O QUE ESTE TEXTO ALCANÇA, E O QUE NÃO ──────────────────
+                    "Tipo das Cadeiras: Dior" e "Quantidade: 120" descrevem o
+                    combinado, e é só isso que fazem: quem monta, quem carrega,
+                    quem compra e o Projeto Visual leem os ITENS da lista
+                    abaixo, não estes campos.
+                    Quem preenchia o texto e não a lista fazia metade do
+                    trabalho e recebia metade do produto, sem nada na tela
+                    dizendo isso. O aviso só aparece quando há de fato algo
+                    aqui que ainda não virou item — senão seria ruído. */}
+                {convertiveis.length > 0 && (
+                  <div className="mb-5 rounded-lg border border-primary/30 bg-primary/5 p-3 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground leading-snug min-w-0 flex-1">
+                      O que está escrito aqui <strong>não</strong> chega ao Caderno, às
+                      Compras nem ao Projeto Visual — quem chega são os itens.{" "}
+                      {convertiveis.length === 1
+                        ? "Há 1 descrição que pode virar item."
+                        : `Há ${convertiveis.length} descrições que podem virar itens.`}
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setSuggesting(true)}
+                      className="cursor-pointer gap-1.5 flex-shrink-0"
+                    >
+                      <Sparkles className="size-3.5" /> Criar itens
+                    </Button>
+                  </div>
+                )}
+
+                {/* ── QUANDO OS DOIS COEXISTEM ───────────────────────────────
+                    Convertido o texto em item, o convite acima some — e o
+                    campo continua escrito, para sempre, sem nada dizendo qual
+                    dos dois o produto usa. Ela ajusta o item para 130 e o
+                    texto segue dizendo 120.
+
+                    Apagar o texto seria errado: é anotação dela, e pode
+                    conter o que o item não comporta ("as douradas; as
+                    prateadas ficam de reserva"). O certo é DIZER que é
+                    anotação. */}
+                {textoEItemConvivem && (
+                  <p className="mb-5 text-xs text-muted-foreground border-l-2 border-border pl-2.5 leading-snug">
+                    Esta área já tem {itensDaArea.length === 1 ? "1 item" : `${itensDaArea.length} itens`}{" "}
+                    cadastrado{itensDaArea.length === 1 ? "" : "s"}. Os campos abaixo valem como{" "}
+                    <strong>anotação</strong> — quem monta, compra e apresenta lê os itens.
+                  </p>
+                )}
+
                 <div className="space-y-6">
                   {area.groups.map((group, gi) => (
                     <div key={gi} className="space-y-4">
@@ -402,6 +493,10 @@ export default function EventBriefingPage() {
         <SuggestItemsDialog
           eventId={eventId}
           briefing={briefing}
+          // Os itens que já existem. Sem isto, abrir o convite duas vezes
+          // criava a segunda "Cadeira Dior" e a Folha de Carregamento passava
+          // a pedir 240 cadeiras.
+          jaExistentes={items ?? []}
           onClose={() => setSuggesting(false)}
         />
       )}

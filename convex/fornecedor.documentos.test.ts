@@ -195,11 +195,13 @@ describe("a pasta diz de quem veio cada arquivo", () => {
     expect(pasta[0].supplierName).toBe("Móveis SP Ltda");
   });
 
-  it("documento do evento diz `null`, nunca 'desconhecido'", async () => {
+  it("documento do evento não inventa dono — ausente é ausente", async () => {
+    // `undefined`, e não a string "desconhecido" nem o nome de algum
+    // fornecedor do evento: documento sem etiqueta é documento do evento.
     const { dona, ids, anexar } = await cenario();
     await anexar(ids.marina, "contrato.pdf", "contract");
     const pasta = await dona.query(api.contracts.listDocuments, { eventId: ids.marina });
-    expect(pasta[0].supplierName).toBeNull();
+    expect(pasta[0].supplierName).toBeUndefined();
   });
 });
 
@@ -217,7 +219,7 @@ describe("remover o fornecedor não destrói a papelada", () => {
     const pasta = await dona.query(api.contracts.listDocuments, { eventId: ids.marina });
     expect(pasta, "o contrato assinado sumiu com o cartão do fornecedor").toHaveLength(1);
     expect(pasta[0].supplierId).toBeUndefined();
-    expect(pasta[0].supplierName).toBeNull();
+    expect(pasta[0].supplierName).toBeUndefined();
     expect(await arquivoExiste(arquivo)).toBe(true);
   });
 

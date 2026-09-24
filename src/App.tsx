@@ -25,6 +25,7 @@ import { ErrorBoundary } from "@/components/error-boundary.tsx";
 // carrega aquela tela e só ela.
 // ─────────────────────────────────────────────────────────────────────────────
 const Dashboard = lazy(() => import("./pages/app/dashboard/page.tsx"));
+const Escritorio = lazy(() => import("./pages/app/escritorio/page.tsx"));
 const Agenda = lazy(() => import("./pages/app/agenda/page.tsx"));
 const Events = lazy(() => import("./pages/app/events/page.tsx"));
 const EventDetails = lazy(() => import("./pages/app/events/[id]/page.tsx"));
@@ -122,6 +123,7 @@ function AppRoutes() {
         </>
       }>
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/escritorio" element={<Escritorio />} />
         <Route path="/agenda" element={<Agenda />} />
         <Route path="/eventos" element={<Events />} />
         <Route path="/eventos/:id" element={<EventDetails />} />

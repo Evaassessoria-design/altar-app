@@ -27,12 +27,24 @@ export type LancamentoComComprovante = {
 /**
  * "Quais pagamentos eu já dei baixa mas ainda não têm comprovante anexado?"
  *
- * Só RECEITA entra. Despesa sem comprovante é outra conversa — esta rodada não
- * implementou anexo em despesa, e o filtro não pode prometer uma cobrança que
- * o produto ainda não faz.
+ * ── DESPESA ENTRA, E ANTES NÃO ENTRAVA ──────────────────────────────────────
+ * A versão anterior exigia `type === "income"`, e a justificativa escrita aqui
+ * era que o produto não anexava em despesa. Isso deixou de ser verdade sem que
+ * esta linha soubesse: o clipe é desenhado em TODA linha do Financeiro, o
+ * diálogo troca o vocabulário por tipo ("Pago" × "Recebido"), a mutation nunca
+ * olhou o tipo e a cascata já apaga os arquivos dos dois.
+ *
+ * O filtro era o único lugar que ainda achava que despesa não tinha anexo — e
+ * o efeito era o pior possível num contador: a tela AFIRMAVA um número menor
+ * do que o trabalho que faltava. Nota de fornecedor pago é exatamente o
+ * documento que a contabilidade cobra, e ele não aparecia na lista.
+ *
+ * O que continua de fora é só o que deve: lançamento ainda NÃO PAGO. Não há
+ * comprovante de pagamento que não aconteceu, e cobrar isso viraria ruído
+ * sobre toda parcela futura do livro.
  */
 export function pagoSemComprovante(tx: LancamentoComComprovante): boolean {
-  return tx.type === "income" && tx.isPaid && (tx.comprovantes?.length ?? 0) === 0;
+  return tx.isPaid && (tx.comprovantes?.length ?? 0) === 0;
 }
 
 /** Tem evidência anexada? */

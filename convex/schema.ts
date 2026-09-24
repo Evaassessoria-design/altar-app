@@ -1368,8 +1368,37 @@ export default defineSchema({
     ambiente: v.optional(v.string()),
     notes: v.optional(v.string()),
     // Duas fotos com papéis distintos: o que foi aprovado × o que foi contratado.
+    //
+    // ── O ARQUIVO PRÓPRIO DO ITEM ───────────────────────────────────────────
+    // Enviado direto no item. Exclusivo dele: sai no `remove` e na cascata.
     referencePhotoStorageId: v.optional(v.id("_storage")),
     contractedPhotoStorageId: v.optional(v.id("_storage")),
+    /**
+     * OU um PONTEIRO para uma foto que já está na Galeria.
+     *
+     * ── O DEFEITO: A MESMA FOTO, DUAS VEZES ─────────────────────────────────
+     * A decoradora subia as trinta fotos do projeto na Galeria, classificava
+     * cada uma por ambiente e escopo — e, para pendurar uma delas no item de
+     * montagem, tinha de ENVIAR O MESMO ARQUIVO DE NOVO. Dois uploads, dois
+     * arquivos cobrados, e duas verdades: classificar a foto na Galeria não
+     * mexia na cópia presa ao item.
+     *
+     * É o mesmo ponteiro que `events.coverPhotoId` já usa, e pela mesma razão:
+     * o arquivo continua sendo um só, e a foto do item herda o que a Galeria
+     * souber dela.
+     *
+     * ── OS DOIS CAMPOS SÃO EXCLUSIVOS ENTRE SI ──────────────────────────────
+     * Um slot tem OU arquivo próprio OU ponteiro, nunca os dois: gravar um
+     * limpa o outro (`assemblyItems.setPhoto` / `setPhotoFromGallery`). A
+     * leitura prefere o ponteiro e cai no arquivo próprio — que é o estado de
+     * todo item já cadastrado. Sem backfill.
+     *
+     * Ponteiro para foto apagada NÃO é estado válido: `gallery.deletePhoto`
+     * limpa os itens antes de apagar, como já limpa a capa. A leitura ainda
+     * degrada para "sem foto" se um ponteiro velho sobreviver.
+     */
+    referencePhotoId: v.optional(v.id("eventPhotos")),
+    contractedPhotoId: v.optional(v.id("eventPhotos")),
     includeInAssemblyReport: v.boolean(),
     // ATENCAO: `checkOnAssembly` NAO e estado. E preferencia de IMPRESSAO —
     // marca quais itens ganham caixinha na ficha de montagem em PDF. O ponto

@@ -230,6 +230,26 @@ export const deletePhoto = mutation({
       await ctx.db.patch(photo.eventId, { coverPhotoId: undefined });
     }
 
+    // ── E OS ITENS DE MONTAGEM QUE APONTAM PARA ELA ─────────────────────────
+    // Um item pode usar esta foto como referência ou como contratada, por
+    // PONTEIRO (`assemblyItems.referencePhotoId`) em vez de arquivo próprio.
+    // Mesma dívida que a capa: a leitura degrada para "sem foto" de qualquer
+    // jeito, mas ponteiro quebrado no banco é dívida calada — quem ler o campo
+    // amanhã não sabe se a foto foi trocada ou se o dado se perdeu.
+    //
+    // Nenhum ARQUIVO é apagado aqui além dos desta foto: o item nunca foi dono
+    // dela. Só o vínculo morre.
+    const itens = await ctx.db
+      .query("assemblyItems")
+      .withIndex("by_event", (q) => q.eq("eventId", photo.eventId))
+      .collect();
+    for (const item of itens) {
+      const limpeza: Record<string, undefined> = {};
+      if (item.referencePhotoId === args.id) limpeza.referencePhotoId = undefined;
+      if (item.contractedPhotoId === args.id) limpeza.contractedPhotoId = undefined;
+      if (Object.keys(limpeza).length > 0) await ctx.db.patch(item._id, limpeza);
+    }
+
     // ── OS DOIS ARQUIVOS SAEM, E A LINHA SAI DE QUALQUER JEITO ───────────
     // `safeDeleteFile` em vez de `ctx.storage.delete` porque o Convex LANÇA
     // ao apagar arquivo inexistente ("Delete on non-existent doc") — e a

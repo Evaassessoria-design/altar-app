@@ -18,6 +18,7 @@ import {
 } from "@/convex/lib/assemblyStatus.ts";
 import { cn } from "@/lib/utils.ts";
 import { StatusSelect } from "@/components/status-select.tsx";
+import { EscolherDaGaleria } from "@/components/montagem/escolher-da-galeria.tsx";
 
 /** Cores do trajeto: cinza no galpão, quente ao sair, verde ao voltar. */
 const TOM_CARREGAMENTO: Record<AssemblyStatus, string> = {
@@ -45,6 +46,8 @@ import {
 
 type Item = {
   _id: Id<"assemblyItems">;
+  /** Para escolher foto da Galeria DESTE evento — nunca a de outro. */
+  eventId: Id<"events">;
   area: string;
   name: string;
   model?: string;
@@ -221,9 +224,12 @@ function ItemCard({
   onRemove: ReturnType<typeof useMutation<typeof api.assemblyItems.remove>>;
 }) {
   const setPhoto = useMutation(api.assemblyItems.setPhoto);
+  const setPhotoFromGallery = useMutation(api.assemblyItems.setPhotoFromGallery);
   const generateUploadUrl = useMutation(api.assemblyItems.generateUploadUrl);
   const { enviar } = useEnvioDeArquivo(generateUploadUrl, { tipo: "imagem", aceitos: ["image/"] });
   const [uploading, setUploading] = useState<"reference" | "contracted" | null>(null);
+  // Qual slot está escolhendo da Galeria. `null` = diálogo fechado.
+  const [escolhendo, setEscolhendo] = useState<"reference" | "contracted" | null>(null);
   const refInput = useRef<HTMLInputElement>(null);
   const contractedInput = useRef<HTMLInputElement>(null);
 
@@ -252,6 +258,20 @@ function ItemCard({
       toast.error("Erro ao enviar a foto.");
     } finally {
       setUploading(null);
+    }
+  };
+
+  /** Aponta o slot para uma foto que já está na Galeria — sem novo upload. */
+  const escolherDaGaleria = async (
+    slot: "reference" | "contracted",
+    photoId: Id<"eventPhotos">,
+  ) => {
+    try {
+      await setPhotoFromGallery({ id: item._id, slot, photoId });
+      toast.success("Foto da galeria usada neste item.");
+      setEscolhendo(null);
+    } catch {
+      toast.error("Não foi possível usar essa foto.");
     }
   };
 
@@ -343,6 +363,7 @@ function ItemCard({
               uploading={uploading === "reference"}
               inputRef={refInput}
               onPick={(f) => void uploadPhoto("reference", f)}
+              onGaleria={() => setEscolhendo("reference")}
             />
             <PhotoSlot
               label="Item contratado"
@@ -350,8 +371,24 @@ function ItemCard({
               uploading={uploading === "contracted"}
               inputRef={contractedInput}
               onPick={(f) => void uploadPhoto("contracted", f)}
+              onGaleria={() => setEscolhendo("contracted")}
             />
           </div>
+
+          {/* Escolher em vez de reenviar. A Galeria já tem a foto — o que sai
+              daqui é um ponteiro, não uma cópia. */}
+          {escolhendo && (
+            <EscolherDaGaleria
+              eventId={item.eventId}
+              titulo={
+                escolhendo === "reference"
+                  ? "Referência aprovada — escolher da galeria"
+                  : "Item contratado — escolher da galeria"
+              }
+              onEscolher={(photoId) => void escolherDaGaleria(escolhendo, photoId)}
+              onFechar={() => setEscolhendo(null)}
+            />
+          )}
 
           {/* Flags */}
           <div className="space-y-2 pt-1">
@@ -439,12 +476,14 @@ function PhotoSlot({
   uploading,
   inputRef,
   onPick,
+  onGaleria,
 }: {
   label: string;
   url?: string | null;
   uploading: boolean;
   inputRef: React.RefObject<HTMLInputElement | null>;
   onPick: (file: File) => void;
+  onGaleria: () => void;
 }) {
   return (
     <div className="space-y-1.5">
@@ -474,6 +513,16 @@ function PhotoSlot({
             <ImagePlus className="size-5" /> Adicionar
           </span>
         )}
+      </button>
+      {/* Dois caminhos, e o da Galeria é o que evita o segundo upload da mesma
+          foto. Fica como texto discreto abaixo do alvo grande: quem ainda não
+          tem foto nenhuma no evento continua indo direto pelo "Adicionar". */}
+      <button
+        onClick={onGaleria}
+        disabled={uploading}
+        className="w-full text-xs text-muted-foreground hover:text-foreground cursor-pointer py-1"
+      >
+        ou escolher da galeria
       </button>
     </div>
   );

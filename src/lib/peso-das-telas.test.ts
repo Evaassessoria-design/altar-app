@@ -24,12 +24,18 @@ const semComentarios = (p: string) =>
 const GALERIA = semComentarios("src/pages/app/events/[id]/fotos/page.tsx");
 const PROJETO = semComentarios("src/pages/app/events/[id]/projeto/page.tsx");
 const PRATELEIRA = semComentarios("src/components/projeto/prateleira-de-fotos.tsx");
+// A quarta: escolher uma foto da Galeria para um item de montagem. Nasceu
+// depois desta trava e entra nela no mesmo gesto — uma grade de trinta
+// miniaturas baixando trinta originais é o defeito que esta suíte existe para
+// impedir, e a tela é usada no galpão, no 4G.
+const ESCOLHER = semComentarios("src/components/montagem/escolher-da-galeria.tsx");
 
-describe("as três superfícies de miniatura usam a versão leve", () => {
+describe("as superfícies de miniatura usam a versão leve", () => {
   it.each([
     ["a grade da Galeria", () => GALERIA],
     ["o Projeto Visual", () => PROJETO],
     ["a prateleira", () => PRATELEIRA],
+    ["o seletor de foto do item", () => ESCOLHER],
   ])("%s passa por `urlDeExibicao`", (_nome, fonte) => {
     expect(fonte()).toContain("urlDeExibicao");
     expect(fonte()).toContain("@/lib/imagem-reduzida.ts");
@@ -52,7 +58,13 @@ describe("as três superfícies de miniatura usam a versão leve", () => {
 describe("a capa continua tendo UM ponteiro só", () => {
   it("nenhum segundo campo de capa foi criado", () => {
     const schema = readFileSync("convex/schema.ts", "utf-8");
-    expect((schema.match(/coverPhotoId/g) ?? []).length).toBe(1);
+    // Conta DECLARAÇÃO de campo, não menção ao nome. A versão anterior contava
+    // qualquer ocorrência, e passou a acusar quando um comentário de outra
+    // tabela citou `events.coverPhotoId` como precedente do ponteiro de foto —
+    // que é exatamente a documentação que este repositório quer. O que o teste
+    // protege é a existência de um SEGUNDO ponteiro de capa, e é isso que ele
+    // mede agora.
+    expect((schema.match(/coverPhotoId\s*:/g) ?? []).length).toBe(1);
     for (const inventado of ["coverPreviewId", "coverStorageId", "coverPhotoStorageId"]) {
       expect(schema, `nasceu um segundo ponteiro: ${inventado}`).not.toContain(inventado);
     }

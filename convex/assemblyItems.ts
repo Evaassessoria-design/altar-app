@@ -68,17 +68,61 @@ export const listByEvent = query({
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
       .collect();
 
+    // ── AS FOTOS DA GALERIA, RESOLVIDAS DE UMA VEZ ───────────────────────────
+    // Um item pode APONTAR para uma foto da Galeria em vez de carregar um
+    // arquivo próprio (ver `assemblyItems.referencePhotoId`). Resolver isso com
+    // um `get` por item seria N+1 numa tela que abre toda visita ao evento.
+    //
+    // Uma consulta por evento, e só quando algum item de fato aponta: evento
+    // sem ponteiro nenhum — o estado de tudo que já existe — não paga nada.
+    const apontam = rows.some((i) => i.referencePhotoId || i.contractedPhotoId);
+    const galeria = apontam
+      ? new Map(
+          (
+            await ctx.db
+              .query("eventPhotos")
+              .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+              .collect()
+          ).map((f) => [f._id, f]),
+        )
+      : new Map();
+
+    /**
+     * A URL de um slot. UMA regra, usada pelos dois — duas cópias divergiriam
+     * e um slot passaria a preferir coisa diferente do outro.
+     *
+     * O ponteiro manda; sem ele, o arquivo próprio do item. Ponteiro que
+     * sobreviveu a uma foto apagada vira "sem foto", nunca quadro quebrado.
+     *
+     * Da foto da Galeria sai a VERSÃO LEVE quando existe: a miniatura do
+     * Caderno tem 22mm, e baixar o original de 15 MB para desenhá-la é o
+     * desperdício que `imagem-reduzida.ts` existe para evitar.
+     */
+    const urlDoSlot = async (
+      photoId: (typeof rows)[number]["referencePhotoId"],
+      storageId: (typeof rows)[number]["referencePhotoStorageId"],
+    ) => {
+      if (photoId) {
+        const foto = galeria.get(photoId);
+        if (!foto) return null;
+        return ctx.storage.getUrl(foto.previewStorageId ?? foto.storageId);
+      }
+      return storageId ? ctx.storage.getUrl(storageId) : null;
+    };
+
     return Promise.all(
       rows
         .sort((a, b) => a.order - b.order)
         .map(async (item) => ({
           ...item,
-          referencePhotoUrl: item.referencePhotoStorageId
-            ? await ctx.storage.getUrl(item.referencePhotoStorageId)
-            : null,
-          contractedPhotoUrl: item.contractedPhotoStorageId
-            ? await ctx.storage.getUrl(item.contractedPhotoStorageId)
-            : null,
+          referencePhotoUrl: await urlDoSlot(
+            item.referencePhotoId,
+            item.referencePhotoStorageId,
+          ),
+          contractedPhotoUrl: await urlDoSlot(
+            item.contractedPhotoId,
+            item.contractedPhotoStorageId,
+          ),
         })),
     );
   },
@@ -203,11 +247,20 @@ export const update = mutation({
   },
 });
 
-/** Define (ou troca) uma das duas fotos do item. */
+const slotValidator = v.union(v.literal("reference"), v.literal("contracted"));
+
+/** Os dois campos de um slot. Um item tem OU arquivo próprio OU ponteiro. */
+function camposDoSlot(slot: "reference" | "contracted") {
+  return slot === "reference"
+    ? { arquivo: "referencePhotoStorageId" as const, ponteiro: "referencePhotoId" as const }
+    : { arquivo: "contractedPhotoStorageId" as const, ponteiro: "contractedPhotoId" as const };
+}
+
+/** Define (ou troca) uma das duas fotos do item, com um arquivo NOVO. */
 export const setPhoto = mutation({
   args: {
     id: v.id("assemblyItems"),
-    slot: v.union(v.literal("reference"), v.literal("contracted")),
+    slot: slotValidator,
     storageId: v.id("_storage"),
   },
   handler: async (ctx, args) => {
@@ -217,10 +270,7 @@ export const setPhoto = mutation({
       throw new ConvexError({ message: "Item não encontrado", code: "NOT_FOUND" });
     }
 
-    const field =
-      args.slot === "reference"
-        ? "referencePhotoStorageId"
-        : "contractedPhotoStorageId";
+    const { arquivo, ponteiro } = camposDoSlot(args.slot);
 
     // Troca de foto: remove o arquivo anterior para não deixar órfão no storage.
     //
@@ -228,11 +278,67 @@ export const setPhoto = mutation({
     // aqui isso abortava a mutation inteira: a foto NOVA não era gravada, e a
     // decoradora via a antiga de volta depois de "trocar com sucesso". Mesma
     // regra que `lib/cascade.ts` já escreveu.
-    const previous = item[field];
+    const previous = item[arquivo];
     if (previous) await safeDeleteFile(ctx, previous);
 
     await ctx.db.patch(args.id, {
-      [field]: args.storageId,
+      [arquivo]: args.storageId,
+      // Enviar arquivo novo DESFAZ o ponteiro: os dois juntos fariam a leitura
+      // preferir a foto da Galeria e a decoradora veria a antiga depois de
+      // enviar a nova.
+      [ponteiro]: undefined,
+      updatedAt: new Date().toISOString(),
+    });
+  },
+});
+
+/**
+ * Aponta o slot para uma foto que JÁ ESTÁ NA GALERIA.
+ *
+ * ── O TRABALHO QUE ISTO APAGA ───────────────────────────────────────────────
+ * Ela sobe as fotos do projeto na Galeria, classifica cada uma por ambiente e
+ * escopo — e, para pendurar uma delas num item de montagem, tinha de ENVIAR O
+ * MESMO ARQUIVO DE NOVO. Dois uploads no 4G do sítio, dois arquivos cobrados,
+ * e duas verdades: reclassificar na Galeria não mexia na cópia do item.
+ *
+ * ── TRÊS PERGUNTAS, NÃO DUAS ────────────────────────────────────────────────
+ * A foto existe, é da conta, E É DESTE EVENTO. A terceira não é zelo: sem ela,
+ * o item de Marina & Gabriel podia exibir uma foto do casamento da Joana. Os
+ * dois eventos são da mesma decoradora, nenhuma regra de posse é violada, e
+ * ainda assim é a foto errada no documento errado. É a mesma lição que
+ * `requireEventPhoto` aprendeu com a capa.
+ *
+ * O arquivo próprio anterior é APAGADO: o slot passou a ser um ponteiro, e
+ * deixar o arquivo seria storage cobrado que nenhuma linha mais referencia.
+ */
+export const setPhotoFromGallery = mutation({
+  args: {
+    id: v.id("assemblyItems"),
+    slot: slotValidator,
+    photoId: v.id("eventPhotos"),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const item = await ctx.db.get(args.id);
+    if (!item || item.userId !== user._id) {
+      throw new ConvexError({ message: "Item não encontrado", code: "NOT_FOUND" });
+    }
+
+    const foto = await ctx.db.get(args.photoId);
+    if (!foto || foto.userId !== user._id || foto.eventId !== item.eventId) {
+      throw new ConvexError({ message: "Foto não encontrada", code: "NOT_FOUND" });
+    }
+
+    const { arquivo, ponteiro } = camposDoSlot(args.slot);
+    // O arquivo exclusivo do item sai — ninguém mais vai referenciá-lo. A foto
+    // da Galeria NÃO é tocada: ela é de lá, e apagá-la estragaria a galeria
+    // inteira e a capa do evento.
+    const previous = item[arquivo];
+    if (previous) await safeDeleteFile(ctx, previous);
+
+    await ctx.db.patch(args.id, {
+      [arquivo]: undefined,
+      [ponteiro]: args.photoId,
       updatedAt: new Date().toISOString(),
     });
   },

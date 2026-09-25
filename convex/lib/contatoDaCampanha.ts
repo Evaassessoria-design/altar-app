@@ -1,4 +1,18 @@
 import { LIVE_ALTAR, estagioDe, type Campanha, type EstagioDoInteressado } from "./campanha";
+import { modeloPorId, primeiroNome, type ContextoDaMensagem } from "./mensagensDaCampanha";
+
+/**
+ * O convite, redigido pela biblioteca de modelos.
+ *
+ * `modeloPorId("convite")` nunca é `undefined` — "convite" é literal do
+ * catálogo — mas o tipo não sabe disso, e um `!` aqui seria a única linha do
+ * módulo a confiar em algo que o compilador não confere.
+ */
+function redigirConvite(c: ContextoDaMensagem) {
+  const modelo = modeloPorId("convite");
+  if (!modelo) throw new Error("o modelo de convite sumiu do catálogo");
+  return modelo.redigir(c);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PREPARAR O CONTATO — E PARAR ANTES DE ENVIAR
@@ -42,6 +56,14 @@ export type InteressadoParaContato = {
   campanha?: string;
   ultimaInteracao?: string;
   eventosPorAno?: number;
+  /**
+   * De onde veio. Decide a linha de abertura do convite.
+   *
+   * Quem preencheu a landing ouve "você entrou em contato com a gente"; quem
+   * veio de uma lista de prospecção ouve a verdade. Afirmar um contato que
+   * nunca houve é a forma mais rápida de queimar um número.
+   */
+  origem?: string;
 };
 
 /** Só quem ainda não foi abordado. Quem já teve contato não entra na fila. */
@@ -54,61 +76,34 @@ export function aguardaPrimeiroContato(lead: InteressadoParaContato): boolean {
   return AGUARDANDO_PRIMEIRO_CONTATO.has(estagioDe(lead));
 }
 
-/**
- * O primeiro nome, para a mensagem não começar com o nome completo.
- *
- * "Olá, Maria Fernanda Albuquerque dos Santos" é um e-mail de banco. Nome
- * vazio devolve `null` e quem chama escreve a saudação sem nome — melhor do
- * que "Olá, !".
- */
-export function primeiroNome(nome: string): string | null {
-  const limpo = nome.trim().split(/\s+/)[0] ?? "";
-  return limpo.length > 0 ? limpo : null;
-}
-
-/** "06/10" — a data como se fala, não como o banco guarda. */
-function diaEMes(iso: string): string {
-  const [, mes, dia] = iso.split("-");
-  return mes && dia ? `${dia}/${mes}` : iso;
-}
+// O primeiro nome mora em `mensagensDaCampanha.ts`, junto dos modelos que o
+// usam. Reexportado porque a fila e os testes já o chamavam daqui, e mover uma
+// importação não é motivo para quebrar quem depende dela.
+export { primeiroNome };
 
 /**
  * O rascunho do convite. Texto pronto para ela revisar, editar e enviar.
  *
- * ── O QUE ENTRA E O QUE NÃO ENTRA ───────────────────────────────────────────
- * Entra o que está GRAVADO: primeiro nome, empresa e cidade quando existem.
- * Não entra nada que precise ser suposto — nem elogio ao trabalho dela, nem
- * "vi que você faz casamentos lindos", que é o tipo de frase que denuncia
- * mensagem automática justamente quando tenta escondê-la.
+ * ── POR QUE ISTO É UMA LINHA E NÃO UM TEXTO ─────────────────────────────────
+ * Havia DUAS cópias do convite no repositório: esta e a da biblioteca de
+ * modelos. Duas cópias do mesmo texto divergem na primeira correção de
+ * vírgula, e a decoradora passa a receber versões diferentes conforme a tela
+ * por onde a mensagem saiu.
  *
- * Não entra CONDIÇÃO COMERCIAL nenhuma: preço, desconto, prazo de teste. Um
- * rascunho que promete condição vira promessa quando alguém envia sem ler.
+ * A biblioteca é a fonte. Esta função continua existindo porque a fila de
+ * contato quer uma string e não precisa conhecer pendência de link — o convite
+ * é o único modelo que não depende do link da sala.
  */
 export function rascunhoDeConvite(
   lead: InteressadoParaContato,
   campanha: Campanha = LIVE_ALTAR,
 ): string {
-  const nome = primeiroNome(lead.name);
-  const saudacao = nome ? `Oi, ${nome}!` : "Oi!";
-  // A empresa entra quando ela existe: mostra que não é disparo cego, e é
-  // informação que a própria pessoa deu.
-  const reconhecimento = lead.empresa
-    ? ` Vi que você é da ${lead.empresa.trim()}.`
-    : "";
-
-  return [
-    `${saudacao}${reconhecimento}`,
-    "",
-    `Sou da equipe do ALTAR, um sistema feito para quem decora eventos — funil,`,
-    `evento, fornecedores, compras, financeiro e o projeto visual da cliente no`,
-    `mesmo lugar.`,
-    "",
-    `No dia ${diaEMes(campanha.data)}, às ${campanha.hora}, vou mostrar o sistema`,
-    `funcionando de ponta a ponta, com um casamento de verdade montado dentro`,
-    `dele. Cerca de meia hora, com espaço para perguntas.`,
-    "",
-    `Posso te mandar o link?`,
-  ].join("\n");
+  return redigirConvite({
+    nome: lead.name,
+    empresa: lead.empresa,
+    origem: lead.origem,
+    campanha,
+  }).texto;
 }
 
 export type ContatoPreparado = {

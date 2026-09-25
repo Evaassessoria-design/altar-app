@@ -89,19 +89,44 @@ describe("o rascunho só diz o que está gravado", () => {
   it("usa o primeiro nome, não o nome completo", () => {
     expect(primeiroNome("Maria Fernanda Albuquerque")).toBe("Maria");
     const texto = rascunhoDeConvite(lead({ name: "Maria Fernanda Albuquerque" }));
-    expect(texto).toContain("Oi, Maria!");
+    expect(texto).toContain("Olá, Maria!");
     expect(texto).not.toContain("Albuquerque");
   });
 
-  it("nome vazio não vira 'Oi, !'", () => {
+  it("nome vazio não vira 'Olá, !'", () => {
     expect(primeiroNome("   ")).toBeNull();
-    expect(rascunhoDeConvite(lead({ name: "  " }))).toContain("Oi!");
+    const texto = rascunhoDeConvite(lead({ name: "  " }));
+    expect(texto).toContain("Olá! Tudo bem?");
+    expect(texto).not.toContain("Olá, !");
   });
 
-  it("cita a empresa quando existe, e não inventa quando não existe", () => {
-    expect(rascunhoDeConvite(lead({ empresa: "Estúdio Alba" }))).toContain("Estúdio Alba");
-    const sem = rascunhoDeConvite(lead({}));
-    expect(sem).not.toContain("Vi que você");
+  it("a abertura NÃO afirma um contato que nunca houve", () => {
+    // ── O DEFEITO QUE ESTE TESTE GUARDA ───────────────────────────────────
+    // "Você entrou em contato com a gente há um tempo demonstrando interesse"
+    // é verdade para quem preencheu a landing e MENTIRA para quem veio de uma
+    // lista de prospecção. Abrir uma primeira conversa afirmando um contato
+    // inexistente é a forma mais rápida de queimar o número — e é o tipo de
+    // erro que só aparece depois de trinta mensagens enviadas.
+    const veioSozinha = rascunhoDeConvite(lead({ origem: "landing" }));
+    expect(veioSozinha).toContain("Você entrou em contato com a gente");
+
+    const prospectada = rascunhoDeConvite(lead({ origem: "prospeccao" }));
+    expect(prospectada, "afirmou um contato que não existiu").not.toContain(
+      "Você entrou em contato",
+    );
+    expect(prospectada).toContain("Estou falando com empresas de decoração");
+  });
+
+  it("na prospecção cita a empresa, e não inventa quando não existe", () => {
+    // Citar a empresa mostra que não é disparo cego — e é um dado que quem
+    // montou a lista já tinha. Quem veio da landing não precisa dessa prova:
+    // foi ela quem procurou.
+    const com = rascunhoDeConvite(lead({ origem: "prospeccao", empresa: "Estúdio Alba" }));
+    expect(com).toContain("Estúdio Alba");
+
+    const sem = rascunhoDeConvite(lead({ origem: "prospeccao" }));
+    expect(sem).toContain("Estou falando com empresas de decoração");
+    expect(sem).not.toContain("cheguei até a");
   });
 
   it("leva a data e a hora DECLARADAS da campanha", () => {
@@ -209,7 +234,7 @@ describe("a fila pelo servidor, e quem pode vê-la", () => {
     const fila = await admin.query(api.admin.contatosAPreparar, { campanha: LIVE_ALTAR.slug });
     expect(fila.contatos).toHaveLength(1);
     expect(fila.contatos[0].nome).toBe("Marina Alves");
-    expect(fila.contatos[0].mensagem).toContain("Oi, Marina!");
+    expect(fila.contatos[0].mensagem).toContain("Olá, Marina!");
     expect(fila.contatos[0].canal).toEqual({ tipo: "whatsapp", valor: "11999" });
   });
 

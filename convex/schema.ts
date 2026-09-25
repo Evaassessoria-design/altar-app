@@ -1211,6 +1211,22 @@ export default defineSchema({
      * subestima, porque uma taxa de comparecimento inflada é pior do que uma
      * tímida. Nenhum backfill foi feito e nenhuma data é inventada.
      */
+    /**
+     * A conta do ALTAR desta pessoa, quando ela virou teste ou cliente.
+     *
+     * ── POR QUE O VÍNCULO PRECISA SER EXPLÍCITO ─────────────────────────────
+     * "Está testando e ainda não criou nenhum evento" é a pergunta que decide
+     * se um teste vai morrer — e é onde a maior parte deles morre. Sem este
+     * vínculo, a única forma de respondê-la seria casar e-mail de interessado
+     * com e-mail de assinante a cada leitura, o que erra silenciosamente
+     * sempre que a pessoa se cadastra com outro endereço.
+     *
+     * AUSENTE = ninguém ligou os dois. NÃO significa "não tem conta": significa
+     * que o ALTAR não sabe, e por isso não afirma nada sobre a conta dela.
+     * Nenhuma regra de acesso depende deste campo — ele é comercial, e ligar
+     * ou desligar o vínculo não concede nem retira nada de ninguém.
+     */
+    contaUserId: v.optional(v.id("users")),
     marcosEm: v.optional(
       v.object({
         convidado: v.optional(v.number()),
@@ -1264,6 +1280,92 @@ export default defineSchema({
     // A decoradora é procurada pelo nome da EMPRESA tanto quanto pelo dela:
     // quem anotou "Ateliê Flor de Lis" no direct não lembra o nome da dona.
     .searchIndex("search_empresa", { searchField: "empresa", filterFields: ["campanha"] }),
+
+  // ── OS RASCUNHOS DA CAMPANHA ──────────────────────────────────────────────
+  // Mensagem escrita, revisada por uma pessoa, e enviada POR ELA, fora daqui.
+  //
+  // ── POR QUE NÃO É `adminApprovals` ────────────────────────────────────────
+  // A fila da Central parece o lugar óbvio: ela já tem proposta, aprovação,
+  // recusa e autor da decisão. E é exatamente por isso que NÃO serve.
+  //
+  // `adminApprovals` existe ligada a uma porta de saída — `communicationsOutbox`
+  // — hoje fechada por `ALTAR_CENTRAL_ENVIO_HABILITADO`. No dia em que essa
+  // porta abrir para responder UMA cliente, tudo que estiver naquela fila fica
+  // elegível a sair. Uma campanha de trezentos convites na mesma fila viraria
+  // um disparo em massa acionado por uma decisão que era sobre outra coisa.
+  //
+  // Esta tabela não tem `conversationId`, não tem `vertical`, não tem executor
+  // e ninguém a lê do lado do outbox. `enviado_manualmente` é ANOTAÇÃO de que
+  // uma pessoa mandou com o dedo dela — não é um estado que o sistema alcança
+  // sozinho. Há trava de fronteira cobrando isso em `rascunhos.campanha.test.ts`.
+  //
+  // ── POR QUE O TEXTO É GRAVADO, E NÃO REGERADO ─────────────────────────────
+  // O modelo é determinístico, então regerar daria o mesmo texto — até o dia em
+  // que alguém corrigir uma vírgula no modelo. Aí o que foi aprovado e o que
+  // seria enviado passam a ser duas coisas, e ninguém percebe. Aprovação é
+  // sobre um texto específico; o texto fica.
+  campaignDrafts: defineTable({
+    landingLeadId: v.id("landingLeads"),
+    /** O slug de `lib/campanha.ts`. */
+    campanha: v.string(),
+    /** Qual dos modelos de `lib/mensagensDaCampanha.ts` gerou este rascunho. */
+    tipo: v.string(),
+    canalSugerido: v.union(v.literal("whatsapp"), v.literal("email")),
+    /**
+     * Para onde iria — o número ou e-mail COMO ESTAVA quando o rascunho nasceu.
+     *
+     * Cópia de propósito: se a pessoa trocar de telefone entre a redação e o
+     * envio, quem revisou precisa ver o número que revisou. Ausente quando não
+     * havia contato nenhum gravado — e aí o rascunho existe com a pendência
+     * declarada, em vez de sumir da lista e fingir que todo mundo é alcançável.
+     */
+    destinatario: v.optional(v.string()),
+    /** Por que esta pessoa, agora. Uma frase, sempre sobre dado gravado. */
+    contexto: v.string(),
+    texto: v.string(),
+    /** O que motivou preparar. Distinto de `contexto`: este é sobre a REGRA. */
+    motivo: v.string(),
+    /** O que fazer depois de enviar. Nunca executado pelo sistema. */
+    proximaAcao: v.string(),
+    /**
+     * O que falta para este texto poder sair — link da sala, e-mail, telefone.
+     *
+     * Lista vazia = nada falta. A aprovação é recusada enquanto houver item
+     * aqui: aprovar um texto com um buraco é como não ter revisado.
+     */
+    pendencias: v.array(v.string()),
+    /**
+     *   rascunho             escrito, ninguém olhou
+     *   aprovado             uma pessoa leu e liberou — NÃO significa enviado
+     *   descartado           não vai ser usado
+     *   enviado_manualmente  uma pessoa mandou, com o dedo dela, fora do ALTAR
+     *
+     * Não existe "enviado" sem "manualmente". O nome é longo de propósito: o
+     * dia em que alguém encurtar para "enviado" é o dia em que o estado passa a
+     * parecer algo que o sistema faz.
+     */
+    status: v.union(
+      v.literal("rascunho"),
+      v.literal("aprovado"),
+      v.literal("descartado"),
+      v.literal("enviado_manualmente"),
+    ),
+    /** Quem redigiu. `modelo` = texto determinístico; `humano` = alguém editou. */
+    geradoPor: v.union(v.literal("modelo"), v.literal("humano")),
+    /** Decisão sem autor não é decisão — a segunda trava do portão. */
+    decididoPorUserId: v.optional(v.id("users")),
+    decididoEm: v.optional(v.number()),
+    /** Quando uma pessoa DISSE que enviou. Anotação, não registro de entrega. */
+    enviadoEm: v.optional(v.number()),
+    criadoEm: v.number(),
+    atualizadoEm: v.number(),
+  })
+    .index("by_campanha_status", ["campanha", "status"])
+    .index("by_lead", ["landingLeadId"])
+    // "Um rascunho deste tipo já existe para esta pessoa?" é a pergunta que
+    // evita preparar o mesmo convite três vezes — e ela precisa de índice,
+    // porque varrer a campanha inteira a cada preparo é O(n²) no tamanho dela.
+    .index("by_lead_tipo", ["landingLeadId", "tipo"]),
 
   // ── CATÁLOGO CENTRAL DE FORNECEDORES ──────────────────────────────────────
   // "Este fornecedor pertence ao catálogo desta empresa."

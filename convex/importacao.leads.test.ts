@@ -252,6 +252,6 @@ describe("importar pelo servidor", () => {
     });
     const fila = await admin.query(api.admin.contatosAPreparar, { campanha: LIVE_ALTAR.slug });
     expect(fila.contatos).toHaveLength(2);
-    expect(fila.contatos[0].mensagem).toContain("Oi,");
+    expect(fila.contatos[0].mensagem).toContain("Olá,");
   });
 });

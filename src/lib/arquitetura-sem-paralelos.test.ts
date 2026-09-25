@@ -69,7 +69,22 @@ describe("nenhuma tabela paralela ao que já existe", () => {
     // são do outro produto — `requireAdmin` em tudo, sem `userId` de tenant.
     // Guardar o pedido da decoradora ali misturaria os dois negócios numa
     // linha só.
-    expect(TABELAS.length).toBe(38);
+    //
+    // 38 → 39: `campaignDrafts`, as mensagens preparadas da campanha.
+    //
+    // `adminApprovals` parecia o lugar óbvio — já tem proposta, aprovação,
+    // recusa e autor da decisão. E é exatamente por isso que NÃO serve: ela
+    // existe ligada a uma porta de saída (`communicationsOutbox`), hoje
+    // fechada por `ALTAR_CENTRAL_ENVIO_HABILITADO`. No dia em que essa porta
+    // abrir para responder UMA cliente, tudo que estiver naquela fila fica
+    // elegível a sair — e trezentos convites de campanha sairiam juntos, por
+    // uma decisão que era sobre outra coisa.
+    //
+    // A tabela nova não tem `conversationId`, não tem `vertical`, não tem
+    // executor, e ninguém a lê do lado do outbox. `enviado_manualmente` é
+    // anotação de que uma pessoa mandou com o dedo dela. A trava de fronteira
+    // está em `convex/rascunhos.campanha.test.ts`.
+    expect(TABELAS.length).toBe(39);
   });
 });
 

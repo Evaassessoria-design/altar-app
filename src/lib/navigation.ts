@@ -91,6 +91,10 @@ export const MORE_MENU_ITEMS = [
  */
 export const ROTAS_SEM_MENU: Readonly<Record<string, string>> = {
   "/admin": "só aparece para administradores",
+  // Separada do Painel Admin de propósito: "como vai o SaaS" e "com quem eu
+  // falo agora" são dois trabalhos, feitos em momentos diferentes. Misturar os
+  // dois deixaria a tela da receita abrir com trezentos nomes no meio.
+  "/campanha": "operação da campanha — só administradores, link condicional no menu",
   "/central": "operação do SaaS — só administradores, alcançada pelo Painel Admin",
   // O Escritório não é do produto: é a mesa de quem administra o NEGÓCIO
   // ALTAR. O link aparece no menu só para o dono da plataforma, e é o backend

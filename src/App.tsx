@@ -53,6 +53,7 @@ const ComprasPage = lazy(() => import("./pages/app/compras/page.tsx"));
 const FinanceiroPage = lazy(() => import("./pages/app/financeiro/page.tsx"));
 const FunilPage = lazy(() => import("./pages/app/funil/page.tsx"));
 const AdminPage = lazy(() => import("./pages/app/admin/page.tsx"));
+const CampanhaPage = lazy(() => import("./pages/app/campanha/page.tsx"));
 const CentralPage = lazy(() => import("./pages/app/central/page.tsx"));
 const PaywallPage = lazy(() => import("./pages/app/paywall/page.tsx"));
 const ResetPasswordPage = lazy(() => import("./pages/auth/ResetPassword.tsx"));
@@ -151,6 +152,7 @@ function AppRoutes() {
         <Route path="/propostas" element={<PropostasPage />} />
         <Route path="/propostas/:id" element={<PropostaPage />} />
         <Route path="/admin" element={<AdminPage />} />
+        <Route path="/campanha" element={<CampanhaPage />} />
         <Route path="/central" element={<CentralPage />} />
         <Route path="/configuracoes" element={<ConfiguracoesPage />} />
       </Route>

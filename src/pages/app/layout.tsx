@@ -23,6 +23,7 @@ import {
   Layers,
   CalendarClock,
   FileText,
+  Megaphone,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth.ts";
@@ -237,6 +238,14 @@ function AppLayoutInner() {
               <NavLink to="/admin" className={navLinkClass}>
                 <Shield className="size-4 flex-shrink-0" />
                 Painel Admin
+              </NavLink>
+              {/* Separada do painel de propósito: "como vai o SaaS" e "com
+                  quem eu falo agora" são dois trabalhos, feitos em momentos
+                  diferentes. Esconder o link é desenho; quem trava é
+                  `requireAdmin` em cada função. */}
+              <NavLink to="/campanha" className={navLinkClass}>
+                <Megaphone className="size-4 flex-shrink-0" />
+                Campanha
               </NavLink>
             </>
           )}

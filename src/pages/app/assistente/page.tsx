@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { cn } from "@/lib/utils.ts";
 import { Loader2, Send, CircleSlash, AlertCircle, CheckCircle2 } from "lucide-react";
 import { TrabalhoAberto } from "./_components/trabalho-aberto.tsx";
+import { BriefingDaManha } from "./_components/briefing-da-manha.tsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ESCRITÓRIO DE IA — A TELA
@@ -100,8 +101,15 @@ export default function EscritorioPage() {
         </p>
       </header>
 
+      {/* ── O BRIEFING ─────────────────────────────────────────────────────
+          Vem antes da caixa por um motivo: a pergunta que ela mais precisa
+          fazer é a que ela não sabe que precisa fazer. O recebimento vencido
+          ontem fica invisível até alguém lembrar de procurá-lo, e ninguém
+          lembra. Aqui o ALTAR olha primeiro. */}
+      <BriefingDaManha />
+
       {/* ── A CAIXA ────────────────────────────────────────────────────────
-          Vem antes de tudo. É a única coisa que ela precisa entender. */}
+          Depois do briefing, e ainda antes de tudo o mais. */}
       <section className="space-y-3 rounded-xl border border-border bg-card p-4">
         <Textarea
           value={pedido}

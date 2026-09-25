@@ -97,6 +97,7 @@ import type * as lib_escopoDoProjeto from "../lib/escopoDoProjeto.js";
 import type * as lib_escritorio_autonomia from "../lib/escritorio/autonomia.js";
 import type * as lib_escritorio_briefingComercial from "../lib/escritorio/briefingComercial.js";
 import type * as lib_escritorio_ciclo from "../lib/escritorio/ciclo.js";
+import type * as lib_escritorio_fonteDeLeads from "../lib/escritorio/fonteDeLeads.js";
 import type * as lib_escritorio_panorama from "../lib/escritorio/panorama.js";
 import type * as lib_escritorio_redacaoDaCampanha from "../lib/escritorio/redacaoDaCampanha.js";
 import type * as lib_eventSummary from "../lib/eventSummary.js";
@@ -243,6 +244,7 @@ declare const fullApi: ApiFromModules<{
   "lib/escritorio/autonomia": typeof lib_escritorio_autonomia;
   "lib/escritorio/briefingComercial": typeof lib_escritorio_briefingComercial;
   "lib/escritorio/ciclo": typeof lib_escritorio_ciclo;
+  "lib/escritorio/fonteDeLeads": typeof lib_escritorio_fonteDeLeads;
   "lib/escritorio/panorama": typeof lib_escritorio_panorama;
   "lib/escritorio/redacaoDaCampanha": typeof lib_escritorio_redacaoDaCampanha;
   "lib/eventSummary": typeof lib_eventSummary;

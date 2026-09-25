@@ -3,7 +3,7 @@
 Como o produto representa, hoje, o trabalho de uma empresa de decoração — e
 onde ele ainda só organiza em vez de mostrar.
 
-Datado de 23/09/2026, conferido contra o código em `e021f7b`.
+Datado de 24/09/2026, conferido contra o código em `3022ca0`.
 
 ---
 
@@ -621,58 +621,84 @@ Para não restar dúvida depois desta rodada:
 
 - **Biblioteca de inspirações** — não existe. Nenhuma tabela, nenhuma tela.
   A especificação está no relatório da rodada de design, não no código.
-- **PDF do Projeto Visual** — não existe. Continua faltando `visibility` em
-  `eventPhotos` (§10). O que a rodada das flores resolveu foi a fronteira dos
-  MATERIAIS (§9d), que é um eixo diferente: material não tem legenda que ela
-  escreveu para si mesma, e a lista sai de uma transformação campo a campo. A
-  FOTO continua sem audiência declarada, e é ela que trava o documento.
+- ~~**PDF do Projeto Visual**~~ **EXISTE** — ver §10, reescrita. E
+  `eventPhotos.visibility`, que esta seção dava como o bloqueio dele, foi
+  implementado.
 - **Moodboard, paleta automática, extração de cor, IA sobre imagem** — nada
   disso foi construído.
 - **Redesenho dos PDFs** — nenhum dos seis foi tocado nesta rodada.
 
 ---
 
-## 10. Um PDF visual para a cliente — o que já dá, e o que não tem audiência
+## 10. O PDF da cliente — IMPLEMENTADO, e as duas frestas que ele tinha
 
-**Nada foi implementado.** A pergunta é se a informação existe e se ela é
-segura.
+Esta seção perguntava se dava para fazer o documento. Ele **existe**: a regra
+de audiência mora em `src/lib/apresentacao-do-projeto.ts` e o desenho em
+`src/lib/generate-projeto-visual-pdf.ts`, chamado só pela tela do Projeto
+Visual. Não há segunda fonte — o documento é uma LEITURA do projeto, como o
+projeto é uma leitura dos itens.
 
-**Dá para montar hoje, com segurança:**
+### O que a versão anterior desta seção exigia, e onde ficou
 
-| Dado | De onde | Audiência |
-|---|---|---|
-| Nome do evento, data, local | `events` | já vai em documento de cliente |
-| Ambiente (rótulo) | `resolverAmbiente` | é o nome que ELA deu |
-| Referências | `eventPhotos` com `projectScope: "referencia"` | precisa de aviso explícito |
-| Contratado | `eventPhotos` com `projectScope: "incluso"` | seguro |
-| Resultado final | fotos de `montagem`/`evento`/`desmontagem` | seguro |
-| Layout | `layoutRenders.outputStorageId` | é a planta que ela já mostra |
+| Exigência | Situação |
+|---|---|
+| `nao_incluso` fora | resolvido em `fotoVaiParaOsNoivos` |
+| `supplierName`, `notes`, `receita` fora | resolvido por TIPO, com trava de fonte no teste |
+| `visibility` em `eventPhotos` | **implementado** — ver abaixo |
+| `caption` impublicável | **resolvido** — ver abaixo |
 
-**O que NÃO tem audiência segura — e é o motivo de isto não ser um "é só
-gerar":**
+As duas últimas ficaram abertas quando o PDF foi entregue, e eram as duas que
+a proteção de TIPO não alcança, porque são de LINHA: o texto que vem junto da
+foto, e a foto que vem por um ponteiro.
 
-1. **`eventPhotos` não tem `visibility`.** `assemblyItems` tem, e o Caderno a
-   respeita campo a campo (`audiencia-do-caderno.ts`). A foto não tem nada
-   equivalente: `projectScope` diz o que a imagem É no projeto, não para quem
-   ela pode aparecer. Uma foto interna ("o estrago da chuva", "o fornecedor
-   entregou errado") não tem como se declarar interna.
-2. **`caption` é texto livre que ela escreve para si mesma.** "refazer, ficou
-   torto" é legenda legítima na galeria e impublicável num documento da
-   cliente.
-3. **`nao_incluso` é explosivo.** Mandar "ficou de fora" para a cliente é
-   conversa comercial, não documento.
-4. **Item de montagem carrega `supplierName`, `notes` e `receita`** — os três
-   são internos, e a `receita` é o custo. Se o PDF visual mostrar itens além de
-   fotos, ele atravessa a mesma fronteira da proposta comercial.
+### A legenda
 
-**Conclusão honesta:** um PDF visual só de FOTOS `incluso` + fotos de execução
-+ planta + cabeçalho do evento é seguro hoje. Qualquer coisa além disso pede
-ou um `visibility` em `eventPhotos`, ou a mesma disciplina de
-`paraOCliente`: **uma função que CONSTRÓI o objeto campo a campo**, e não uma
-tela que esconde. A fronteira mora na transformação, não na renderização — é a
-regra que `convex/lib/propostaComercial.ts` já sustenta.
+`caption` é o que ela escreve para SI MESMA na Galeria — "refazer, ficou
+torto", "conferir com a Flora". Toda legenda ia impressa sob a imagem, no papel
+que leva o nome e o contato da empresa no rodapé.
 
----
+Agora acompanha **apenas a foto classificada como `incluso`**: é a única
+classificação que exige um gesto deliberado dizendo "isto está no projeto
+contratado". Inspiração e foto ainda não classificada vão sem texto — a imagem
+já diz o que precisa dizer.
+
+### A foto do item
+
+Desde que o item APONTA para a Galeria em vez de guardar cópia própria (§2),
+um item aprovado carregava a imagem apontada sem que ninguém perguntasse nada
+sobre ela: `itemVaiParaOsNoivos` aprovava o ITEM, e foto de execução,
+`nao_incluso` ou interna entravam de carona.
+
+Agora a foto do item passa pela **mesma** `fotoVaiParaOsNoivos` das
+prateleiras. Uma segunda regra para ela divergiria — e a que divergisse seria
+a do papel impresso. O arquivo PRÓPRIO do item continua passando: nunca esteve
+na Galeria, não tem eixo de audiência nenhum, e o item já foi aprovado.
+
+### `eventPhotos.visibility` — o eixo que faltava
+
+`projectScope` responde "o que a imagem É no projeto"; `category` responde
+"quando foi tirada". Nenhum responde **para quem pode aparecer**, e o documento
+vinha usando `category === "antes"` como substituto.
+
+O substituto falha no caso que mais importa: a foto do problema — o fornecedor
+mandou a cor errada, a peça chegou torta — é tirada antes do evento, não tem
+classificação nenhuma, e saía impressa.
+
+**AUSENTE = o comportamento de hoje.** Isso é compatibilidade, não gosto:
+ausente valendo "interno" esvaziaria o documento de todos os eventos que já
+existem. Ausente significa "nunca foi marcada como interna", nunca "ela
+aprovou" — a foto continua passando pelos filtros de escopo e fase como sempre
+passou, e o campo só acrescenta uma porta de saída explícita.
+
+Vocabulário igual ao de `assemblyItems.visibility`, de propósito: item e foto
+respondem à mesma pergunta e precisam usar as mesmas palavras nos documentos.
+Sem `"equipe"` — nenhuma superfície distingue foto só-da-equipe hoje, e alargar
+a união é aditivo no dia em que distinguir.
+
+Ela marca **"Só para mim"** na Galeria, que é a única tela que sobe, classifica
+e apaga foto. O selo aparece na grade: marcar sem poder ver o que está marcado
+obrigaria a abrir foto por foto para saber o que sai no documento. E `null`
+desmarca — sem isso, marcar por engano seria irreversível.
 
 ## 11. O que NÃO entra agora
 

@@ -3,7 +3,13 @@ import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { requireAdmin } from "./lib/adminGuard";
-import { campanhaPorSlug, diasAte, estagioDe, type Campanha } from "./lib/campanha";
+import {
+  campanhaPorSlug,
+  diasAte,
+  estagioDe,
+  procurouOAltar,
+  type Campanha,
+} from "./lib/campanha";
 import { modeloPorId, type TipoDeMensagem } from "./lib/mensagensDaCampanha";
 import { proximaAcao, type FatosDoInteressado } from "./lib/proximaAcao";
 import { dataDoDia } from "./lib/dataDoDia";
@@ -60,6 +66,7 @@ async function fatosDe(
     status: lead.status,
     marcosEm: lead.marcosEm,
     temCanal: Boolean(lead.whatsapp?.trim() || lead.email?.trim()),
+    procurouOAltar: procurouOAltar(lead),
     diasDesdeOConvite:
       convidadoEm === undefined
         ? undefined

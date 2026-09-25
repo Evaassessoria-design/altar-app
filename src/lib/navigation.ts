@@ -91,10 +91,11 @@ export const MORE_MENU_ITEMS = [
  */
 export const ROTAS_SEM_MENU: Readonly<Record<string, string>> = {
   "/admin": "só aparece para administradores",
-  // Separada do Painel Admin de propósito: "como vai o SaaS" e "com quem eu
-  // falo agora" são dois trabalhos, feitos em momentos diferentes. Misturar os
-  // dois deixaria a tela da receita abrir com trezentos nomes no meio.
-  "/campanha": "operação da campanha — só administradores, link condicional no menu",
+  // Fica no grupo COMERCIAL do menu, logo depois de Propostas — venda é
+  // operação, não manutenção — mas o link é condicional porque o público dela
+  // é a ALTAR, não as assinantes. Por isso não entra em `NAV_ITEMS`, que é
+  // renderizado para todo mundo.
+  "/campanha": "operação comercial da ALTAR — link condicional, depois de Propostas",
   "/central": "operação do SaaS — só administradores, alcançada pelo Painel Admin",
   // O Escritório não é do produto: é a mesa de quem administra o NEGÓCIO
   // ALTAR. O link aparece no menu só para o dono da plataforma, e é o backend

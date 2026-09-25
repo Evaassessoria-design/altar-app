@@ -541,6 +541,40 @@ export function origemDe(lead: { origem?: string }): OrigemDoInteressado {
   return id && ORIGENS.some((o) => o.id === id) ? id : "landing";
 }
 
+/**
+ * As origens em que a pessoa PROCUROU a ALTAR.
+ *
+ * ── POR QUE ISTO NÃO É UM SCORE ─────────────────────────────────────────────
+ * Não há peso, nota nem percentual. É um fato binário e verificável: ou o
+ * registro nasceu de alguém preenchendo um formulário, ou nasceu de alguém
+ * montando uma lista.
+ *
+ * Um score diria "87" e ninguém saberia o que fazer com isso. Isto diz "ela
+ * pediu demonstração" — e a decisão de falar com ela primeiro sai sozinha.
+ *
+ * `indicacao` entra porque quem foi indicado chega com uma ponte humana, que
+ * vale mais do que qualquer lista. `instagram` e `whatsapp` entram porque, nas
+ * duas, foi ela quem escreveu primeiro.
+ */
+const PROCURARAM: ReadonlySet<OrigemDoInteressado> = new Set([
+  "landing",
+  "site",
+  "indicacao",
+  "instagram",
+  "whatsapp",
+]);
+
+/**
+ * Esta pessoa procurou a ALTAR, ou foi procurada?
+ *
+ * É o que separa "vou falar com quem já levantou a mão" de "vou abordar quem
+ * nunca ouviu falar da gente" — e as duas conversas nem começam igual: ver
+ * `porQueEstouFalandoComVoce` em `lib/mensagensDaCampanha.ts`.
+ */
+export function procurouOAltar(lead: { origem?: string }): boolean {
+  return PROCURARAM.has(origemDe(lead));
+}
+
 export function rotuloDaOrigem(id: OrigemDoInteressado): string {
   return ORIGENS.find((o) => o.id === id)?.rotulo ?? "Landing page";
 }

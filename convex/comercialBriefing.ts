@@ -6,6 +6,7 @@ import {
   campanhaPorSlug,
   diasAte,
   funilDaCampanha,
+  procurouOAltar,
   situacaoDaCampanha,
 } from "./lib/campanha";
 import { proximaAcao } from "./lib/proximaAcao";
@@ -92,6 +93,7 @@ export const hoje = query({
             status: lead.status,
             marcosEm: lead.marcosEm,
             temCanal: Boolean(lead.whatsapp?.trim() || lead.email?.trim()),
+            procurouOAltar: procurouOAltar(lead),
             diasDesdeOConvite:
               convidadoEm === undefined
                 ? undefined

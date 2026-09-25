@@ -14,6 +14,7 @@ import {
   estagioDe,
   funilDaCampanha as calcularFunil,
   origemDe,
+  procurouOAltar,
   situacaoDaCampanha,
   taxasDaCampanha,
 } from "./lib/campanha";
@@ -676,6 +677,10 @@ export const listLandingLeads = query({
         intent: l.intent,
         status: estagioDe(l),
         origem: origemDe(l),
+        // Ela procurou a ALTAR, ou foi procurada? A tela mostra isso como
+        // selo e usa para ordenar. Vem do servidor, e não derivado na tela,
+        // para que a regra do que conta como inbound viva num lugar só.
+        procurouOAltar: procurouOAltar(l),
         campanha: l.campanha,
         empresa: l.empresa,
         instagram: l.instagram,
@@ -800,6 +805,7 @@ export const buscarInteressados = query({
         estado: l.estado,
         status: estagioDe(l),
         origem: origemDe(l),
+        procurouOAltar: procurouOAltar(l),
         campanha: l.campanha,
         convidadoEm: l.marcosEm?.convidado,
         ultimaInteracao: l.ultimaInteracao,
@@ -955,6 +961,230 @@ export const previewDeImportacao = query({
     };
   },
 });
+
+/**
+ * Põe um interessado que JÁ EXISTE dentro de uma campanha.
+ *
+ * ── A LACUNA QUE ISTO FECHA ─────────────────────────────────────────────────
+ * Quem chega pela landing sem `?campanha=` fica com `campanha` ausente — e é
+ * o caso de todo mundo que pediu demonstração antes de a live existir.
+ *
+ * `/campanha` lê por índice `by_campanha`, então essas pessoas ficavam
+ * invisíveis lá: o painel dizia "10 interessados, 9 sem contato" e a campanha
+ * dizia "ninguém aqui, importe uma lista". Duas telas olhando o mesmo banco e
+ * discordando — e a saída que a tela sugeria (importar) criaria as MESMAS
+ * pessoas de novo.
+ *
+ * Não era bug: era a ponte que nunca foi construída. Estes são justamente os
+ * leads mais quentes da campanha, porque foram eles que procuraram a ALTAR.
+ *
+ * ── O QUE ESTA MUTATION NÃO TOCA ────────────────────────────────────────────
+ * `status`, `origem`, `marcosEm`, observações, porte — nada. Ela grava UM
+ * campo. Quem já estava "Convite enviado" continua lá; quem veio da landing
+ * continua com origem de landing.
+ *
+ * Mexer em qualquer um dos outros seria apagar trabalho já feito, e a tela
+ * ainda diria que "adicionou à campanha".
+ */
+export const adicionarACampanha = mutation({
+  args: { leadId: v.id("landingLeads"), campanha: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+
+    // Campanha desconhecida não entra: sem isso, um slug digitado errado
+    // criaria um grupo fantasma que nenhuma tela lê e ninguém encontra.
+    if (!campanhaPorSlug(args.campanha)) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Campanha não encontrada" });
+    }
+
+    const lead = await ctx.db.get(args.leadId);
+    if (!lead) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Interessado não encontrado" });
+    }
+
+    // ── JÁ ESTÁ? ENTÃO NÃO ACONTECE NADA ────────────────────────────────
+    // Não é erro: é o resultado normal de clicar duas vezes, ou de mandar em
+    // lote alguém que já foi. Recusar faria a ação em lote parar na primeira
+    // pessoa já adicionada.
+    if (lead.campanha === args.campanha) {
+      return { resultado: "ja_estava" as const, nome: lead.name };
+    }
+
+    // ── E SE ESTIVER EM OUTRA? ──────────────────────────────────────────
+    // Mover alguém de campanha em silêncio apagaria o vínculo com a anterior
+    // e estragaria as duas contagens. Quem decide isso é uma pessoa, na tela
+    // do interessado.
+    if (lead.campanha) {
+      return { resultado: "em_outra" as const, nome: lead.name, campanha: lead.campanha };
+    }
+
+    await ctx.db.patch(args.leadId, { campanha: args.campanha });
+    return { resultado: "adicionado" as const, nome: lead.name };
+  },
+});
+
+/**
+ * Cadastra alguém direto na campanha, sem passar pelo Painel Admin.
+ *
+ * ── POR QUE NÃO É UM CADASTRO PARALELO ──────────────────────────────────────
+ * Grava em `landingLeads`, a MESMA tabela do formulário público e da
+ * importação. Uma tabela própria para "lead rápido da campanha" criaria duas
+ * listas de decoradoras interessadas, e a primeira busca por telefone
+ * devolveria uma pessoa de cada.
+ *
+ * ── A DEDUPLICAÇÃO É POR IDENTIFICADOR NORMALIZADO ──────────────────────────
+ * E-mail em minúsculas e telefone em E.164 — os dois já normalizados pelas
+ * mesmas funções que a landing usa. "(11) 99999-8888" e "+5511999998888" são o
+ * mesmo aparelho, e sem normalizar a mesma pessoa entraria duas vezes e
+ * receberia a mesma mensagem duas vezes.
+ *
+ * Quando acha alguém, NÃO sobrescreve: só adiciona à campanha, e o resto —
+ * etapa, origem, observações, porte — fica como estava.
+ */
+export const criarInteressado = mutation({
+  args: {
+    name: v.string(),
+    email: v.optional(v.string()),
+    whatsapp: v.optional(v.string()),
+    empresa: v.optional(v.string()),
+    origem: origemValidator,
+    campanha: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    if (!campanhaPorSlug(args.campanha)) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Campanha não encontrada" });
+    }
+
+    const nome = args.name.trim();
+    if (!nome) throw new ConvexError({ code: "INVALID", message: "Escreva o nome." });
+
+    const email = args.email?.trim().toLowerCase() || undefined;
+    const whatsapp = args.whatsapp?.trim() || undefined;
+    const e164 = whatsapp ? (normalizarE164(whatsapp) ?? undefined) : undefined;
+
+    // Sem canal a pessoa entra e não tem como ser abordada — e cairia na fila
+    // "Precisa de você" no mesmo minuto em que foi digitada.
+    if (!email && !whatsapp) {
+      throw new ConvexError({
+        code: "INVALID",
+        message: "Informe ao menos e-mail ou WhatsApp.",
+      });
+    }
+
+    // ── JÁ EXISTE? ──────────────────────────────────────────────────────
+    // Telefone primeiro: é o identificador mais confiável dos dois, porque
+    // e-mail de empresa é compartilhado (contato@) com mais frequência do que
+    // aparelho.
+    const porTelefone = e164
+      ? await ctx.db
+          .query("landingLeads")
+          .withIndex("by_whatsapp_e164", (q) => q.eq("whatsappE164", e164))
+          .first()
+      : null;
+    const porEmail =
+      !porTelefone && email
+        ? await ctx.db
+            .query("landingLeads")
+            .withIndex("by_email", (q) => q.eq("email", email))
+            .first()
+        : null;
+    const existente = porTelefone ?? porEmail;
+
+    if (existente) {
+      if (existente.campanha === args.campanha) {
+        return { resultado: "ja_na_campanha" as const, nome: existente.name };
+      }
+      if (existente.campanha) {
+        return {
+          resultado: "em_outra_campanha" as const,
+          nome: existente.name,
+          campanha: existente.campanha,
+        };
+      }
+      // Só o vínculo com a campanha. Nada do que já foi trabalhado é tocado.
+      await ctx.db.patch(existente._id, { campanha: args.campanha });
+      return { resultado: "vinculado" as const, nome: existente.name };
+    }
+
+    await ctx.db.insert("landingLeads", {
+      name: nome,
+      // O schema exige e-mail; quem só tem telefone entra com vazio, que é o
+      // mesmo que a importação de lista já faz.
+      email: email ?? "",
+      whatsapp,
+      whatsappE164: e164,
+      // Quem foi digitado à mão não pediu demonstração nenhuma. `beta` é o
+      // mais honesto dos dois valores que `intent` aceita.
+      intent: "beta" as const,
+      status: "novo" as const,
+      origem: args.origem,
+      campanha: args.campanha,
+      empresa: args.empresa?.trim() || undefined,
+    });
+    return { resultado: "criado" as const, nome };
+  },
+});
+
+/**
+ * O mesmo, para uma seleção.
+ *
+ * Devolve a contagem de cada desfecho em vez de lançar no primeiro tropeço:
+ * quem clica em "adicionar 9" quer saber quantos entraram, não descobrir pelo
+ * erro que o terceiro já estava lá.
+ */
+export const adicionarVariosACampanha = mutation({
+  args: { leadIds: v.array(v.id("landingLeads")), campanha: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    if (!campanhaPorSlug(args.campanha)) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Campanha não encontrada" });
+    }
+    if (args.leadIds.length > LIMITE_DO_LOTE_DE_CAMPANHA) {
+      throw new ConvexError({
+        code: "INVALID",
+        message: `Selecione no máximo ${LIMITE_DO_LOTE_DE_CAMPANHA} por vez.`,
+      });
+    }
+
+    let adicionados = 0;
+    let jaEstavam = 0;
+    const emOutra: string[] = [];
+    const sumiram: string[] = [];
+
+    // Ids repetidos na mesma chamada contariam duas vezes: o primeiro grava, o
+    // segundo lê o registro já gravado e vira "já estava". O conjunto resolve
+    // antes de tocar no banco.
+    for (const leadId of [...new Set(args.leadIds)]) {
+      const lead = await ctx.db.get(leadId);
+      if (!lead) {
+        sumiram.push(String(leadId));
+        continue;
+      }
+      if (lead.campanha === args.campanha) {
+        jaEstavam++;
+        continue;
+      }
+      if (lead.campanha) {
+        emOutra.push(lead.name);
+        continue;
+      }
+      await ctx.db.patch(leadId, { campanha: args.campanha });
+      adicionados++;
+    }
+
+    return { adicionados, jaEstavam, emOutra, sumiram: sumiram.length };
+  },
+});
+
+/**
+ * Teto da seleção em lote.
+ *
+ * Uma mutation do Convex é uma transação: mil `patch` numa só não fecha. E o
+ * modo de falha seria o pior possível — metade adicionada, sem ninguém saber
+ * qual metade.
+ */
+export const LIMITE_DO_LOTE_DE_CAMPANHA = 100;
 
 /**
  * Grava as linhas NOVAS. Nunca sobrescreve quem já está no banco.

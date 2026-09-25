@@ -230,6 +230,25 @@ function AppLayoutInner() {
             </NavLink>
           ))}
 
+          {/* ── CAMPANHA FICA NO COMERCIAL, NÃO NO ADMIN ──────────────────
+              Ela vem logo depois de Propostas, fechando a sequência do
+              trabalho comercial: Funil → Propostas → Campanha.
+
+              Estava sob o cabeçalho "Admin", ao lado do Painel — e isso a
+              fazia parecer ferramenta interna de manutenção. São coisas
+              diferentes: o Painel responde "como vai o SaaS"; a Campanha é
+              venda, e venda é operação.
+
+              O link é condicional porque o público dela é a ALTAR, não as
+              assinantes. Esconder é desenho; quem trava é `requireAdmin` em
+              cada função. */}
+          {isAdmin && (
+            <NavLink to="/campanha" className={navLinkClass}>
+              <Megaphone className="size-4 flex-shrink-0" />
+              Campanha
+            </NavLink>
+          )}
+
           {isAdmin && (
             <>
               <div className="pt-2 pb-1 px-3">
@@ -238,14 +257,6 @@ function AppLayoutInner() {
               <NavLink to="/admin" className={navLinkClass}>
                 <Shield className="size-4 flex-shrink-0" />
                 Painel Admin
-              </NavLink>
-              {/* Separada do painel de propósito: "como vai o SaaS" e "com
-                  quem eu falo agora" são dois trabalhos, feitos em momentos
-                  diferentes. Esconder o link é desenho; quem trava é
-                  `requireAdmin` em cada função. */}
-              <NavLink to="/campanha" className={navLinkClass}>
-                <Megaphone className="size-4 flex-shrink-0" />
-                Campanha
               </NavLink>
             </>
           )}
@@ -384,6 +395,23 @@ function AppLayoutInner() {
                   <span className="truncate">{item.label}</span>
                 </NavLink>
               ))}
+              {/* No celular a Campanha também é comercial: vem antes do
+                  Admin, na mesma grade dos outros destinos de operação. */}
+              {isAdmin && (
+                <NavLink
+                  to="/campanha"
+                  onClick={() => setShowMoreMenu(false)}
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center gap-2.5 px-3 py-3 rounded-xl border border-border text-sm font-medium transition-colors cursor-pointer",
+                      isActive ? "text-primary border-primary/40 bg-primary/5" : "text-foreground hover:bg-accent",
+                    )
+                  }
+                >
+                  <Megaphone className="size-4 flex-shrink-0" />
+                  <span className="truncate">Campanha</span>
+                </NavLink>
+              )}
               {isAdmin && (
                 <NavLink
                   to="/admin"

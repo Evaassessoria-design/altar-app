@@ -160,7 +160,19 @@ export function PessoasDaCampanha({
               className="rounded-lg border border-border/60 p-3 sm:flex sm:items-center sm:gap-3"
             >
               <div className="min-w-0 flex-1">
-                <p className="truncate font-medium leading-tight">{p.name}</p>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <p className="truncate font-medium leading-tight">{p.name}</p>
+                  {/* ── QUEM LEVANTOU A MÃO ───────────────────────────────
+                      Não é score: é um fato binário e verificável. Ou o
+                      registro nasceu de alguém preenchendo um formulário, ou
+                      de alguém montando uma lista — e as duas conversas nem
+                      começam igual. */}
+                  {p.procurouOAltar && (
+                    <span className="flex-shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                      Procurou a ALTAR
+                    </span>
+                  )}
+                </div>
                 {p.empresa && (
                   <p className="truncate text-xs text-muted-foreground">{p.empresa}</p>
                 )}

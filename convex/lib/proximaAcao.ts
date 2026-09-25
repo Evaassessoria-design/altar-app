@@ -37,6 +37,15 @@ export type FatosDoInteressado = InteressadoNoFunil & {
   /** Existe telefone ou e-mail gravado? Sem canal, nenhuma mensagem faz sentido. */
   temCanal: boolean;
   /**
+   * Ela procurou a ALTAR, ou foi procurada? Ver `procurouOAltar` em
+   * `lib/campanha.ts`.
+   *
+   * Ausente = tratada como fria, que é a suposição conservadora: abordar
+   * alguém como se já tivesse pedido demonstração, quando não pediu, é o erro
+   * que queima o contato.
+   */
+  procurouOAltar?: boolean;
+  /**
    * Dias desde que o convite foi enviado. `undefined` = não há registro.
    *
    * Sem esta data a pessoa NÃO entra na fila de follow-up. Entrar com uma data
@@ -75,6 +84,15 @@ export type ProximaAcao = {
    * para a fila "Precisa de você" em vez de virar mensagem preparada.
    */
   precisaDeHumano?: boolean;
+  /**
+   * Dentro da mesma urgência, quem vem primeiro.
+   *
+   * `inbound` é quem procurou a ALTAR e está esperando: a pessoa já demonstrou
+   * intenção e o silêncio é nosso. `fria` é abordagem de quem nunca pediu
+   * nada. Ausente quando a distinção não muda a ordem — num lembrete de
+   * véspera, por exemplo, ninguém é mais urgente por ter vindo da landing.
+   */
+  prioridade?: "inbound" | "fria";
 };
 
 /**
@@ -311,10 +329,23 @@ export function proximaAcao(f: FatosDoInteressado): ProximaAcao {
     return {
       mensagem: "convite",
       acao: preparado ? "Revisar e enviar o convite" : "Preparar o convite",
+      // ── QUEM LEVANTOU A MÃO VEM ANTES ────────────────────────────────
+      // O motivo diz POR QUE esta pessoa, e é o que faz a fila se ordenar
+      // sozinha na cabeça de quem lê: "pediu demonstração e ninguém
+      // respondeu" cobra uma resposta que "chegou numa lista" não cobra.
+      //
+      // Não há score por trás — é um fato binário e verificável: ou o
+      // registro nasceu de alguém preenchendo um formulário, ou de alguém
+      // montando uma lista.
       motivo: preparado
         ? "A mensagem já está escrita e ninguém enviou."
-        : "Chegou e ninguém falou com ela ainda.",
+        : f.procurouOAltar
+          ? "Procurou a ALTAR e ainda não teve resposta."
+          : "Chegou e ninguém falou com ela ainda.",
       urgencia: "agora",
+      // Quem procurou e está esperando é o caso mais caro da campanha: a
+      // pessoa já demonstrou intenção e o silêncio é nosso.
+      prioridade: f.procurouOAltar ? "inbound" : "fria",
     };
   }
 
@@ -335,12 +366,25 @@ const PESO_DA_URGENCIA: Record<UrgenciaDaAcao, number> = {
   nenhuma: 3,
 };
 
+/**
+ * Dentro da mesma urgência, quem procurou vem antes de quem foi procurado.
+ *
+ * Ausente pesa como fria: a suposição conservadora é não tratar ninguém como
+ * inbound sem prova.
+ */
+const PESO_DA_PRIORIDADE = { inbound: 0, fria: 1 } as const;
+const pesoDe = (p?: "inbound" | "fria") => PESO_DA_PRIORIDADE[p ?? "fria"];
+
 export function ordenarPorPrioridade<T extends { acao: ProximaAcao; esperandoHaDias?: number }>(
   itens: readonly T[],
 ): T[] {
   return itens.slice().sort((a, b) => {
     const peso = PESO_DA_URGENCIA[a.acao.urgencia] - PESO_DA_URGENCIA[b.acao.urgencia];
     if (peso !== 0) return peso;
+    // Inbound antes de fria: quem já levantou a mão está esperando, e o
+    // silêncio é nosso. Quem nunca pediu nada não está esperando resposta.
+    const prioridade = pesoDe(a.acao.prioridade) - pesoDe(b.acao.prioridade);
+    if (prioridade !== 0) return prioridade;
     return (b.esperandoHaDias ?? 0) - (a.esperandoHaDias ?? 0);
   });
 }

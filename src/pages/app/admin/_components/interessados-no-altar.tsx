@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { ConvexError } from "convex/values";
 import { toast } from "sonner";
-import { ChevronDown, ChevronUp, Sparkles, Upload } from "lucide-react";
+import { ChevronDown, ChevronUp, Megaphone, Sparkles, Upload } from "lucide-react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Input } from "@/components/ui/input.tsx";
@@ -263,8 +264,12 @@ export function InteressadosNoAltar() {
     campanha ? { campanha } : "skip",
   );
   const setStatus = useMutation(api.admin.setLandingLeadStatus);
+  const adicionar = useMutation(api.admin.adicionarACampanha);
+  const adicionarVarios = useMutation(api.admin.adicionarVariosACampanha);
   const [aberto, setAberto] = useState<Id<"landingLeads"> | null>(null);
   const [importando, setImportando] = useState(false);
+  /** O id em andamento, ou `"lote"`. `null` = nada acontecendo. */
+  const [adicionando, setAdicionando] = useState<Id<"landingLeads"> | "lote" | null>(null);
 
   if (dados === undefined) {
     return (
@@ -279,6 +284,67 @@ export function InteressadosNoAltar() {
   const semContato = leads.filter(
     (l) => l.status === "novo" || l.status === "contato_preparado",
   ).length;
+
+  // ── QUEM AINDA NÃO ESTÁ EM CAMPANHA NENHUMA ─────────────────────────────
+  // Deliberadamente sobre a PÁGINA carregada, e não sobre a base: o botão
+  // adiciona exatamente o que está à vista, e o número que ele mostra é o
+  // mesmo que a pessoa consegue contar na tela. Prometer "adicionar todos"
+  // sobre algo que não está carregado seria a tela afirmando o que não viu.
+  const foraDaCampanha = leads.filter((l) => !l.campanha);
+
+  async function adicionarUm(leadId: Id<"landingLeads">, nome: string) {
+    setAdicionando(leadId);
+    try {
+      const r = await adicionar({ leadId, campanha: LIVE_ALTAR.slug });
+      if (r.resultado === "adicionado") {
+        toast.success(`${nome} entrou na campanha`, {
+          description: "Etapa, origem e histórico ficaram como estavam.",
+        });
+      } else if (r.resultado === "ja_estava") {
+        toast.info(`${nome} já estava na campanha`);
+      } else {
+        // Mover de campanha em silêncio apagaria o vínculo com a anterior e
+        // estragaria as duas contagens.
+        toast.warning(`${nome} já está em outra campanha`, {
+          description: "Mover exige uma decisão sua, no detalhe do interessado.",
+        });
+      }
+    } catch (e) {
+      toast.error(
+        e instanceof ConvexError
+          ? String((e.data as { message?: string })?.message)
+          : "Não deu para adicionar",
+      );
+    } finally {
+      setAdicionando(null);
+    }
+  }
+
+  async function adicionarTodos() {
+    setAdicionando("lote");
+    try {
+      const r = await adicionarVarios({
+        leadIds: foraDaCampanha.map((l) => l._id),
+        campanha: LIVE_ALTAR.slug,
+      });
+      // Cada desfecho vira uma frase, em vez de um "pronto" que esconde o que
+      // não entrou.
+      const partes = [
+        `${r.adicionados} ${r.adicionados === 1 ? "adicionado" : "adicionados"}`,
+      ];
+      if (r.jaEstavam > 0) partes.push(`${r.jaEstavam} já estavam`);
+      if (r.emOutra.length > 0) partes.push(`${r.emOutra.length} em outra campanha`);
+      toast.success("Interessados na campanha", { description: partes.join(" · ") });
+    } catch (e) {
+      toast.error(
+        e instanceof ConvexError
+          ? String((e.data as { message?: string })?.message)
+          : "Não deu para adicionar",
+      );
+    } finally {
+      setAdicionando(null);
+    }
+  }
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -403,6 +469,39 @@ export function InteressadosNoAltar() {
             {semContato > 0 && ` · ${semContato} ainda sem contato`}
           </p>
 
+          {/* ── A AÇÃO EM LOTE ────────────────────────────────────────────
+              Aparece só quando há alguém fora de campanha nesta página. Um
+              botão permanente que às vezes não faz nada ensina a ignorá-lo —
+              e a frase diz o número exato, para ninguém clicar às cegas. */}
+          {foraDaCampanha.length > 0 && (
+            <div className="flex flex-col gap-2 bg-primary/5 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-xs font-medium">
+                  {foraDaCampanha.length}{" "}
+                  {foraDaCampanha.length === 1
+                    ? "interessado não está"
+                    : "interessados não estão"}{" "}
+                  na {LIVE_ALTAR.nome}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Eles procuraram a ALTAR — são os primeiros a falar, antes de
+                  qualquer lista.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                disabled={adicionando === "lote"}
+                onClick={() => void adicionarTodos()}
+                className="flex-shrink-0 cursor-pointer gap-1.5"
+              >
+                <Megaphone className="size-3.5" />
+                {adicionando === "lote"
+                  ? "Adicionando…"
+                  : `Adicionar ${foraDaCampanha.length} à campanha`}
+              </Button>
+            </div>
+          )}
+
           {leads.map((lead) => (
             <div key={lead._id} className="px-5 py-3">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
@@ -427,6 +526,16 @@ export function InteressadosNoAltar() {
                     <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
                       {rotuloDaOrigem(lead.origem)}
                     </span>
+                    {/* ── ELA JÁ ESTÁ NUMA CAMPANHA? ──────────────────────
+                        Sem este selo, a única forma de saber era clicar em
+                        cada um e abrir o detalhe — e foi exatamente por não
+                        saber que o painel dizia "10 interessados" enquanto a
+                        campanha dizia "ninguém aqui". */}
+                    {lead.campanha === LIVE_ALTAR.slug && (
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                        Na campanha
+                      </span>
+                    )}
                   </div>
                   <div className="mt-0.5 flex flex-wrap gap-3">
                     <a
@@ -457,6 +566,26 @@ export function InteressadosNoAltar() {
                 </div>
 
                 <div className="flex flex-shrink-0 items-center gap-2">
+                  {/* ── A PONTE QUE FALTAVA ────────────────────────────────
+                      Só aparece para quem ainda não está em campanha nenhuma.
+                      Quem já está mostra o selo acima; mover alguém de uma
+                      campanha para outra é decisão que se toma no detalhe, com
+                      o histórico à vista. */}
+                  {!lead.campanha && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={adicionando === lead._id}
+                      onClick={() => void adicionarUm(lead._id, lead.name)}
+                      className="h-9 flex-shrink-0 cursor-pointer gap-1.5 text-xs"
+                    >
+                      <Megaphone className="size-3.5" />
+                      <span className="hidden sm:inline">
+                        {adicionando === lead._id ? "Adicionando…" : "Adicionar à campanha"}
+                      </span>
+                      <span className="sm:hidden">Campanha</span>
+                    </Button>
+                  )}
                   <select
                     value={lead.status}
                     aria-label={`Etapa de ${lead.name}`}

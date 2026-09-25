@@ -8,7 +8,10 @@ import { ComercialHoje } from "./_components/comercial-hoje.tsx";
 import { FunilDaCampanha } from "./_components/funil-da-campanha.tsx";
 import { PessoasDaCampanha } from "./_components/pessoas-da-campanha.tsx";
 import { FilaDeRevisao } from "./_components/fila-de-revisao.tsx";
-import { Megaphone } from "lucide-react";
+import { AdicionarLead } from "./_components/adicionar-lead.tsx";
+import { ImportarInteressados } from "../admin/_components/importar-interessados.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { Megaphone, Upload, UserPlus } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // A CAMPANHA
@@ -39,6 +42,8 @@ export default function CampanhaPage() {
   const navigate = useNavigate();
   const isAdmin = useQuery(api.admin.isAdmin);
   const [etapa, setEtapa] = useState("");
+  const [adicionando, setAdicionando] = useState(false);
+  const [importando, setImportando] = useState(false);
 
   useEffect(() => {
     if (isAdmin === false) navigate("/dashboard");
@@ -63,6 +68,50 @@ export default function CampanhaPage() {
           {LIVE_ALTAR.nome} · {LIVE_ALTAR.hora} (horário de Brasília)
         </p>
       </header>
+
+      {/* ── AS DUAS PORTAS DE ENTRADA ──────────────────────────────────────
+          Uma pessoa avulsa (uma indicação que chegou no WhatsApp) e uma
+          lista inteira são trabalhos diferentes, e obrigar a passar pelo
+          Painel Admin para a primeira fazia a campanha depender de outra tela
+          para a coisa mais comum que acontece nela.
+
+          O rótulo diz "interessado", e não "lead", pela mesma razão que o
+          resto da tela: o Painel Admin já chama estas pessoas de
+          "Interessados no ALTAR", e a campanha fala em "pessoas nesta
+          campanha". Uma terceira palavra para a mesma coisa é como se começa
+          a ter três. */}
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          variant={adicionando ? "secondary" : "outline"}
+          onClick={() => {
+            setAdicionando((a) => !a);
+            setImportando(false);
+          }}
+          className="cursor-pointer gap-1.5"
+        >
+          <UserPlus className="size-3.5" /> Adicionar interessado
+        </Button>
+        <Button
+          size="sm"
+          variant={importando ? "secondary" : "outline"}
+          onClick={() => {
+            setImportando((i) => !i);
+            setAdicionando(false);
+          }}
+          className="cursor-pointer gap-1.5"
+        >
+          <Upload className="size-3.5" /> Importar lista
+        </Button>
+      </div>
+
+      {adicionando && <AdicionarLead aoFechar={() => setAdicionando(false)} />}
+      {importando && (
+        // Reusa o mesmo componente do Painel Admin: ele já nasce com a
+        // campanha da live escolhida, e duplicá-lo aqui criaria dois
+        // importadores que divergem na primeira correção.
+        <ImportarInteressados onFechar={() => setImportando(false)} />
+      )}
 
       <ComercialHoje campanha={LIVE_ALTAR.slug} />
       <FilaDeRevisao campanha={LIVE_ALTAR.slug} />

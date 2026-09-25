@@ -426,12 +426,14 @@ function LeadCard({
         <div className="flex gap-1">
           <button
             onClick={() => onEdit(lead)}
+            aria-label={`Editar ${lead.clientName}`}
             className="p-1 rounded hover:bg-accent cursor-pointer text-muted-foreground"
           >
             <Pencil className="size-3" />
           </button>
           <button
             onClick={() => onDelete(lead)}
+            aria-label={`Excluir ${lead.clientName}`}
             className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer text-muted-foreground hover:text-destructive"
           >
             <Trash2 className="size-3" />
@@ -660,6 +662,7 @@ function KanbanColumn({
         </div>
         <button
           onClick={() => onAdd(stage.id)}
+          aria-label={`Nova oportunidade em ${stage.label}`}
           className="p-1 rounded-lg hover:bg-background/50 cursor-pointer text-muted-foreground"
         >
           <Plus className="size-4" />

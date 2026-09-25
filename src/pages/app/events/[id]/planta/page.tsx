@@ -374,6 +374,7 @@ export default function PlantaPage() {
                         size="sm"
                         variant="ghost"
                         onClick={() => removeElement(i)}
+                        aria-label={`Remover ${el.tipo ?? "elemento"}`}
                         className="cursor-pointer text-destructive h-9 w-9 p-0"
                       >
                         <Trash2 className="size-4" />

@@ -585,7 +585,7 @@ function SupplierForm({
                   <div key={idx} className="flex items-center gap-2">
                     <Input value={item.label} onChange={(e) => updateRow(idx, { label: e.target.value })} placeholder="Título" className="flex-1 h-9 text-sm" />
                     <Input value={item.value} onChange={(e) => updateRow(idx, { value: e.target.value })} placeholder="Valor / informação" className="flex-1 h-9 text-sm" />
-                    <button type="button" onClick={() => removeRow(idx)} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-muted-foreground hover:text-destructive cursor-pointer">
+                    <button type="button" onClick={() => removeRow(idx)} className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20 text-muted-foreground hover:text-destructive cursor-pointer" aria-label="Remover esta linha">
                       <X className="size-4" />
                     </button>
                   </div>

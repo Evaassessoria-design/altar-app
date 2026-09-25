@@ -259,12 +259,14 @@ export default function EquipePage() {
               <div className="flex gap-1 flex-shrink-0">
                 <button
                   onClick={() => setEditing(member)}
+                  aria-label={`Editar ${member.name}`}
                   className="p-2 rounded-lg hover:bg-accent transition-colors cursor-pointer text-muted-foreground"
                 >
                   <Pencil className="size-4" />
                 </button>
                 <button
                   onClick={() => setDeleting(member)}
+                  aria-label={`Remover ${member.name}`}
                   className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer text-muted-foreground hover:text-destructive"
                 >
                   <Trash2 className="size-4" />

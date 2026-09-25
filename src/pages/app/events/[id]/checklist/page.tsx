@@ -296,6 +296,7 @@ export default function EventChecklistPage() {
           <Button
             type="submit"
             disabled={!newItemName.trim()}
+            aria-label="Adicionar item ao checklist"
             className="cursor-pointer flex-shrink-0"
           >
             <Plus className="size-4" />

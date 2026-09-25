@@ -144,6 +144,7 @@ export function NotificationCenter() {
                 )}
                 <button
                   onClick={() => setOpen(false)}
+                  aria-label="Fechar avisos"
                   className="p-1 rounded-md hover:bg-accent text-muted-foreground transition-colors cursor-pointer"
                 >
                   <X className="size-4" />
@@ -207,6 +208,7 @@ export function NotificationCenter() {
                       {/* Delete */}
                       <button
                         onClick={() => void remove({ id: notif._id })}
+                        aria-label="Descartar aviso"
                         className="flex-shrink-0 p-1 rounded-md hover:bg-accent text-muted-foreground/50 hover:text-muted-foreground transition-colors cursor-pointer self-start mt-0.5"
                       >
                         <X className="size-3.5" />

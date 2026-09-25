@@ -655,12 +655,14 @@ export default function FinanceiroPage() {
                   </button>
                   <button
                     onClick={() => setEditing(tx)}
+                    aria-label={`Editar ${tx.description}`}
                     className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer text-muted-foreground"
                   >
                     <Pencil className="size-3.5" />
                   </button>
                   <button
                     onClick={() => setDeleting(tx)}
+                    aria-label={`Excluir ${tx.description}`}
                     className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer text-muted-foreground hover:text-destructive"
                   >
                     <Trash2 className="size-3.5" />

@@ -943,7 +943,7 @@ export default function GaleriaPage() {
               </div>
 
               <div className="flex justify-end gap-2">
-                <Button variant="ghost" size="sm" onClick={() => setEditingCaption(null)} className="cursor-pointer">
+                <Button variant="ghost" size="sm" onClick={() => setEditingCaption(null)} className="cursor-pointer" aria-label="Cancelar">
                   <X className="size-4" />
                 </Button>
                 <Button size="sm" onClick={() => void handleSaveCaption(editingCaption)} className="cursor-pointer gap-1.5">

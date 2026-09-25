@@ -307,12 +307,14 @@ export default function EventsPage() {
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button
                       onClick={() => setEditingEvent(event as Doc<"events">)}
+                      aria-label={`Editar ${event.name}`}
                       className="p-2 rounded-lg hover:bg-accent transition-colors cursor-pointer text-muted-foreground hover:text-foreground"
                     >
                       <Pencil className="size-4" />
                     </button>
                     <button
                       onClick={() => setDeletingId(event._id)}
+                      aria-label={`Excluir ${event.name}`}
                       className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer text-muted-foreground hover:text-destructive"
                     >
                       <Trash2 className="size-4" />

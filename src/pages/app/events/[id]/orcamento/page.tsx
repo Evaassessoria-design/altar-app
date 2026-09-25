@@ -510,12 +510,14 @@ export default function OrcamentoPage() {
                       <div className="flex gap-1 w-16 justify-end">
                         <button
                           onClick={() => openEdit(item)}
+                          aria-label={`Editar ${item.description}`}
                           className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer text-muted-foreground"
                         >
                           <Pencil className="size-3.5" />
                         </button>
                         <button
                           onClick={() => setDeletingId(item._id)}
+                          aria-label={`Excluir ${item.description}`}
                           className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer text-muted-foreground hover:text-destructive"
                         >
                           <Trash2 className="size-3.5" />
@@ -632,7 +634,7 @@ export default function OrcamentoPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setDialogOpen(false)} className="cursor-pointer">
+            <Button variant="ghost" onClick={() => setDialogOpen(false)} className="cursor-pointer" aria-label="Cancelar">
               <X className="size-4" />
             </Button>
             <Button onClick={() => void handleSave()} disabled={saving} className="cursor-pointer gap-1.5">

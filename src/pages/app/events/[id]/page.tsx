@@ -304,12 +304,14 @@ export default function EventDetailsPage() {
             </button>
             <button
               onClick={() => setEditing(true)}
+              aria-label="Editar o evento"
               className="p-2 rounded-lg hover:bg-accent transition-colors cursor-pointer text-muted-foreground"
             >
               <Pencil className="size-4" />
             </button>
             <button
               onClick={() => setConfirmDelete(true)}
+              aria-label="Excluir o evento"
               className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer text-muted-foreground hover:text-destructive"
             >
               <Trash2 className="size-4" />

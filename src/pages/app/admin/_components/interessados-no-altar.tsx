@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, Sparkles, Upload } from "lucide-react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Input } from "@/components/ui/input.tsx";
+import { Textarea } from "@/components/ui/textarea.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -169,7 +170,7 @@ function DetalheDoInteressado({
         </div>
         <div>
           <Label className="text-xs">Segmento</Label>
-          <Input className="mt-1 h-9" placeholder="Casamento" {...campo("segmento")} />
+          <Input className="mt-1 h-9" placeholder="Casamento, corporativo…" {...campo("segmento")} />
         </div>
         <div>
           <Label className="text-xs">Eventos por ano</Label>
@@ -210,7 +211,17 @@ function DetalheDoInteressado({
 
       <div>
         <Label className="text-xs">Observações</Label>
-        <Input className="mt-1 h-9" placeholder="O que ela contou" {...campo("observacoes")} />
+        {/* Campo de UMA LINHA aqui esconderia o que ela escreveu: "tem sócia,
+            atende o litoral, pediu para ligar depois das 18h" não cabe num
+            `<Input>`. A trava de `campos-longos` cobra isso do produto
+            inteiro. */}
+        <Textarea
+          rows={2}
+          className="mt-1"
+          placeholder="O que ela contou"
+          value={campos.observacoes}
+          onChange={(e) => setCampos((c) => ({ ...c, observacoes: e.target.value }))}
+        />
       </div>
 
       <div className="flex justify-end gap-2">

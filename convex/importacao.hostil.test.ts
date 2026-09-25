@@ -24,7 +24,7 @@ const vazio = { emails: new Set<string>(), telefones: new Set<string>() };
 describe("o que o Excel produz de verdade", () => {
   it("BOM no começo do arquivo não esconde a coluna de nome", () => {
     // O Excel salva UTF-8 COM BOM. Sem tratar, o primeiro cabeçalho vira
-    // "﻿nome", não casa com "nome", e o importador diz "não encontrei a
+    // o BOM grudado no primeiro cabeçalho, que deixa de casar com "nome", e
     // coluna de nome" para um arquivo perfeito. É o defeito que mais
     // provavelmente apareceria na noite da live.
     const r = lerArquivo("﻿nome;email\nMarina;m@ex.com");

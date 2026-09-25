@@ -124,13 +124,18 @@ ALTAR_DEMO                               ← só no projeto de demonstração
 | Orçamento, galeria, planta por IA | `convex/orcamento.ts`, `gallery.ts`, `layoutRenders.ts`, `aiVisual.ts` |
 | Saúde do evento, dashboard, agenda | `convex/health.ts`, `dashboard.ts`, `agenda.ts` |
 | Notificações (com varredura diária) | `convex/notifications.ts`, `crons.ts` |
-| Assistente ALTAR (a IA da decoradora) | `convex/assistente.ts`, `assistenteExecutor.ts`, `lib/assistente/*` — veja `docs/assistente-e-escritorio.md` |
+| Assistente ALTAR (a IA da decoradora) | `convex/assistente.ts`, `assistenteExecutor.ts`, `lib/assistente/*` — veja `docs/assistente-e-escritorio.md` e `docs/comercial-ia.md` |
+| Briefing da manhã (o ALTAR olha antes de ser perguntado) | `convex/assistenteBriefing.ts`, `lib/assistente/briefing.ts` — derivado, nunca gravado |
+| "Meu ALTAR está pronto?" (onboarding por valor, não por cadastro) | `convex/onboarding.ts`, `lib/prontidaoDaConta.ts` |
 
 **Operação do SaaS** (só administradores)
 
 | Módulo | Onde |
 |---|---|
 | Painel administrativo, contas, métricas | `convex/admin.ts` |
+| Campanha da live (12 etapas, taxas, busca) | `convex/lib/campanha.ts`, `comercialBriefing.ts`, `/campanha` — veja `docs/campanha-live-altar.md` |
+| Mensagens preparadas da campanha | `convex/campanhaRascunhos.ts`, `lib/mensagensDaCampanha.ts` — **não** é `adminApprovals`, e o porquê está em `docs/whatsapp-arquitetura.md` |
+| Situação honesta de cada canal | `convex/mensageria.ts`, `lib/channels/situacao.ts` — cinco estados; hoje `nao_configurado` |
 | Assinatura e cobrança | `convex/asaas.ts`, `asaasWebhook.ts` |
 | Central de Comunicações | `convex/communications*.ts`, `adminApprovals.ts`, `adminWorkItems.ts`, `customerVoice.ts` — veja `docs/central-comunicacoes.md` |
 | Ponte do Escritório 3D (somente leitura) | `convex/officeBridgeHttp.ts`, `officeCentralHttp.ts` |
@@ -149,6 +154,22 @@ não cria fotos nem contrato, e sem elas o Projeto Visual abre vazio),
 `docs/checklist-pre-live.md` (T-7 até T-15min) e `docs/plano-b-live.md` (plano
 A e B de cada bloco). No produto, `health.getEventReadiness` responde "este
 evento está pronto para ser mostrado?" com número, não com promessa.
+
+**Para OPERAR a campanha da live** — que é outro trabalho, feito antes e depois
+dela: `docs/campanha-live-altar.md` (as doze etapas, os dez modelos de
+mensagem, e o roteiro do primeiro contato até a assinatura). A tela é
+`/campanha`, separada do Painel Admin porque "como vai o SaaS" e "com quem eu
+falo agora" são perguntas diferentes.
+
+**O que está pronto de verdade**: `docs/homologacao-pre-live.md` separa
+CONSTRUÍDO de TESTADO de HOMOLOGADO, e lista o que só existe em teste. Nada da
+rodada de campanha está homologado — homologação exige uma pessoa usando com
+dado real.
+
+**Por que o ALTAR não manda WhatsApp**: `docs/whatsapp-arquitetura.md`. A
+camada de canal está pronta e o portão de saída está fechado por quatro travas
+independentes. Os rascunhos da campanha vivem em outra tabela, sem caminho até
+o outbox — de propósito.
 
 **Para a reunião comercial**: `docs/demo-comercial.md` (roteiro de 7 e 20 min,
 perguntas frequentes, checklist pré-Meet) e `docs/prontidao-comercial.md` (o

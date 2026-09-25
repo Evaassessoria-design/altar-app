@@ -4,6 +4,7 @@ import { convexTest } from "convex-test";
 import schema from "./schema";
 import { modules } from "./test.setup";
 import { api } from "./_generated/api";
+import { estagioDe } from "./lib/campanha";
 
 // TRAVA: interessado no ALTAR não pode voltar a ser dado invisível.
 //
@@ -84,7 +85,44 @@ describe("leitura administrativa dos interessados", () => {
     // dois lugares divergiria no dia em que o padrão mudasse — e o padrão é
     // justamente o que sustenta "sem backfill".
     expect(corpoDe("listLandingLeads")).toContain("estagioDe(l)");
-    const regra = readFileSync("convex/lib/campanha.ts", "utf-8");
-    expect(regra).toContain('return id && ESTAGIOS.some((e) => e.id === id) ? id : "novo";');
+
+    // Antes esta linha fixava o TEXTO de `estagioDe`. Ela quebrou na primeira
+    // vez que a função trocou `ESTAGIOS.some(...)` por um `Map` — uma mudança
+    // que não alterou nada do que ela protege. Trava de texto sobre uma regra
+    // que já tem função pura testável é trava no lugar errado: agora o teste
+    // cobra o COMPORTAMENTO, que é o que não pode mudar.
+    expect(estagioDe({})).toBe("novo");
+    expect(estagioDe({ status: undefined })).toBe("novo");
+    expect(estagioDe({ status: "" })).toBe("novo");
+    expect(estagioDe({ status: "etapa_que_nao_existe" })).toBe("novo");
+    expect(estagioDe({ status: "convertido" })).toBe("convertido");
+  });
+
+  it("a regra do ausente mora num lugar só", () => {
+    // O que a trava de texto realmente defendia: ninguém pode reimplementar
+    // `?? "novo"` numa consulta ou numa tela. Dois lugares lendo o ausente
+    // divergem no dia em que o padrão mudar, e é o padrão que sustenta o
+    // "sem backfill" do schema.
+    //
+    // A lista é dos arquivos que hoje CONSOMEM estágio. Um arquivo novo que
+    // consuma estágio e não esteja aqui escapa — e é por isso que o teste
+    // acima cobra o comportamento de `estagioDe` em vez de depender só desta
+    // varredura.
+    const consumidores = [
+      "convex/admin.ts",
+      "convex/lib/contatoDaCampanha.ts",
+      "src/pages/app/admin/_components/interessados-no-altar.tsx",
+      "src/pages/app/admin/_components/fila-de-contato.tsx",
+    ];
+    for (const arquivo of consumidores) {
+      const semComentarios = readFileSync(arquivo, "utf-8")
+        .split("\n")
+        .filter((l) => !l.trimStart().startsWith("//") && !l.trimStart().startsWith("*"))
+        .join("\n");
+      expect(
+        semComentarios,
+        `${arquivo} reimplementa o padrão do estágio ausente em vez de chamar estagioDe`,
+      ).not.toMatch(/\?\?\s*"novo"/);
+    }
   });
 });

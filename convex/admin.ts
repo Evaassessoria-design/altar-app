@@ -2,15 +2,20 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import type { QueryCtx, MutationCtx } from "./_generated/server.d.ts";
+import type { Doc } from "./_generated/dataModel";
 import { getOptionalUser } from "./lib/identity";
 import { requireAdmin } from "./lib/adminGuard";
 import { ALTAR_ADMIN_ROLE, effectiveSubscriptionStatus, resolveAccess } from "./lib/access";
 import { deleteUserDataCascade } from "./lib/cascade";
 import {
   campanhaPorSlug,
+  carimbosAGravar,
+  diasAte,
   estagioDe,
   funilDaCampanha as calcularFunil,
   origemDe,
+  situacaoDaCampanha,
+  taxasDaCampanha,
 } from "./lib/campanha";
 import { limparCampos } from "./lib/limparCampos";
 import { prepararContatos } from "./lib/contatoDaCampanha";
@@ -31,14 +36,23 @@ const origemValidator = v.union(
   v.literal("outro"),
 );
 
-/** As etapas aceitas — espelha a união do schema e de `lib/campanha.ts`. */
+/**
+ * As etapas aceitas — espelha a união do schema e de `lib/campanha.ts`.
+ *
+ * As três listas precisam concordar, e concordam por TESTE
+ * (`campanha.live.test.ts`), não por confiança: um literal esquecido aqui
+ * viraria uma etapa que a tela oferece e a mutation recusa.
+ */
 const estagioValidator = v.union(
   v.literal("novo"),
   v.literal("contato_preparado"),
   v.literal("contatado"),
+  v.literal("respondeu"),
   v.literal("interessado"),
   v.literal("confirmou"),
   v.literal("participou"),
+  v.literal("nao_participou"),
+  v.literal("demonstracao"),
   v.literal("testando"),
   v.literal("convertido"),
   v.literal("descartado"),
@@ -673,11 +687,115 @@ export const listLandingLeads = query({
         observacoes: l.observacoes,
         proximoContato: l.proximoContato,
         ultimaInteracao: l.ultimaInteracao,
+        // Ausente = não há registro de convite enviado. A tela escreve "sem
+        // registro" em vez de calcular "há 57 anos" a partir de um zero.
+        convidadoEm: l.marcosEm?.convidado,
         createdAt: new Date(l._creationTime).toISOString(),
       })),
     };
   },
 });
+
+/**
+ * Procurar uma pessoa pelo que quem procura realmente lembra.
+ *
+ * ── QUATRO CAMINHOS, PORQUE SÃO QUATRO PERGUNTAS DIFERENTES ─────────────────
+ * Quem abre esta tela lembra de UMA coisa: o nome dela, o nome do ateliê, o
+ * telefone que respondeu no direct, ou o e-mail que ela mandou. Uma busca que
+ * cobrisse só o nome mandaria a pessoa rolar duzentas linhas.
+ *
+ * Telefone e e-mail são buscas EXATAS por índice, porque são identificadores:
+ * "11999998888" ou casa com um aparelho ou não casa com nenhum. Nome e empresa
+ * são busca textual, porque são memória de gente.
+ *
+ * ── POR QUE O TELEFONE É NORMALIZADO ANTES ──────────────────────────────────
+ * "(11) 99999-8888" e "5511999998888" são o mesmo aparelho e nenhum casa com o
+ * outro por comparação de string. Sem normalizar, procurar pelo número copiado
+ * do WhatsApp não acharia o registro digitado à mão — e a pessoa seria
+ * cadastrada de novo, que é exatamente a duplicidade que este painel combate.
+ */
+export const buscarInteressados = query({
+  args: {
+    termo: v.string(),
+    /** Restringe à campanha. Ausente = procura em todas. */
+    campanha: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const termo = args.termo.trim();
+    // Uma letra casaria com metade da base e devolveria ruído com cara de
+    // resultado. Abaixo de dois caracteres a busca não acontece.
+    if (termo.length < 2) return { termo, resultados: [], curtoDemais: true };
+
+    const encontrados = new Map<string, Doc<"landingLeads">>();
+    const guardar = (leads: Doc<"landingLeads">[]) => {
+      for (const l of leads) {
+        // A campanha filtra aqui só nos caminhos EXATOS (e-mail e telefone),
+        // que não têm por onde receber o filtro no índice. Os textuais já
+        // vieram filtrados pelo próprio índice de busca.
+        if (args.campanha && l.campanha !== args.campanha) continue;
+        encontrados.set(l._id, l);
+      }
+    };
+
+    // ── E-mail: exato, normalizado como a landing grava ──────────────────
+    if (termo.includes("@")) {
+      guardar(
+        await ctx.db
+          .query("landingLeads")
+          .withIndex("by_email", (q) => q.eq("email", termo.toLowerCase()))
+          .take(LIMITE_DA_BUSCA),
+      );
+    }
+
+    // ── Telefone: exato, em E.164 ────────────────────────────────────────
+    const e164 = normalizarE164(termo);
+    if (e164) {
+      guardar(
+        await ctx.db
+          .query("landingLeads")
+          .withIndex("by_whatsapp_e164", (q) => q.eq("whatsappE164", e164))
+          .take(LIMITE_DA_BUSCA),
+      );
+    }
+
+    // ── Nome e empresa: textual, já filtrado por campanha no índice ──────
+    for (const indice of ["search_nome", "search_empresa"] as const) {
+      const campo = indice === "search_nome" ? ("name" as const) : ("empresa" as const);
+      guardar(
+        await ctx.db
+          .query("landingLeads")
+          .withSearchIndex(indice, (q) => {
+            const busca = q.search(campo, termo);
+            return args.campanha ? busca.eq("campanha", args.campanha) : busca;
+          })
+          .take(LIMITE_DA_BUSCA),
+      );
+    }
+
+    return {
+      termo,
+      curtoDemais: false,
+      resultados: [...encontrados.values()].slice(0, LIMITE_DA_BUSCA).map((l) => ({
+        _id: l._id,
+        name: l.name,
+        email: l.email,
+        whatsapp: l.whatsapp,
+        empresa: l.empresa,
+        cidade: l.cidade,
+        estado: l.estado,
+        status: estagioDe(l),
+        origem: origemDe(l),
+        campanha: l.campanha,
+        convidadoEm: l.marcosEm?.convidado,
+        ultimaInteracao: l.ultimaInteracao,
+      })),
+    };
+  },
+});
+
+/** Teto por caminho de busca. Quem procura uma pessoa não rola cem linhas. */
+export const LIMITE_DA_BUSCA = 25;
 
 /**
  * O funil de uma campanha, em contagens — as sete perguntas de uma vez.
@@ -701,10 +819,22 @@ export const funilDaCampanha = query({
       .take(VARREDURA_DA_CAMPANHA + 1);
 
     const completa = leads.length <= VARREDURA_DA_CAMPANHA;
+    const funil = calcularFunil(leads.slice(0, VARREDURA_DA_CAMPANHA));
+    const campanha = campanhaPorSlug(args.campanha) ?? null;
+    const hoje = dataDoDia();
+
     return {
-      campanha: campanhaPorSlug(args.campanha) ?? null,
+      campanha,
       completa,
-      ...calcularFunil(leads.slice(0, VARREDURA_DA_CAMPANHA)),
+      ...funil,
+      // As taxas saem da MESMA varredura. Uma segunda consulta leria a tabela
+      // de novo e, entre as duas, um lead poderia mudar de etapa — e a tela
+      // mostraria um funil que não fecha com as próprias porcentagens.
+      taxas: taxasDaCampanha(funil),
+      // Derivados da data, nunca gravados: um `status` editável ficaria em
+      // "agendada" no dia em que ninguém lembrasse de virar a chave.
+      situacao: campanha ? situacaoDaCampanha(campanha, hoje) : null,
+      diasAte: campanha ? diasAte(campanha, hoje) : null,
     };
   },
 });
@@ -888,9 +1018,23 @@ export const setLandingLeadStatus = mutation({
     // Mover de etapa É uma interação: sem carimbar a data aqui, "há quanto
     // tempo ninguém fala com essa pessoa" mediria só quem foi editado pelo
     // formulário completo.
+    //
+    // ── O PASSADO NÃO É REESCRITO ──────────────────────────────────────────
+    // Mover de etapa carimba os marcos que aquela etapa comprova e que ainda
+    // não tinham carimbo. Nunca apaga e nunca reescreve: voltar para "Convite
+    // enviado" corrige o presente e mantém a data do convite original.
+    //
+    // Sem essa regra, toda correção de etapa clicada por engano zeraria o
+    // relógio do follow-up — e a pessoa esquecida há uma semana voltaria para
+    // o fim da fila, que é o oposto do que a fila existe para fazer.
+    //
+    // `ultimaInteracao` continua sendo reescrita: ela mede a ÚLTIMA conversa,
+    // que é outra pergunta.
+    const novos = carimbosAGravar(lead, args.status, Date.now());
     await ctx.db.patch(args.leadId, {
       status: args.status,
       ultimaInteracao: dataDoDia(),
+      ...(novos ? { marcosEm: { ...lead.marcosEm, ...novos } } : {}),
     });
   },
 });

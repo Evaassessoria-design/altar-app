@@ -39,17 +39,30 @@ import {
 // paralela é exatamente o que este produto existe para acabar.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Cores por etapa: do cinza de quem chegou ao verde de quem assinou. */
+/**
+ * Cores por etapa: do cinza de quem chegou ao verde de quem assinou.
+ *
+ * `Record` exaustivo de propósito. Quando o pipeline passou de nove para doze
+ * etapas, foi esta declaração que apontou as três que faltavam — uma etapa sem
+ * cor cairia com `undefined` na classe e viraria um selo invisível na tela.
+ */
 const TOM_DO_ESTAGIO: Record<EstagioDoInteressado, string> = {
   novo: "bg-muted text-muted-foreground",
   contato_preparado:
     "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
   contatado: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+  respondeu: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
   interessado:
     "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
   confirmou:
     "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
   participou: "bg-primary/10 text-primary",
+  // Os dois desvios em laranja: não são progresso nem perda, são gente que
+  // continua alcançável por outro caminho.
+  nao_participou:
+    "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
+  demonstracao:
+    "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
   testando: "bg-primary/10 text-primary",
   convertido:
     "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",

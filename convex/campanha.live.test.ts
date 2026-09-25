@@ -68,33 +68,115 @@ async function cenario() {
 }
 
 describe("o funil da campanha responde as sete perguntas", () => {
-  it("conta por etapa, e quem avançou continua contando nas anteriores", async () => {
+  it("quem avançou pelo caminho normal continua contando nas etapas anteriores", async () => {
+    // ── O DEFEITO QUE ESTE TESTE GUARDA ─────────────────────────────────────
     // Contar só quem PAROU em "confirmou" faria o número encolher durante a
     // própria live, conforme as pessoas avançassem. Um indicador que cai
     // quando a campanha dá certo não serve para decidir nada.
+    //
+    // Quem sustenta isso são os CARIMBOS (`marcosEm`), gravados pela mutation
+    // a cada passo. Por isso este teste move as pessoas PELA MUTATION, uma
+    // etapa de cada vez, em vez de inserir o estágio final direto no banco:
+    // inserir direto é o caso legado, e ele é o próximo teste.
     const { admin, interessado } = await cenario();
-    for (const status of [
-      "novo",
+
+    const caminho = [
       "contatado",
+      "respondeu",
       "interessado",
       "confirmou",
       "participou",
       "testando",
       "convertido",
-      "descartado",
-    ] as const) {
-      await interessado({ campanha: LIVE_ALTAR.slug, status });
+    ] as const;
+
+    // Uma pessoa por parada: a primeira anda um passo, a última anda o caminho
+    // todo. É o retrato de uma campanha no meio do processo.
+    for (let ate = 0; ate < caminho.length; ate++) {
+      const leadId = await interessado({ campanha: LIVE_ALTAR.slug });
+      for (const status of caminho.slice(0, ate + 1)) {
+        await admin.mutation(api.admin.setLandingLeadStatus, { leadId, status });
+      }
     }
+    await interessado({ campanha: LIVE_ALTAR.slug });
 
     const f = await admin.query(api.admin.funilDaCampanha, { campanha: LIVE_ALTAR.slug });
     expect(f.total).toBe(8);
-    expect(f.semContato, "só o novo está sem contato").toBe(1);
-    expect(f.interessados, "interessado em diante, sem o descartado").toBe(5);
-    expect(f.confirmados).toBe(4);
-    expect(f.participaram).toBe(3);
+    expect(f.semContato, "só o que nunca foi movido está sem contato").toBe(1);
+    expect(f.convidados, "todos que andaram receberam convite").toBe(7);
+    expect(f.respostas).toBe(6);
+    expect(f.interessados).toBe(5);
+    expect(f.confirmados, "quem participou e quem avançou depois tinha confirmado").toBe(4);
+    expect(f.participaram, "participou, testando e cliente passaram pela live").toBe(3);
     expect(f.testando).toBe(2);
     expect(f.clientes).toBe(1);
-    expect(f.descartados).toBe(1);
+  });
+
+  it("os desvios NÃO contam como presença na live", async () => {
+    // ── O NÚMERO QUE A LIVE EXISTE PARA MEDIR ───────────────────────────────
+    // Quem confirmou e faltou, e quem nunca passou pela live e viu uma
+    // demonstração individual, chegam os dois a "testando". Se o funil
+    // inferisse o passado a partir do estágio atual, os dois entrariam na taxa
+    // de comparecimento — inflando exatamente o indicador que decide se a
+    // apresentação funcionou.
+    const { admin, interessado } = await cenario();
+
+    const faltou = await interessado({ campanha: LIVE_ALTAR.slug });
+    for (const status of ["contatado", "respondeu", "interessado", "confirmou", "nao_participou", "testando"] as const) {
+      await admin.mutation(api.admin.setLandingLeadStatus, { leadId: faltou, status });
+    }
+
+    const individual = await interessado({ campanha: LIVE_ALTAR.slug });
+    for (const status of ["contatado", "respondeu", "interessado", "demonstracao", "testando"] as const) {
+      await admin.mutation(api.admin.setLandingLeadStatus, { leadId: individual, status });
+    }
+
+    const f = await admin.query(api.admin.funilDaCampanha, { campanha: LIVE_ALTAR.slug });
+    expect(f.testando, "os dois estão testando").toBe(2);
+    expect(f.participaram, "nenhum dos dois esteve na live").toBe(0);
+    expect(f.confirmados, "só quem faltou tinha confirmado").toBe(1);
+
+    const comparecimento = f.taxas.find((t) => t.chave === "comparecimento");
+    expect(comparecimento?.numerador).toBe(0);
+    expect(comparecimento?.denominador, "a base é quem confirmou").toBe(1);
+  });
+
+  it("voltar de etapa corrige o presente sem apagar o passado", async () => {
+    // Clicar na etapa errada e corrigir é rotina. Se a correção apagasse o
+    // carimbo do convite, o relógio do follow-up zeraria e a pessoa esquecida
+    // há uma semana voltaria para o fim da fila.
+    const { admin, interessado } = await cenario();
+    const leadId = await interessado({ campanha: LIVE_ALTAR.slug });
+
+    await admin.mutation(api.admin.setLandingLeadStatus, { leadId, status: "contatado" });
+    const depoisDoConvite = await admin.query(api.admin.listLandingLeads, {});
+    const convidadoEm = depoisDoConvite.leads[0].convidadoEm;
+    expect(convidadoEm, "o convite precisa ter data").toBeTypeOf("number");
+
+    await admin.mutation(api.admin.setLandingLeadStatus, { leadId, status: "participou" });
+    await admin.mutation(api.admin.setLandingLeadStatus, { leadId, status: "contatado" });
+
+    const depois = await admin.query(api.admin.listLandingLeads, {});
+    expect(depois.leads[0].status, "o presente foi corrigido").toBe("contatado");
+    expect(depois.leads[0].convidadoEm, "a data original ficou de pé").toBe(convidadoEm);
+
+    const f = await admin.query(api.admin.funilDaCampanha, { campanha: LIVE_ALTAR.slug });
+    expect(f.participaram, "esteve na live uma vez; corrigir a etapa não desfaz isso").toBe(1);
+  });
+
+  it("registro legado, sem carimbo, é contado de forma conservadora", async () => {
+    // Um interessado gravado à mão antes de `marcosEm` existir tem estágio e
+    // nenhuma data. O funil não pode inventar o passado dele — e, na dúvida,
+    // subestima: uma taxa de comparecimento inflada mente sobre o único número
+    // que a live existe para medir.
+    const { admin, interessado } = await cenario();
+    await interessado({ campanha: LIVE_ALTAR.slug, status: "testando" });
+
+    const f = await admin.query(api.admin.funilDaCampanha, { campanha: LIVE_ALTAR.slug });
+    expect(f.testando, "o que o estágio comprova, ele conta").toBe(1);
+    expect(f.interessados, "chegar a testando comprova interesse").toBe(1);
+    expect(f.participaram, "não há prova de que esteve na live").toBe(0);
+    expect(f.confirmados, "nem de que confirmou").toBe(0);
   });
 
   it("quem disse NÃO fica fora de todos os acumulados", async () => {
@@ -123,7 +205,7 @@ describe("o funil da campanha responde as sete perguntas", () => {
     const f = await admin.query(api.admin.funilDaCampanha, { campanha: LIVE_ALTAR.slug });
     expect(f.total).toBe(0);
     expect(f.clientes).toBe(0);
-    expect(f.campanha?.nome).toBe("Live ALTAR");
+    expect(f.campanha?.nome).toBe("Apresentação ALTAR — 06/10/2026");
     expect(f.completa).toBe(true);
   });
 

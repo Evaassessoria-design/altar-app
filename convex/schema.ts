@@ -1089,10 +1089,13 @@ export default defineSchema({
     //
     //   novo              recém-chegado, ninguém falou com ele
     //   contato_preparado a mensagem está escrita, esperando uma pessoa enviar
-    //   contatado         alguém falou com ele
+    //   contatado         o convite foi enviado por uma pessoa
+    //   respondeu         deu retorno, sem interesse ainda declarado
     //   interessado       respondeu e demonstrou interesse
     //   confirmou         disse que vem (campanha com data, como a live)
     //   participou        esteve presente
+    //   nao_participou    confirmou e faltou — recuperável por demonstração
+    //   demonstracao      vai ver o ALTAR numa conversa individual
     //   testando          está usando o ALTAR
     //   convertido        virou cliente          (original)
     //   descartado        não tem interesse      (original)
@@ -1100,14 +1103,24 @@ export default defineSchema({
     // `contato_preparado` existe por causa de uma trava do produto: a IA
     // escreve a mensagem e PARA. O estágio é o registro de que o rascunho
     // existe e de que falta uma pessoa apertar enviar. Ver lib/campanha.ts.
+    //
+    // `respondeu`, `nao_participou` e `demonstracao` foram ACRESCENTADOS
+    // depois dos outros nove. Nenhum literal existente mudou de nome ou de
+    // significado, então todo registro já gravado continua válido — a união é
+    // aditiva e não houve backfill. Os dois últimos são DESVIOS da linha
+    // principal, e é por isso que o funil conta por marcos declarados e não
+    // por posição num array: ver `MarcoDoInteressado` em lib/campanha.ts.
     status: v.optional(
       v.union(
         v.literal("novo"),
         v.literal("contato_preparado"),
         v.literal("contatado"),
+        v.literal("respondeu"),
         v.literal("interessado"),
         v.literal("confirmou"),
         v.literal("participou"),
+        v.literal("nao_participou"),
+        v.literal("demonstracao"),
         v.literal("testando"),
         v.literal("convertido"),
         v.literal("descartado"),
@@ -1168,6 +1181,48 @@ export default defineSchema({
     /** "AAAA-MM-DD" da última conversa. Sem ela não se afirma abandono. */
     ultimaInteracao: v.optional(v.string()),
     /**
+     * QUANDO cada marco do funil foi atravessado. Instantes, não dias civis.
+     *
+     * ── O DEFEITO QUE ISTO CORRIGE ──────────────────────────────────────────
+     * Enquanto o funil foi uma fila reta, dava para inferir o passado a partir
+     * do presente: quem está em "testando" obviamente confirmou e participou.
+     *
+     * Parou de ser verdade quando entraram os DESVIOS. Hoje se chega a
+     * "testando" por três caminhos — participou da live, faltou e foi
+     * recuperado, ou nunca passou pela live e viu uma demonstração individual.
+     * O estágio atual não distingue os três, e cada palpite estraga um número:
+     * supor que participou infla a taxa de comparecimento (o número que a live
+     * existe para medir); supor que não participou faz o total de participantes
+     * ENCOLHER conforme as pessoas avançam — um indicador que despenca quando a
+     * campanha dá certo.
+     *
+     * A saída é não adivinhar. Cada marco é carimbado quando acontece, e o
+     * carimbo nunca é apagado nem reescrito: voltar de etapa corrige o presente
+     * sem reescrever o passado.
+     *
+     * ── O AUSENTE ───────────────────────────────────────────────────────────
+     * AUSENTE (o objeto todo, ou um marco dentro dele) = não há registro de que
+     * aquilo aconteceu. NÃO significa que não aconteceu: um registro marcado à
+     * mão antes deste campo existir é um convidado sem carimbo.
+     *
+     * Por isso a contagem aceita as duas evidências — o carimbo, quando há, e
+     * o que o estágio atual COMPROVA, quando não há. A segunda é deliberadamente
+     * conservadora (ver `MarcoDoInteressado` em lib/campanha.ts): na dúvida ela
+     * subestima, porque uma taxa de comparecimento inflada é pior do que uma
+     * tímida. Nenhum backfill foi feito e nenhuma data é inventada.
+     */
+    marcosEm: v.optional(
+      v.object({
+        convidado: v.optional(v.number()),
+        respondeu: v.optional(v.number()),
+        interessado: v.optional(v.number()),
+        confirmou: v.optional(v.number()),
+        participou: v.optional(v.number()),
+        testando: v.optional(v.number()),
+        cliente: v.optional(v.number()),
+      }),
+    ),
+    /**
      * Quando este registro foi COLETADO — só para os de prospecção.
      *
      * Uma lista legítima importada precisa dizer de quando é: telefone público
@@ -1200,7 +1255,15 @@ export default defineSchema({
     // Vincular um contato da Central a um interessado exige achá-lo pelo NOME
     // quando o telefone não casa (pessoa que escreveu de outro aparelho).
     // Índice sobre um campo que já existe — sem backfill.
-    .searchIndex("search_nome", { searchField: "name" }),
+    //
+    // `campanha` entrou como filtro do índice para que "procurar Marina DENTRO
+    // da live" seja uma consulta só. Sem ele, a busca voltaria os homônimos de
+    // todas as campanhas e a tela teria de descartá-los depois de carregados —
+    // que é a forma de a busca dizer "16 resultados" e mostrar 3.
+    .searchIndex("search_nome", { searchField: "name", filterFields: ["campanha"] })
+    // A decoradora é procurada pelo nome da EMPRESA tanto quanto pelo dela:
+    // quem anotou "Ateliê Flor de Lis" no direct não lembra o nome da dona.
+    .searchIndex("search_empresa", { searchField: "empresa", filterFields: ["campanha"] }),
 
   // ── CATÁLOGO CENTRAL DE FORNECEDORES ──────────────────────────────────────
   // "Este fornecedor pertence ao catálogo desta empresa."

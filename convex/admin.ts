@@ -30,6 +30,19 @@ const origemValidator = v.union(
   v.literal("prospeccao"),
   v.literal("outro"),
 );
+
+/** As etapas aceitas — espelha a união do schema e de `lib/campanha.ts`. */
+const estagioValidator = v.union(
+  v.literal("novo"),
+  v.literal("contato_preparado"),
+  v.literal("contatado"),
+  v.literal("interessado"),
+  v.literal("confirmou"),
+  v.literal("participou"),
+  v.literal("testando"),
+  v.literal("convertido"),
+  v.literal("descartado"),
+);
 import { ACTIVE_WINDOWS, isActiveWithin } from "./lib/presence";
 import { deleteBetterAuthAccount } from "./lib/authAccount";
 import { exigirNumeroReal } from "./lib/numeroGravavel";
@@ -500,21 +513,68 @@ export const listLandingLeads = query({
   args: {
     /** Só os desta campanha. Ausente = todos. Filtro do BANCO, por índice. */
     campanha: v.optional(v.string()),
+    /**
+     * Só os nesta etapa. Ausente = todas.
+     *
+     * ── POR QUE O FILTRO É DO BANCO ─────────────────────────────────────────
+     * Filtrar a página já carregada devolveria "os não abordados ENTRE os 200
+     * primeiros" e a tela leria isso como "os não abordados". Com uma campanha
+     * de trezentas pessoas, a resposta estaria errada exatamente quando
+     * começasse a importar.
+     *
+     * O índice `by_campanha_status` responde os dois juntos. Sem campanha, a
+     * etapa sozinha não tem índice próprio — e não vale criar um: escolher
+     * etapa sem escolher campanha é pergunta de caixa de entrada inteira, que
+     * o teto de 200 já atende.
+     */
+    status: v.optional(estagioValidator),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
     // Mais um do que o teto: é assim que se sabe que há próxima página sem
     // contar a tabela inteira.
-    const encontrados = args.campanha
-      ? await ctx.db
+    const buscar = () => {
+      // ── "NOVO" É O AUSENTE, E O ÍNDICE NÃO SABE DISSO ───────────────────
+      // `status` ausente SIGNIFICA "novo" (ver o schema), e é o estado de todo
+      // interessado que chegou pela landing. Um índice casa o valor gravado,
+      // não o significado do vazio: buscar `status === "novo"` devolveria só
+      // quem foi marcado à mão e deixaria de fora exatamente as pessoas que
+      // mais precisam ser abordadas.
+      //
+      // Por isso "novo" lê a campanha inteira e resolve o ausente com
+      // `estagioDe`. As outras oito etapas são valores gravados de verdade e
+      // usam o índice composto.
+      if (args.campanha && args.status && args.status !== "novo") {
+        return ctx.db
+          .query("landingLeads")
+          .withIndex("by_campanha_status", (q) =>
+            q.eq("campanha", args.campanha).eq("status", args.status),
+          )
+          .order("desc")
+          .take(LIMITE_DE_INTERESSADOS + 1);
+      }
+      if (args.campanha) {
+        return ctx.db
           .query("landingLeads")
           .withIndex("by_campanha", (q) => q.eq("campanha", args.campanha))
           .order("desc")
-          .take(LIMITE_DE_INTERESSADOS + 1)
-      : await ctx.db.query("landingLeads").order("desc").take(LIMITE_DE_INTERESSADOS + 1);
+          .take(LIMITE_DE_INTERESSADOS + 1);
+      }
+      return ctx.db.query("landingLeads").order("desc").take(LIMITE_DE_INTERESSADOS + 1);
+    };
 
+    const encontrados = await buscar();
     const temMais = encontrados.length > LIMITE_DE_INTERESSADOS;
-    const leads = encontrados.slice(0, LIMITE_DE_INTERESSADOS);
+    // Sem campanha, a etapa é aplicada depois — e a tela avisa quando o teto
+    // foi atingido, porque aí a contagem é parcial e ela precisa saber.
+    // Filtra depois quando o índice não resolveu sozinho: sem campanha, ou
+    // com a etapa "novo", que é o ausente.
+    const indiceResolveu = !!args.campanha && !!args.status && args.status !== "novo";
+    const naEtapa =
+      args.status && !indiceResolveu
+        ? encontrados.filter((l) => estagioDe(l) === args.status)
+        : encontrados;
+    const leads = naEtapa.slice(0, LIMITE_DE_INTERESSADOS);
 
     return {
       temMais,
@@ -735,18 +795,6 @@ export const contatosAPreparar = query({
   },
 });
 
-
-const estagioValidator = v.union(
-  v.literal("novo"),
-  v.literal("contato_preparado"),
-  v.literal("contatado"),
-  v.literal("interessado"),
-  v.literal("confirmou"),
-  v.literal("participou"),
-  v.literal("testando"),
-  v.literal("convertido"),
-  v.literal("descartado"),
-);
 
 export const setLandingLeadStatus = mutation({
   args: {

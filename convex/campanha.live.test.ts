@@ -335,3 +335,65 @@ describe("a inscrição pela landing pode chegar marcada", () => {
     expect(f.total, "a segunda inscrição apagou a campanha").toBe(1);
   });
 });
+
+describe("o filtro por etapa", () => {
+  it("filtra no BANCO quando há campanha — pelo índice composto", async () => {
+    // "Quem ainda não foi abordado?" é a pergunta mais frequente da campanha.
+    // Filtrar a página carregada devolveria "os não abordados ENTRE os 200
+    // primeiros", e a tela leria isso como "os não abordados".
+    const { admin, interessado } = await cenario();
+    await interessado({ campanha: LIVE_ALTAR.slug, name: "Nova", status: "novo" });
+    await interessado({ campanha: LIVE_ALTAR.slug, name: "Confirmada", status: "confirmou" });
+    await interessado({ campanha: LIVE_ALTAR.slug, name: "Cliente", status: "convertido" });
+
+    const confirmadas = await admin.query(api.admin.listLandingLeads, {
+      campanha: LIVE_ALTAR.slug,
+      status: "confirmou",
+    });
+    expect(confirmadas.leads.map((l) => l.name)).toEqual(["Confirmada"]);
+  });
+
+  it("e a etapa sozinha, sem campanha, também responde", async () => {
+    const { admin, interessado } = await cenario();
+    await interessado({ name: "Nova" });
+    await interessado({ name: "Descartada", status: "descartado" });
+
+    const r = await admin.query(api.admin.listLandingLeads, { status: "descartado" });
+    expect(r.leads.map((l) => l.name)).toEqual(["Descartada"]);
+  });
+
+  it("registro SEM status aparece no filtro de `novo` — ausente é novo", async () => {
+    // O ausente tem significado declarado. Se o filtro não o alcançasse, os
+    // interessados que já chegaram pela landing sumiriam da etapa em que
+    // estão.
+    const { admin, interessado } = await cenario();
+    await interessado({ campanha: LIVE_ALTAR.slug, name: "Sem status" });
+    const r = await admin.query(api.admin.listLandingLeads, { status: "novo" });
+    expect(r.leads.map((l) => l.name)).toEqual(["Sem status"]);
+  });
+
+  it("COM campanha, o filtro `novo` também alcança quem não tem status", async () => {
+    // O índice casa `status === "novo"`, e quem chegou pela landing tem o
+    // campo AUSENTE. Sem tratar isso, a pergunta mais frequente da campanha —
+    // "quem ainda não foi abordado?" — devolveria vazio justamente para as
+    // pessoas que mais precisam ser abordadas.
+    const { admin, interessado } = await cenario();
+    await interessado({ campanha: LIVE_ALTAR.slug, name: "Sem status" });
+    await interessado({ campanha: LIVE_ALTAR.slug, name: "Marcada novo", status: "novo" });
+    await interessado({ campanha: LIVE_ALTAR.slug, name: "Contatada", status: "contatado" });
+
+    const novos = await admin.query(api.admin.listLandingLeads, {
+      campanha: LIVE_ALTAR.slug,
+      status: "novo",
+    });
+    expect(novos.leads.map((l) => l.name).sort()).toEqual(["Marcada novo", "Sem status"]);
+  });
+
+  it("sem filtro, todas as etapas voltam", async () => {
+    const { admin, interessado } = await cenario();
+    await interessado({ status: "novo" });
+    await interessado({ status: "descartado" });
+    const r = await admin.query(api.admin.listLandingLeads, {});
+    expect(r.leads).toHaveLength(2);
+  });
+});

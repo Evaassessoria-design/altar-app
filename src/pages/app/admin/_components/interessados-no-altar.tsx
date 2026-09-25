@@ -239,7 +239,12 @@ function DetalheDoInteressado({
 export function InteressadosNoAltar() {
   /** `""` = todas as campanhas. O filtro é do BANCO, por índice. */
   const [campanha, setCampanha] = useState("");
-  const dados = useQuery(api.admin.listLandingLeads, campanha ? { campanha } : {});
+  /** `""` = todas as etapas. */
+  const [etapa, setEtapa] = useState<EstagioDoInteressado | "">("");
+  const dados = useQuery(api.admin.listLandingLeads, {
+    ...(campanha ? { campanha } : {}),
+    ...(etapa ? { status: etapa } : {}),
+  });
   const funil = useQuery(
     api.admin.funilDaCampanha,
     campanha ? { campanha } : "skip",
@@ -300,6 +305,28 @@ export function InteressadosNoAltar() {
             <Upload className="size-3.5" /> Importar lista
           </Button>
         </div>
+
+        {/* ── O FILTRO POR ETAPA ─────────────────────────────────────────────
+            "Quem ainda não foi abordado?" é a pergunta mais frequente de uma
+            campanha, e ela não pode custar rolar duzentas linhas. O filtro é
+            do BANCO: filtrar a página carregada devolveria "os não abordados
+            ENTRE os 200 primeiros" e a tela leria isso como "os não
+            abordados". */}
+        <div className="mt-2">
+          <select
+            value={etapa}
+            onChange={(e) => setEtapa(e.target.value as EstagioDoInteressado | "")}
+            aria-label="Filtrar por etapa"
+            className="h-8 w-full cursor-pointer rounded-md border border-input bg-background px-2 text-xs sm:w-56"
+          >
+            <option value="">Todas as etapas</option>
+            {ESTAGIOS.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.rotulo}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {importando && <ImportarInteressados onFechar={() => setImportando(false)} />}
@@ -340,10 +367,18 @@ export function InteressadosNoAltar() {
       {leads.length === 0 ? (
         <div className="px-5 py-8 text-center">
           <p className="text-sm font-medium">
-            {campanha ? "Nenhum interessado nesta campanha ainda" : "Nenhum interessado ainda"}
+            {etapa
+              ? `Ninguém em "${ESTAGIOS.find((e) => e.id === etapa)?.rotulo}"`
+              : campanha
+                ? "Nenhum interessado nesta campanha ainda"
+                : "Nenhum interessado ainda"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Quem pedir demonstração ou entrar na lista beta pelo site aparece aqui.
+            {etapa
+              ? "Tire o filtro para ver as outras etapas."
+              : campanha
+                ? "Divulgue o link com ?campanha= para as inscrições chegarem já marcadas, ou importe uma lista."
+                : "Quem pedir demonstração ou entrar na lista beta pelo site aparece aqui."}
           </p>
         </div>
       ) : (

@@ -1,4 +1,5 @@
 import { query } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireUser } from "./lib/identity";
 import { diasEntre, montarAtencao, JANELA_RETORNO_DIAS } from "./lib/attention";
@@ -136,11 +137,22 @@ export const getDashboardStats = query({
  * leitura generosa — o corte fino de "isto merece atenção?" é da regra, não da
  * consulta.
  */
-export const getAttentionBoard = query({
-  args: {},
-  handler: async (ctx) => {
-    const user = await requireUser(ctx);
-
+/**
+ * A leitura do painel de atenção, separada da consulta que a expõe.
+ *
+ * ── POR QUE UM HELPER E NÃO DUAS CONSULTAS ──────────────────────────────────
+ * O briefing do Assistente precisa exatamente destes eventos com estes
+ * motivos. Uma segunda consulta refazendo as leituras significaria duas
+ * versões da pergunta "o que precisa de atenção?", e elas divergem na primeira
+ * vez que uma das duas ganhar uma regra nova — com o Dashboard e o Assistente
+ * dizendo coisas diferentes sobre o mesmo dia.
+ *
+ * Em Convex uma query não chama outra. Um helper exportado chama, e é assim
+ * que as duas dividem a MESMA leitura e a MESMA regra.
+ */
+export async function carregarAtencao(ctx: QueryCtx, userId: Id<"users">) {
+  const user = { _id: userId };
+  {
     const hojeISO = dataDoDia();
 
     const eventos = (
@@ -274,5 +286,13 @@ export const getAttentionBoard = query({
     );
 
     return montarAtencao(entradas);
+  }
+}
+
+export const getAttentionBoard = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    return carregarAtencao(ctx, user._id);
   },
 });

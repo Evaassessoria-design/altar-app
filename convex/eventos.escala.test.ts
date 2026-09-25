@@ -218,9 +218,23 @@ describe("nada atravessa a fronteira da conta na leitura em lote", () => {
 // ═════════════════════════════════════════════════════════════════════════════
 const DASHBOARD = readFileSync("convex/dashboard.ts", "utf-8");
 
+/**
+ * O corpo da REGRA de leitura do painel.
+ *
+ * Aponta para `carregarAtencao`, não para `getAttentionBoard`. A leitura foi
+ * extraída para um helper quando o briefing do Assistente passou a precisar
+ * exatamente destes eventos com estes motivos — duas telas, UMA versão da
+ * pergunta "o que precisa de atenção?".
+ *
+ * A query virou uma casca de três linhas, e esta trava, apontada para ela,
+ * passou a não proteger nada: ela continuava VERDE enquanto o N+1 podia voltar
+ * ao helper sem ninguém ver. Trava que passa calada é pior do que trava
+ * nenhuma, e foi por isso que ela mudou de alvo em vez de ser afrouxada.
+ */
 function corpoDoPainel(): string {
-  const i = DASHBOARD.indexOf("export const getAttentionBoard");
-  const proxima = DASHBOARD.indexOf("export const", i + 10);
+  const i = DASHBOARD.indexOf("export async function carregarAtencao");
+  expect(i, "carregarAtencao sumiu de dashboard.ts").toBeGreaterThan(-1);
+  const proxima = DASHBOARD.indexOf("\nexport ", i + 10);
   return DASHBOARD.slice(i, proxima === -1 ? DASHBOARD.length : proxima)
     .split("\n")
     .filter((l) => !l.trim().startsWith("//"))

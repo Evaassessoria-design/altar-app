@@ -148,22 +148,39 @@ describe("painel de atencao sobre banco real", () => {
     }
   });
 
+/**
+ * O corpo da REGRA, nao o da query.
+ *
+ * `getAttentionBoard` virou uma casca de tres linhas quando a leitura foi
+ * extraida para `carregarAtencao`, para o briefing do Assistente reusar a
+ * mesma pergunta. Estas travas liam a casca e passavam a nao proteger nada —
+ * e uma trava que passa calada e pior do que nenhuma.
+ */
+function corpoDeCarregarAtencao(fonte: string): string {
+  const i = fonte.indexOf("export async function carregarAtencao");
+  expect(i, "carregarAtencao sumiu de dashboard.ts").toBeGreaterThan(-1);
+  const proxima = fonte.indexOf("\nexport ", i + 10);
+  return fonte.slice(i, proxima === -1 ? undefined : proxima);
+}
+
   it("a query e somente leitura e exige usuario", () => {
+    // A leitura mora em `carregarAtencao`, um helper exportado que o briefing
+    // do Assistente tambem chama — duas telas, UMA versao da pergunta "o que
+    // precisa de atencao?". A query que a expoe e so a casca com o guarda.
     const fonte = readFileSync("convex/dashboard.ts", "utf-8");
-    const i = fonte.indexOf("export const getAttentionBoard =");
-    const corpo = fonte.slice(i);
-    expect(corpo).toContain("requireUser");
-    expect(corpo).toContain('withIndex("by_user"');
-    expect(corpo).not.toMatch(/ctx\.db\.(insert|patch|delete)/);
+    const query = fonte.slice(fonte.indexOf("export const getAttentionBoard ="));
+    expect(query).toContain("requireUser");
+
+    const regra = corpoDeCarregarAtencao(fonte);
+    expect(regra).toContain('withIndex("by_user"');
+    expect(regra).not.toMatch(/ctx\.db\.(insert|patch|delete)/);
   });
 
   it("a query alimenta TODOS os campos que a regra le", () => {
     // O espelho acima so prova a regra se a query de verdade mandar os mesmos
     // campos. Um campo novo alimentado so no teste passaria despercebido e o
     // motivo nunca apareceria em producao.
-    const fonte = readFileSync("convex/dashboard.ts", "utf-8");
-    const i = fonte.indexOf("export const getAttentionBoard =");
-    const corpo = fonte.slice(i);
+    const corpo = corpoDeCarregarAtencao(readFileSync("convex/dashboard.ts", "utf-8"));
     for (const campo of [
       "checklistPendentes",
       "comprasPendentes",
@@ -173,7 +190,7 @@ describe("painel de atencao sobre banco real", () => {
       "equipeEscalada",
       "acoesDeFornecedor",
     ]) {
-      expect(corpo, `getAttentionBoard nao envia ${campo}`).toContain(`${campo}:`);
+      expect(corpo, `carregarAtencao nao envia ${campo}`).toContain(`${campo}:`);
     }
   });
 });

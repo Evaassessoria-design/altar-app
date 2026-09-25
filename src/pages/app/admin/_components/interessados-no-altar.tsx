@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { cn } from "@/lib/utils.ts";
 import { formatTimestamp } from "@/lib/safe-date.ts";
+import { FilaDeContato } from "./fila-de-contato.tsx";
 import {
   ESTAGIOS,
   LIVE_ALTAR,
@@ -299,6 +300,15 @@ export function InteressadosNoAltar() {
               A campanha passou do teto de contagem — os números acima são parciais.
             </p>
           )}
+        </div>
+      )}
+
+      {/* ── A FILA DE CONTATO ────────────────────────────────────────────
+          Só com uma campanha escolhida: "quem falta abordar" é uma pergunta
+          de campanha, não da caixa de entrada inteira. */}
+      {campanha && (
+        <div className="border-b border-border">
+          <FilaDeContato campanha={campanha} />
         </div>
       )}
 

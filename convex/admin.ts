@@ -13,6 +13,7 @@ import {
   origemDe,
 } from "./lib/campanha";
 import { limparCampos } from "./lib/limparCampos";
+import { prepararContatos } from "./lib/contatoDaCampanha";
 import { dataDoDia } from "./lib/dataDoDia";
 
 /** As origens aceitas — espelha a união do schema. */
@@ -572,6 +573,47 @@ export const funilDaCampanha = query({
 
 /** Até onde a contagem varre antes de admitir que não viu tudo. */
 export const VARREDURA_DA_CAMPANHA = 5_000;
+
+/**
+ * A FILA DE CONTATO de uma campanha — quem falta abordar, com a mensagem pronta.
+ *
+ * ── O QUE ESTA CONSULTA FAZ, E ONDE ELA PARA ────────────────────────────────
+ * Devolve texto. Não envia nada, não agenda envio, não muda etapa de ninguém e
+ * não conhece número de telefone de saída. O último passo — apertar enviar —
+ * é de uma pessoa, e continua sendo depois desta rodada.
+ *
+ * É a mesma trava que a Central sustenta desde que nasceu: uma campanha que
+ * dispara sozinha erra em escala, e erro em escala com o nome da empresa em
+ * cima não volta atrás.
+ *
+ * O rascunho é MODELO DE TEXTO, não chamada de IA — ver o cabeçalho de
+ * `lib/contatoDaCampanha.ts`. Resumindo os três motivos: a live não pode
+ * depender de uma chamada externa que falha ao vivo; quem revisa trinta
+ * mensagens precisa que elas sejam previsíveis; e um modelo não tem como
+ * afirmar um fato que ninguém preencheu.
+ */
+export const contatosAPreparar = query({
+  args: { campanha: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const leads = await ctx.db
+      .query("landingLeads")
+      .withIndex("by_campanha", (q) => q.eq("campanha", args.campanha))
+      .take(VARREDURA_DA_CAMPANHA + 1);
+
+    const campanha = campanhaPorSlug(args.campanha);
+    return {
+      campanha: campanha ?? null,
+      completa: leads.length <= VARREDURA_DA_CAMPANHA,
+      // Campanha desconhecida não inventa data: sem ela não há convite a
+      // escrever, e a fila volta vazia em vez de mandar "no dia undefined".
+      contatos: campanha
+        ? prepararContatos(leads.slice(0, VARREDURA_DA_CAMPANHA), campanha)
+        : [],
+    };
+  },
+});
+
 
 const estagioValidator = v.union(
   v.literal("novo"),

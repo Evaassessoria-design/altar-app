@@ -5,11 +5,14 @@ import type { QueryCtx } from "./_generated/server";
 import { requireAdmin } from "./lib/adminGuard";
 import {
   campanhaPorSlug,
+  carimbosAGravar,
+  definicaoDoEstagio,
   diasAte,
   estagioDe,
   procurouOAltar,
   type Campanha,
 } from "./lib/campanha";
+import { redigirParaLead } from "./lib/escritorio/redacaoDaCampanha";
 import { modeloPorId, type TipoDeMensagem } from "./lib/mensagensDaCampanha";
 import { proximaAcao, type FatosDoInteressado } from "./lib/proximaAcao";
 import { dataDoDia } from "./lib/dataDoDia";
@@ -101,20 +104,6 @@ async function fatosDe(
 
 // ── Preparar ───────────────────────────────────────────────────────────────
 
-/** Por onde falar com ela. WhatsApp na frente: é onde decoradora responde. */
-function canalDe(lead: Doc<"landingLeads">): {
-  canal: "whatsapp" | "email";
-  destinatario?: string;
-} {
-  const zap = lead.whatsapp?.trim();
-  if (zap) return { canal: "whatsapp", destinatario: zap };
-  const email = lead.email?.trim();
-  if (email) return { canal: "email", destinatario: email };
-  // Sem contato nenhum: o rascunho ainda nasce, com a pendência declarada. O
-  // contrário faria a lista prometer que todo mundo é alcançável.
-  return { canal: "whatsapp" };
-}
-
 async function redigirPara(
   ctx: QueryCtx,
   lead: Doc<"landingLeads">,
@@ -132,34 +121,16 @@ async function redigirPara(
   const modelo = modeloPorId(tipo);
   if (!modelo) return null;
 
-  const { canal, destinatario } = canalDe(lead);
-  const redigido = modelo.redigir({
-    nome: lead.name,
-    empresa: lead.empresa,
-    origem: lead.origem,
-    campanha,
-  });
-
-  const pendencias = [...redigido.pendencias];
-  if (!destinatario) {
-    pendencias.push("Não há telefone nem e-mail gravado para esta pessoa.");
-  }
-  // O modelo tem um canal preferido, mas o cadastro manda: preparar um e-mail
-  // para quem só tem WhatsApp é um rascunho que não tem para onde ir.
-  if (modelo.canal === "email" && canal === "whatsapp" && destinatario) {
-    pendencias.push("Este modelo é de e-mail, e só há WhatsApp gravado.");
-  }
-
-  return {
-    tipo,
-    canalSugerido: destinatario ? canal : modelo.canal,
-    destinatario,
-    texto: redigido.texto,
-    pendencias,
-    contexto: sugestao.motivo,
-    motivo: tipoPedido ? "Escolhido por uma pessoa." : sugestao.acao,
-    proximaAcao: modelo.proximaAcao,
-  };
+  // A redação mora em `lib/escritorio/redacaoDaCampanha.ts` porque o ciclo do
+  // Escritório também escreve rascunho. Duas cópias divergiriam na primeira
+  // correção de texto, e a mesma pessoa receberia versões diferentes conforme
+  // o botão por onde a mensagem saiu.
+  return redigirParaLead(
+    lead,
+    modelo,
+    sugestao.motivo,
+    tipoPedido ? "Escolhido por uma pessoa." : sugestao.acao,
+  );
 }
 
 const tipoValidator = v.string();
@@ -443,6 +414,40 @@ export const decidir = mutation({
       decididoEm: rascunho.decididoEm ?? agora,
       enviadoEm: agora,
       atualizadoEm: agora,
+    });
+
+    // ── E A PESSOA AVANÇA NO FUNIL ─────────────────────────────────────────
+    // ── O DEFEITO QUE ISTO CORRIGE ─────────────────────────────────────────
+    // Marcar "Já enviei" mexia só no rascunho. A pessoa continuava em "Novo",
+    // e a tela seguia dizendo "Procurou a ALTAR e ainda não teve resposta"
+    // sobre alguém que acabara de receber o convite.
+    //
+    // Pior: o ciclo do Escritório a veria como não abordada e prepararia OUTRO
+    // convite na rodada seguinte — a mesma pessoa recebendo a mesma mensagem
+    // duas vezes.
+    //
+    // Para onde ela vai é decisão do MODELO (`estagioApos`), não desta função:
+    // mandar um convite avança para "Convite enviado"; mandar um lembrete não
+    // avança ninguém, porque quem recebe lembrete já estava confirmado.
+    const modelo = modeloPorId(rascunho.tipo);
+    const destino = modelo?.estagioApos;
+    if (!destino) return;
+
+    const lead = await ctx.db.get(rascunho.landingLeadId);
+    if (!lead) return;
+
+    // Nunca REBOBINA. Quem já está em "Interessado" não volta para "Convite
+    // enviado" porque um convite atrasado foi marcado agora — e a ordem das
+    // etapas é o que diz qual das duas está na frente.
+    const atual = definicaoDoEstagio(estagioDe(lead));
+    const novo = definicaoDoEstagio(destino);
+    if (novo.marcos.length <= atual.marcos.length) return;
+
+    const carimbos = carimbosAGravar(lead, destino, agora);
+    await ctx.db.patch(rascunho.landingLeadId, {
+      status: destino,
+      ultimaInteracao: dataDoDia(),
+      ...(carimbos ? { marcosEm: { ...lead.marcosEm, ...carimbos } } : {}),
     });
   },
 });

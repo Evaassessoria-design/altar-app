@@ -2307,6 +2307,117 @@ export default defineSchema({
     // "Meus trabalhos recentes", que é a única leitura que a tela faz.
     .index("by_user", ["userId"]),
 
+  // ── ATÉ ONDE O ESCRITÓRIO VAI SOZINHO ─────────────────────────────────────
+  // Uma linha por capacidade cuja escolha DIFERE do padrão do catálogo.
+  //
+  // ── POR QUE SÓ AS DIFERENÇAS ──────────────────────────────────────────────
+  // O padrão vive em código (`lib/escritorio/autonomia.ts`). Semear quinze
+  // linhas por campanha faria toda campanha nova depender de uma gravação que
+  // pode falhar — e a primeira que falhasse viraria uma campanha sem política
+  // nenhuma, que é o estado mais perigoso possível.
+  //
+  // Ausente significa "o padrão do catálogo", e o padrão é: verde ligado,
+  // amarelo e vermelho desligados.
+  //
+  // ── POR QUE NÃO É `adminAutonomyPolicy` ───────────────────────────────────
+  // Aquela é de OUTRO EIXO: canal × departamento, para a Central decidir se
+  // uma resposta a uma cliente pode sair sozinha. Esta é capacidade × campanha,
+  // para o Escritório decidir se pode trabalhar sem ninguém pedir.
+  //
+  // Forçar as duas na mesma tabela exigiria campos nulos dos dois lados e a
+  // primeira consulta que esquecesse um filtro leria a política errada.
+  escritorioAutonomia: defineTable({
+    /** O slug de `lib/campanha.ts`. */
+    campanha: v.string(),
+    /** O id de `lib/escritorio/autonomia.ts`. */
+    capacidade: v.string(),
+    ligada: v.boolean(),
+    /** Decisão sem autor não é decisão. */
+    alteradoPorUserId: v.id("users"),
+    alteradoEm: v.number(),
+  })
+    .index("by_campanha", ["campanha"])
+    .index("by_campanha_capacidade", ["campanha", "capacidade"]),
+
+  // ── O QUE O ESCRITÓRIO FEZ, E QUANDO ──────────────────────────────────────
+  // Uma linha por execução de "Rodar Escritório".
+  //
+  // ── POR QUE GUARDAR ───────────────────────────────────────────────────────
+  // Um sistema que trabalha sozinho precisa poder ser auditado depois. Sem
+  // este registro, a única prova do que ele fez seria o efeito colateral — e
+  // quando o efeito é "nada mudou, porque já estava tudo pronto", não há prova
+  // nenhuma de que ele rodou.
+  //
+  // É também o que sustenta o relatório do dia: "hoje o Escritório fez" precisa
+  // de uma fonte, e derivar isso dos rascunhos perderia as rodadas que não
+  // produziram nada.
+  escritorioExecucoes: defineTable({
+    campanha: v.string(),
+    /** Quem mandou rodar. `sistema` fica para quando houver agendamento. */
+    disparadoPor: v.union(v.literal("humano"), v.literal("sistema")),
+    disparadoPorUserId: v.optional(v.id("users")),
+    /** Quantas pessoas foram olhadas. */
+    analisadas: v.number(),
+    mensagensPreparadas: v.number(),
+    duplicidadesApontadas: v.number(),
+    decisoesParaVoce: v.number(),
+    /** Intenções puladas por já existirem. É a idempotência, medida. */
+    jaExistiam: v.number(),
+    /** Intenções puladas porque a capacidade está desligada. */
+    bloqueadasPorAutonomia: v.number(),
+    /** A frase que a tela mostra. Gravada para o histórico não depender da regra. */
+    resumo: v.string(),
+    /**
+     * Quantas chamadas de modelo esta rodada gastou.
+     *
+     * Hoje é sempre ZERO — o ciclo inteiro é determinístico, e as mensagens
+     * saem de modelo de texto. O campo existe para que ligar IA no ciclo, um
+     * dia, tenha onde aparecer antes de virar fatura.
+     */
+    chamadasDeIa: v.number(),
+    criadoEm: v.number(),
+  }).index("by_campanha_criadoEm", ["campanha", "criadoEm"]),
+
+  // ── O QUE A PESSOA RESPONDEU ──────────────────────────────────────────────
+  // ── POR QUE ISTO NÃO É `communicationMessages` ────────────────────────────
+  // Aquela tabela guarda mensagem que CHEGOU por um canal, com id externo,
+  // thread e carimbo da plataforma. Aqui não chegou nada: uma pessoa leu o
+  // WhatsApp dela e colou o texto.
+  //
+  // A diferença importa na hora de confiar no dado. Guardar um texto digitado
+  // à mão ao lado de mensagens de canal faria a Central tratar os dois como
+  // igualmente verificados — e um deles não é verificado por nada além da
+  // memória de quem digitou.
+  //
+  // `registradoPorUserId` existe por isso: toda linha aqui tem autor humano, e
+  // a tela mostra "registrado por você".
+  respostasRegistradas: defineTable({
+    landingLeadId: v.id("landingLeads"),
+    campanha: v.string(),
+    /** O texto como a pessoa colou. Nunca reescrito. */
+    texto: v.string(),
+    /** O que `lib/respostaDoInteressado.ts` leu. */
+    intencao: v.string(),
+    confianca: v.number(),
+    sinais: v.array(v.string()),
+    emailEncontrado: v.optional(v.string()),
+    precisaDeHumano: v.boolean(),
+    /** Para onde a leitura sugeriu mover. Ausente quando `incerto`. */
+    estagioSugerido: v.optional(v.string()),
+    /**
+     * Para onde de fato moveu. AUSENTE = ninguém moveu.
+     *
+     * Separado do sugerido de propósito: é a prova de que a classificação
+     * sugere e uma pessoa decide, e permite medir depois quantas vezes a
+     * sugestão foi aceita.
+     */
+    estagioAplicado: v.optional(v.string()),
+    registradoPorUserId: v.id("users"),
+    criadoEm: v.number(),
+  })
+    .index("by_lead", ["landingLeadId"])
+    .index("by_campanha_criadoEm", ["campanha", "criadoEm"]),
+
   adminAutonomyPolicy: defineTable({
     vertical,
     channel,

@@ -84,7 +84,29 @@ describe("nenhuma tabela paralela ao que já existe", () => {
     // executor, e ninguém a lê do lado do outbox. `enviado_manualmente` é
     // anotação de que uma pessoa mandou com o dedo dela. A trava de fronteira
     // está em `convex/rascunhos.campanha.test.ts`.
-    expect(TABELAS.length).toBe(39);
+    //
+    // 39 → 42: o Escritório Virtual passou a trabalhar sozinho, e três coisas
+    // que antes não existiam precisaram de onde morar.
+    //
+    // `escritorioAutonomia` — até onde ele vai sem perguntar. NÃO é
+    // `adminAutonomyPolicy`: aquela é de outro eixo (canal × departamento,
+    // para a Central decidir se uma resposta a uma cliente pode sair). Esta é
+    // capacidade × campanha, para o Escritório decidir se pode trabalhar sem
+    // ninguém pedir. Forçar as duas na mesma tabela exigiria campos nulos dos
+    // dois lados, e a primeira consulta que esquecesse um filtro leria a
+    // política errada.
+    //
+    // `escritorioExecucoes` — o que ele fez, e quando. Um sistema que trabalha
+    // sozinho precisa poder ser auditado depois, e derivar isso dos rascunhos
+    // perderia justamente as rodadas que não produziram nada — que são a
+    // maioria, e são a prova de que ele rodou e estava tudo em dia.
+    //
+    // `respostasRegistradas` — o que a pessoa respondeu, colado por um humano.
+    // NÃO é `communicationMessages`: aquela guarda mensagem que CHEGOU por um
+    // canal, com id externo e carimbo da plataforma. Aqui não chegou nada.
+    // Guardar as duas juntas faria a Central tratar como igualmente
+    // verificados um dado de canal e um dado de memória de quem digitou.
+    expect(TABELAS.length).toBe(42);
   });
 });
 

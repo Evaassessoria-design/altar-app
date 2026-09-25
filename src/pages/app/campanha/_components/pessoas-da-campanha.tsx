@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { cn } from "@/lib/utils.ts";
-import { Mail, PenLine, Phone, Search, UserX } from "lucide-react";
+import { Mail, MessageSquarePlus, PenLine, Phone, Search, UserX } from "lucide-react";
+import { RegistrarResposta } from "./registrar-resposta.tsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AS PESSOAS DA CAMPANHA
@@ -41,6 +42,8 @@ export function PessoasDaCampanha({
   aoLimparEtapa: () => void;
 }) {
   const [termo, setTermo] = useState("");
+  /** Em quem a caixa de resposta está aberta. `null` = nenhuma. */
+  const [respondendo, setRespondendo] = useState<Id<"landingLeads"> | null>(null);
   const buscando = termo.trim().length >= MINIMO_PARA_BUSCAR;
 
   // Enquanto há busca, a listagem não roda: são duas respostas para a mesma
@@ -155,10 +158,12 @@ export function PessoasDaCampanha({
       ) : (
         <ul className="space-y-2">
           {pessoas.map((p) => (
-            <li
-              key={p._id}
-              className="rounded-lg border border-border/60 p-3 sm:flex sm:items-center sm:gap-3"
-            >
+            <li key={p._id} className="rounded-lg border border-border/60 p-3">
+              {/* A linha da pessoa vira duas colunas no desktop; o painel de
+                  resposta fica ABAIXO dela, em qualquer largura. Sem este
+                  agrupamento, o `sm:flex` do cartão colocaria o painel ao
+                  lado do nome e espremeria os dois. */}
+              <div className="sm:flex sm:items-center sm:gap-3">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <p className="truncate font-medium leading-tight">{p.name}</p>
@@ -221,7 +226,28 @@ export function PessoasDaCampanha({
                 >
                   <PenLine className="size-3.5" />
                 </Button>
+                {/* Registrar o que ela respondeu é a ação mais frequente
+                    depois do envio — e antes disto só existia mudar a etapa
+                    à mão, sem guardar o que ela disse. */}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setRespondendo(respondendo === p._id ? null : p._id)}
+                  aria-label={`Registrar resposta de ${p.name}`}
+                  className="h-8 w-8 flex-shrink-0 cursor-pointer p-0"
+                >
+                  <MessageSquarePlus className="size-3.5" />
+                </Button>
               </div>
+              </div>
+
+              {respondendo === p._id && (
+                <RegistrarResposta
+                  leadId={p._id}
+                  nome={p.name}
+                  aoFechar={() => setRespondendo(null)}
+                />
+              )}
             </li>
           ))}
         </ul>

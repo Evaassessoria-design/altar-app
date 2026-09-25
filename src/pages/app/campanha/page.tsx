@@ -5,6 +5,7 @@ import { api } from "@/convex/_generated/api.js";
 import { LIVE_ALTAR } from "@/convex/lib/campanha";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { ComercialHoje } from "./_components/comercial-hoje.tsx";
+import { EscritorioTrabalhando } from "./_components/escritorio-trabalhando.tsx";
 import { FunilDaCampanha } from "./_components/funil-da-campanha.tsx";
 import { PessoasDaCampanha } from "./_components/pessoas-da-campanha.tsx";
 import { FilaDeRevisao } from "./_components/fila-de-revisao.tsx";
@@ -112,6 +113,10 @@ export default function CampanhaPage() {
         // importadores que divergem na primeira correção.
         <ImportarInteressados onFechar={() => setImportando(false)} />
       )}
+
+      {/* O Escritório vem ANTES do resumo comercial: a primeira pergunta da
+          manhã é "o que ele já fez por mim?", não "como está o funil". */}
+      <EscritorioTrabalhando campanha={LIVE_ALTAR.slug} />
 
       <ComercialHoje campanha={LIVE_ALTAR.slug} />
       <FilaDeRevisao campanha={LIVE_ALTAR.slug} />

@@ -18,7 +18,12 @@ import type { Id } from "./_generated/dataModel";
 // No lugar entrou o que É a operação dela: existe projeto de montagem?
 // ─────────────────────────────────────────────────────────────────────────────
 
-const FONTE = readFileSync(join(__dirname, "health.ts"), "utf8");
+// A CONTA migrou para `lib/saudeDoEvento.ts` quando a listagem passou a ler
+// em lote: `health.ts` virou só leitura de banco. A trava segue a regra para
+// onde ela mora — o que ela cobra não mudou uma vírgula.
+const FONTE = readFileSync(join(__dirname, "lib", "saudeDoEvento.ts"), "utf8");
+/** A LEITURA do banco continua em `health.ts` — a conta é que saiu de lá. */
+const LEITURA = readFileSync(join(__dirname, "health.ts"), "utf8");
 
 /** Só o corpo do cálculo — o cabeçalho explica o que foi removido. */
 const CODIGO = FONTE.split("\n")
@@ -99,19 +104,22 @@ describe("o critério de assessoria saiu do cálculo", () => {
   it("entrou um critério da operação da decoradora", () => {
     expect(CODIGO).toContain('key: "montagem"');
     expect(CODIGO).toContain("Montagem planejada");
-    expect(CODIGO).toContain("assemblyItems.length > 0");
+    expect(CODIGO).toContain("ok: dados.temItensDeMontagem");
   });
 
   it("usa dado que já existe — nenhuma regra nem módulo novo", () => {
     // `assemblyItems` já alimenta o Caderno de Montagem, o Projeto de
     // Decoração e o Carregamento.
-    expect(CODIGO).toContain('ctx.db.query("assemblyItems")');
-    expect(CODIGO).toContain('withIndex("by_event"');
+    // A leitura mora em `health.ts`, nos DOIS caminhos: a tela de um evento lê
+    // por evento, a listagem lê por dono e agrupa. Nenhuma tabela nova.
+    expect(LEITURA).toContain('ctx.db.query("assemblyItems")');
+    expect(LEITURA).toContain('withIndex("by_event"');
+    expect(LEITURA).toContain('withIndex("by_user"');
   });
 
   it("o nome da assessoria continua sendo INFORMADO — só não é exigido", () => {
     // Saber quem coordena o evento é contexto útil para a decoradora.
-    expect(CODIGO).toContain('suppliers.find((s) => s.category === "assessoria")');
+    expect(CODIGO).toContain('dados.fornecedores.find((s) => s.category === "assessoria")');
   });
 });
 
@@ -163,7 +171,7 @@ describe("evento sem assessoria não fica incompleto", () => {
 describe("os critérios medem operação, não adesão a funcionalidade", () => {
   const bloco = () =>
     CODIGO.slice(
-      CODIGO.indexOf("const checks: HealthCheck[] = ["),
+      CODIGO.indexOf("const checks: ChecagemDeSaude[] = ["),
       CODIGO.indexOf("// Pontos de atenção"),
     );
 

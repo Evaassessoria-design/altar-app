@@ -3,9 +3,10 @@ import { responsavelDoEvento } from "./lib/responsavel";
 import { dataDoDia } from "./lib/dataDoDia";
 import { v } from "convex/values";
 import type { QueryCtx } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { getOwnedEvent, requireUser } from "./lib/identity";
 import { montarResumoOperacional } from "./lib/eventSummary";
+import { saudeDoEvento } from "./lib/saudeDoEvento";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SAÚDE DO EVENTO (CORE). Calculada SOMENTE a partir de dados reais já existentes
@@ -26,12 +27,20 @@ export type EventHealth = {
   responsiblePhone?: string;
 };
 
+/**
+ * A saúde de UM evento, lendo o banco por evento.
+ *
+ * Continua assim para a tela do evento, onde a pergunta é sobre um só e a
+ * lista completa de avisos é usada. A LISTA não passa por aqui — ver
+ * `listCards`, que lê em lote. A conta é a mesma nos dois caminhos
+ * (`lib/saudeDoEvento.ts`); só a leitura muda.
+ */
 async function computeHealth(
   ctx: QueryCtx,
   event: Doc<"events">,
 ): Promise<EventHealth> {
   const eventId = event._id;
-  const [contractDocs, txs, suppliers, team, briefing, assemblyItems] = await Promise.all([
+  const [documentos, txs, fornecedores, escalas, briefing, itens] = await Promise.all([
     ctx.db.query("contracts").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
     ctx.db.query("transactions").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
     ctx.db.query("eventSuppliers").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
@@ -39,94 +48,20 @@ async function computeHealth(
     ctx.db.query("briefings").withIndex("by_event", (q) => q.eq("eventId", eventId)).unique(),
     ctx.db.query("assemblyItems").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
   ]);
-  // Documentos sem `kind` são contratos legados (compat. com dados anteriores à multi-documento).
-  const contract = contractDocs.find((c) => (c.kind ?? "contract") === "contract");
 
-  const checks: HealthCheck[] = [
-    { key: "evento", label: "Dados do evento", ok: !!(event.name && event.date && event.location && event.clientName) },
-    { key: "contrato", label: "Contrato anexado", ok: !!contract },
-    // ── POR QUE "CONTRATO ANALISADO" SAIU ───────────────────────────────────
-    // Dependia de `contractAnalyzedAt`, que só existe para quem usa a leitura
-    // de contrato por IA. Uma decoradora que anexa o contrato e lê com os
-    // próprios olhos ficava presa em 7 de 8 para sempre — penalizada por não
-    // usar uma funcionalidade opcional.
-    //
-    // Critério de saúde tem de medir a OPERAÇÃO, não a adesão a um recurso.
-    // Foi removido em vez de substituído: os sete que restam são universais, e
-    // inventar um oitavo só para manter o número seria fabricar exigência.
-    //
-    // Efeito: contas que nunca usaram a IA sobem de percentual. É a correção,
-    // não um efeito colateral.
-    { key: "financeiro", label: "Financeiro", ok: txs.length > 0 },
-    { key: "fornecedores", label: "Fornecedores", ok: suppliers.length > 0 },
-    // ── POR QUE "ASSESSORIA DEFINIDA" SAIU ──────────────────────────────────
-    // Exigir uma assessoria cadastrada tratava um fornecedor DO CLIENTE como
-    // requisito do evento DELA. Aniversário, corporativo, formatura e festa
-    // infantil costumam não ter assessoria nenhuma — e casamento também pode
-    // não ter. Esses eventos ficavam com uma marca vermelha permanente, por
-    // uma ausência que não é falha.
-    //
-    // No lugar entrou o que É a operação da decoradora: existe projeto de
-    // montagem? Usa `assemblyItems`, que já alimenta o Caderno de Montagem, o
-    // Projeto de Decoração e o Carregamento. Nenhuma regra nova, nenhum
-    // módulo novo — só um dado que já existe.
-    { key: "montagem", label: "Montagem planejada", ok: assemblyItems.length > 0 },
-    { key: "responsavel", label: "Responsável definido", ok: team.length > 0 },
-    { key: "briefing", label: "Convidados (briefing)", ok: !!briefing?.guestCount?.trim() },
-  ];
+  const equipe = (await Promise.all(escalas.map((t) => ctx.db.get(t.teamMemberId))))
+    .filter((m): m is NonNullable<typeof m> => m !== null)
+    .map((m) => ({ _id: m._id as string, name: m.name, role: m.role, phone: m.phone }));
 
-  // Pontos de atenção — apenas ausências objetivas (nada presumido/inventado).
-  const attention: string[] = [];
-  // "Contrato não processado" saiu pelo mesmo motivo do critério acima: cobrar
-  // o uso da leitura por IA de quem escolheu não usá-la é ruído permanente.
-  if (!contract) attention.push("Contrato ainda não anexado");
-  if (team.length === 0) attention.push("Responsável do evento não definido");
-  if (suppliers.length === 0) attention.push("Nenhum fornecedor cadastrado");
-  for (const s of suppliers) {
-    if (!s.contactName) attention.push(`Fornecedor sem responsável: ${s.companyName}`);
-    if (!s.status) attention.push(`Fornecedor sem status: ${s.companyName}`);
-    if (!(s.alignments && s.alignments.length > 0)) attention.push(`Fornecedor sem alinhamento: ${s.companyName}`);
-  }
-  for (const p of event.contractPendings ?? []) attention.push(p);
-
-  const passed = checks.filter((c) => c.ok).length;
-  const percent = Math.round((passed / checks.length) * 100);
-  const status = percent >= 80 ? "complete" : percent >= 50 ? "attention" : "incomplete";
-
-  // ── QUEM RESPONDE PELO EVENTO ─────────────────────────────────────────────
-  // Antes: `team[0]` — o PRIMEIRO membro escalado. Ninguém escolheu essa
-  // pessoa; ela só foi adicionada primeiro, e mudar a ordem da equipe trocava
-  // o "Resp." do cartão sem que ninguém pedisse. Pior: se esse primeiro
-  // registro apontasse para um membro já excluído, o evento ficava SEM
-  // responsável mesmo tendo gente escalada.
-  //
-  // A regra agora vive em lib/responsavel.ts e prefere não dizer nada a
-  // eleger alguém: escolha explícita > anotação > única pessoa escalada.
-  const membrosEscalados = (
-    await Promise.all(team.map((t) => ctx.db.get(t.teamMemberId)))
-  ).filter((m): m is NonNullable<typeof m> => m !== null);
-  const responsavel = responsavelDoEvento(
-    { responsibleId: event.responsibleId, responsible: event.responsible },
-    membrosEscalados.map((m) => ({ _id: m._id, name: m.name, role: m.role })),
-  );
-  const responsible = responsavel?.nome;
-  // O TELEFONE vem do vínculo, não de casar o nome com a lista de escalados.
-  // Casar por nome errava com duas "Camila" e falhava sempre que o
-  // responsável era uma anotação livre (alguém de fora da equipe).
-  const responsiblePhone = responsavel?.membroId
-    ? membrosEscalados.find((m) => m._id === responsavel.membroId)?.phone
-    : undefined;
-
-  return {
-    percent,
-    status,
-    checks,
-    attention: attention.slice(0, 12),
-    guestCount: briefing?.guestCount ?? undefined,
-    assessoria: suppliers.find((s) => s.category === "assessoria")?.companyName,
-    responsible,
-    responsiblePhone,
-  };
+  return saudeDoEvento({
+    evento: event,
+    documentos,
+    temLancamento: txs.length > 0,
+    fornecedores,
+    equipe,
+    guestCount: briefing?.guestCount,
+    temItensDeMontagem: itens.length > 0,
+  });
 }
 
 // Lista de eventos com os campos do card + saúde (resumo). Reutiliza `events`.
@@ -166,18 +101,74 @@ export const listCards = query({
       })
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    return Promise.all(
-      events.map(async (event) => {
-        const h = await computeHealth(ctx, event);
-        return {
-          ...event,
-          health: { percent: h.percent, status: h.status },
-          guestCount: h.guestCount,
-          assessoria: h.assessoria,
-          responsible: h.responsible,
-        };
-      }),
-    );
+    // ── A SAÚDE DE TODOS, EM SETE CONSULTAS ────────────────────────────────
+    // Antes: uma chamada de `computeHealth` por evento, e cada uma abria seis
+    // consultas mais um `db.get` por pessoa escalada. Com os 40 eventos da
+    // decoradora piloto isso era cerca de 360 operações de banco para desenhar
+    // UMA tela — a primeira que ela abre, e a primeira de uma demonstração. A
+    // 300 eventos passaria de 2.500.
+    //
+    // Agora as mesmas tabelas são lidas UMA VEZ, por dono, e agrupadas em
+    // memória. O custo deixa de crescer com o número de eventos.
+    //
+    // A conta não mudou de lugar: é a mesma `saudeDoEvento` que a tela de um
+    // evento usa. Duas pontuações diferentes para o mesmo evento seria o
+    // defeito que separar leitura de cálculo existe para impedir.
+    const [documentos, txs, fornecedores, escalas, briefings, itens, membros] =
+      await Promise.all([
+        ctx.db.query("contracts").withIndex("by_user", (q) => q.eq("userId", user._id)).collect(),
+        ctx.db.query("transactions").withIndex("by_user", (q) => q.eq("userId", user._id)).collect(),
+        ctx.db.query("eventSuppliers").withIndex("by_user", (q) => q.eq("userId", user._id)).collect(),
+        ctx.db.query("eventTeam").withIndex("by_user", (q) => q.eq("userId", user._id)).collect(),
+        ctx.db.query("briefings").withIndex("by_user", (q) => q.eq("userId", user._id)).collect(),
+        ctx.db.query("assemblyItems").withIndex("by_user", (q) => q.eq("userId", user._id)).collect(),
+        ctx.db.query("teamMembers").withIndex("by_user", (q) => q.eq("userId", user._id)).collect(),
+      ]);
+
+    /** Agrupa por evento de uma vez — um `filter` por evento seria O(n²). */
+    function agrupar<T extends { eventId?: Id<"events"> }>(linhas: readonly T[]) {
+      const mapa = new Map<string, T[]>();
+      for (const linha of linhas) {
+        if (!linha.eventId) continue;
+        const atual = mapa.get(linha.eventId);
+        if (atual) atual.push(linha);
+        else mapa.set(linha.eventId, [linha]);
+      }
+      return mapa;
+    }
+
+    const docsPorEvento = agrupar(documentos);
+    const txPorEvento = agrupar(txs);
+    const fornecedoresPorEvento = agrupar(fornecedores);
+    const escalasPorEvento = agrupar(escalas);
+    const itensPorEvento = agrupar(itens);
+    const briefingPorEvento = new Map(briefings.map((b) => [b.eventId as string, b]));
+    const membroPorId = new Map(membros.map((m) => [m._id as string, m]));
+
+    return events.map((event) => {
+      const equipe = (escalasPorEvento.get(event._id) ?? [])
+        .map((t) => membroPorId.get(t.teamMemberId))
+        .filter((m): m is NonNullable<typeof m> => m !== undefined)
+        .map((m) => ({ _id: m._id as string, name: m.name, role: m.role, phone: m.phone }));
+
+      const h = saudeDoEvento({
+        evento: event,
+        documentos: docsPorEvento.get(event._id) ?? [],
+        temLancamento: (txPorEvento.get(event._id) ?? []).length > 0,
+        fornecedores: fornecedoresPorEvento.get(event._id) ?? [],
+        equipe,
+        guestCount: briefingPorEvento.get(event._id)?.guestCount,
+        temItensDeMontagem: (itensPorEvento.get(event._id) ?? []).length > 0,
+      });
+
+      return {
+        ...event,
+        health: { percent: h.percent, status: h.status },
+        guestCount: h.guestCount,
+        assessoria: h.assessoria,
+        responsible: h.responsible,
+      };
+    });
   },
 });
 

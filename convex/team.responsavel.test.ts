@@ -229,7 +229,9 @@ describe("o telefone do responsável vem do vínculo, não do nome", () => {
   });
 
   it("`health` devolve o telefone pelo vínculo, não casando nomes", () => {
-    const fonte = readFileSync("convex/health.ts", "utf-8");
+    // A conta da saúde mora em `lib/saudeDoEvento.ts` desde que a listagem
+    // passou a ler em lote. A regra é a mesma; só mudou de arquivo.
+    const fonte = readFileSync("convex/lib/saudeDoEvento.ts", "utf-8");
     expect(fonte).toContain("responsavel?.membroId");
     expect(fonte).toContain("responsiblePhone");
   });

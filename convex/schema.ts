@@ -621,7 +621,12 @@ export default defineSchema({
     eventId: v.id("events"),
     userId: v.id("users"),
     ...briefingFields,
-  }).index("by_event", ["eventId"]),
+  })
+    .index("by_event", ["eventId"])
+    // A lista de eventos precisa da saúde de TODOS os eventos da conta. Sem
+    // este índice, a resposta era uma consulta por evento — 40 eventos viravam
+    // centenas de operações para desenhar uma tela. Ver lib/saudeDoEvento.ts.
+    .index("by_user", ["userId"]),
 
   checklistItems: defineTable({
     eventId: v.id("events"),
@@ -658,7 +663,11 @@ export default defineSchema({
     .index("by_event_member", ["eventId", "teamMemberId"])
     // Excluir um membro precisa achar TODAS as escalas dele, em qualquer
     // evento — sem este indice a exclusao varreria a tabela inteira.
-    .index("by_member", ["teamMemberId"]),
+    .index("by_member", ["teamMemberId"])
+    // A lista de eventos precisa da saúde de TODOS os eventos da conta. Sem
+    // este índice, a resposta era uma consulta por evento — 40 eventos viravam
+    // centenas de operações para desenhar uma tela. Ver lib/saudeDoEvento.ts.
+    .index("by_user", ["userId"]),
 
   // Documentos do evento (contrato, adendo, orçamento, referência, outros).
   // `kind` ausente = contrato legado (compatibilidade com dados existentes).
@@ -701,7 +710,12 @@ export default defineSchema({
         v.literal("other"),
       ),
     ),
-  }).index("by_event", ["eventId"]),
+  })
+    .index("by_event", ["eventId"])
+    // A lista de eventos precisa da saúde de TODOS os eventos da conta. Sem
+    // este índice, a resposta era uma consulta por evento — 40 eventos viravam
+    // centenas de operações para desenhar uma tela. Ver lib/saudeDoEvento.ts.
+    .index("by_user", ["userId"]),
 
   purchaseItems: defineTable({
     userId: v.id("users"),
@@ -1188,7 +1202,11 @@ export default defineSchema({
     .index("by_event_category", ["eventId", "category"])
     // Responde "em quais eventos já usei este fornecedor?" — a pergunta que
     // não tinha resposta antes do catálogo.
-    .index("by_supplier", ["supplierId"]),
+    .index("by_supplier", ["supplierId"])
+    // A lista de eventos precisa da saúde de TODOS os eventos da conta. Sem
+    // este índice, a resposta era uma consulta por evento — 40 eventos viravam
+    // centenas de operações para desenhar uma tela. Ver lib/saudeDoEvento.ts.
+    .index("by_user", ["userId"]),
 
   // ── CATÁLOGO DE MATERIAIS ─────────────────────────────────────────────────
   // "Do que a decoração é feita": rosa branca, eucalipto, vaso 25cm, vela,
@@ -1522,7 +1540,11 @@ export default defineSchema({
   })
     .index("by_event", ["eventId"])
     .index("by_event_area", ["eventId", "area"])
-    .index("by_composition", ["compositionId"]),
+    .index("by_composition", ["compositionId"])
+    // A lista de eventos precisa da saúde de TODOS os eventos da conta. Sem
+    // este índice, a resposta era uma consulta por evento — 40 eventos viravam
+    // centenas de operações para desenhar uma tela. Ver lib/saudeDoEvento.ts.
+    .index("by_user", ["userId"]),
 
   // ── IA VISUAL / Planta Premium ─────────────────────────────────────────────
   // Histórico versionado das gerações de planta. Tabela EXCLUSIVA da IA Visual —

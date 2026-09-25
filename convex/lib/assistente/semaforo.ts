@@ -113,6 +113,27 @@ const AMARELOS: readonly { termos: readonly string[]; motivo: string }[] = [
     ],
   },
   {
+    // ── POR QUE DESCONTO É AMARELO, E NÃO VERDE ──────────────────────────
+    // "Prepare uma proposta com 10% de desconto para a Marina" é um pedido
+    // legítimo: ela tem todo direito de dar desconto no trabalho dela.
+    //
+    // O que não pode é o texto sair com a condição dentro sem ninguém ler.
+    // Desconto é dinheiro saindo do bolso dela, e um rascunho que promete
+    // condição vira promessa no instante em que alguém envia sem revisar —
+    // com a diferença de que esta promessa a cliente vai cobrar.
+    //
+    // Verde deixaria a IA redigir a concessão como se fosse um resumo.
+    // Vermelho recusaria um pedido legítimo. Amarelo produz o rascunho, com o
+    // aviso em cima, e para.
+    motivo: "condição comercial",
+    termos: [
+      "desconto", "descontos", "de um desconto", "da um desconto",
+      "abatimento", "cortesia", "de graca", "sem cobrar", "por conta da casa",
+      "condicao especial", "preco especial", "parcelar em", "isentar",
+      "baixa o preco", "baixar o preco", "reduza o valor",
+    ],
+  },
+  {
     motivo: "alterar dados do sistema",
     termos: [
       "altere", "alterar", "mude o", "mudar o", "atualize", "atualizar",
@@ -177,7 +198,15 @@ export function recadoDaRecusa(motivo: string | undefined): string {
 
 /** O aviso que acompanha um rascunho amarelo. */
 export function recadoDoRascunho(motivo: string | undefined): string {
-  return motivo === "falar com alguém de fora"
-    ? "Isto é um RASCUNHO. Sua equipe não envia mensagem nenhuma — leia, ajuste se quiser e mande você mesma."
-    : "Isto é uma SUGESTÃO. Sua equipe não altera nada no sistema — a mudança continua sendo sua, na tela do módulo.";
+  switch (motivo) {
+    case "falar com alguém de fora":
+      return "Isto é um RASCUNHO. Sua equipe não envia mensagem nenhuma — leia, ajuste se quiser e mande você mesma.";
+    case "condição comercial":
+      // O aviso é mais forte do que o dos outros amarelos de propósito: os
+      // outros produzem texto que alguém relê; este produz um número que a
+      // cliente vai cobrar.
+      return "Isto é um RASCUNHO com uma condição comercial dentro. Nenhum desconto foi aplicado a nada — confira o valor antes de mandar.";
+    default:
+      return "Isto é uma SUGESTÃO. Sua equipe não altera nada no sistema — a mudança continua sendo sua, na tela do módulo.";
+  }
 }

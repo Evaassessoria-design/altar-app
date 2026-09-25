@@ -69,7 +69,8 @@ export function ImportarInteressados({ onFechar }: { onFechar: () => void }) {
       toast.success(
         `${r.criados} ${r.criados === 1 ? "interessado importado" : "interessados importados"}.` +
           (r.duplicadas > 0 ? ` ${r.duplicadas} já existiam.` : "") +
-          (r.invalidas > 0 ? ` ${r.invalidas} sem dados suficientes.` : ""),
+          (r.invalidas > 0 ? ` ${r.invalidas} sem dados suficientes.` : "") +
+          (r.truncado ? " O arquivo foi cortado no limite de 1.000 linhas." : ""),
       );
       onFechar();
     } catch (e) {
@@ -144,6 +145,15 @@ export function ImportarInteressados({ onFechar }: { onFechar: () => void }) {
                     <strong>{preview.resumo.duplicadas}</strong> já existem ·{" "}
                     <strong>{preview.resumo.invalidas}</strong> sem dados suficientes
                   </p>
+                  {/* O corte nunca é silencioso: "1.000 importados" de um
+                      arquivo com 1.500 esconderia 500 pessoas que só
+                      apareceriam ao reclamar de não terem sido procuradas. */}
+                  {preview.truncado && (
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      O arquivo passou do limite de 1.000 linhas e foi cortado. Divida-o e
+                      importe o resto num segundo arquivo.
+                    </p>
+                  )}
                   {preview.ignoradas.length > 0 && (
                     // Dizer o que foi ignorado é melhor do que descartar
                     // calado: quem exportou a planilha reconhece a coluna.

@@ -689,6 +689,8 @@ export const previewDeImportacao = query({
       erro: leitura.erro,
       colunas: leitura.colunas,
       ignoradas: leitura.ignoradas,
+      /** O arquivo passou do teto e foi cortado — a tela precisa dizer. */
+      truncado: leitura.truncado,
       resumo: resumir(situacoes),
       // Só as primeiras: o preview é para conferir o FORMATO, não para ler
       // mil linhas numa tela.
@@ -751,7 +753,7 @@ export const importarInteressados = mutation({
       criados++;
     }
 
-    return { criados, ...resumir(situacoes) };
+    return { criados, truncado: leitura.truncado, ...resumir(situacoes) };
   },
 });
 

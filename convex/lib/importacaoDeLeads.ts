@@ -120,6 +120,14 @@ export type LeituraDoArquivo = {
   /** Cabeçalhos que o arquivo trouxe e a importação não usa. */
   ignoradas: string[];
   linhas: LinhaLida[];
+  /**
+   * O arquivo passou do teto e foi CORTADO.
+   *
+   * Cortar em silêncio faria a tela dizer "1.000 importados" de um arquivo
+   * com 1.500 — e as 500 que faltam só apareceriam quando alguém reclamasse
+   * de não ter sido procurada.
+   */
+  truncado: boolean;
   /** Por que a leitura não produziu nada, quando não produziu. */
   erro?: string;
 };
@@ -139,12 +147,15 @@ export function lerArquivo(conteudo: string): LeituraDoArquivo {
     .map((l) => l.trim())
     .filter((l) => l.length > 0);
 
-  if (linhas.length === 0) return { colunas: [], ignoradas: [], linhas: [], erro: "Arquivo vazio." };
+  if (linhas.length === 0) {
+    return { colunas: [], ignoradas: [], linhas: [], truncado: false, erro: "Arquivo vazio." };
+  }
   if (linhas.length === 1) {
     return {
       colunas: [],
       ignoradas: [],
       linhas: [],
+      truncado: false,
       erro: "O arquivo tem só o cabeçalho, sem nenhuma linha de dados.",
     };
   }
@@ -166,6 +177,7 @@ export function lerArquivo(conteudo: string): LeituraDoArquivo {
       colunas: [],
       ignoradas,
       linhas: [],
+      truncado: false,
       erro: "Não encontrei a coluna de nome. O cabeçalho precisa ter 'nome'.",
     };
   }
@@ -185,6 +197,8 @@ export function lerArquivo(conteudo: string): LeituraDoArquivo {
     colunas: Array.from(mapa.values()).filter((c) => c !== "linha"),
     ignoradas,
     linhas: lidas,
+    // `-1` porque a primeira linha é o cabeçalho, não um registro.
+    truncado: linhas.length - 1 > TETO_DE_LINHAS,
   };
 }
 

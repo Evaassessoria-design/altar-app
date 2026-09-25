@@ -29,6 +29,19 @@ Tem de ser **`healthy-pika-907`**. Se aparecer `mellow-goose-539`, pare aqui.
 ```bash
 npx convex codegen
 ```
+
+> ### ⚠️ `codegen` NÃO PUBLICA. A saída dele engana.
+>
+> Ele imprime **"Uploading functions to Convex..."** — e o que sobe é uma
+> cópia temporária, para derivar tipos. Nada fica publicado.
+>
+> Isto já custou uma homologação: `/escritorio` quebrou na frente do cliente
+> com `Could not find public function for 'escritorio:souDono'`. A função
+> estava no código, exportada, pública, no `api.d.ts`; typecheck verde, 5.100
+> testes verdes, CI verde. **O DEV é que rodava versão antiga — faltavam 51
+> funções, de sete módulos.**
+>
+> Quem publica é o **passo 6**. Não pule.
 Este comando não roda no ambiente do agente (sem `CONVEX_DEPLOYMENT`), e por
 isso `convex/_generated/api.d.ts` recebeu **duas linhas escritas à mão** para
 registrar o módulo `propostas`.
@@ -60,9 +73,28 @@ Se o passo 4 não mudou nada, esta validação já foi feita e está verde.
 npx convex dev --once
 ```
 
-**7. Confirmar que subiu onde devia.** Painel do Convex → `healthy-pika-907` →
-Functions. `propostas` tem de aparecer; `supplierCatalog.get` e
-`propostas.doLead`, não.
+**7. Confirmar que subiu onde devia — por comando, não por memória.**
+```bash
+node scripts/sincronia/conferir.mjs
+```
+Ele lê o código, pergunta ao deployment o que está publicado, e compara. Sai
+com código 1 quando alguma tela chamaria função que não está lá, então dá para
+encadear num `&&`.
+
+Saída esperada:
+```
+Deployment: https://healthy-pika-907.convex.cloud
+Funções públicas no código: 236 · publicadas: 236 · chamadas pela tela: 229
+
+✔ O deployment está em dia com o código.
+```
+
+Ele **recusa** rodar contra `mellow-goose-539`, e recusa de novo se o
+deployment responder como produção.
+
+> Conferir pelo painel também funciona, e é o que se fazia antes. O problema é
+> que o painel exige saber **o que procurar** — e o defeito que derrubou a
+> homologação era justamente uma função que ninguém sabia que estava faltando.
 
 ---
 

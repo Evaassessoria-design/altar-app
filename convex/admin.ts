@@ -14,6 +14,8 @@ import {
 } from "./lib/campanha";
 import { limparCampos } from "./lib/limparCampos";
 import { prepararContatos } from "./lib/contatoDaCampanha";
+import { analisar, lerArquivo, resumir } from "./lib/importacaoDeLeads";
+import { normalizarE164 } from "./lib/central/telefone";
 import { dataDoDia } from "./lib/dataDoDia";
 
 /** As origens aceitas — espelha a união do schema. */
@@ -573,6 +575,125 @@ export const funilDaCampanha = query({
 
 /** Até onde a contagem varre antes de admitir que não viu tudo. */
 export const VARREDURA_DA_CAMPANHA = 5_000;
+
+/**
+ * O que a IMPORTAÇÃO vai fazer com cada linha — antes de gravar qualquer coisa.
+ *
+ * ── POR QUE O SERVIDOR LÊ O ARQUIVO DE NOVO NA HORA DE IMPORTAR ─────────────
+ * Preview e importação chamam a MESMA leitura sobre o MESMO conteúdo. Se o
+ * navegador mandasse as linhas já analisadas, o que ele mostrou e o que o
+ * banco gravaria seriam duas coisas diferentes na primeira divergência de
+ * versão — e a divergência apareceria como registros que ninguém aprovou.
+ *
+ * ── A DUPLICIDADE É PROCURADA POR ÍNDICE, LINHA A LINHA ─────────────────────
+ * Não se varre a tabela: para cada e-mail e cada telefone do arquivo, uma
+ * busca indexada. O custo cresce com o ARQUIVO (teto de mil linhas), nunca com
+ * a base — que é o que uma campanha existe para fazer crescer.
+ */
+async function analisarArquivo(ctx: QueryCtx, conteudo: string) {
+  const leitura = lerArquivo(conteudo);
+  if (leitura.erro || leitura.linhas.length === 0) {
+    return { leitura, situacoes: [] as ReturnType<typeof analisar> };
+  }
+
+  const emails = new Set<string>();
+  const telefones = new Set<string>();
+  for (const linha of leitura.linhas) {
+    const email = linha.email?.trim().toLowerCase();
+    if (email) {
+      const achado = await ctx.db
+        .query("landingLeads")
+        .withIndex("by_email", (q) => q.eq("email", email))
+        .first();
+      if (achado) emails.add(email);
+    }
+    const e164 = linha.whatsapp ? normalizarE164(linha.whatsapp) : null;
+    if (e164) {
+      const achado = await ctx.db
+        .query("landingLeads")
+        .withIndex("by_whatsapp_e164", (q) => q.eq("whatsappE164", e164))
+        .first();
+      if (achado) telefones.add(e164);
+    }
+  }
+
+  return { leitura, situacoes: analisar(leitura.linhas, { emails, telefones }) };
+}
+
+export const previewDeImportacao = query({
+  args: { conteudo: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const { leitura, situacoes } = await analisarArquivo(ctx, args.conteudo);
+    return {
+      erro: leitura.erro,
+      colunas: leitura.colunas,
+      ignoradas: leitura.ignoradas,
+      resumo: resumir(situacoes),
+      // Só as primeiras: o preview é para conferir o FORMATO, não para ler
+      // mil linhas numa tela.
+      amostra: situacoes.slice(0, 25),
+    };
+  },
+});
+
+/**
+ * Grava as linhas NOVAS. Nunca sobrescreve quem já está no banco.
+ *
+ * Duplicada é PULADA, e o relatório diz quantas. Quem já está cadastrado pode
+ * ter sido trabalhado — etapa movida, observação escrita, porte preenchido —
+ * e um arquivo velho apagaria tudo isso em silêncio.
+ *
+ * Esta mutation NÃO envia nada e não prepara envio: o que ela produz são
+ * registros na fila de contato, que continua exigindo uma pessoa.
+ */
+export const importarInteressados = mutation({
+  args: {
+    conteudo: v.string(),
+    campanha: v.optional(v.string()),
+    origem: v.optional(origemValidator),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const { leitura, situacoes } = await analisarArquivo(ctx, args.conteudo);
+    if (leitura.erro) {
+      throw new ConvexError({ code: "INVALID", message: leitura.erro });
+    }
+
+    const hoje = dataDoDia();
+    let criados = 0;
+    for (const s of situacoes) {
+      if (s.tipo !== "nova") continue;
+      const d = s.dados;
+      await ctx.db.insert("landingLeads", {
+        name: d.name.trim(),
+        // O e-mail é obrigatório no schema; a análise já garantiu que existe
+        // e-mail OU telefone, então aqui o vazio é aceitável e explícito.
+        email: d.email?.trim().toLowerCase() ?? "",
+        whatsapp: d.whatsapp?.trim(),
+        whatsappE164: d.whatsapp ? (normalizarE164(d.whatsapp) ?? undefined) : undefined,
+        // Importação não é pedido de demonstração: quem entrou numa lista não
+        // pediu nada. `beta` é o mais honesto dos dois valores existentes.
+        intent: "beta" as const,
+        status: "novo" as const,
+        origem: args.origem ?? "prospeccao",
+        campanha: args.campanha,
+        empresa: d.empresa,
+        instagram: d.instagram,
+        site: d.site,
+        cidade: d.cidade,
+        estado: d.estado,
+        segmento: d.segmento,
+        // De quando é a lista. Telefone público de dois anos atrás não é
+        // contato, é ruído.
+        coletadoEm: hoje,
+      });
+      criados++;
+    }
+
+    return { criados, ...resumir(situacoes) };
+  },
+});
 
 /**
  * A FILA DE CONTATO de uma campanha — quem falta abordar, com a mensagem pronta.

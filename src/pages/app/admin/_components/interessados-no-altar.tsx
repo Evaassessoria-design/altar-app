@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
-import { ChevronDown, ChevronUp, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronUp, Sparkles, Upload } from "lucide-react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel";
 import { Input } from "@/components/ui/input.tsx";
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button.tsx";
 import { cn } from "@/lib/utils.ts";
 import { formatTimestamp } from "@/lib/safe-date.ts";
 import { FilaDeContato } from "./fila-de-contato.tsx";
+import { ImportarInteressados } from "./importar-interessados.tsx";
 import {
   ESTAGIOS,
   LIVE_ALTAR,
@@ -234,6 +235,7 @@ export function InteressadosNoAltar() {
   );
   const setStatus = useMutation(api.admin.setLandingLeadStatus);
   const [aberto, setAberto] = useState<Id<"landingLeads"> | null>(null);
+  const [importando, setImportando] = useState(false);
 
   if (dados === undefined) {
     return (
@@ -260,7 +262,7 @@ export function InteressadosNoAltar() {
           campanha. Não confundir com o funil de /funil, que é das clientes da decoradora.
         </p>
 
-        <div className="mt-3 flex flex-wrap gap-1.5">
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
           {[{ slug: "", nome: "Todas as origens" }, LIVE_ALTAR].map((c) => (
             <button
               key={c.slug || "todas"}
@@ -276,8 +278,20 @@ export function InteressadosNoAltar() {
               {"data" in c && ` · ${c.data.split("-").reverse().join("/")}`}
             </button>
           ))}
+          {/* Cem pessoas digitadas uma a uma é a planilha voltando pela porta
+              dos fundos. O preview vem antes de qualquer gravação. */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setImportando(true)}
+            className="ml-auto h-7 cursor-pointer gap-1.5 text-xs"
+          >
+            <Upload className="size-3.5" /> Importar lista
+          </Button>
         </div>
       </div>
+
+      {importando && <ImportarInteressados onFechar={() => setImportando(false)} />}
 
       {/* ── O FUNIL DA CAMPANHA ──────────────────────────────────────────────
           Sete contagens, calculadas no servidor a partir das etapas. Só

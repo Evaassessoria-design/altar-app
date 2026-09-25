@@ -79,6 +79,12 @@ describe("leitura administrativa dos interessados", () => {
   });
 
   it("status ausente é reportado como 'novo'", () => {
-    expect(corpoDe("listLandingLeads")).toContain('l.status ?? ("novo" as const)');
+    // A leitura do ausente virou `estagioDe`, em `lib/campanha.ts`, quando o
+    // pipeline passou de quatro para nove etapas. Um `?? "novo"` espalhado em
+    // dois lugares divergiria no dia em que o padrão mudasse — e o padrão é
+    // justamente o que sustenta "sem backfill".
+    expect(corpoDe("listLandingLeads")).toContain("estagioDe(l)");
+    const regra = readFileSync("convex/lib/campanha.ts", "utf-8");
+    expect(regra).toContain('return id && ESTAGIOS.some((e) => e.id === id) ? id : "novo";');
   });
 });

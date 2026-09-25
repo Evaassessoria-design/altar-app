@@ -1053,14 +1053,98 @@ export default defineSchema({
     // com o funil de leads da decoradora (tabela `leads`), que é de clientes
     // dela. AUSENTE = "novo": todos os registros anteriores a este campo
     // continuam válidos, sem backfill.
+    // ── O PIPELINE DE QUEM SE INTERESSOU PELO ALTAR ────────────────────────
+    // Os quatro originais NÃO mudaram de nome nem de significado; os cinco do
+    // meio foram ACRESCENTADOS, então todo registro já gravado continua válido
+    // sem backfill. Mesmo movimento que `leads.stage` fez no funil dela.
+    //
+    //   novo              recém-chegado, ninguém falou com ele
+    //   contato_preparado a mensagem está escrita, esperando uma pessoa enviar
+    //   contatado         alguém falou com ele
+    //   interessado       respondeu e demonstrou interesse
+    //   confirmou         disse que vem (campanha com data, como a live)
+    //   participou        esteve presente
+    //   testando          está usando o ALTAR
+    //   convertido        virou cliente          (original)
+    //   descartado        não tem interesse      (original)
+    //
+    // `contato_preparado` existe por causa de uma trava do produto: a IA
+    // escreve a mensagem e PARA. O estágio é o registro de que o rascunho
+    // existe e de que falta uma pessoa apertar enviar. Ver lib/campanha.ts.
     status: v.optional(
       v.union(
         v.literal("novo"),
+        v.literal("contato_preparado"),
         v.literal("contatado"),
+        v.literal("interessado"),
+        v.literal("confirmou"),
+        v.literal("participou"),
+        v.literal("testando"),
         v.literal("convertido"),
         v.literal("descartado"),
       ),
     ),
+    // ── QUEM É ESTA PESSOA, ALÉM DO NOME E DO E-MAIL ───────────────────────
+    // A landing captura três campos porque pedir mais afugenta quem está com
+    // pressa. O resto é preenchido DEPOIS, por quem conversa — ou entra junto
+    // numa importação de lista legítima.
+    //
+    // Tudo opcional, e em todos ausente significa "ninguém preencheu ainda".
+    empresa: v.optional(v.string()),
+    instagram: v.optional(v.string()),
+    site: v.optional(v.string()),
+    cidade: v.optional(v.string()),
+    estado: v.optional(v.string()),
+    /** "Casamento", "Corporativo", "Infantil"... texto livre: o vocabulário é do mercado. */
+    segmento: v.optional(v.string()),
+    /** Porte, em eventos por ano. Ajuda a decidir quem atender primeiro. */
+    eventosPorAno: v.optional(v.number()),
+    observacoes: v.optional(v.string()),
+    /**
+     * DE ONDE ele veio. Distinto de `intent`, que diz o que ele PEDIU.
+     *
+     * AUSENTE = veio pela landing, que é a origem de todo registro anterior a
+     * este campo e continua sendo a do formulário público.
+     */
+    origem: v.optional(
+      v.union(
+        v.literal("landing"),
+        v.literal("instagram"),
+        v.literal("indicacao"),
+        v.literal("whatsapp"),
+        v.literal("site"),
+        v.literal("evento"),
+        v.literal("live"),
+        v.literal("prospeccao"),
+        v.literal("outro"),
+      ),
+    ),
+    /**
+     * A campanha que trouxe esta pessoa — o slug de `lib/campanha.ts`.
+     *
+     * ── POR QUE NÃO EXISTE TABELA DE CAMPANHA ───────────────────────────────
+     * Uma campanha teria nome, data, hora e observação: quatro valores que não
+     * mudam e que ninguém edita pela tela. "Leads relacionados" é um FILTRO
+     * por este slug, não uma coluna. Uma tabela para guardar uma constante
+     * seria um CRM de marketing montado para responder sete contagens.
+     *
+     * No dia em que houver campanha criada pela tela, o slug vira `v.id()` e
+     * o dado já está no lugar certo.
+     */
+    campanha: v.optional(v.string()),
+    /** Quem, da ALTAR, está cuidando deste interessado. */
+    responsavelUserId: v.optional(v.id("users")),
+    /** "AAAA-MM-DD" do próximo retorno combinado. Dia civil, nunca instante. */
+    proximoContato: v.optional(v.string()),
+    /** "AAAA-MM-DD" da última conversa. Sem ela não se afirma abandono. */
+    ultimaInteracao: v.optional(v.string()),
+    /**
+     * Quando este registro foi COLETADO — só para os de prospecção.
+     *
+     * Uma lista legítima importada precisa dizer de quando é: telefone público
+     * de dois anos atrás não é contato, é ruído.
+     */
+    coletadoEm: v.optional(v.string()),
     /**
      * Telefone em E.164 canônico, derivado de `whatsapp`.
      *
@@ -1079,6 +1163,11 @@ export default defineSchema({
   })
     .index("by_email", ["email"])
     .index("by_whatsapp_e164", ["whatsappE164"])
+    // "Quantos leads temos para a live?" é a pergunta da campanha, e ela não
+    // pode custar uma varredura da tabela inteira filtrada na memória — que é
+    // como a resposta para na metade em silêncio depois do milésimo registro.
+    .index("by_campanha", ["campanha"])
+    .index("by_campanha_status", ["campanha", "status"])
     // Vincular um contato da Central a um interessado exige achá-lo pelo NOME
     // quando o telefone não casa (pessoa que escreveu de outro aparelho).
     // Índice sobre um campo que já existe — sem backfill.

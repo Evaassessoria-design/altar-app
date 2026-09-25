@@ -6,6 +6,27 @@ import { getOptionalUser } from "./lib/identity";
 import { requireAdmin } from "./lib/adminGuard";
 import { ALTAR_ADMIN_ROLE, effectiveSubscriptionStatus, resolveAccess } from "./lib/access";
 import { deleteUserDataCascade } from "./lib/cascade";
+import {
+  campanhaPorSlug,
+  estagioDe,
+  funilDaCampanha as calcularFunil,
+  origemDe,
+} from "./lib/campanha";
+import { limparCampos } from "./lib/limparCampos";
+import { dataDoDia } from "./lib/dataDoDia";
+
+/** As origens aceitas — espelha a união do schema. */
+const origemValidator = v.union(
+  v.literal("landing"),
+  v.literal("instagram"),
+  v.literal("indicacao"),
+  v.literal("whatsapp"),
+  v.literal("site"),
+  v.literal("evento"),
+  v.literal("live"),
+  v.literal("prospeccao"),
+  v.literal("outro"),
+);
 import { ACTIVE_WINDOWS, isActiveWithin } from "./lib/presence";
 import { deleteBetterAuthAccount } from "./lib/authAccount";
 import { exigirNumeroReal } from "./lib/numeroGravavel";
@@ -463,39 +484,111 @@ export const deleteUser = mutation({
  * `status` ausente significa "novo" — registros anteriores ao campo continuam
  * válidos, sem backfill.
  */
+/**
+ * Teto da listagem de interessados.
+ *
+ * `collect()` sem limite responde bem com trinta e para em silêncio com três
+ * mil — e uma campanha existe justamente para produzir três mil. A tela diz
+ * quantos carregou e se há mais; nunca afirma um total que não contou.
+ */
+export const LIMITE_DE_INTERESSADOS = 200;
+
 export const listLandingLeads = query({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    /** Só os desta campanha. Ausente = todos. Filtro do BANCO, por índice. */
+    campanha: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
     await requireAdmin(ctx);
-    const leads = await ctx.db.query("landingLeads").order("desc").collect();
-    return leads.map((l) => ({
-      _id: l._id,
-      name: l.name,
-      email: l.email,
-      whatsapp: l.whatsapp,
-      intent: l.intent,
-      status: l.status ?? ("novo" as const),
-      createdAt: new Date(l._creationTime).toISOString(),
-    }));
+    // Mais um do que o teto: é assim que se sabe que há próxima página sem
+    // contar a tabela inteira.
+    const encontrados = args.campanha
+      ? await ctx.db
+          .query("landingLeads")
+          .withIndex("by_campanha", (q) => q.eq("campanha", args.campanha))
+          .order("desc")
+          .take(LIMITE_DE_INTERESSADOS + 1)
+      : await ctx.db.query("landingLeads").order("desc").take(LIMITE_DE_INTERESSADOS + 1);
+
+    const temMais = encontrados.length > LIMITE_DE_INTERESSADOS;
+    const leads = encontrados.slice(0, LIMITE_DE_INTERESSADOS);
+
+    return {
+      temMais,
+      leads: leads.map((l) => ({
+        _id: l._id,
+        name: l.name,
+        email: l.email,
+        whatsapp: l.whatsapp,
+        intent: l.intent,
+        status: estagioDe(l),
+        origem: origemDe(l),
+        campanha: l.campanha,
+        empresa: l.empresa,
+        instagram: l.instagram,
+        site: l.site,
+        cidade: l.cidade,
+        estado: l.estado,
+        segmento: l.segmento,
+        eventosPorAno: l.eventosPorAno,
+        observacoes: l.observacoes,
+        proximoContato: l.proximoContato,
+        ultimaInteracao: l.ultimaInteracao,
+        createdAt: new Date(l._creationTime).toISOString(),
+      })),
+    };
   },
 });
 
 /**
- * Marca em que ponto está a conversa com o interessado.
+ * O funil de uma campanha, em contagens — as sete perguntas de uma vez.
  *
- * É acompanhamento comercial, não cobrança: não cria conta, não concede
- * acesso, não toca em assinatura. Converter alguém de verdade continua sendo
- * cadastro + Asaas, pelos caminhos normais.
+ * "Quantos leads temos para a live? Quantos foram contatados? Quantos
+ * demonstraram interesse? Quantos confirmaram? Quantos participaram? Quantos
+ * iniciaram teste? Quantos viraram clientes?"
+ *
+ * Lê por ÍNDICE de campanha e conta com `lib/campanha.ts`, que é puro. A
+ * contagem varre até um teto declarado e DIZ quando parou: uma campanha que
+ * estoure o teto precisa avisar, não devolver um número menor com cara de
+ * total.
  */
+export const funilDaCampanha = query({
+  args: { campanha: v.string() },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const leads = await ctx.db
+      .query("landingLeads")
+      .withIndex("by_campanha", (q) => q.eq("campanha", args.campanha))
+      .take(VARREDURA_DA_CAMPANHA + 1);
+
+    const completa = leads.length <= VARREDURA_DA_CAMPANHA;
+    return {
+      campanha: campanhaPorSlug(args.campanha) ?? null,
+      completa,
+      ...calcularFunil(leads.slice(0, VARREDURA_DA_CAMPANHA)),
+    };
+  },
+});
+
+/** Até onde a contagem varre antes de admitir que não viu tudo. */
+export const VARREDURA_DA_CAMPANHA = 5_000;
+
+const estagioValidator = v.union(
+  v.literal("novo"),
+  v.literal("contato_preparado"),
+  v.literal("contatado"),
+  v.literal("interessado"),
+  v.literal("confirmou"),
+  v.literal("participou"),
+  v.literal("testando"),
+  v.literal("convertido"),
+  v.literal("descartado"),
+);
+
 export const setLandingLeadStatus = mutation({
   args: {
     leadId: v.id("landingLeads"),
-    status: v.union(
-      v.literal("novo"),
-      v.literal("contatado"),
-      v.literal("convertido"),
-      v.literal("descartado"),
-    ),
+    status: estagioValidator,
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
@@ -503,7 +596,64 @@ export const setLandingLeadStatus = mutation({
     if (!lead) {
       throw new ConvexError({ code: "NOT_FOUND", message: "Interessado não encontrado" });
     }
-    await ctx.db.patch(args.leadId, { status: args.status });
+    // Mover de etapa É uma interação: sem carimbar a data aqui, "há quanto
+    // tempo ninguém fala com essa pessoa" mediria só quem foi editado pelo
+    // formulário completo.
+    await ctx.db.patch(args.leadId, {
+      status: args.status,
+      ultimaInteracao: dataDoDia(),
+    });
+  },
+});
+
+/**
+ * Preenche o que se descobre CONVERSANDO com o interessado.
+ *
+ * A landing pede três campos porque pedir mais afugenta quem está com pressa.
+ * Empresa, cidade, porte e segmento aparecem depois — e sem lugar para
+ * guardá-los, iam para uma planilha paralela, que é exatamente o que este
+ * produto existe para acabar.
+ *
+ * `null` LIMPA, ausente não mexe: a convenção de `lib/limparCampos.ts`. Sem
+ * ela, corrigir um campo preenchido por engano seria impossível.
+ *
+ * NÃO mexe em `status`: mudar de etapa é a outra mutation, porque é a outra
+ * decisão. Um formulário que salva e move a pessoa de etapa junto faria toda
+ * correção de telefone parecer avanço no funil.
+ */
+export const atualizarInteressado = mutation({
+  args: {
+    leadId: v.id("landingLeads"),
+    empresa: v.optional(v.union(v.string(), v.null())),
+    instagram: v.optional(v.union(v.string(), v.null())),
+    site: v.optional(v.union(v.string(), v.null())),
+    cidade: v.optional(v.union(v.string(), v.null())),
+    estado: v.optional(v.union(v.string(), v.null())),
+    segmento: v.optional(v.union(v.string(), v.null())),
+    eventosPorAno: v.optional(v.union(v.number(), v.null())),
+    observacoes: v.optional(v.union(v.string(), v.null())),
+    proximoContato: v.optional(v.union(v.string(), v.null())),
+    campanha: v.optional(v.union(v.string(), v.null())),
+    origem: v.optional(origemValidator),
+    /** Registra que alguém falou com a pessoa hoje. */
+    registrarInteracao: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const lead = await ctx.db.get(args.leadId);
+    if (!lead) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Interessado não encontrado" });
+    }
+    const { leadId, registrarInteracao, ...campos } = args;
+    // Um número ilegível gravado aqui não estraga só a linha: estraga toda
+    // ordenação por porte. Mesma trava de `lib/dinheiro.ts`, no menor formato.
+    if (typeof campos.eventosPorAno === "number" && !Number.isFinite(campos.eventosPorAno)) {
+      throw new ConvexError({ code: "INVALID", message: "Informe um número de eventos." });
+    }
+    await ctx.db.patch(leadId, {
+      ...limparCampos(campos),
+      ...(registrarInteracao ? { ultimaInteracao: dataDoDia() } : {}),
+    });
   },
 });
 

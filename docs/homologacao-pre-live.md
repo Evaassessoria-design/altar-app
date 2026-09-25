@@ -121,6 +121,34 @@ Lista honesta do que só existe em teste:
 7. O PDF do projeto visual gerado a partir da conta de demonstração com fotos.
 8. Qualquer envio externo, de qualquer natureza.
 
+### Um risco que só um deployment real resolve
+
+**Busca por empresa em registros sem empresa.** O banco falso do `convex-test`
+chama `.split()` no campo de um índice de busca sem conferir se ele existe, e
+explode em qualquer registro sem `empresa` — inclusive numa busca por NOME,
+porque a consulta usa os dois índices.
+
+Pela documentação do Convex, documento sem o campo simplesmente não casa, e
+isso é quase certamente limitação do simulador. **Mas não foi verificado contra
+um deployment de verdade**, e o efeito de estar errado é a busca da campanha
+quebrar inteira na noite da live.
+
+**Como verificar, em 30 segundos:** no DEV, cadastrar um interessado SEM
+empresa, abrir `/campanha` e procurar por qualquer nome. Se a lista responder,
+está resolvido.
+
+### Uma dependência que foi removida
+
+A busca lia 25 resultados por caminho e mostrava 25. Com 250 pessoas e nomes
+repetidos, procurar "Beatriz Pacheco" podia não trazer a Beatriz Pacheco: o
+termo "Beatriz" casava com dezenas, e a exata ficava fora das 25 primeiras
+conforme o ranking do backend.
+
+Depender do ranking para achar alguém cujo nome inteiro foi digitado é apostar
+numa heurística que o código não controla, e o resultado do erro é a tela dizer
+"ninguém encontrado" sobre uma pessoa que está lá. Agora lê-se 100 por caminho
+e ordena-se aqui: igual primeiro, depois começa-com, depois contém.
+
 ## 7. Antes de 06/10, obrigatoriamente
 
 Em ordem de risco:

@@ -118,13 +118,40 @@ export function PessoasDaCampanha({
           <Skeleton className="h-16 w-full" />
         </div>
       ) : pessoas.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">
-          {buscando
-            ? `Ninguém encontrado para "${termo.trim()}".`
-            : etapa
-              ? `Ninguém em "${ESTAGIOS.find((e) => e.id === etapa)?.rotulo}".`
-              : "Ninguém nesta campanha ainda."}
-        </p>
+        // ── VAZIO NÃO PODE SER UM BECO ──────────────────────────────────
+        // "Ninguém encontrado" sem saída deixa a pessoa numa tela que ela não
+        // sabe desfazer — e a campanha inteira continua ali atrás, invisível.
+        // Cada motivo de vazio traz o caminho de volta correspondente.
+        <div className="py-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            {buscando
+              ? `Ninguém encontrado para "${termo.trim()}".`
+              : etapa
+                ? `Ninguém em "${ESTAGIOS.find((e) => e.id === etapa)?.rotulo}".`
+                : "Ninguém nesta campanha ainda."}
+          </p>
+          {buscando && (
+            <button
+              onClick={() => setTermo("")}
+              className="mt-1 cursor-pointer text-xs text-primary hover:underline"
+            >
+              Limpar busca e ver todos
+            </button>
+          )}
+          {!buscando && etapa && (
+            <button
+              onClick={aoLimparEtapa}
+              className="mt-1 cursor-pointer text-xs text-primary hover:underline"
+            >
+              Ver todos
+            </button>
+          )}
+          {!buscando && !etapa && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Importe uma lista pelo Painel Admin, ou espere quem chegar pela landing.
+            </p>
+          )}
+        </div>
       ) : (
         <ul className="space-y-2">
           {pessoas.map((p) => (

@@ -769,14 +769,28 @@ export const buscarInteressados = query({
             const busca = q.search(campo, termo);
             return args.campanha ? busca.eq("campanha", args.campanha) : busca;
           })
-          .take(LIMITE_DA_BUSCA),
+          // ── POR QUE SE LÊ MAIS DO QUE SE MOSTRA ─────────────────────────
+          // Busca textual casa por TOKEN. "Beatriz Pacheco" bate com todas as
+          // Beatrizes da campanha, e num grupo de 250 pessoas a exata pode
+          // ficar fora das 25 primeiras conforme o ranking do backend.
+          //
+          // Depender do ranking para achar alguém cujo nome inteiro foi
+          // digitado é apostar numa heurística que este código não controla —
+          // e o resultado do erro é a tela dizer "ninguém encontrado" sobre
+          // uma pessoa que está lá.
+          //
+          // Lê-se um lote maior e ordena-se aqui, com uma regra explícita: o
+          // que a pessoa digitou por inteiro vem primeiro.
+          .take(LOTE_DA_BUSCA),
       );
     }
 
     return {
       termo,
       curtoDemais: false,
-      resultados: [...encontrados.values()].slice(0, LIMITE_DA_BUSCA).map((l) => ({
+      resultados: ordenarPorAderencia([...encontrados.values()], termo)
+        .slice(0, LIMITE_DA_BUSCA)
+        .map((l) => ({
         _id: l._id,
         name: l.name,
         email: l.email,
@@ -794,8 +808,45 @@ export const buscarInteressados = query({
   },
 });
 
-/** Teto por caminho de busca. Quem procura uma pessoa não rola cem linhas. */
+/** Teto do que é MOSTRADO. Quem procura uma pessoa não rola cem linhas. */
 export const LIMITE_DA_BUSCA = 25;
+
+/**
+ * Teto do que é LIDO por caminho de busca, antes de ordenar.
+ *
+ * Maior do que o que aparece de propósito — ver o comentário em
+ * `buscarInteressados`. Quatro vezes o mostrado cobre com folga uma campanha
+ * de centenas de pessoas com nomes repetidos, e continua sendo uma leitura de
+ * custo fixo.
+ */
+export const LOTE_DA_BUSCA = 100;
+
+/**
+ * O que a pessoa digitou por inteiro vem primeiro.
+ *
+ * Três degraus, e nenhum deles é "score": igual, começa com, e o resto. Uma
+ * pontuação por similaridade seria mais sofisticada e impossível de explicar
+ * quando alguém perguntasse por que a Marina certa ficou em sexto.
+ */
+function ordenarPorAderencia(
+  leads: readonly Doc<"landingLeads">[],
+  termo: string,
+): Doc<"landingLeads">[] {
+  const alvo = termo.trim().toLowerCase();
+  const grau = (l: Doc<"landingLeads">): number => {
+    const campos = [l.name, l.empresa].filter(Boolean).map((c) => c!.toLowerCase());
+    if (campos.some((c) => c === alvo)) return 0;
+    if (campos.some((c) => c.startsWith(alvo))) return 1;
+    if (campos.some((c) => c.includes(alvo))) return 2;
+    return 3;
+  };
+  return leads
+    .map((l, i) => ({ l, i, g: grau(l) }))
+    // O índice de origem desempata: dentro do mesmo grau a ordem que veio do
+    // backend é preservada, e ela já é a ordem de relevância dele.
+    .sort((a, b) => (a.g !== b.g ? a.g - b.g : a.i - b.i))
+    .map((x) => x.l);
+}
 
 /**
  * O funil de uma campanha, em contagens — as sete perguntas de uma vez.

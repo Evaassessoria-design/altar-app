@@ -20,6 +20,12 @@ const TELAS_OPERACIONAIS = [
   "src/pages/app/events/[id]/checklist/page.tsx",
   "src/components/attention-board.tsx",
   "src/pages/app/events/[id]/projeto/page.tsx",
+  // A campanha é operada NO CELULAR, entre um compromisso e outro: mudar a
+  // etapa de alguém que acabou de responder no WhatsApp é a ação mais
+  // frequente dela, e é feita com o telefone na mão.
+  "src/pages/app/campanha/_components/pessoas-da-campanha.tsx",
+  "src/pages/app/campanha/_components/fila-de-revisao.tsx",
+  "src/pages/app/campanha/_components/comercial-hoje.tsx",
 ];
 
 /** Blocos `hidden sm:*` / `hidden md:*` e o que vem logo dentro deles. */

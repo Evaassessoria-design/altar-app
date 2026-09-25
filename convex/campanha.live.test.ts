@@ -291,3 +291,47 @@ describe("as regras puras, sem banco", () => {
     expect(LIVE_ALTAR.hora).toBe("19:00");
   });
 });
+
+describe("a inscrição pela landing pode chegar marcada", () => {
+  it("slug conhecido marca a campanha e a origem", async () => {
+    const { t, admin } = await cenario();
+    await t.mutation(api.landingLeads.submit, {
+      name: "Decoradora da live",
+      email: "live@ex.com",
+      intent: "demo",
+      campanha: LIVE_ALTAR.slug,
+    });
+    const f = await admin.query(api.admin.funilDaCampanha, { campanha: LIVE_ALTAR.slug });
+    expect(f.total).toBe(1);
+  });
+
+  it("slug INVENTADO é descartado — e o cadastro entra assim mesmo", async () => {
+    // A mutation é pública. Aceitar o texto como veio deixaria alguém gravar
+    // mil registros com uma campanha inventada, e as contagens somariam lixo.
+    // Mas recusar a inscrição por causa de um parâmetro errado na URL seria
+    // perder a decoradora — trocar o essencial pelo acessório.
+    const { t, admin } = await cenario();
+    await t.mutation(api.landingLeads.submit, {
+      name: "Decoradora",
+      email: "x@ex.com",
+      intent: "demo",
+      campanha: "campanha-que-nao-existe",
+    });
+    const todos = await admin.query(api.admin.listLandingLeads, {});
+    expect(todos.leads).toHaveLength(1);
+    expect(todos.leads[0].campanha).toBeUndefined();
+  });
+
+  it("voltar pela landing sem campanha NÃO apaga a marcação de antes", async () => {
+    // Apagar faria a contagem da campanha encolher sozinha, depois da live.
+    const { t, admin } = await cenario();
+    await t.mutation(api.landingLeads.submit, {
+      name: "Marina", email: "m@ex.com", intent: "demo", campanha: LIVE_ALTAR.slug,
+    });
+    await t.mutation(api.landingLeads.submit, {
+      name: "Marina", email: "m@ex.com", intent: "beta",
+    });
+    const f = await admin.query(api.admin.funilDaCampanha, { campanha: LIVE_ALTAR.slug });
+    expect(f.total, "a segunda inscrição apagou a campanha").toBe(1);
+  });
+});

@@ -337,3 +337,96 @@ describe("a foto do ITEM passa pela mesma porta das prateleiras", () => {
     expect(fotosDosItens(a)).toEqual(["/proprio.jpg"]);
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// REGRESSÃO — O DOCUMENTO DA CLIENTE, DE PONTA A PONTA
+//
+// As travas acima testam cada fronteira isolada. Estas testam o objeto
+// INTEIRO, serializado, do jeito que o gerador o recebe: é assim que um campo
+// novo vaza — não por alguém decidir publicá-lo, mas por um `...item` num
+// lugar onde ninguém estava olhando.
+// ═════════════════════════════════════════════════════════════════════════════
+describe("o objeto que chega ao PDF não contém nada interno", () => {
+  /** Um evento com tudo que existe de interno em item e foto. */
+  const completo = () =>
+    montar(
+      [
+        item({
+          _id: "i1",
+          ambiente: "Cerimônia",
+          name: "Arranjo alto",
+          quantity: 12,
+          supplierName: "Flora Bela Atacado",
+          notes: "Fechar por 180 e pedir nota",
+          operationalStatus: "carregado",
+          receita: [{ nome: "Rosa branca", quantidade: 180, custoReferencia: 6.9 }],
+          contractedFoto: {
+            url: "/o.jpg",
+            previewUrl: "/l.jpg",
+            origem: "galeria",
+            photoId: "f1",
+          },
+        } as never),
+      ],
+      [
+        foto({
+          _id: "f1",
+          ambiente: "Cerimônia",
+          projectScope: "incluso",
+          caption: "Arranjo alto do altar",
+        }),
+        foto({
+          _id: "f2",
+          ambiente: "Cerimônia",
+          visibility: "interno",
+          caption: "fornecedor mandou a cor errada",
+        }),
+        foto({
+          _id: "f3",
+          ambiente: "Cerimônia",
+          category: "evento",
+          caption: "como ficou",
+        }),
+        foto({ _id: "f4", ambiente: "Cerimônia", projectScope: "nao_incluso" }),
+      ],
+    );
+
+  it("nem fornecedor, nem custo, nem nota operacional, nem situação", () => {
+    const serializado = JSON.stringify(completo());
+    for (const interno of [
+      "Flora Bela",
+      "Fechar por 180",
+      "carregado",
+      "6.9",
+      "custoReferencia",
+      "supplierName",
+      "receita",
+      "operationalStatus",
+    ]) {
+      expect(serializado, `vazou "${interno}" para o documento da cliente`).not.toContain(
+        interno,
+      );
+    }
+  });
+
+  it("a foto marcada SÓ PARA MIM não aparece em lugar nenhum do objeto", () => {
+    // Nem como imagem de ambiente, nem como foto de item, nem pela legenda.
+    const serializado = JSON.stringify(completo());
+    expect(serializado).not.toContain("mandou a cor errada");
+    expect(serializado).not.toContain("/f2");
+  });
+
+  it("nem a foto de execução, nem a `nao_incluso`", () => {
+    const serializado = JSON.stringify(completo());
+    expect(serializado).not.toContain("como ficou");
+  });
+
+  it("e o que É da cliente continua chegando inteiro", () => {
+    // Uma trava que só proíbe acaba esvaziando o documento sem ninguém notar.
+    const a = completo();
+    const serializado = JSON.stringify(a);
+    expect(serializado).toContain("Arranjo alto");
+    expect(serializado).toContain("Arranjo alto do altar");
+    expect(a.ambientes[0].itens[0].fotoUrl).toBe("/l.jpg");
+  });
+});

@@ -1,6 +1,7 @@
 import { mutation } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
 import { normalizarE164 } from "./lib/central/telefone";
+import { campanhaPorSlug } from "./lib/campanha";
 
 // ── LIMITES DE UM ENDPOINT ABERTO ───────────────────────────────────────────
 // Esta é a ÚNICA mutation do ALTAR que escreve sem sessão: qualquer pessoa na
@@ -37,6 +38,19 @@ export const submit = mutation({
     email: v.string(),
     whatsapp: v.optional(v.string()),
     intent: v.union(v.literal("demo"), v.literal("beta")),
+    /**
+     * De qual campanha veio, quando veio de uma.
+     *
+     * ── POR QUE O SERVIDOR CONFERE A LISTA ──────────────────────────────────
+     * Esta mutation é PÚBLICA: qualquer visitante a chama. Aceitar o texto
+     * como veio deixaria alguém gravar mil registros com uma campanha
+     * inventada, e as contagens do painel passariam a somar lixo.
+     *
+     * Slug desconhecido é DESCARTADO, não recusado: o cadastro é o que
+     * importa, e perder a inscrição de uma decoradora por causa de um
+     * parâmetro errado na URL seria trocar o essencial pelo acessório.
+     */
+    campanha: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const email = args.email.trim().toLowerCase();
@@ -70,6 +84,9 @@ export const submit = mutation({
       .withIndex("by_email", (q) => q.eq("email", email))
       .first();
 
+    // Só uma campanha que o produto conhece. Ver o argumento acima.
+    const campanha = campanhaPorSlug(args.campanha)?.slug;
+
     if (existing) {
       const whatsapp = whatsappInformado ?? existing.whatsapp;
       await ctx.db.patch(existing._id, {
@@ -77,6 +94,10 @@ export const submit = mutation({
         intent: args.intent,
         whatsapp,
         whatsappE164: normalizarE164(whatsapp) ?? undefined,
+        // A campanha só é GRAVADA, nunca apagada: quem já estava marcado como
+        // vindo da live e voltou pela landing continua sendo da live. Apagar
+        // faria a contagem da campanha encolher sozinha, depois do evento.
+        ...(campanha ? { campanha, origem: "live" as const } : {}),
       });
       return null;
     }
@@ -87,6 +108,8 @@ export const submit = mutation({
       intent: args.intent,
       whatsapp: whatsappInformado,
       whatsappE164: normalizarE164(whatsappInformado) ?? undefined,
+      campanha,
+      origem: campanha ? ("live" as const) : undefined,
     });
     return null;
   },

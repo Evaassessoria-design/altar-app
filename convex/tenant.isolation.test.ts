@@ -27,6 +27,15 @@ const GUARDAS = [
   // Mesma semântica de `requireUser` para as queries que degradam para null:
   // resolve QUEM está chamando, e a função compara o dono logo em seguida.
   "getOptionalUser",
+  // Guarda de posse do módulo `propostas`, com a MESMA forma de
+  // `requireEventOwner`: resolve a sessão por `requireUser`, lê o registro,
+  // compara o dono e responde NOT_FOUND para id de outra conta.
+  //
+  // Entra na lista por ser um guarda de verdade, não por conveniência — e a
+  // prova disso é o teste logo abaixo, que confere o que ele faz por dentro.
+  // Sem essa checagem, acrescentar um nome aqui seria a maneira mais fácil de
+  // desligar esta trava inteira.
+  "minhaProposta",
 ];
 
 // `requireIdentity` NÃO entra nesta lista de propósito: ele confirma que há
@@ -55,6 +64,12 @@ const SEM_GUARDA_JUSTIFICADO: Record<string, string> = {
   "assemblyItems.generateUploadUrl": "URL de upload sem vínculo com tenant",
   "gallery.generateUploadUrl": "URL de upload sem vínculo com tenant",
   "leadDocuments.generateUploadUrl": "URL de upload sem vínculo com tenant",
+
+  // Responde se o provedor de IMAGEM está configurado no AMBIENTE — um
+  // booleano sobre a instalação, não sobre a conta. Exige sessão
+  // (`requireIdentity`) para não virar sonda pública do que está ligado no
+  // servidor, e não há dado de tenant para isolar.
+  "layoutRenders.providerStatus": "booleano sobre o ambiente, não sobre a conta",
 };
 
 /** Módulos tocados ou recém-expostos nesta rodada e nas anteriores. */
@@ -87,6 +102,21 @@ const MODULOS = [
   "compositions",
   "fichaTecnica",
   "acervo",
+  // ── LACUNA FECHADA ───────────────────────────────────────────────────────
+  // `propostas` ficou fora desta lista desde que o módulo nasceu, e a auditoria
+  // de jornada registrou isso como lacuna de cobertura. Não havia defeito — as
+  // funções sempre passaram por `minhaProposta`/`requireUser` —, mas a trava
+  // que vigia o resto do produto não vigiava justamente o documento que vai
+  // para a cliente.
+  "propostas",
+  // O Assistente da decoradora entra desde o primeiro dia: é a superfície mais
+  // nova a ler dado de negócio, e a que mais depende de a posse vir da sessão.
+  "assistente",
+  "orcamento",
+  "layoutRenders",
+  "dashboard",
+  "agenda",
+  "notifications",
 ];
 
 type Funcao = { id: string; tipo: string; corpo: string };
@@ -185,5 +215,43 @@ describe("pasta do evento e resumo: presos ao evento do dono", () => {
     expect(corpo).toMatch(/if \(!event\) return null/);
     // E toda leitura seguinte é presa ao eventId já validado.
     expect(corpo).not.toMatch(/\.collect\(\)[\s\S]{0,40}filter\(\(\w\) => \w\.userId/);
+  });
+});
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UM NOME NA LISTA DE GUARDAS PRECISA SER UM GUARDA
+//
+// `GUARDAS` é uma lista de STRINGS conferida contra o texto da função. É
+// poderosa e é frágil pelo mesmo motivo: acrescentar um nome ali é a maneira
+// mais fácil de desligar esta trava inteira, e ninguém repararia.
+//
+// `minhaProposta` entrou nesta rodada. Este bloco existe para que ela tenha de
+// continuar fazendo o que um guarda faz.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("minhaProposta é mesmo um guarda de posse", () => {
+  const PROPOSTAS = readFileSync("convex/propostas.ts", "utf-8");
+  const corpo = PROPOSTAS.slice(
+    PROPOSTAS.indexOf("async function minhaProposta"),
+    PROPOSTAS.indexOf("/** O que a lista mostra"),
+  );
+
+  it("resolve a sessão", () => {
+    expect(corpo).toContain("requireUser(ctx)");
+  });
+
+  it("compara o dono do registro com a sessão", () => {
+    expect(corpo).toMatch(/proposta\.userId\s*!==\s*user\._id/);
+  });
+
+  it("responde NOT_FOUND, nunca FORBIDDEN", () => {
+    // Confirmar que o id existe já seria contar que aquela empresa tem uma
+    // proposta. É a regra do produto inteiro.
+    expect(corpo).toContain('code: "NOT_FOUND"');
+    expect(corpo).not.toContain("FORBIDDEN");
+  });
+
+  it("lança em vez de devolver — quem chama não tem como esquecer de checar", () => {
+    expect(corpo).toContain("throw new ConvexError");
   });
 });

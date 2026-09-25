@@ -314,6 +314,31 @@ export default defineSchema({
     ),
     // Epoch ms. Só tem efeito quando accessType === "beta".
     accessExpiresAt: v.optional(v.number()),
+    /**
+     * DONO DA PLATAFORMA — quem administra o negócio ALTAR.
+     *
+     * ── TRÊS CONCEITOS QUE NÃO PODEM SE MISTURAR ────────────────────────────
+     *   platformOwner  → administra o SaaS ALTAR. Hoje: uma conta só.
+     *   role: "admin"  → opera o painel e a Central (suporte, cobrança).
+     *   a decoradora   → administra a EMPRESA DELA dentro do ALTAR.
+     *
+     * O terceiro é dono de tudo que é dele e de nada que seja do ALTAR. O
+     * segundo já existia e é mais amplo do que o primeiro precisa ser: um dia
+     * haverá alguém de suporte com `role: "admin"` que não deve enxergar
+     * métricas de receita nem a ferramenta interna de IA.
+     *
+     * ── NINGUÉM GANHA ISTO POR INFERÊNCIA ───────────────────────────────────
+     * AUSENTE = false, e é o estado de TODAS as contas — inclusive as que têm
+     * `role: "admin"`, `accessType: "internal"` ou `beta`. Nenhuma dessas
+     * promove ninguém: são estados de COBRANÇA e de SUPORTE, não de posse da
+     * plataforma.
+     *
+     * Não há nome, e-mail ou identidade pessoal em lugar nenhum do código. A
+     * concessão é um ato explícito e deliberado —
+     * `admin.grantPlatformOwnerByEmail`, uma `internalMutation` que só roda
+     * pelo painel do Convex, por quem já tem acesso ao deployment.
+     */
+    platformOwner: v.optional(v.boolean()),
   })
     .index("by_token", ["tokenIdentifier"])
     .index("by_better_auth_id", ["betterAuthId"])
@@ -2042,11 +2067,11 @@ export default defineSchema({
   // outra. São dois produtos que compartilham arquitetura, não dados.
   //
   // ── POR QUE NÃO EXISTE TABELA DE AGENTES ───────────────────────────────────
-  // Agente é PRODUTO, não dado: os sete vivem em `lib/escritorio/agentes.ts`.
+  // Agente é PRODUTO, não dado: os sete vivem em `lib/assistente/agentes.ts`.
   // Uma tabela pediria cadastro que ninguém quer fazer e obrigaria cada conta a
   // ter sete linhas semeadas, com a primeira que falhasse virando uma conta sem
   // equipe.
-  agentTasks: defineTable({
+  assistantTasks: defineTable({
     /** A DONA. Nunca vem do navegador — é sempre a sessão. */
     userId: v.id("users"),
     /** O que ela escreveu, como escreveu. */
@@ -2080,7 +2105,7 @@ export default defineSchema({
       v.literal("failed"),
       v.literal("refused"),
     ),
-    /** O veredicto do semáforo (`lib/escritorio/semaforo.ts`). */
+    /** O veredicto do semáforo (`lib/assistente/semaforo.ts`). */
     cor: v.union(v.literal("verde"), v.literal("amarelo"), v.literal("vermelho")),
     /** O que tornou o pedido amarelo ou vermelho. Ausente = verde. */
     motivoDaCor: v.optional(v.string()),
@@ -2093,7 +2118,7 @@ export default defineSchema({
      */
     erro: v.optional(v.string()),
     /**
-     * As fontes consultadas, pelos ids de `lib/escritorio/agentes.ts`.
+     * As fontes consultadas, pelos ids de `lib/assistente/agentes.ts`.
      *
      * A tela traduz por `ROTULO_DA_FONTE`. Guardar o id e não o rótulo permite
      * mudar o texto sem reescrever histórico.

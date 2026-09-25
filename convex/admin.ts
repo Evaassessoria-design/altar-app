@@ -44,6 +44,7 @@ const estagioValidator = v.union(
   v.literal("descartado"),
 );
 import { ACTIVE_WINDOWS, isActiveWithin } from "./lib/presence";
+import { panoramaDoNegocio } from "./lib/escritorio/panorama";
 import { deleteBetterAuthAccount } from "./lib/authAccount";
 import { exigirNumeroReal } from "./lib/numeroGravavel";
 
@@ -381,6 +382,9 @@ export const grantInternalAccessByEmail = internalMutation({
       });
     }
 
+    // `platformOwner` NÃO entra aqui, e a ausência é deliberada: ser admin e
+    // ser interno são estados de SUPORTE e de COBRANÇA. Quem administra o
+    // negócio ALTAR é concedido à parte, por `grantPlatformOwnerByEmail`.
     await ctx.db.patch(target._id, {
       role: "admin",
       accessType: "internal",
@@ -396,6 +400,76 @@ export const grantInternalAccessByEmail = internalMutation({
       accessType: updated?.accessType,
       subscriptionStatus: updated?.subscriptionStatus,
       blocked: updated ? resolveAccess(updated).blocked : null,
+    };
+  },
+});
+
+/**
+ * Concede (ou remove) o DONO DA PLATAFORMA — quem administra o negócio ALTAR.
+ *
+ * ── POR QUE É UMA CONCESSÃO SEPARADA ────────────────────────────────────────
+ * `grantInternalAccessByEmail` promove a admin e isenta de cobrança. Isso é
+ * suporte. Administrar o negócio é outra coisa, e o dia em que houver uma
+ * segunda pessoa no suporte, ela não deve herdar as métricas de receita nem a
+ * ferramenta interna de IA só por ter sido promovida a admin.
+ *
+ * Por isso nada aqui é automático: nenhum caminho do produto chama esta
+ * função, e nenhum estado de conta (`role: "admin"`, `accessType: "internal"`,
+ * `"beta"`, ser dono do próprio tenant) leva a ela. É uma `internalMutation`
+ * como a irmã acima — só roda pelo painel do Convex, por quem já tem acesso ao
+ * deployment.
+ *
+ * ── E POR QUE NÃO PROMOVE A ADMIN JUNTO ─────────────────────────────────────
+ * Seria conveniente e seria errado: misturaria de novo os dois conceitos que
+ * esta função existe para separar. Conceder as duas coisas são duas chamadas,
+ * e isso é a intenção.
+ *
+ * O e-mail é ARGUMENTO, digitado por quem opera o banco. Não existe nome nem
+ * e-mail escrito em lugar nenhum do código — trocar quem é o dono não é mexer
+ * em código.
+ *
+ * Uso no painel do Convex:
+ *   internal.admin.grantPlatformOwnerByEmail
+ *   { "email": "pessoa@exemplo.com" }            → concede
+ *   { "email": "pessoa@exemplo.com", "revoke": true }  → remove
+ */
+export const grantPlatformOwnerByEmail = internalMutation({
+  args: { email: v.string(), revoke: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
+    const email = args.email.trim().toLowerCase();
+    const users = await ctx.db.query("users").collect();
+    const target = users.find((u) => u.email.trim().toLowerCase() === email);
+
+    if (!target) {
+      throw new ConvexError({
+        code: "NOT_FOUND",
+        message: `Nenhum usuário com o e-mail ${email}. Confira em Data → users.`,
+      });
+    }
+
+    const conceder = args.revoke !== true;
+    // Removido vira `undefined` e não `false`: o schema diz que ausente é
+    // "não é dono", então guardar `false` seria escrever o padrão no banco.
+    await ctx.db.patch(target._id, {
+      platformOwner: conceder ? true : undefined,
+    });
+
+    // Quem mais tem — para quem operou ver na hora se a lista cresceu sem
+    // querer. A varredura completa cabe: é uma função interna, rodada à mão.
+    const donos = (await ctx.db.query("users").collect())
+      .filter((u) => u.platformOwner === true)
+      .map((u) => u.email);
+
+    return {
+      userId: target._id,
+      email: target.email,
+      name: target.name,
+      platformOwner: conceder,
+      // `role` vem junto de propósito: deixa visível que conceder a plataforma
+      // não mexeu no papel de suporte, e nem deveria.
+      role: target.role,
+      accessType: target.accessType ?? "client",
+      donosDaPlataforma: donos,
     };
   },
 });
@@ -420,6 +494,8 @@ export const inspectAccountByEmail = internalQuery({
       name: target.name,
       role: target.role,
       isAdmin: target.role === "admin",
+      // Separado de `isAdmin` de propósito: são duas perguntas diferentes.
+      platformOwner: target.platformOwner === true,
       accessType: target.accessType ?? "client",
       subscriptionStatus: target.subscriptionStatus,
       trialEndDate: target.trialEndDate,
@@ -882,53 +958,15 @@ export const atualizarInteressado = mutation({
 export const getOfficeSnapshot = internalQuery({
   args: { now: v.number() },
   handler: async (ctx, args) => {
+    // Os tetos são altos e existem para a varredura não ficar sem fim; quando
+    // a carteira encostar neles, isto vira paginação de verdade.
     const users = await ctx.db.query("users").take(5_000);
-    const now = args.now;
-
-    const billable = users.filter((user) => !resolveAccess(user, now).billingExempt);
-    const statusOf = (user: (typeof users)[number]) =>
-      effectiveSubscriptionStatus(user, now);
-
-    const trial = billable.filter((user) => statusOf(user) === "trial").length;
-    const active = billable.filter((user) => statusOf(user) === "active").length;
-    const overdue = billable.filter((user) => statusOf(user) === "overdue").length;
-    const expired = billable.filter((user) => statusOf(user) === "expired").length;
-    const cancelled = billable.filter((user) => statusOf(user) === "cancelled").length;
-    const overdueBlocked = billable.filter(
-      (user) => statusOf(user) === "overdue" && resolveAccess(user, now).blocked,
-    ).length;
-
-    const conversionDenominator = active + expired;
     const eventsTotal = await ctx.db.query("events").take(20_000);
 
     return {
       vertical: "altar_decor" as const,
-      generatedAt: new Date(now).toISOString(),
-      metrics: {
-        total: users.length,
-        trial,
-        active,
-        overdue,
-        overdueBlocked,
-        expired,
-        cancelled,
-        mrr: active * 119.9,
-        conversionRate:
-          conversionDenominator > 0
-            ? Math.round((active / conversionDenominator) * 100)
-            : 0,
-        eventsTotal: eventsTotal.length,
-        activeDay: users.filter((user) =>
-          isActiveWithin(user.lastSeenAt, ACTIVE_WINDOWS.day, now),
-        ).length,
-        activeWeek: users.filter((user) =>
-          isActiveWithin(user.lastSeenAt, ACTIVE_WINDOWS.week, now),
-        ).length,
-        activeMonth: users.filter((user) =>
-          isActiveWithin(user.lastSeenAt, ACTIVE_WINDOWS.month, now),
-        ).length,
-        neverSeen: users.filter((user) => user.lastSeenAt === undefined).length,
-      },
+      generatedAt: new Date(args.now).toISOString(),
+      metrics: panoramaDoNegocio(users, eventsTotal.length, args.now),
     };
   },
 });

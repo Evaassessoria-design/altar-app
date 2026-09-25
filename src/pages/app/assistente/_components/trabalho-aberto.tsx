@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.tsx";
 import { Loader2, CircleSlash, AlertCircle } from "lucide-react";
-import { ROTULO_DA_FONTE, type Fonte } from "@/convex/lib/escritorio/agentes.ts";
+import { ROTULO_DA_FONTE, type Fonte } from "@/convex/lib/assistente/agentes.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // UM TRABALHO, ABERTO
@@ -38,14 +38,14 @@ export function TrabalhoAberto({
   nomeDoAgente,
   onClose,
 }: {
-  taskId: Id<"agentTasks">;
+  taskId: Id<"assistantTasks">;
   nomeDoAgente?: string;
   onClose: () => void;
 }) {
   // Reativa: o diálogo abre com a tarefa ainda `queued` e se preenche sozinho
   // quando o executor termina. É o que faz a espera parecer trabalho e não
   // travamento.
-  const tarefa = useQuery(api.escritorio.obter, { taskId });
+  const tarefa = useQuery(api.assistente.obter, { taskId });
 
   const trabalhando =
     tarefa && (tarefa.status === "queued" || tarefa.status === "running");

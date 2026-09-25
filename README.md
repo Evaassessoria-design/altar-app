@@ -124,6 +124,7 @@ ALTAR_DEMO                               ← só no projeto de demonstração
 | Orçamento, galeria, planta por IA | `convex/orcamento.ts`, `gallery.ts`, `layoutRenders.ts`, `aiVisual.ts` |
 | Saúde do evento, dashboard, agenda | `convex/health.ts`, `dashboard.ts`, `agenda.ts` |
 | Notificações (com varredura diária) | `convex/notifications.ts`, `crons.ts` |
+| Assistente ALTAR (a IA da decoradora) | `convex/assistente.ts`, `assistenteExecutor.ts`, `lib/assistente/*` — veja `docs/assistente-e-escritorio.md` |
 
 **Operação do SaaS** (só administradores)
 
@@ -133,6 +134,7 @@ ALTAR_DEMO                               ← só no projeto de demonstração
 | Assinatura e cobrança | `convex/asaas.ts`, `asaasWebhook.ts` |
 | Central de Comunicações | `convex/communications*.ts`, `adminApprovals.ts`, `adminWorkItems.ts`, `customerVoice.ts` — veja `docs/central-comunicacoes.md` |
 | Ponte do Escritório 3D (somente leitura) | `convex/officeBridgeHttp.ts`, `officeCentralHttp.ts` |
+| Escritório ALTAR (o painel do negócio) | `convex/escritorio.ts`, `lib/escritorio/panorama.ts`, `lib/platformGuard.ts` — **não** é para administradores: é para o dono da plataforma |
 | Seed de demonstração (Marina & Gabriel) | `convex/demo.ts`, `lib/demoData.ts`, `lib/demoGuard.ts` — três travas: `ALTAR_DEMO=1`, recusa em banco com sinal de produção, idempotência |
 
 **A identidade visual**: `docs/identidade-visual.md` — a arte oficial, as onze
@@ -172,8 +174,9 @@ conta está medida, e só medida, em `docs/arquitetura-multiusuario.md` — ela
 Estas não são preferências. Cada uma existe por causa de um defeito real.
 
 1. **Toda função pública passa por um guarda.** Nada de `ctx.db` sem antes
-   `requireUser`, `requireEventOwner`, `requireLeadOwner` (`convex/lib/identity.ts`)
-   ou `requireAdmin` (`convex/lib/adminGuard.ts`).
+   `requireUser`, `requireEventOwner`, `requireLeadOwner` (`convex/lib/identity.ts`),
+   `requireAdmin` (`convex/lib/adminGuard.ts`) ou `requirePlatformOwner`
+   (`convex/lib/platformGuard.ts`).
 2. **Id que veio do navegador não é prova de posse.** Toda função que recebe um
    `v.id(...)` confere o dono antes de ler ou escrever. Evento de outra conta
    responde `NOT_FOUND`, nunca `FORBIDDEN` — não se confirma nem que existe.
@@ -204,6 +207,14 @@ Estas não são preferências. Cada uma existe por causa de um defeito real.
 8. **Exclusão apaga mesmo.** `convex/lib/cascade.ts` é a fonte única: some a
    linha, somem os filhos e somem os arquivos no storage. Tabela nova com
    `eventId` que não entrar ali quebra `cascade.test.ts`.
+9. **Administrar o NEGÓCIO e administrar uma EMPRESA CLIENTE são permissões
+   diferentes.** `platformOwner` (`convex/lib/platformGuard.ts`) abre o
+   Escritório ALTAR, e **ninguém o ganha por inferência**: nem `role: "admin"`,
+   nem `accessType: "internal"` ou `"beta"`, nem ser dona do próprio tenant —
+   os dois últimos são isenções de cobrança, não poder. A concessão é um ato
+   explícito (`internal.admin.grantPlatformOwnerByEmail`), sem nome nem e-mail
+   escrito no código. `escritorio.fronteiras.test.ts` e
+   `src/lib/duas-camadas-de-ia.test.ts` atacam a fronteira de propósito.
 
 ---
 

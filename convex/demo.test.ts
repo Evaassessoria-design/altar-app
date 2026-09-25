@@ -854,3 +854,107 @@ describe("o roteiro comercial não mente sobre o demo", () => {
     }
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// A DEMONSTRAÇÃO PRECISA EXERCITAR O QUE FOI CONSTRUÍDO
+//
+// Um seed pode estar tecnicamente correto e mesmo assim deixar três recursos
+// invisíveis numa apresentação ao vivo. Foi o que a auditoria de pré-lançamento
+// encontrou: os itens não tinham escopo, não apontavam para o fornecedor, e as
+// transações pagas não diziam quando nem como.
+//
+// Nenhum desses era bug. Eram recursos construídos que a demonstração não
+// mostrava — o que, numa live, é indistinguível de não existirem.
+// ═════════════════════════════════════════════════════════════════════════════
+describe("a demonstração mostra o que o produto sabe fazer", () => {
+  it("os itens declaram escopo — a distinção que evita a confusão mais cara", async () => {
+    const t = convexTest(schema, modules);
+    const userId = await ambienteDemo(t);
+    await t.mutation(seed, {});
+
+    const itens = await t.run((ctx) => ctx.db.query("assemblyItems").collect());
+    expect(itens.length).toBeGreaterThan(0);
+    // Todos classificados: numa demonstração, item sem selo parece cadastro
+    // pela metade.
+    expect(itens.filter((i) => !i.projectScope)).toHaveLength(0);
+    // E pelo menos UM é referência — sem isso o Projeto Visual mostraria só
+    // "contratado" e a distinção não apareceria na tela.
+    expect(itens.some((i) => i.projectScope === "referencia")).toBe(true);
+    expect(itens.some((i) => i.projectScope === "incluso")).toBe(true);
+  });
+
+  it("os itens apontam para o fornecedor do evento, não só para o nome", async () => {
+    const t = convexTest(schema, modules);
+    await ambienteDemo(t);
+    await t.mutation(seed, {});
+
+    const [itens, fornecedores] = await t.run(async (ctx) => [
+      await ctx.db.query("assemblyItems").collect(),
+      await ctx.db.query("eventSuppliers").collect(),
+    ]);
+    const idsValidos = new Set(fornecedores.map((f) => f._id as string));
+
+    const comNome = itens.filter((i) => i.supplierName);
+    expect(comNome.length).toBeGreaterThan(0);
+    for (const item of comNome) {
+      // Sem o vínculo, "o que ele entrega neste evento" sai VAZIO na ficha do
+      // fornecedor — o recurso existiria e a demonstração não o mostraria.
+      expect(item.supplierId, `${item.name} sem vínculo`).toBeDefined();
+      expect(idsValidos.has(item.supplierId as string)).toBe(true);
+    }
+    // E o nome continua gravado ao lado: é o snapshot que mantém o Caderno
+    // legível se o fornecedor sair do evento depois.
+    expect(comNome.every((i) => !!i.supplierName)).toBe(true);
+  });
+
+  it("o vínculo do item aponta para o fornecedor CERTO", async () => {
+    const t = convexTest(schema, modules);
+    await ambienteDemo(t);
+    await t.mutation(seed, {});
+
+    const [itens, fornecedores] = await t.run(async (ctx) => [
+      await ctx.db.query("assemblyItems").collect(),
+      await ctx.db.query("eventSuppliers").collect(),
+    ]);
+    const nomePorId = new Map(fornecedores.map((f) => [f._id as string, f.companyName]));
+    for (const item of itens.filter((i) => i.supplierId)) {
+      expect(nomePorId.get(item.supplierId as string)).toBe(item.supplierName);
+    }
+  });
+
+  it("o que está pago diz QUANDO e COMO — e o vencido continua sem isso", async () => {
+    const t = convexTest(schema, modules);
+    await ambienteDemo(t);
+    await t.mutation(seed, {});
+
+    const txs = await t.run((ctx) => ctx.db.query("transactions").collect());
+    const pagas = txs.filter((x) => x.isPaid);
+    const abertas = txs.filter((x) => !x.isPaid);
+
+    expect(pagas.length).toBeGreaterThan(0);
+    for (const x of pagas) {
+      expect(x.paidAt, `${x.description} paga sem data`).toBeTruthy();
+      expect(x.paymentMethod, `${x.description} paga sem forma`).toBeTruthy();
+    }
+    // O que não foi pago NÃO pode ter data de pagamento: data errada em
+    // financeiro é pior que data ausente, e numa demonstração é pior ainda.
+    for (const x of abertas) {
+      expect(x.paidAt, `${x.description} em aberto com data de pagamento`).toBeUndefined();
+      expect(x.paymentMethod).toBeUndefined();
+    }
+  });
+
+  it("a conta vencida da história continua vencida e sem pagamento", async () => {
+    // É o alerta que o painel da manhã existe para dar. Se ela ganhasse
+    // `paidAt` por descuido, a demonstração perderia seu único momento de
+    // tensão — e o produto, seu argumento.
+    const t = convexTest(schema, modules);
+    await ambienteDemo(t);
+    await t.mutation(seed, {});
+
+    const vencidas = (await t.run((ctx) => ctx.db.query("transactions").collect()))
+      .filter((x) => !x.isPaid && x.type === "expense");
+    expect(vencidas.length).toBeGreaterThan(0);
+    expect(vencidas.every((x) => !x.paidAt)).toBe(true);
+  });
+});

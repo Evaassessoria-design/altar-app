@@ -4,6 +4,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import { Button } from "@/components/ui/button.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { Input } from "@/components/ui/input.tsx";
 import { toast } from "sonner";
 import { ConvexError } from "convex/values";
 import {
@@ -16,6 +17,7 @@ import {
   Pencil,
   Trash2,
   ChevronRight,
+  Search,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { format } from "date-fns";
@@ -86,7 +88,31 @@ export default function EventsPage() {
   const [editingEvent, setEditingEvent] = useState<Doc<"events"> | null>(null);
   const [deletingId, setDeletingId] = useState<Id<"events"> | null>(null);
 
+  const [busca, setBusca] = useState("");
+
   const events = useQuery(api.health.listCards, { filter });
+
+  // ── A BUSCA FILTRA A LISTA COMPLETA, E ISSO É DIFERENTE ────────────────
+  // "Filtro entra na consulta" vale quando a tela mostra UMA PÁGINA: filtrar
+  // o que já veio faria a contagem mentir sobre o que existe atrás. Aqui não
+  // é o caso — `listCards` devolve TODOS os eventos da conta, sem teto.
+  // Filtrar esse array é filtrar o conjunto inteiro, e a contagem continua
+  // verdadeira.
+  //
+  // Isto amarra a busca ao fato de a consulta não paginar. Se um dia ela
+  // paginar — e vai precisar, ver `docs/escala-e-projeto-visual.md` — a busca
+  // tem que descer junto para o backend, ou a tela passa a mentir.
+  const termo = busca.trim().toLowerCase();
+  const visiveis = (events ?? []).filter((e) => {
+    if (!termo) return true;
+    // Ela procura pelo nome do cliente, pelo local ou pela data — é assim que
+    // se lembra de um evento, não pelo título que cadastrou meses atrás. E
+    // "cliente" e não "noivos": o ALTAR também faz 15 anos e corporativo, e
+    // `produto-generico.test.ts` cobra isso em todo texto de tela.
+    return [e.name, e.clientName, e.location, e.date]
+      .filter(Boolean)
+      .some((campo) => String(campo).toLowerCase().includes(termo));
+  });
   const createEvent = useMutation(api.events.create);
   const updateEvent = useMutation(api.events.update);
   const removeEvent = useMutation(api.events.remove);
@@ -137,7 +163,9 @@ export default function EventsPage() {
         <div>
           <h1 className="text-2xl font-bold">Eventos</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
-            {events?.length ?? 0} evento{(events?.length ?? 0) !== 1 ? "s" : ""}
+            {termo
+              ? `${visiveis.length} de ${events?.length ?? 0} evento${(events?.length ?? 0) !== 1 ? "s" : ""}`
+              : `${events?.length ?? 0} evento${(events?.length ?? 0) !== 1 ? "s" : ""}`}
           </p>
         </div>
         <Button onClick={() => setShowCreate(true)} className="cursor-pointer flex items-center gap-2">
@@ -164,6 +192,26 @@ export default function EventsPage() {
         ))}
       </div>
 
+      {/* ── BUSCA ──────────────────────────────────────────────────────────
+          Aparece a partir de uma dúzia de eventos. Com cinco, um campo de
+          busca é ruído; com quarenta — que é o que uma decoradora real já
+          tem — rolar a lista inteira para achar "Marina" é o trabalho que o
+          produto deveria estar poupando. */}
+      {(events?.length ?? 0) >= 12 && (
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+          <Input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por cliente, local ou data"
+            aria-label="Buscar eventos"
+            // `h-11` e `text-base`: alvo de toque de verdade, e abaixo de 16px
+            // o iOS dá zoom ao focar e a tela salta na cara de quem digita.
+            className="h-11 pl-9 text-base md:text-sm"
+          />
+        </div>
+      )}
+
       {/* List */}
       {events === undefined ? (
         <div className="space-y-3">
@@ -171,7 +219,7 @@ export default function EventsPage() {
             <Skeleton key={i} className="h-28 w-full rounded-xl" />
           ))}
         </div>
-      ) : events.length === 0 ? (
+      ) : visiveis.length === 0 ? (
         <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -179,12 +227,17 @@ export default function EventsPage() {
             </EmptyMedia>
             <EmptyTitle>Nenhum evento encontrado</EmptyTitle>
             <EmptyDescription>
-              {filter === "all"
-                ? "Crie seu primeiro evento para começar"
-                : "Nenhum evento nessa categoria ainda"}
+              {/* Três situações diferentes que a tela dizia com a mesma frase.
+                  "Crie seu primeiro evento" com quarenta no banco e a busca
+                  escrita é o produto ignorando o que a pessoa acabou de fazer. */}
+              {termo
+                ? `Nenhum evento com “${busca.trim()}”. Tente o nome do cliente ou o local.`
+                : filter === "all"
+                  ? "Crie seu primeiro evento para começar"
+                  : "Nenhum evento nessa categoria ainda"}
             </EmptyDescription>
           </EmptyHeader>
-          {filter === "all" && (
+          {filter === "all" && !termo && (
             <EmptyContent>
               <Button size="sm" onClick={() => setShowCreate(true)} className="cursor-pointer">
                 <Plus className="size-4 mr-2" /> Criar Evento
@@ -194,7 +247,7 @@ export default function EventsPage() {
         </Empty>
       ) : (
         <div className="space-y-3">
-          {events.map((event) => {
+          {visiveis.map((event) => {
             const status = STATUS_CONFIG[event.status] ?? STATUS_CONFIG.planning;
             return (
               <div

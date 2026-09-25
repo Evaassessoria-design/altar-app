@@ -7,10 +7,10 @@ import type { ActionCtx } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { requireIdentity } from "./lib/identity";
 import { getAiConfig } from "./lib/aiConfig";
-import { agentePorId, ROTULO_DA_FONTE, type Agente, type Fonte } from "./lib/escritorio/agentes";
-import { planoDeConsulta } from "./lib/escritorio/plano";
-import { recadoDoRascunho } from "./lib/escritorio/semaforo";
-import { redigirLocalmente, resumirFatos } from "./lib/escritorio/redacao";
+import { agentePorId, ROTULO_DA_FONTE, type Agente, type Fonte } from "./lib/assistente/agentes";
+import { planoDeConsulta } from "./lib/assistente/plano";
+import { recadoDoRascunho } from "./lib/assistente/semaforo";
+import { redigirLocalmente, resumirFatos } from "./lib/assistente/redacao";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // O EXECUTOR — A IA NUNCA TOCA NO BANCO
@@ -22,7 +22,7 @@ import { redigirLocalmente, resumirFatos } from "./lib/escritorio/redacao";
 //
 // ── O QUE ACONTECE AQUI, NESTA ORDEM ────────────────────────────────────────
 //
-//   1. a tarefa é carregada POR UMA CONSULTA DA DONA (`api.escritorio.obter`),
+//   1. a tarefa é carregada POR UMA CONSULTA DA DONA (`api.assistente.obter`),
 //      que devolve `null` se não for dela — a posse não é verificada aqui, é
 //      herdada do guarda que o resto do produto já usa;
 //   2. o agente vem do CATÁLOGO EM CÓDIGO, nunca do pedido;
@@ -115,13 +115,13 @@ REGRAS ABSOLUTAS:
 }
 
 export const executar = action({
-  args: { taskId: v.id("agentTasks") },
+  args: { taskId: v.id("assistantTasks") },
   handler: async (ctx, args): Promise<{ status: string }> => {
     await requireIdentity(ctx);
 
     // A POSSE VEM DAQUI. `obter` devolve `null` para tarefa de outra conta —
     // o mesmo padrão de leitura do resto do produto.
-    const tarefa = await ctx.runQuery(api.escritorio.obter, { taskId: args.taskId });
+    const tarefa = await ctx.runQuery(api.assistente.obter, { taskId: args.taskId });
     if (!tarefa) {
       throw new ConvexError({ code: "NOT_FOUND", message: "Trabalho não encontrado" });
     }
@@ -132,14 +132,14 @@ export const executar = action({
 
     const agente = agentePorId(tarefa.agenteId);
     if (!agente) {
-      await ctx.runMutation(internal.escritorio.falhar, {
+      await ctx.runMutation(internal.assistente.falhar, {
         taskId: args.taskId,
         erro: "Este trabalho ficou sem responsável. Delegue de novo.",
       });
       return { status: "failed" };
     }
 
-    await ctx.runMutation(internal.escritorio.marcarRodando, { taskId: args.taskId });
+    await ctx.runMutation(internal.assistente.marcarRodando, { taskId: args.taskId });
 
     try {
       const fontes = planoDeConsulta(tarefa.pedido, agente);
@@ -169,7 +169,7 @@ export const executar = action({
         // Sem chave, o produto NÃO para: os fatos são os mesmos e a redação
         // sai por regra. A tarefa registra que foi assim.
         const local = redigirLocalmente(agente, tarefa.pedido, fatos, tarefa.cor);
-        await ctx.runMutation(internal.escritorio.concluir, {
+        await ctx.runMutation(internal.assistente.concluir, {
           taskId: args.taskId,
           resultado: local,
           fontesConsultadas: consultadas,
@@ -193,7 +193,7 @@ export const executar = action({
       if (!texto) {
         // Modelo devolveu vazio: a regra assume, em vez de entregar silêncio.
         const local = redigirLocalmente(agente, tarefa.pedido, fatos, tarefa.cor);
-        await ctx.runMutation(internal.escritorio.concluir, {
+        await ctx.runMutation(internal.assistente.concluir, {
           taskId: args.taskId,
           resultado: local,
           fontesConsultadas: consultadas,
@@ -207,7 +207,7 @@ export const executar = action({
           ? `${recadoDoRascunho(tarefa.motivoDaCor)}\n\n${texto}`
           : texto;
 
-      await ctx.runMutation(internal.escritorio.concluir, {
+      await ctx.runMutation(internal.assistente.concluir, {
         taskId: args.taskId,
         resultado: comAviso,
         fontesConsultadas: consultadas,
@@ -217,7 +217,7 @@ export const executar = action({
       });
       return { status: "completed" };
     } catch (e) {
-      await ctx.runMutation(internal.escritorio.falhar, {
+      await ctx.runMutation(internal.assistente.falhar, {
         taskId: args.taskId,
         erro: erroSeguro(e),
       });

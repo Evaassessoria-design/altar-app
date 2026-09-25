@@ -49,10 +49,27 @@ describe("pago sem comprovante", () => {
     expect(pagoSemComprovante(receita({ isPaid: false }))).toBe(false);
   });
 
-  it("despesa fica de fora — o produto ainda não anexa nelas", () => {
-    // Prometer a cobrança sem oferecer o campo seria a tela pedindo algo que
-    // ela não tem como dar.
-    expect(pagoSemComprovante({ type: "expense", isPaid: true })).toBe(false);
+  it("DESPESA paga e sem anexo também é alvo", () => {
+    // Era o contrário aqui, com a justificativa de que o produto não anexava
+    // em despesa. Passou a anexar — o clipe está em toda linha, o diálogo
+    // troca "Recebido" por "Pago" e a mutation nunca olhou o tipo. Só o filtro
+    // não tinha sabido, e afirmava um número menor do que o trabalho real.
+    //
+    // Nota de fornecedor pago é justamente o documento que a contabilidade
+    // cobra. Deixá-lo fora da lista era esconder a metade que mais dói.
+    expect(pagoSemComprovante({ type: "expense", isPaid: true })).toBe(true);
+  });
+
+  it("despesa com anexo sai da lista, como a receita", () => {
+    expect(
+      pagoSemComprovante({ type: "expense", isPaid: true, comprovantes: [{ storageId: "s1" }] }),
+    ).toBe(false);
+  });
+
+  it("despesa NÃO paga continua fora — não há prova de pagamento que não houve", () => {
+    // O limite que sobrou, e é o certo: cobrar comprovante de parcela futura
+    // viraria ruído sobre o livro inteiro.
+    expect(pagoSemComprovante({ type: "expense", isPaid: false })).toBe(false);
   });
 });
 

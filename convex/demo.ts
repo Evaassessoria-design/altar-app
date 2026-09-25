@@ -150,6 +150,7 @@ export const seed = internalMutation({
     // O seed exercita o catálogo central: cada fornecedor entra no catálogo da
     // empresa E ganha o vínculo com o evento, como aconteceria no uso real.
     const supplierIds = new Map<string, Id<"suppliers">>();
+    const vinculoPorNome = new Map<string, Id<"eventSuppliers">>();
     for (const [i, f] of d.suppliers.entries()) {
       const supplierId = await ctx.db.insert("suppliers", {
         userId,
@@ -170,7 +171,10 @@ export const seed = internalMutation({
       });
       supplierIds.set(f.companyName, supplierId);
 
-      await ctx.db.insert("eventSuppliers", {
+      // O id do VÍNCULO fica guardado: é para ele que `assemblyItems.supplierId`
+      // aponta, e é o que faz a ficha do fornecedor responder "o que ele entrega
+      // neste evento". Sem isto a demo mostraria o recurso vazio.
+      const vinculoId = await ctx.db.insert("eventSuppliers", {
         userId,
         eventId,
         supplierId,
@@ -190,6 +194,7 @@ export const seed = internalMutation({
         notes: f.notes,
         order: i,
       });
+      vinculoPorNome.set(f.companyName, vinculoId);
     }
 
     // ── Catálogo de materiais ────────────────────────────────────────────────
@@ -395,6 +400,12 @@ export const seed = internalMutation({
         amount: t.amount,
         date: t.date,
         isPaid: t.isPaid,
+        // QUANDO entrou e COMO. `date` é o vencimento; estes dois são o
+        // pagamento de verdade. Sem eles a demonstração mostraria "pago" sem
+        // a data e a forma que a tela sabe exibir — e o recurso de
+        // comprovantes pareceria não existir.
+        paidAt: "paidAt" in t ? (t.paidAt as string) : undefined,
+        paymentMethod: "paymentMethod" in t ? (t.paymentMethod as string) : undefined,
       });
     }
 
@@ -424,8 +435,17 @@ export const seed = internalMutation({
         quantity: a.quantity,
         unit: a.unit,
         supplierName: a.supplierName,
+        // O VÍNCULO, e não só o nome. `supplierName` continua ao lado como
+        // snapshot — é o que mantém o Caderno legível se o fornecedor sair
+        // do evento depois.
+        supplierId: a.supplierName ? vinculoPorNome.get(a.supplierName) : undefined,
         ambiente: a.ambiente,
         notes: a.notes,
+        // O que é contratado e o que é direção estética. Sem isto o Projeto
+        // Visual da demonstração não mostraria a distinção que evita a
+        // confusão mais cara da decoração — a cliente achar que a inspiração
+        // foi comprada.
+        projectScope: "escopo" in a ? (a.escopo as "incluso" | "referencia" | "nao_incluso") : undefined,
         includeInAssemblyReport: true,
         checkOnAssembly: a.checkOnAssembly,
         visibility: a.visibility,

@@ -328,6 +328,21 @@ export const unregisterCost = mutation({
 
     const lancamento = await ctx.db.get(item.transactionId);
     if (lancamento && lancamento.userId === user._id) {
+      // ── OS ARQUIVOS SAEM COM A LINHA ──────────────────────────────────
+      // Este era o único caminho de exclusão do Financeiro que apagava o
+      // lançamento e deixava os comprovantes no storage. `deleteTransaction`,
+      // a decisão de cancelamento e as duas cascatas já faziam isto; aqui
+      // faltava, e o efeito é storage órfão cobrado para sempre — sem nenhuma
+      // linha no banco que ainda aponte para ele, ou seja, sem jeito de achar
+      // depois.
+      //
+      // Acontece de verdade: a despesa nasce da compra, ela anexa a nota do
+      // fornecedor, e depois desfaz o custo porque lançou no evento errado.
+      //
+      // `safeDeleteFile` porque o Convex LANÇA ao apagar arquivo inexistente,
+      // e uma mutation que lança aborta inteira — o lançamento continuaria
+      // vivo e vinculado por causa de um arquivo que já não existia.
+      for (const c of lancamento.comprovantes ?? []) await safeDeleteFile(ctx, c.storageId);
       await ctx.db.delete(item.transactionId);
     }
     await ctx.db.patch(args.id, { transactionId: undefined });

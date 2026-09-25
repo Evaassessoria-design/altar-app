@@ -402,16 +402,16 @@ export const DEMO_WEDDING = {
   // Entradas do contrato de decoração e saídas da execução do projeto.
   // Nenhum fornecedor do casal aparece aqui — ver financeScope.ts.
   transactions: [
-    { type: "income" as const, category: "Sinal", description: "Sinal do contrato (30%)", amount: 55_950, date: "2026-06-28", isPaid: true },
-    { type: "income" as const, category: "Saldo", description: "2ª parcela", amount: 43_550, date: "2026-08-10", isPaid: true },
-    { type: "income" as const, category: "Saldo", description: "3ª parcela", amount: 43_500, date: "2026-09-10", isPaid: true },
+    { type: "income" as const, category: "Sinal", description: "Sinal do contrato (30%)", amount: 55_950, date: "2026-06-28", isPaid: true, paidAt: "2026-06-28", paymentMethod: "PIX" },
+    { type: "income" as const, category: "Saldo", description: "2ª parcela", amount: 43_550, date: "2026-08-10", isPaid: true, paidAt: "2026-08-12", paymentMethod: "Transferência" },
+    { type: "income" as const, category: "Saldo", description: "3ª parcela", amount: 43_500, date: "2026-09-10", isPaid: true, paidAt: "2026-09-11", paymentMethod: "PIX" },
     { type: "income" as const, category: "Saldo", description: "Parcela final", amount: 43_500, date: "2026-10-05", isPaid: false },
-    { type: "expense" as const, category: "Flores", description: "Flores de Aurora — 50% do pedido", amount: 17_000, date: "2026-08-05", isPaid: true },
-    { type: "expense" as const, category: "Móveis", description: "Mobiliário Casa Rara — locação", amount: 21_400, date: "2026-08-18", isPaid: true },
-    { type: "expense" as const, category: "Materiais", description: "Estrutura do arco e painéis", amount: 12_800, date: "2026-08-22", isPaid: true },
-    { type: "expense" as const, category: "Tecidos", description: "Toalhas, trilhos e guardanapos", amount: 9_600, date: "2026-09-02", isPaid: true },
-    { type: "expense" as const, category: "Transporte", description: "Frete da montagem (ida e volta)", amount: 3_800, date: "2026-09-12", isPaid: true },
-    { type: "expense" as const, category: "Materiais", description: "Materiais de consumo e insumos", amount: 2_400, date: "2026-09-12", isPaid: true },
+    { type: "expense" as const, category: "Flores", description: "Flores de Aurora — 50% do pedido", amount: 17_000, date: "2026-08-05", isPaid: true, paidAt: "2026-08-05", paymentMethod: "PIX" },
+    { type: "expense" as const, category: "Móveis", description: "Mobiliário Casa Rara — locação", amount: 21_400, date: "2026-08-18", isPaid: true, paidAt: "2026-08-18", paymentMethod: "Boleto" },
+    { type: "expense" as const, category: "Materiais", description: "Estrutura do arco e painéis", amount: 12_800, date: "2026-08-22", isPaid: true, paidAt: "2026-08-22", paymentMethod: "Cartão" },
+    { type: "expense" as const, category: "Tecidos", description: "Toalhas, trilhos e guardanapos", amount: 9_600, date: "2026-09-02", isPaid: true, paidAt: "2026-09-02", paymentMethod: "PIX" },
+    { type: "expense" as const, category: "Transporte", description: "Frete da montagem (ida e volta)", amount: 3_800, date: "2026-09-12", isPaid: true, paidAt: "2026-09-12", paymentMethod: "PIX" },
+    { type: "expense" as const, category: "Materiais", description: "Materiais de consumo e insumos", amount: 2_400, date: "2026-09-12", isPaid: true, paidAt: "2026-09-12", paymentMethod: "Cartão" },
     // ── A ÚNICA CONTA VENCIDA DA HISTÓRIA ────────────────────────────────
     // O saldo da floricultura venceu em 15/09 e não foi liquidado. É o que
     // faz o painel da manhã dizer "Venceu e não foi liquidado · 1 a pagar ·
@@ -431,21 +431,21 @@ export const DEMO_WEDDING = {
   // ── Carregamento / Caderno de Montagem ───────────────────────────────────
   // `area` casa com as chaves de BRIEFING_AREAS (src/lib/briefing-areas.ts).
   assembly: [
-    { area: "ceremony", name: "Arco de oliveiras", model: "Estrutura curva 2,4m", quantity: 1, unit: "un", supplierName: "Flores de Aurora", ambiente: "Jardim das oliveiras", notes: "Montar até as 13h — foto dos noivos às 15h", checkOnAssembly: true, visibility: "equipe" as const, composicao: "Arco de oliveiras" },
-    { area: "ceremony", name: "Tapete de linho cru", quantity: 1, unit: "un", supplierName: "Mobiliário Casa Rara", ambiente: "Jardim das oliveiras", checkOnAssembly: true, visibility: "equipe" as const },
-    { area: "ceremony", name: "Arranjos baixos do corredor", quantity: 12, unit: "un", supplierName: "Flores de Aurora", ambiente: "Jardim das oliveiras", checkOnAssembly: true, visibility: "cliente" as const, composicao: "Arranjo baixo do corredor" },
-    { area: "party", name: "Mesa redonda 1,80m", model: "Madeira maciça", quantity: 18, unit: "un", supplierName: "Mobiliário Casa Rara", ambiente: "Salão de vidro", checkOnAssembly: true, visibility: "equipe" as const },
-    { area: "party", name: "Cadeira Tiffany dourada", model: "Assento de linho", quantity: 180, unit: "un", supplierName: "Mobiliário Casa Rara", ambiente: "Salão de vidro", notes: "Conferir 6 reservas", checkOnAssembly: true, visibility: "equipe" as const },
-    { area: "party", name: "Centro de mesa — eucalipto e velas", quantity: 18, unit: "un", supplierName: "Flores de Aurora", ambiente: "Salão de vidro", checkOnAssembly: true, visibility: "cliente" as const, composicao: "Centro de mesa — eucalipto e velas" },
-    { area: "furniture", name: "Sofá de vime do lounge", quantity: 4, unit: "un", supplierName: "Mobiliário Casa Rara", ambiente: "Lounge do jardim", checkOnAssembly: true, visibility: "equipe" as const },
-    { area: "furniture", name: "Tapete natural do lounge", quantity: 2, unit: "un", supplierName: "Mobiliário Casa Rara", ambiente: "Lounge do jardim", checkOnAssembly: false, visibility: "equipe" as const },
-    { area: "furniture", name: "Aparador do livro de assinaturas", model: "Madeira antiga", quantity: 1, unit: "un", supplierName: "Mobiliário Casa Rara", ambiente: "Entrada", checkOnAssembly: true, visibility: "cliente" as const },
-    { area: "lighting", name: "Varal de luz cruzado", quantity: 120, unit: "m", supplierName: "Som & Luz Meridiano", ambiente: "Salão de vidro", notes: "Depende do fechamento da proposta", checkOnAssembly: false, visibility: "interno" as const },
-    { area: "lighting", name: "Spots âmbar do jardim", quantity: 24, unit: "un", supplierName: "Som & Luz Meridiano", ambiente: "Jardim das oliveiras", checkOnAssembly: false, visibility: "interno" as const },
+    { area: "ceremony", name: "Arco de oliveiras", model: "Estrutura curva 2,4m", quantity: 1, unit: "un", supplierName: "Flores de Aurora", ambiente: "Jardim das oliveiras", notes: "Montar até as 13h — foto dos noivos às 15h", checkOnAssembly: true, visibility: "equipe" as const, composicao: "Arco de oliveiras", escopo: "incluso" as const },
+    { area: "ceremony", name: "Tapete de linho cru", quantity: 1, unit: "un", supplierName: "Mobiliário Casa Rara", ambiente: "Jardim das oliveiras", checkOnAssembly: true, visibility: "equipe" as const, escopo: "incluso" as const },
+    { area: "ceremony", name: "Arranjos baixos do corredor", quantity: 12, unit: "un", supplierName: "Flores de Aurora", ambiente: "Jardim das oliveiras", checkOnAssembly: true, visibility: "cliente" as const, composicao: "Arranjo baixo do corredor", escopo: "incluso" as const },
+    { area: "party", name: "Mesa redonda 1,80m", model: "Madeira maciça", quantity: 18, unit: "un", supplierName: "Mobiliário Casa Rara", ambiente: "Salão de vidro", checkOnAssembly: true, visibility: "equipe" as const, escopo: "incluso" as const },
+    { area: "party", name: "Cadeira Tiffany dourada", model: "Assento de linho", quantity: 180, unit: "un", supplierName: "Mobiliário Casa Rara", ambiente: "Salão de vidro", notes: "Conferir 6 reservas", checkOnAssembly: true, visibility: "equipe" as const, escopo: "incluso" as const },
+    { area: "party", name: "Centro de mesa — eucalipto e velas", quantity: 18, unit: "un", supplierName: "Flores de Aurora", ambiente: "Salão de vidro", checkOnAssembly: true, visibility: "cliente" as const, composicao: "Centro de mesa — eucalipto e velas", escopo: "incluso" as const },
+    { area: "furniture", name: "Sofá de vime do lounge", quantity: 4, unit: "un", supplierName: "Mobiliário Casa Rara", ambiente: "Lounge do jardim", checkOnAssembly: true, visibility: "equipe" as const, escopo: "incluso" as const },
+    { area: "furniture", name: "Tapete natural do lounge", quantity: 2, unit: "un", supplierName: "Mobiliário Casa Rara", ambiente: "Lounge do jardim", checkOnAssembly: false, visibility: "equipe" as const, escopo: "incluso" as const },
+    { area: "furniture", name: "Aparador do livro de assinaturas", model: "Madeira antiga", quantity: 1, unit: "un", supplierName: "Mobiliário Casa Rara", ambiente: "Entrada", checkOnAssembly: true, visibility: "cliente" as const, escopo: "incluso" as const },
+    { area: "lighting", name: "Varal de luz cruzado", quantity: 120, unit: "m", supplierName: "Som & Luz Meridiano", ambiente: "Salão de vidro", notes: "Depende do fechamento da proposta", checkOnAssembly: false, visibility: "interno" as const, escopo: "referencia" as const },
+    { area: "lighting", name: "Spots âmbar do jardim", quantity: 24, unit: "un", supplierName: "Som & Luz Meridiano", ambiente: "Jardim das oliveiras", checkOnAssembly: false, visibility: "interno" as const, escopo: "incluso" as const },
     // Receita POR COUVERT: quantidade 180 é o número de convidados, e é o
     // que transforma "1 sousplat" em "180 sousplats" no consolidado.
-    { area: "party", name: "Mesa posta — linho, sousplat e guardanapo", quantity: 180, unit: "un", ambiente: "Salão de vidro", checkOnAssembly: true, visibility: "equipe" as const, composicao: "Mesa posta — linho e dourado" },
-    { area: "cake", name: "Mesa do bolo — vidro e madeira", quantity: 1, unit: "un", supplierName: "Doces da Vila", ambiente: "Salão de vidro", checkOnAssembly: true, visibility: "cliente" as const },
+    { area: "party", name: "Mesa posta — linho, sousplat e guardanapo", quantity: 180, unit: "un", ambiente: "Salão de vidro", checkOnAssembly: true, visibility: "equipe" as const, composicao: "Mesa posta — linho e dourado", escopo: "incluso" as const },
+    { area: "cake", name: "Mesa do bolo — vidro e madeira", quantity: 1, unit: "un", supplierName: "Doces da Vila", ambiente: "Salão de vidro", checkOnAssembly: true, visibility: "cliente" as const, escopo: "incluso" as const },
   ],
 
   // ── ACERVO — O QUE A EMPRESA POSSUI ──────────────────────────────────────

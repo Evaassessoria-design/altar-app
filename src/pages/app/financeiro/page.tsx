@@ -365,9 +365,11 @@ export default function FinanceiroPage() {
   const filtered = (transactions ?? []).filter((t) =>
     filter === "sem_comprovante" ? pagoSemComprovante(t) : filter === "all" || t.type === filter,
   );
-  // A pergunta da decoradora: "quais recebimentos eu já dei baixa e ainda não
-  // tenho o documento?". Contada sobre o livro INTEIRO, não sobre o recorte
-  // aberto — senão o número mudaria conforme o filtro e deixaria de responder.
+  // A pergunta da decoradora: "o que eu já dei baixa e ainda não tenho o
+  // documento?". Vale para os dois lados do livro — a nota do fornecedor pago
+  // é o que a contabilidade cobra, e durante um tempo ela ficou fora desta
+  // conta. Contada sobre o livro INTEIRO, não sobre o recorte aberto: senão o
+  // número mudaria conforme o filtro e deixaria de responder.
   const semComprovante = (transactions ?? []).filter(pagoSemComprovante).length;
   // "Não há lançamento nenhum" e "este recorte não tem lançamento" são coisas
   // diferentes, e a tela dizia a primeira nas duas situações — com 200 linhas

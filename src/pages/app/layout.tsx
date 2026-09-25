@@ -53,7 +53,7 @@ import { MarcaAltar } from "@/components/marca-altar.tsx";
 // menu em tempo de execucao.
 const ICONES: Record<RotaDeMenu, LucideIcon> = {
   "/dashboard": Home,
-  "/escritorio": Sparkles,
+  "/assistente": Sparkles,
   "/agenda": CalendarClock,
   "/eventos": CalendarDays,
   "/fornecedores": Building2,
@@ -170,6 +170,10 @@ function AppLayoutInner() {
   const navigate = useNavigate();
   const location = useLocation();
   const isAdmin = useQuery(api.admin.isAdmin);
+  // Duas perguntas diferentes, de propósito: operar o SaaS (suporte) e
+  // administrar o negócio ALTAR não são a mesma permissão, e um dia haverá
+  // quem tenha a primeira sem a segunda.
+  const souDono = useQuery(api.escritorio.souDono);
   const currentUser = useQuery(api.users.getCurrentUser);
 
   // Marca presença (no máximo uma gravação a cada 30 min por usuário — a regra
@@ -233,6 +237,22 @@ function AppLayoutInner() {
               <NavLink to="/admin" className={navLinkClass}>
                 <Shield className="size-4 flex-shrink-0" />
                 Painel Admin
+              </NavLink>
+            </>
+          )}
+
+          {/* Esconder o link é desenho, não segurança: quem trava é
+              `requirePlatformOwner` em cada função de convex/escritorio.ts. */}
+          {souDono === true && (
+            <>
+              <div className="pt-2 pb-1 px-3">
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
+                  Plataforma
+                </p>
+              </div>
+              <NavLink to="/escritorio" className={navLinkClass}>
+                <Building2 className="size-4 flex-shrink-0" />
+                Escritório ALTAR
               </NavLink>
             </>
           )}

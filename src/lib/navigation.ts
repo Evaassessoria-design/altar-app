@@ -15,13 +15,18 @@ export type NavItem = { to: string; label: string };
 /** Menu lateral (desktop). Ordem = ordem do dia de trabalho. */
 export const NAV_ITEMS = [
   { to: "/dashboard", label: "Início" },
-  // O Escritório vem LOGO DEPOIS do Início, e antes da agenda, porque é a
+  // O Assistente vem LOGO DEPOIS do Início, e antes da agenda, porque é a
   // pergunta que se faz antes de abrir qualquer módulo: "o que precisa de mim
   // hoje?". Enterrá-lo no fim da lista o transformaria numa curiosidade.
   //
-  // NÃO é a Central: aquela é a operação do SaaS ALTAR, só para
-  // administradores, e continua fora do menu da decoradora.
-  { to: "/escritorio", label: "Escritório" },
+  // ── ASSISTENTE ≠ ESCRITÓRIO ────────────────────────────────────────────
+  // "Assistente" é a IA DA DECORADORA, sobre a empresa DELA. "Escritório" é
+  // o nome reservado para a ferramenta interna do ALTAR — a equipe de IA que
+  // administra o SaaS, e que nenhuma decoradora deve ver no menu.
+  //
+  // Os dois nasceram com o mesmo nome e isso fez o produto errado aparecer no
+  // menu certo. Ver `docs/assistente-e-escritorio.md`.
+  { to: "/assistente", label: "Assistente" },
   { to: "/agenda", label: "Agenda" },
   { to: "/eventos", label: "Eventos" },
   { to: "/fornecedores", label: "Fornecedores" },
@@ -63,9 +68,9 @@ export const BOTTOM_NAV_ITEMS = [
  * não existe.
  */
 export const MORE_MENU_ITEMS = [
-  // No celular a barra inferior está no teto de quatro, então o Escritório
+  // No celular a barra inferior está no teto de quatro, então o Assistente
   // entra aqui — e vem primeiro, pela mesma razão que abre o menu lateral.
-  { to: "/escritorio", label: "Escritório" },
+  { to: "/assistente", label: "Assistente" },
   // A agenda é a tela mais consultada FORA do escritório — precisa existir no
   // celular. A barra inferior já está no teto de quatro, então ela entra aqui.
   { to: "/agenda", label: "Agenda" },
@@ -87,6 +92,10 @@ export const MORE_MENU_ITEMS = [
 export const ROTAS_SEM_MENU: Readonly<Record<string, string>> = {
   "/admin": "só aparece para administradores",
   "/central": "operação do SaaS — só administradores, alcançada pelo Painel Admin",
+  // O Escritório não é do produto: é a mesa de quem administra o NEGÓCIO
+  // ALTAR. O link aparece no menu só para o dono da plataforma, e é o backend
+  // (`requirePlatformOwner`) que recusa quem digitar a URL à mão.
+  "/escritorio": "plataforma — só o dono do ALTAR, link condicional no menu",
   "/paywall": "destino de redirecionamento, não de navegação",
   "/fornecedores/:id": "acessada pelo card do fornecedor, no catálogo",
   "/propostas/:id": "acessada pela lista de propostas, pelo funil e pelo evento",

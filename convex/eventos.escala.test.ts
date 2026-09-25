@@ -204,3 +204,81 @@ describe("nada atravessa a fronteira da conta na leitura em lote", () => {
     expect(dela[0].assessoria).toBe("Assessoria da rival");
   });
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// O PAINEL DE ATENÇÃO — A OUTRA METADE DO MESMO DEFEITO
+//
+// A rodada anterior tirou o N+1 de `health.listCards` e deixou o mesmo padrão
+// intacto em `dashboard.getAttentionBoard`: quatro consultas POR EVENTO
+// (checklist, compras, fornecedores, equipe). Com 40 eventos, 160 consultas
+// para desenhar o painel que ela abre primeiro, todo dia.
+//
+// O acervo, logo acima no mesmo arquivo, já lia em lote — e o comentário dele
+// explicava por quê. O laço abaixo ignorava o próprio aviso.
+// ═════════════════════════════════════════════════════════════════════════════
+const DASHBOARD = readFileSync("convex/dashboard.ts", "utf-8");
+
+function corpoDoPainel(): string {
+  const i = DASHBOARD.indexOf("export const getAttentionBoard");
+  const proxima = DASHBOARD.indexOf("export const", i + 10);
+  return DASHBOARD.slice(i, proxima === -1 ? DASHBOARD.length : proxima)
+    .split("\n")
+    .filter((l) => !l.trim().startsWith("//"))
+    .join("\n");
+}
+
+describe("o painel de atenção também lê em lote", () => {
+  it("nenhuma consulta dentro do laço de eventos", () => {
+    const corpo = corpoDoPainel();
+    const laco = corpo.slice(corpo.indexOf("eventos.map(async (e)"));
+    expect(laco, "N+1: consulta por evento no painel de atenção").not.toContain("ctx.db");
+  });
+
+  it("e lê as quatro tabelas por DONO", () => {
+    const corpo = corpoDoPainel();
+    for (const tabela of ["checklistItems", "purchaseItems", "eventSuppliers", "eventTeam"]) {
+      const trecho = corpo.slice(corpo.indexOf(`query("${tabela}")`));
+      expect(trecho.slice(0, 120), `${tabela} não é lida por dono`).toContain("by_user");
+    }
+  });
+
+  it("o painel responde com muitos eventos, e só o que é da conta", async () => {
+    // O painel tem horizonte de 30 dias (`JANELA_ATENCAO_DIAS`): evento
+    // distante não é atenção de hoje. Por isso a data aqui é PRÓXIMA — senão
+    // o teste passaria com o painel vazio dos dois lados, sem provar nada.
+    const emDias = (n: number) =>
+      new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
+    const { t, dona } = await contaCom(15);
+    const rival = await autenticarComo(t, {
+      nome: "Rival", email: "rival@ex.com", role: "user", subject: "auth|rival",
+    });
+    await t.run(async (ctx: MutationCtx) => {
+      const rivalId = (await ctx.db
+        .query("users")
+        .withIndex("by_better_auth_id", (q) => q.eq("betterAuthId", "auth|rival"))
+        .unique())!._id;
+      const eventId = await ctx.db.insert("events", {
+        userId: rivalId, name: "Da rival", type: "wedding" as const, date: emDias(5),
+        location: "Sítio", clientName: "Joana", status: "planning" as const,
+      });
+      // Pendências da rival que NÃO podem aparecer no painel da dona.
+      await ctx.db.insert("checklistItems", {
+        userId: rivalId, eventId, phase: "pre" as const, name: "Item da rival",
+        order: 0, isChecked: false,
+      });
+      await ctx.db.insert("eventSuppliers", {
+        userId: rivalId, eventId, category: "buffet", companyName: "Buffet da rival",
+        nextAction: "Confirmar cardápio",
+      });
+    });
+
+    const painel = await dona.query(api.dashboard.getAttentionBoard, {});
+    const serializado = JSON.stringify(painel);
+    expect(serializado).not.toContain("Da rival");
+    expect(serializado).not.toContain("Buffet da rival");
+    expect(serializado).not.toContain("Confirmar cardápio");
+
+    const dela = await rival.query(api.dashboard.getAttentionBoard, {});
+    expect(JSON.stringify(dela)).toContain("Da rival");
+  });
+});

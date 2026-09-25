@@ -641,7 +641,11 @@ export default defineSchema({
     isChecked: v.boolean(),
   })
     .index("by_event", ["eventId"])
-    .index("by_event_phase", ["eventId", "phase"]),
+    .index("by_event_phase", ["eventId", "phase"])
+    // O painel de atenção do Dashboard pergunta "o que falta em TODOS os meus
+    // eventos?". Sem este índice, a resposta era uma consulta por evento — e o
+    // Dashboard é a primeira tela que ela abre, todo dia.
+    .index("by_user", ["userId"]),
 
   teamMembers: defineTable({
     userId: v.id("users"),

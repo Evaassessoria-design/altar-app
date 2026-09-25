@@ -1,4 +1,5 @@
 import { query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requireUser } from "./lib/identity";
 import { diasEntre, montarAtencao, JANELA_RETORNO_DIAS } from "./lib/attention";
 import { deficitDaReserva, disponibilidadeNaJanela, faltaVoltar } from "./lib/acervo";
@@ -172,16 +173,50 @@ export const getAttentionBoard = query({
       else reservasPorItem.set(chave, [r]);
     }
 
+    // ── QUATRO CONSULTAS, NÃO QUATRO POR EVENTO ──────────────────────────
+    // Este laço abria checklist, compras, fornecedores e equipe PARA CADA
+    // EVENTO. Com os 40 eventos da decoradora piloto eram 160 consultas para
+    // desenhar o painel que ela abre primeiro, todo dia. A 300 eventos
+    // passaria de mil.
+    //
+    // É o mesmo defeito que `health.listCards` tinha, e a mesma correção: ler
+    // por DONO uma vez e agrupar em memória. O acervo logo acima já fazia
+    // assim — o comentário dele até explica por quê, e o laço abaixo o
+    // ignorava.
+    const [checklists, todasAsCompras, todosOsFornecedores, todaAEquipe] =
+      await Promise.all([
+        ctx.db.query("checklistItems").withIndex("by_user", (q) => q.eq("userId", user._id)).collect(),
+        ctx.db.query("purchaseItems").withIndex("by_user", (q) => q.eq("userId", user._id)).collect(),
+        ctx.db.query("eventSuppliers").withIndex("by_user", (q) => q.eq("userId", user._id)).collect(),
+        ctx.db.query("eventTeam").withIndex("by_user", (q) => q.eq("userId", user._id)).collect(),
+      ]);
+
+    /** Agrupa por evento de uma vez — `filter` por evento seria O(n²). */
+    function porEvento<T extends { eventId?: Id<"events"> }>(linhas: readonly T[]) {
+      const mapa = new Map<string, T[]>();
+      for (const linha of linhas) {
+        if (!linha.eventId) continue;
+        const atual = mapa.get(linha.eventId);
+        if (atual) atual.push(linha);
+        else mapa.set(linha.eventId, [linha]);
+      }
+      return mapa;
+    }
+    const checklistPorEvento = porEvento(checklists);
+    const comprasPorEvento = porEvento(todasAsCompras);
+    const fornecedoresPorEvento = porEvento(todosOsFornecedores);
+    const equipePorEvento = porEvento(todaAEquipe);
+    // As reservas também deixam de ser refiltradas evento a evento.
+    const reservasPorEvento = porEvento(reservas);
+
     const entradas = await Promise.all(
       eventos.map(async (e) => {
-        const [checklist, compras, fornecedores, equipe] = await Promise.all([
-          ctx.db.query("checklistItems").withIndex("by_event", (q) => q.eq("eventId", e._id)).collect(),
-          ctx.db.query("purchaseItems").withIndex("by_event", (q) => q.eq("eventId", e._id)).collect(),
-          ctx.db.query("eventSuppliers").withIndex("by_event", (q) => q.eq("eventId", e._id)).collect(),
-          ctx.db.query("eventTeam").withIndex("by_event", (q) => q.eq("eventId", e._id)).collect(),
-        ]);
+        const checklist = checklistPorEvento.get(e._id) ?? [];
+        const compras = comprasPorEvento.get(e._id) ?? [];
+        const fornecedores = fornecedoresPorEvento.get(e._id) ?? [];
+        const equipe = equipePorEvento.get(e._id) ?? [];
 
-        const doEvento = reservas.filter((r) => r.eventId === e._id);
+        const doEvento = reservasPorEvento.get(e._id) ?? [];
 
         // Déficit: o que a reserva pede menos o que está livre na janela dela.
         // Número calculado, nunca "não sei" — material reutilizável sem item

@@ -47,6 +47,7 @@ import { labelDoTipoDeEvento } from "@/lib/event-types.ts";
 import { useRef, useState } from "react";
 import EventFormDialog from "../_components/event-form-dialog.tsx";
 import { ContractImportDialog } from "./_components/contract-import-dialog.tsx";
+import { ProntoParaMostrar } from "./_components/pronto-para-mostrar.tsx";
 import { LayoutAnalysisDialog } from "./_components/layout-analysis-dialog.tsx";
 import {
   AlertDialog,
@@ -543,6 +544,11 @@ export default function EventDetailsPage() {
           </div>
         </div>
       )}
+
+      {/* Pronto para mostrar? — a pergunta de quem vai APRESENTAR, que a
+          Saúde acima não responde: um evento 100% saudável pode abrir o
+          Projeto Visual em branco. Fechada por padrão. */}
+      <ProntoParaMostrar eventId={id as Id<"events">} />
 
       {/* Contrato + IA */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">

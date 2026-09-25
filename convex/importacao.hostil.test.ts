@@ -23,10 +23,12 @@ const vazio = { emails: new Set<string>(), telefones: new Set<string>() };
 
 describe("o que o Excel produz de verdade", () => {
   it("BOM no começo do arquivo não esconde a coluna de nome", () => {
-    // O Excel salva UTF-8 COM BOM. Sem tratar, o primeiro cabeçalho vira
-    // o BOM grudado no primeiro cabeçalho, que deixa de casar com "nome", e
-    // coluna de nome" para um arquivo perfeito. É o defeito que mais
-    // provavelmente apareceria na noite da live.
+    // O Excel salva UTF-8 COM BOM. Sem tratar, o caractere fica grudado no
+    // primeiro cabeçalho, que deixa de casar com "nome", e o importador
+    // responde "não encontrei a coluna de nome" para um arquivo perfeito.
+    //
+    // É o defeito que mais provavelmente apareceria na noite da live, e o que
+    // o salva é `trim()`: em JavaScript o BOM conta como espaço em branco.
     const r = lerArquivo("﻿nome;email\nMarina;m@ex.com");
     expect(r.erro, "o BOM escondeu o cabeçalho").toBeUndefined();
     expect(r.linhas[0].name).toBe("Marina");

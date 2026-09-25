@@ -6,7 +6,11 @@ import { carregarAtencao } from "./dashboard";
 import { dinheiroVencido } from "./lib/dinheiroVencido";
 import { resumirFollowUp } from "./lib/leadFollowUp";
 import { resumirPanorama } from "./lib/panoramaDeCompras";
-import { montarBriefing, type FatosDoBriefing } from "./lib/assistente/briefing";
+import {
+  montarBriefing,
+  type AreaDoBriefing,
+  type FatosDoBriefing,
+} from "./lib/assistente/briefing";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // O BRIEFING DA MANHÃ
@@ -126,16 +130,34 @@ export const daManha = query({
       },
     };
 
+    const briefing = montarBriefing(fatos, args.hora ?? 9);
+
+    /**
+     * Áreas que chegam ao briefing POR OUTRO CAMINHO.
+     *
+     * ── O DEFEITO QUE ISTO CORRIGE ──────────────────────────────────────
+     * Fornecedores e acervo não têm resumo por dono como os outros: eles
+     * entram pelos eventos que pedem atenção, que é onde importam. Como a
+     * regra nunca recebe fatos deles, ela os declarava "não medidos" —
+     * e a tela escrevia "Não consegui olhar: fornecedores, acervo" em TODA
+     * conta, TODO dia.
+     *
+     * Uma linha de erro que aparece sempre não é aviso: é ruído, e ruído
+     * ensina a ignorar a linha inteira — inclusive no dia em que ela
+     * apontar uma área que de fato falhou.
+     *
+     * A separação é entre "não olhei" e "olhei por outro lugar". As duas
+     * são verdade; só uma é problema.
+     */
+    const porOutroCaminho: AreaDoBriefing[] = ["fornecedores", "acervo"];
+
     return {
-      ...montarBriefing(fatos, args.hora ?? 9),
-      /**
-       * Fornecedores e acervo saem do painel de atenção, por evento, e não têm
-       * um resumo por dono como os outros. Declarados como não medidos seria
-       * mentira — eles ENTRAM no briefing pela via dos eventos urgentes, que é
-       * onde importam. Este campo existe para a tela poder dizer isso.
-       */
-      observacao:
-        "Fornecedores e acervo aparecem dentro dos eventos que pedem atenção.",
+      ...briefing,
+      areasNaoMedidas: briefing.areasNaoMedidas.filter(
+        (a) => !porOutroCaminho.includes(a),
+      ),
+      areasPorOutroCaminho: porOutroCaminho,
+      observacao: "Fornecedores e acervo aparecem dentro dos eventos que pedem atenção.",
     };
   },
 });

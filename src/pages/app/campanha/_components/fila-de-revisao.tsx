@@ -230,15 +230,23 @@ export function FilaDeRevisao({ campanha }: { campanha: string }) {
                         Já enviei
                       </Button>
                     )}
+                    {/* ── ALVO DE DEDO, NÃO DE MOUSE ────────────────────────
+                        28px é alvo de mouse. iOS e Android pedem ~44px, e esta
+                        fila é operada no celular, entre um compromisso e
+                        outro.
+
+                        `-m-1` sobre um botão de 36px devolve o espaço ao
+                        layout: a área tocável cresce e nada se move na tela —
+                        é o mesmo padrão de `toque-galpao.test.ts`. */}
                     {aba !== "descartado" && aba !== "enviado_manualmente" && (
                       <Button
                         size="sm"
                         variant="ghost"
                         onClick={() => void agir(r._id, "descartar")}
                         aria-label="Descartar mensagem"
-                        className="h-7 w-7 cursor-pointer p-0 text-muted-foreground"
+                        className="relative -m-1 h-9 w-9 cursor-pointer p-0 text-muted-foreground"
                       >
-                        <Trash2 className="size-3" />
+                        <Trash2 className="size-3.5" />
                       </Button>
                     )}
                   </div>

@@ -78,12 +78,20 @@ export function ComercialHoje({ campanha }: { campanha: string }) {
           description: "Todo mundo que precisa de mensagem já tem uma escrita.",
         });
       } else {
+        // ── O "PELO MENOS" NÃO É ENFEITE ──────────────────────────────────
+        // `restantes` conta só dentro dos registros que a varredura OLHOU.
+        // Numa campanha de dois mil ele devolve 450 enquanto faltam 1.950 —
+        // e "Faltaram 450" seria a tela afirmando um total que ela não
+        // contou. `varreduraIncompleta` é o que permite dizer a verdade.
+        const quantosFaltam = r.varreduraIncompleta
+          ? `Faltam pelo menos ${r.restantes}`
+          : `Faltaram ${r.restantes}`;
         toast.success(
           `${r.preparados} ${r.preparados === 1 ? "mensagem escrita" : "mensagens escritas"}`,
           {
             description:
-              r.restantes > 0
-                ? `Faltaram ${r.restantes}. Clique de novo para continuar de onde parou.`
+              r.restantes > 0 || r.varreduraIncompleta
+                ? `${quantosFaltam}. Clique de novo para continuar de onde parou.`
                 : "Revise antes de enviar. O ALTAR não envia nada.",
           },
         );
@@ -160,8 +168,15 @@ export function ComercialHoje({ campanha }: { campanha: string }) {
           <ul className="space-y-2">
             {dados.precisaDeVoce.map((p) => (
               <li key={p.chave} className="rounded-lg border border-border/60 p-2.5 text-sm">
-                <p className="font-medium leading-tight">{p.pessoa}</p>
-                <p className="text-xs leading-tight text-muted-foreground">{p.motivo}</p>
+                {/* `break-words`: o nome vem do cadastro, e cadastro recebe
+                    coisas como "ateliedecoracoeseeventosmarinaalves" ou um
+                    e-mail colado no campo errado. Palavra sem espaço não
+                    quebra sozinha, e em 320px ela empurra o cartão para fora
+                    da tela inteira. */}
+                <p className="break-words font-medium leading-tight">{p.pessoa}</p>
+                <p className="break-words text-xs leading-tight text-muted-foreground">
+                  {p.motivo}
+                </p>
                 <p className="mt-1 text-xs leading-tight text-primary">{p.sugestao}</p>
               </li>
             ))}

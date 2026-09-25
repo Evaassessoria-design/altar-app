@@ -170,6 +170,86 @@ para funcionar com uma pessoa copiando e colando — e funciona.
 
 ---
 
+## 6b. Para usar o número atual do WhatsApp Business do ALTAR, o que falta
+
+Resposta objetiva, em dez frentes. **Nenhuma depende de código novo grande; a
+maioria não depende de código nenhum.**
+
+### 1. Decisões comerciais — PENDENTE (não é código)
+
+- O número atual é o pessoal do Matheus ou um número comercial separado?
+  Migrar um número pessoal para a API significa **perder o WhatsApp normal
+  naquele aparelho**: uma vez na Cloud API, o número não volta ao app.
+- Quem responde, em qual horário, e o que acontece fora dele.
+- Volume esperado por dia — acima de certo ponto a Meta cobra por conversa.
+
+### 2. Configuração Meta / provider — PENDENTE
+
+- Conta Meta Business verificada (documento da empresa).
+- WhatsApp Business Account criada e número registrado.
+- App da Meta com o produto WhatsApp adicionado.
+- Webhook configurado apontando para a rota HTTP do ALTAR.
+
+### 3. Credenciais — PENDENTE, e é o bloqueio duro
+
+Os NOMES já existem no ambiente (`ALTAR_WHATSAPP_PROVIDER` e as do adaptador).
+Os VALORES não. Sem eles `configurado()` devolve `false` e o gateway responde
+503 — que é o comportamento certo.
+
+### 4. Templates — PENDENTE, e é o mais demorado
+
+A Meta exige **template aprovado** para iniciar conversa fora da janela de 24
+horas, e toda mensagem de campanha é iniciação.
+
+Os dez modelos deste repositório **não são** templates da Meta: são texto para
+uma pessoa copiar. Submeter cada um é um processo com prazo próprio, fora do
+controle do código, e a Meta recusa texto promocional demais.
+
+**Consequência prática para 06/10:** não dá tempo. A campanha foi desenhada
+para funcionar com uma pessoa copiando e colando — e funciona.
+
+### 5. Webhook — CONSTRUÍDO, desligado
+
+`officeCentralHttp.ts` e o gateway já existem, com verificação de assinatura
+sobre o corpo cru e deduplicação por chave. Sem credencial ele recusa tudo.
+
+### 6. Opt-in / opt-out — PARCIAL
+
+- **Opt-out da Central:** existe (`optOut` barra o envio no outbox).
+- **Opt-out na mensagem:** o convite frio agora traz a saída no próprio texto.
+- **Opt-in registrado:** NÃO EXISTE. Quem preencheu a landing tem consentimento
+  implícito; quem veio de lista de prospecção, não. Para envio em escala isso
+  precisa ser um campo com data e origem, não uma suposição.
+
+### 7. Gateway — CONSTRUÍDO
+
+Recebe, verifica, normaliza e deduplica. Nada a fazer.
+
+### 8. Ligação `campaignDrafts` → outbox — NÃO EXISTE, POR DESENHO
+
+É a trava descrita em §4. Construí-la deve ser uma decisão deliberada, num
+commit próprio e revisável — nunca um efeito colateral de configurar
+credenciais.
+
+### 9. Classificação de resposta — CONSTRUÍDO, desconectado
+
+`lib/respostaDoInteressado.ts` está pronto e testado (9 intenções, negação,
+`incerto` nunca vira confirmação). É função pura e **nada o chama**. Ligá-lo é
+uma linha no gateway, no dia em que houver entrada real.
+
+### 10. Handoff humano — CONSTRUÍDO
+
+A fila "Precisa de você" já sobe preço, pedido de ligação, intenção incerta e
+duplicidade. Funciona hoje, sem WhatsApp.
+
+### Resumo em uma linha
+
+O que trava não é o ALTAR: é **credencial da Meta e template aprovado**. Os
+dois têm prazo externo. Tudo do lado do código está pronto ou deliberadamente
+desligado.
+
+---
+
 ## 7. E-mail
 
 **NÃO EXISTE.** Nenhum provedor, nenhum adaptador, nenhum envio.

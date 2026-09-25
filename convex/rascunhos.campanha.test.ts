@@ -487,6 +487,52 @@ describe("a biblioteca de mensagens", () => {
     }
   });
 
+  it("nenhum modelo afirma QUANDO está sendo enviado", () => {
+    // ── O DEFEITO QUE ESTE TESTE GUARDA ───────────────────────────────────
+    // O modelo não sabe em que dia nem a que horas alguém vai apertar enviar.
+    // "Obrigado por participar ontem", numa mensagem mandada três dias depois,
+    // erra um fato que a própria pessoa presenciou — e o agradecimento, que
+    // existe para criar proximidade, passa a soar automático.
+    //
+    // Pior no lembrete: "começamos em 30 minutos" disparado às 18h40 mente
+    // sobre um número que quem lê confere no relógio, e mentira conferível é
+    // a que mais custa confiança.
+    //
+    // A data e a hora DA CAMPANHA continuam podendo aparecer: essas o modelo
+    // conhece. O que não pode é afirmar a distância até elas.
+    const proibidos = [
+      "ontem",
+      "hoje de manhã",
+      "em 30 minutos",
+      "em 24 horas",
+      "agora há pouco",
+      "essa semana",
+    ];
+    for (const modelo of MODELOS) {
+      const texto = modelo.redigir({ nome: "Marina" }).texto.toLowerCase();
+      for (const p of proibidos) {
+        expect(texto, `${modelo.id} afirma quando está sendo enviado: "${p}"`).not.toContain(p);
+      }
+    }
+  });
+
+  it("a primeira mensagem FRIA oferece saída; a do lead que se cadastrou, não", () => {
+    // Quem preencheu a landing pediu para ser contactada — oferecer saída na
+    // resposta ao próprio pedido dela soa como desculpa.
+    //
+    // Quem foi prospectado não pediu nada. Numa primeira mensagem fria a
+    // saída é o que separa um convite de um disparo — e é o que evita que a
+    // pessoa bloqueie o número em vez de responder, o que custaria todos os
+    // contatos seguintes daquele aparelho.
+    const convite = modeloPorId("convite")!;
+
+    const fria = convite.redigir({ nome: "Marina", origem: "prospeccao" }).texto;
+    expect(fria, "mensagem fria sem opt-out").toMatch(/não te incomodo mais/i);
+
+    const pedida = convite.redigir({ nome: "Marina", origem: "landing" }).texto;
+    expect(pedida).not.toMatch(/não te incomodo mais/i);
+  });
+
   it("a chamada do convite bate com o que o classificador de respostas espera", () => {
     // O convite pede "me responda QUERO PARTICIPAR". Se o texto e o
     // classificador divergirem, a resposta combinada com a própria pessoa

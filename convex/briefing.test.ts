@@ -223,6 +223,24 @@ describe("o briefing lê os dados reais da conta", () => {
     expect(b.tudoEmDia).toBe(false);
   });
 
+  it("'não consegui olhar' NÃO aparece para área coberta por outro caminho", async () => {
+    // ── O DEFEITO QUE ESTE TESTE GUARDA ───────────────────────────────────
+    // Fornecedores e acervo não têm resumo por dono: entram pelos eventos que
+    // pedem atenção. Como a regra nunca recebe fatos deles, ela os declarava
+    // "não medidos" — e a tela escrevia "Não consegui olhar: fornecedores,
+    // acervo" em TODA conta, TODO dia.
+    //
+    // Aviso que aparece sempre não é aviso: é ruído, e ruído ensina a ignorar
+    // a linha inteira, inclusive no dia em que ela apontar uma falha real.
+    const t = convexTest(schema, modules);
+    const decoradora = await autenticarComoDecoradora(t);
+    const b = await decoradora.query(api.assistenteBriefing.daManha, { hora: 9 });
+
+    expect(b.areasNaoMedidas, "a consulta mede tudo o que consegue").toEqual([]);
+    expect(b.areasPorOutroCaminho.sort()).toEqual(["acervo", "fornecedores"]);
+    expect(b.observacao).toMatch(/dentro dos eventos/i);
+  });
+
   it("conta vazia diz que está em dia — não devolve nada inventado", async () => {
     const t = convexTest(schema, modules);
     const decoradora = await autenticarComoDecoradora(t);

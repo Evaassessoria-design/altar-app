@@ -284,12 +284,24 @@ export const prepararPendentes = mutation({
       );
     }
 
+    const varreduraIncompleta = leads.length > VARREDURA_DO_LOTE;
     return {
       preparados: criados.length,
-      /** Precisavam e não couberam no lote. Rodar de novo continua daqui. */
+      /**
+       * Precisavam e não couberam no lote. Rodar de novo continua daqui.
+       *
+       * ── POR QUE ESTE NÚMERO PRECISA DO AVISO AO LADO ────────────────────
+       * Ele conta só dentro dos `VARREDURA_DO_LOTE` registros que foram
+       * OLHADOS. Numa campanha de dois mil, a varredura vê quinhentos,
+       * prepara cinquenta e devolve `restantes: 450` — enquanto faltam 1.950.
+       *
+       * O número não está errado; o que estaria errado é a tela lê-lo como
+       * total. Por isso `varreduraIncompleta` vem junto, e a tela escreve
+       * "pelo menos 450" quando ela é verdadeira.
+       */
       restantes: pulados,
-      /** A varredura bateu no teto: pode haver gente além do que foi olhado. */
-      varreduraIncompleta: leads.length > VARREDURA_DO_LOTE,
+      /** A varredura bateu no teto: há gente além do que foi olhado. */
+      varreduraIncompleta,
     };
   },
 });

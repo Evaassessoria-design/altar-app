@@ -211,6 +211,19 @@ export const MODELOS: readonly ModeloDeMensagem[] = [
         "Se quiser participar, me responda QUERO PARTICIPAR e envie o melhor e-mail da sua empresa.",
         "",
         "Vamos colocar você na lista e enviar as informações e o lembrete da apresentação.",
+        // ── POR QUE O OPT-OUT SÓ ENTRA NA PROSPECÇÃO ────────────────────
+        // Quem preencheu a landing PEDIU para ser contactada; oferecer saída
+        // na resposta ao próprio pedido dela soa como desculpa e enfraquece o
+        // convite.
+        //
+        // Quem foi prospectado não pediu nada. Numa primeira mensagem fria,
+        // dar a saída na mesma frase é o que separa um convite de um disparo
+        // — e é também o que evita que a pessoa bloqueie o número em vez de
+        // responder, o que custaria todos os contatos seguintes daquele
+        // aparelho.
+        ...(VEIO_SOZINHA.has(origemDe({ origem: c.origem }))
+          ? []
+          : ["", "Se não for do seu interesse, é só me dizer e não te incomodo mais."]),
         "",
         ...ASSINATURA,
       ]);
@@ -325,7 +338,14 @@ export const MODELOS: readonly ModeloDeMensagem[] = [
         [
           saudacao(c),
           "",
-          `Começamos em 30 minutos, às ${campanha.hora}.`,
+          // ── POR QUE NÃO "COMEÇAMOS EM 30 MINUTOS" ─────────────────────
+        // Porque o modelo não sabe que horas são quando alguém aperta enviar.
+        // Se o Matheus disparar às 18h40 em vez de 18h30, o texto mente sobre
+        // um número que quem lê consegue conferir no relógio — e mentira
+        // conferível é a que mais custa confiança.
+        //
+        // "Daqui a pouco" é verdade em qualquer minuto daquela última hora.
+        `A apresentação começa daqui a pouco, às ${campanha.hora}.`,
           "",
           `Link: ${link.linha}`,
           "",
@@ -348,7 +368,12 @@ export const MODELOS: readonly ModeloDeMensagem[] = [
       texto([
         saudacao(c),
         "",
-        "Obrigado por participar da apresentação do ALTAR ontem. Foi muito bom ter você lá.",
+        // ── POR QUE NÃO "ONTEM" ───────────────────────────────────────
+        // O modelo não sabe em que dia alguém vai apertar enviar. Dizer
+        // "ontem" numa mensagem mandada três dias depois é errar um fato que
+        // a própria pessoa presenciou — e o agradecimento, que existe para
+        // criar proximidade, passa a soar automático.
+        "Obrigado por participar da apresentação do ALTAR. Foi muito bom ter você lá.",
         "",
         "Ficou alguma dúvida sobre alguma parte que a gente mostrou? Pode perguntar à vontade.",
         "",
@@ -366,7 +391,8 @@ export const MODELOS: readonly ModeloDeMensagem[] = [
       texto([
         saudacao(c),
         "",
-        "Senti sua falta na apresentação de ontem — imagino que o dia tenha sido corrido.",
+        // Mesma razão do agradecimento: o dia do envio não é conhecido aqui.
+        "Senti sua falta na apresentação — imagino que o dia tenha sido corrido.",
         "",
         "Se quiser, eu te mostro o ALTAR numa conversa só nossa, no horário que for melhor para você. São uns 30 minutos.",
         "",

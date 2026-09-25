@@ -117,9 +117,15 @@ export function BriefingDaManha() {
       {/* ── O QUE NÃO FOI OLHADO ────────────────────────────────────────────
           Uma tela que diz "está tudo bem" sobre uma área que ninguém mediu é
           pior do que uma tela que não diz nada. Quando uma área fica de fora,
-          ela é nomeada. */}
+          ela é nomeada.
+
+          Só que "ficou de fora" e "entrou por outro caminho" são coisas
+          diferentes: fornecedores e acervo chegam pelos eventos, e listá-los
+          aqui fazia esta linha aparecer em toda conta, todo dia. Aviso que
+          aparece sempre não é aviso — é ruído, e ruído ensina a ignorar a
+          linha inteira, inclusive no dia em que ela apontar uma falha real. */}
       {briefing.areasNaoMedidas.length > 0 && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-amber-600 dark:text-amber-500">
           Não consegui olhar: {briefing.areasNaoMedidas.join(", ")}.
         </p>
       )}

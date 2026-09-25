@@ -28,6 +28,7 @@ import { autenticarComoAdmin } from "./test.auth";
 import type { MutationCtx } from "./_generated/server";
 import { LIVE_ALTAR } from "./lib/campanha";
 import { LIMITE_DE_INTERESSADOS } from "./admin";
+import { VARREDURA_DO_LOTE as VARREDURA } from "./campanhaRascunhos";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // A CAMPANHA COM GENTE DENTRO
@@ -252,6 +253,25 @@ describe("a fila humana não vira um mural", () => {
     const { admin } = await cenario(100, { whatsapp: undefined, whatsappE164: undefined, email: "" });
     const b = await admin.query(api.comercialBriefing.hoje, { campanha: LIVE_ALTAR.slug });
     expect(b.precisaDeVoce.length).toBeLessThanOrEqual(25);
+  });
+
+  it("numa campanha grande, o 'restantes' do lote vem com o aviso de varredura", async () => {
+    // ── O DEFEITO QUE ESTE TESTE GUARDA ───────────────────────────────────
+    // `restantes` conta só dentro dos registros que a varredura OLHOU. Com
+    // 2.000 pessoas ele devolve 450 — enquanto faltam 1.950.
+    //
+    // O número não está errado; errado seria a tela lê-lo como total. Por
+    // isso `varreduraIncompleta` precisa vir verdadeiro junto com ele, e é o
+    // que permite a tela escrever "pelo menos 450" em vez de "faltaram 450".
+    const { admin } = await cenario(VARREDURA + 200);
+
+    const r = await admin.mutation(api.campanhaRascunhos.prepararPendentes, {
+      campanha: LIVE_ALTAR.slug,
+    });
+    expect(r.preparados).toBe(50);
+    expect(r.varreduraIncompleta, "a tela ficaria sem como dizer a verdade").toBe(true);
+    // O que sobra é contado dentro da varredura, não da campanha.
+    expect(r.restantes).toBeLessThan(VARREDURA);
   });
 
   it("a duplicidade tem teto e aponta as mais fortes primeiro", async () => {

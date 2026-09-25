@@ -4,7 +4,58 @@ Roteiro e narrativa: `docs/live-altar-2026-10-06.md`
 Preparar a conta: `docs/checklist-demo-manual.md`
 O que fazer se algo cair: `docs/plano-b-live.md`
 
-Este arquivo é só a **ordem das horas**.
+Este arquivo tem duas vistas do mesmo trabalho: a **triagem por prioridade**
+(logo abaixo) e a **ordem das horas** (depois). A primeira responde "o que não
+pode faltar"; a segunda, "o que eu faço agora".
+
+---
+
+## Triagem — o que não pode faltar
+
+### OBRIGATÓRIO · sem isto, não se apresenta
+
+- [ ] **Conta de demonstração funcional** — seed rodado, 18 tabelas com dado
+- [ ] **Fotos na conta demo** — o seed NÃO cria fotos nem contrato, e sem elas
+      o Projeto Visual (o clímax) abre vazio. Passos em
+      `checklist-demo-manual.md`
+- [ ] **Acesso da conta demo liberado** — ⚠️ **o seed não mexe no acesso.** Se
+      o trial daquela conta tiver vencido, o paywall corta no bloco 2, na hora
+      de converter a proposta em evento. Marcar a conta como `internal` pelo
+      Painel Admin ANTES, e conferir abrindo a conversão uma vez
+- [ ] **Conferir pelo produto, não pelo papel** — abrir o evento e usar
+      **"Pronto para mostrar?"**: ele lê o banco e responde com número
+- [ ] **Lista real de interessados importada** e `/campanha` aberta com ela
+- [ ] **Os 10 modelos lidos em voz alta** — se algum soar como robô, reescrever
+- [ ] **Link da sala definido** e gravado em `lib/campanha.ts`. Enquanto não
+      existir, confirmação e lembretes saem com a pendência e **não podem ser
+      aprovados** — que é o comportamento certo, e é um impedimento real
+- [ ] **Roteiro ensaiado inteiro**, cronometrado, em voz alta
+- [ ] **Preço decidido** e onde ele está escrito. Nenhum modelo o menciona, e
+      nenhum deve
+- [ ] **CTA final definido** — o que exatamente se pede no fim
+- [ ] **Caminho do trial testado ponta a ponta** — do formulário à conta criada
+- [ ] **Teste no celular** e **no notebook** que serão usados
+- [ ] **Backup da apresentação**: PDF dos noivos salvo no computador e vídeo
+      gravado dos blocos que dependem de rede
+- [ ] **Internet e plano B** — `plano-b-live.md`, plano A e B de cada bloco
+
+### IMPORTANTE · muda a qualidade, não impede
+
+- [ ] Fotos do catálogo (rosa, lisianthus, eucalipto) para a Ficha Técnica
+- [ ] Uma foto marcada **"Só para mim"**, para demonstrar a fronteira de
+      audiência no PDF
+- [ ] Segunda pessoa acompanhando o chat durante a transmissão
+- [ ] Resposta pronta para "quanto custa?" e "tem app?"
+- [ ] `/campanha` aberta num celular de verdade
+- [ ] Conferir a landing num celular de verdade
+
+### PODE ESPERAR · depois da live
+
+- [ ] Templates aprovados na Meta
+- [ ] Envio automático de qualquer natureza
+- [ ] E-mail transacional
+- [ ] Webhook de respostas ligado ao classificador
+- [ ] Contador denormalizado de `assemblyItems`
 
 ---
 

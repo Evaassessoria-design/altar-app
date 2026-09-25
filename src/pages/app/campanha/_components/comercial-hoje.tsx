@@ -176,21 +176,26 @@ export function ComercialHoje({ campanha }: { campanha: string }) {
         </p>
       )}
 
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={preparando}
-        onClick={() => void prepararTudo()}
-        className="w-full cursor-pointer gap-1.5 sm:w-auto"
-      >
-        <PenLine className="size-3.5" />
-        {preparando ? "Escrevendo…" : "Escrever o que está faltando"}
-      </Button>
-      {/* A frase fica ao lado do botão que mais parece um disparador. É o lugar
-          onde ela precisa estar. */}
-      <p className="-mt-3 text-xs text-muted-foreground">
-        O ALTAR escreve e para. Quem envia é você, pelo seu WhatsApp.
-      </p>
+      {/* O botão e a frase são UMA coisa, e por isso moram no mesmo bloco: a
+          frase fica ao lado do botão que mais parece um disparador, que é o
+          lugar onde ela precisa estar. Separá-los obrigaria a compensar o
+          espaçamento com margem negativa — e margem negativa é sempre o
+          sintoma de dois elementos que deveriam estar juntos. */}
+      <div className="space-y-1.5">
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={preparando}
+          onClick={() => void prepararTudo()}
+          className="w-full cursor-pointer gap-1.5 sm:w-auto"
+        >
+          <PenLine className="size-3.5" />
+          {preparando ? "Escrevendo…" : "Escrever o que está faltando"}
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          O ALTAR escreve e para. Quem envia é você, pelo seu WhatsApp.
+        </p>
+      </div>
     </div>
   );
 }

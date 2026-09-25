@@ -140,11 +140,13 @@ derivações técnicas que saem dela, onde cada uma é usada e por que a ocupaç
 do símbolo muda de um alvo para outro. A fonte fica em `brand/`, intacta; as
 derivações são geradas por `scripts/brand/gerar-icones.py`.
 
-**Para a live de 06/10/2026**: `docs/live-altar-2026-10-06.md` — roteiro de
-28-33 min pela jornada de um casamento, o que NÃO demonstrar, planos B para IA
-e internet, os três checklists e o follow-up. A seção 7 lista a preparação
-manual obrigatória: o seed da demonstração não cria fotos nem contrato, e sem
-elas o Projeto Visual abre vazio.
+**Para a live de 06/10/2026**, quatro arquivos com papéis distintos:
+`docs/live-altar-2026-10-06.md` (roteiro pela jornada de um casamento e o que
+NÃO demonstrar), `docs/checklist-demo-manual.md` (preparar a conta — o seed
+não cria fotos nem contrato, e sem elas o Projeto Visual abre vazio),
+`docs/checklist-pre-live.md` (T-7 até T-15min) e `docs/plano-b-live.md` (plano
+A e B de cada bloco). No produto, `health.getEventReadiness` responde "este
+evento está pronto para ser mostrado?" com número, não com promessa.
 
 **Para a reunião comercial**: `docs/demo-comercial.md` (roteiro de 7 e 20 min,
 perguntas frequentes, checklist pré-Meet) e `docs/prontidao-comercial.md` (o

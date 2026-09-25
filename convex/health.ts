@@ -7,6 +7,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { getOwnedEvent, requireUser } from "./lib/identity";
 import { montarResumoOperacional } from "./lib/eventSummary";
 import { saudeDoEvento } from "./lib/saudeDoEvento";
+import { prontidaoDoEvento } from "./lib/prontidaoDoEvento";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SAÚDE DO EVENTO (CORE). Calculada SOMENTE a partir de dados reais já existentes
@@ -238,6 +239,75 @@ export const getEventSummary = query({
       equipe,
       carregamento,
       transacoes,
+    });
+  },
+});
+
+/**
+ * "Este evento está pronto para ser MOSTRADO?"
+ *
+ * Distinta de `getEventHealth`, que mede se a operação está coberta. Um evento
+ * pode estar 100% saudável e abrir o Projeto Visual em branco — foi
+ * exatamente o que a auditoria da live encontrou na conta de demonstração, e
+ * um documento dizendo "suba 8 fotos" não resolve porque ninguém lembra se
+ * subiu. Esta consulta lê o banco e responde com o número.
+ *
+ * Serve à preparação da demonstração e serve à decoradora antes de mandar o
+ * projeto para a cliente. A regra mora em `lib/prontidaoDoEvento.ts`, pura.
+ *
+ * Custo: sete consultas por evento, nunca por linha. É chamada sob demanda,
+ * numa tela só, e não no painel nem na listagem.
+ */
+export const getEventReadiness = query({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    const event = await getOwnedEvent(ctx, args.eventId);
+    if (!event) return null;
+    const eventId = event._id;
+
+    const [fotos, itens, documentos, fornecedores, briefing] = await Promise.all([
+      ctx.db.query("eventPhotos").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+      ctx.db.query("assemblyItems").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+      ctx.db.query("contracts").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+      ctx.db.query("eventSuppliers").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+      ctx.db.query("briefings").withIndex("by_event", (q) => q.eq("eventId", eventId)).unique(),
+    ]);
+
+    // Os materiais da ficha e quantos deles têm foto no catálogo. Uma leitura
+    // por material DISTINTO — dezenas, não o catálogo inteiro.
+    const materiais = new Set<string>();
+    for (const item of itens) {
+      for (const linha of item.receita ?? []) {
+        if (linha.materialId) materiais.add(linha.materialId);
+      }
+    }
+    let materiaisComFoto = 0;
+    for (const id of materiais) {
+      const material = await ctx.db.get(id as Id<"materials">);
+      if (material && material.userId === event.userId && material.fotoStorageId) {
+        materiaisComFoto++;
+      }
+    }
+
+    return prontidaoDoEvento({
+      temCapa: !!event.coverPhotoId,
+      fotos: fotos.length,
+      fotosClassificadas: fotos.filter((f) => !!f.projectScope).length,
+      fotosComAmbiente: fotos.filter((f) => !!f.ambiente?.trim()).length,
+      temFotoInterna: fotos.some((f) => f.visibility === "interno"),
+      itensDeMontagem: itens.length,
+      itensComFotoDaGaleria: itens.filter(
+        (i) => !!i.referencePhotoId || !!i.contractedPhotoId,
+      ).length,
+      materiaisNaFicha: materiais.size,
+      materiaisComFoto,
+      documentos: documentos.length,
+      fornecedores: fornecedores.length,
+      temConceito: !!(
+        briefing?.decorStyle?.trim() ||
+        briefing?.colorPalette?.trim() ||
+        briefing?.atmosphereDescription?.trim()
+      ),
     });
   },
 });

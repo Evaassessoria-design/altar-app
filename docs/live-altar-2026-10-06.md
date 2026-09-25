@@ -156,21 +156,15 @@ Isso tem consequência direta no roteiro:
 
 ### Tarefa manual obrigatória antes da live
 
-Na conta de demonstração, **à mão**, pela interface:
+Os passos exatos, na ordem, em **`docs/checklist-demo-manual.md`** — 10 a 15
+minutos com as imagens já separadas.
 
-1. subir **8 a 12 fotos** de referência na Galeria de Marina & Gabriel;
-2. classificar cada uma com **ambiente** (Cerimônia, Salão, Mesa do bolo) e
-   **escopo** (Contratado / Inspiração);
-3. escolher uma **capa**;
-4. marcar **uma** foto como **"Só para mim"** — é ela que prova a fronteira;
-5. apontar a foto de **um item de montagem** para uma foto da Galeria (mostra
-   o reaproveitamento, sem segundo upload);
-6. subir **um PDF** como contrato do evento e **um** como orçamento de um
-   fornecedor;
-7. subir **uma foto** em 3 ou 4 materiais do catálogo (rosa, lisianthus,
-   eucalipto) — é o que faz a seção "Flores e materiais" aparecer.
+**E não confie no papel para saber se está pronto.** Abra o evento e use
+**"Pronto para mostrar?"**: a verificação lê o banco e responde com número
+("3 de 8 com foto"), em vez de perguntar se você lembra de ter subido.
 
-Sem os itens 1–4, **o bloco 6 não deve ser apresentado**.
+Se houver qualquer ✕ no item de fotos ou capa, **o bloco 6 não deve ser
+apresentado**.
 
 ---
 
@@ -190,65 +184,23 @@ Nada disto deve aparecer ao vivo:
 - **Qualquer conta real** de cliente.
 - **Preço de improviso** — só o que estiver escrito na landing.
 
-## 9. Plano B — se a IA falhar
+## 9. Quando algo falhar
 
-O Escritório depende de uma chamada externa. Se ela demorar ou falhar:
+Plano A e plano B de **cada bloco**, as três regras de palco e a pasta de
+contingência: **`docs/plano-b-live.md`**.
 
-1. **Não insista.** Uma segunda tentativa ao vivo custa trinta segundos de
-   silêncio.
-2. Diga a frase pronta: *"a IA está fora agora; o que ela faz é ler o que já
-   está aqui e resumir — e é exatamente isso que eu acabei de mostrar à mão"*.
-3. Vá direto ao **bloco 8**.
-
-O bloco 7 é o **único** dependente de IA. Todo o resto do roteiro funciona com
-o banco e o navegador.
-
-## 10. Plano B — se a internet cair
-
-1. Ter a demonstração **gravada em vídeo** (15 min, mesma ordem) num arquivo
-   local. Gravar até **04/10**.
-2. Ter o **PDF do Projeto Visual** já gerado e salvo no computador.
-3. Se a queda for curta: falar sobre o problema que o ALTAR resolve — é
-   conteúdo, não enrolação.
-4. Se for longa: passar o vídeo e abrir para perguntas.
+A regra que resume todas: nunca tente a mesma coisa duas vezes na frente de
+quem assiste.
 
 ---
 
-## 11. Checklist — 24 horas antes (05/10)
+## 10. As horas antes
 
-- [ ] Conta de demonstração aberta e conferida, **tela por tela**, na ordem do
-      roteiro
-- [ ] Os 7 itens da seção 7 executados
-- [ ] PDF dos noivos gerado e conferido — sem foto interna, sem custo
-- [ ] Vídeo de contingência gravado e salvo **fora da nuvem**
-- [ ] Landing conferida: o que ela promete é o que será mostrado
-- [ ] Campanha `live-altar-2026-10-06` existindo no painel
-- [ ] Suíte verde: `pnpm test`, typecheck, lint, build
-- [ ] Notificações do sistema operacional **silenciadas**
-- [ ] Testar em **outro** navegador, com a conta logada
-
-## 12. Checklist — 1 hora antes
-
-- [ ] Reiniciar o computador
-- [ ] Fechar tudo: e-mail, WhatsApp Web, Slack
-- [ ] Abrir **só** as abas do roteiro, na ordem, já logadas
-- [ ] Zoom do navegador em **125%** — quem assiste pelo celular precisa ler
-- [ ] Tema **claro** (contraste melhor em transmissão)
-- [ ] Testar áudio e compartilhamento de tela
-- [ ] Água por perto
-- [ ] Vídeo de contingência aberto num player, minimizado
-
-## 13. Checklist — 15 minutos antes
-
-- [ ] Abas na ordem, uma por bloco
-- [ ] Recarregar a tela do bloco 1 (dados frescos)
-- [ ] Celular no silencioso, longe da mesa
-- [ ] Alguém de confiança acompanhando o chat
-- [ ] Link de inscrição **copiado**, pronto para colar no chat
+T-7, T-3, T-1, T-2h e T-15min, na ordem: **`docs/checklist-pre-live.md`**.
 
 ---
 
-## 14. Follow-up pós-live
+## 11. Follow-up pós-live
 
 O produto já suporta isto — é para usar, não para improvisar.
 
@@ -276,7 +228,7 @@ estão testando · quantos viraram clientes.
 
 ---
 
-## 15. Riscos conhecidos
+## 12. Riscos conhecidos
 
 | Risco | Gravidade | Mitigação |
 |---|---|---|

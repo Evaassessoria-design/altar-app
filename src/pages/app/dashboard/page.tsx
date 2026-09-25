@@ -20,6 +20,7 @@ import {
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { OnboardingBanner } from "@/components/onboarding-banner.tsx";
+import { MeuAltarEstaPronto } from "@/components/meu-altar-esta-pronto.tsx";
 import { useState } from "react";
 import { motion } from "motion/react";
 import {
@@ -172,6 +173,16 @@ export default function Dashboard() {
       {/* Precisam da sua atenção — entra ANTES dos números do mês porque
           responde a primeira pergunta da manhã: "o que exige algo de mim
           hoje?". As regras vivem em convex/lib/attention.ts. */}
+      {/* "Meu ALTAR está pronto?" vem ANTES do painel de atenção, e só
+          enquanto faz sentido: aberta quando falta essencial, fechada quando
+          está pronta. Quem acabou de entrar não tem evento nenhum pedindo
+          atenção — tem um sistema vazio e nenhuma ideia de por onde começar.
+
+          Distinta do aviso de primeiros passos acima: aquele mede se a
+          configuração mínima foi feita e some para sempre quando ela dispensa;
+          esta mede a jornada até o ALTAR se pagar, e continua disponível. */}
+      <MeuAltarEstaPronto />
+
       <AttentionBoard totalDeEventos={stats?.totalEvents} />
 
       {/* Stat cards */}

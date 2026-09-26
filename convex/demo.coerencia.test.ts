@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { convexTest } from "convex-test";
 import schema from "./schema";
 import { modules } from "./test.setup";
@@ -270,6 +271,29 @@ describe("as datas não envelhecem", () => {
     // A forma: mais futuro do que passado, e nenhum dos dois zerado.
     expect(passado).toBeGreaterThan(0);
     expect(futuro).toBeGreaterThan(passado);
+  });
+});
+
+describe("o mapa da demo não envelhece calado", () => {
+  // ── POR QUE UM TESTE SOBRE UM DOCUMENTO ───────────────────────────────────
+  // `docs/live-06-10/mapa-demo.md` é o que quem apresenta consulta quando um
+  // número na tela não bate com o que ele esperava. Se o documento envelhecer,
+  // ele passa a ser a fonte do susto em vez da resposta — e envelhecer é o que
+  // documento faz sozinho.
+  const MAPA = readFileSync("docs/live-06-10/mapa-demo.md", "utf-8");
+
+  it("o número de eventos que o mapa promete é o que o seed cria", () => {
+    const linhas = MAPA.split("\n").filter((l) => /^\| [−+]?\d| \*\*10\/10/.test(l));
+    expect(linhas.length, "a tabela do mapa não bate com o portfólio").toBe(
+      TOTAL_DE_EVENTOS_DEMO,
+    );
+  });
+
+  it("todo evento do portfólio está nomeado no mapa", () => {
+    for (const p of PORTFOLIO_DEMO) {
+      expect(MAPA, `"${p.event.name}" não está no mapa`).toContain(p.event.name);
+    }
+    expect(MAPA).toContain("Marina & Gabriel");
   });
 });
 

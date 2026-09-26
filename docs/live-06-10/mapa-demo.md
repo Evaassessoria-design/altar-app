@@ -51,7 +51,7 @@ seed rodar.
 | +30 d | confirmado | Batizado do Bento | 18.900 | 18.900 | 3.200 |
 | +38 d | confirmado | Bodas de Prata — Célia & Amaro | 52.000 | 52.000 | — |
 | +47 d | planejamento | Aniversário de 50 anos — Beatriz | 38.500 | 15.400 | — |
-| +55 d | planejamento | Lançamento Coleção Aurora — Lume | 74.000 | 29.600 | — |
+| +55 d | planejamento | Lançamento Coleção Aurora — Marca Lume | 74.000 | 29.600 | — |
 | +78 d | planejamento | Casamento Júlia & Enzo | 165.000 | 66.000 | — |
 | +96 d | planejamento | 15 anos da Manuela | 71.000 | — | — |
 

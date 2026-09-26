@@ -47,7 +47,27 @@ mostrar a IA funcionando.
 - **Como fecha:** ler o roteiro curto uma vez antes de ensaiar
 - **Prazo:** antes do primeiro ensaio
 
-### 4. Abrir `/admin` ou a conta da piloto por engano — **alta**
+### 4. O reset da demo nunca foi rodado contra um banco de verdade — **média**
+
+`internal.demo.limpar` e `internal.demo.resetar` estão **publicados no DEV**
+(`healthy-pika-907`, conferido em 26/09 com `npx convex function-spec`), mas
+`ALTAR_DEMO` **não está definida lá** — e não deve estar: definir faria do DEV
+um ambiente de demonstração e enfraqueceria a trava.
+
+Consequência honesta: **os dois estão provados por teste e por mais nada.**
+Dezesseis testes adversariais cobrem frase errada, ambiente desligado, rastro
+de cobrança, banco nunca semeado, conta de outro usuário e foto subida à mão —
+mas nenhum deles é uma pessoa clicando no painel do Convex.
+
+- **Como fecha:** no projeto de demonstração (o que tem `ALTAR_DEMO=1`), rodar
+  `internal.demo.checkEnvironment`, depois `resetar` com a frase, e conferir
+  que os treze eventos voltaram
+- **Como se sabe:** a resposta traz `resetou: true` e `apagadas.events: 13`
+- **Prazo:** antes do primeiro ensaio — e **antes** de subir as fotos
+- **Se não der tempo:** não use o reset. Ensaie sem ele e aceite a demo suja;
+  perder as fotos vale mais do que um ensaio limpo
+
+### 5. Abrir `/admin` ou a conta da piloto por engano — **alta**
 
 `/admin` tem contas, receita e os leads desta própria live. A conta da piloto
 tem clientes reais, com nome, telefone e valor.
@@ -57,12 +77,12 @@ tem clientes reais, com nome, telefone e valor.
 - **Como se sabe:** a barra de abas não tem nada além das onze
 - **Prazo:** T-15 min
 
-### 5. Falar preço de improviso — **média**
+### 6. Falar preço de improviso — **média**
 
 - **Como fecha:** abrir a landing numa aba e ler de lá. Só o que está escrito
 - **Prazo:** T-15 min
 
-### 6. Internet instável ou uma tela pendurada — **média**
+### 7. Internet instável ou uma tela pendurada — **média**
 
 - **Como fecha:** vídeo gravado de contingência acessível numa aba; regra dos
   cinco segundos; [`../plano-b-live.md`](../plano-b-live.md)

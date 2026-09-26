@@ -224,26 +224,104 @@ describe("o seed de demonstração não é um furo no paywall", () => {
   // independentes: ser interno E exigir o ambiente demo.
   const demoSource = readFileSync(join(__dirname, "demo.ts"), "utf8");
 
+  /**
+   * Um bloco de nível superior de `demo.ts`, do seu início até a próxima
+   * declaração.
+   *
+   * ── POR QUE ISTO DEIXOU DE PODER SER `slice(start)` ───────────────────────
+   * Estas travas liam do começo do seed até o FIM DO ARQUIVO, o que funcionava
+   * enquanto `demo.ts` só sabia inserir. Quando `limpar` e `resetar` entraram —
+   * as primeiras funções do arquivo que apagam — a trava "o seed nunca apaga"
+   * passou a acusar o `ctx.db.delete` do reset, que fica setecentas linhas
+   * depois e não tem nada a ver com o seed.
+   *
+   * O que ela defende continua valendo, e continua importando: o CAMINHO DE
+   * INSERÇÃO não apaga nada. O que estava errado era a fronteira, não a regra.
+   */
+  const DECLARACOES = ["export const ", "async function "];
+  const bloco = (nome: string) => {
+    // Sem regex de propósito: escapar `\b` dentro de template literal já
+    // custou uma hora nesta trava, e `indexOf` responde à mesma pergunta.
+    const inicios = DECLARACOES.map((d) => demoSource.indexOf(`
+${d}${nome}`)).filter(
+      (n) => n > -1,
+    );
+    expect(inicios.length, `não achei ${nome} em demo.ts`).toBe(1);
+    const resto = demoSource.slice(inicios[0] + 1);
+    const fins = DECLARACOES.map((d) => resto.indexOf(`
+${d}`)).filter((n) => n > -1);
+    return fins.length === 0 ? resto : resto.slice(0, Math.min(...fins));
+  };
+
   it("seed é internalMutation, não alcançável pelo aplicativo", () => {
-    const start = demoSource.indexOf("export const seed");
-    const bloco = demoSource.slice(start, start + 200);
-    expect(bloco).toContain("internalMutation");
+    expect(bloco("seed").slice(0, 200)).toContain("internalMutation");
   });
 
   it("seed valida o ambiente ANTES de qualquer escrita", () => {
-    const start = demoSource.indexOf("export const seed");
-    const bloco = demoSource.slice(start);
-    const guarda = bloco.indexOf("assertDemoEnvironment");
-    const primeiraEscrita = bloco.indexOf("ctx.db.insert");
+    const corpo = bloco("seed");
+    const guarda = corpo.indexOf("assertDemoEnvironment");
     expect(guarda).toBeGreaterThan(-1);
-    expect(guarda).toBeLessThan(primeiraEscrita);
+    // O seed não insere mais direto: delega a `inserirDemonstracao`, e é essa
+    // chamada que precisa vir DEPOIS da guarda.
+    expect(guarda).toBeLessThan(corpo.indexOf("inserirDemonstracao"));
   });
 
-  it("seed nunca apaga nem sobrescreve dado alheio", () => {
-    const start = demoSource.indexOf("export const seed");
-    const bloco = demoSource.slice(start);
-    expect(bloco).not.toContain("ctx.db.delete");
-    expect(bloco).not.toContain("ctx.db.replace");
+  it("o caminho de inserção nunca apaga nem sobrescreve", () => {
+    for (const nome of ["seed", "inserirDemonstracao"]) {
+      const corpo = bloco(nome);
+      expect(corpo, `${nome} apaga`).not.toContain("ctx.db.delete");
+      expect(corpo, `${nome} sobrescreve`).not.toContain("ctx.db.replace");
+    }
+  });
+});
+
+describe("apagar a demo tem porta única", () => {
+  // ── O QUE ESTAS TRAVAS DEFENDEM ─────────────────────────────────────────
+  // `limpar` e `resetar` são as únicas funções do produto inteiro que apagam a
+  // conta de alguém de uma vez. Um terceiro `internalMutation` neste arquivo
+  // que chamasse `limparConta` direto — para "só limpar o financeiro", digamos
+  // — nasceria sem frase de confirmação e sem a checagem do marcador, e
+  // ninguém notaria até rodar no deployment errado.
+  const demoSource = readFileSync(join(__dirname, "demo.ts"), "utf8");
+
+  it("só limpar e resetar chamam a limpeza, e só elas apagam", () => {
+    const chamadas = demoSource.split("limparConta(ctx,").length - 1;
+    expect(chamadas, "alguém novo chama limparConta").toBe(2);
+  });
+
+  it("as duas passam por autorizarReset ANTES de apagar", () => {
+    for (const nome of ["limpar", "resetar"]) {
+      const inicio = demoSource.indexOf(`export const ${nome} = internalMutation`);
+      expect(inicio, `${nome} deixou de ser internalMutation`).toBeGreaterThan(-1);
+      const corpo = demoSource.slice(inicio, demoSource.indexOf("\n});", inicio));
+      const guarda = corpo.indexOf("autorizarReset");
+      const limpeza = corpo.indexOf("limparConta");
+      expect(guarda, `${nome} apaga sem autorizar`).toBeGreaterThan(-1);
+      expect(guarda, `${nome} autoriza depois de apagar`).toBeLessThan(limpeza);
+    }
+  });
+
+  it("autorizarReset exige o ambiente, a frase e o marcador — nesta ordem", () => {
+    const inicio = demoSource.indexOf("async function autorizarReset");
+    const corpo = demoSource.slice(inicio, demoSource.indexOf("\n}", inicio));
+    const ambiente = corpo.indexOf("assertDemoEnvironment");
+    const frase = corpo.indexOf("CONFIRMACAO_DE_RESET");
+    const marcador = corpo.indexOf("encontrarEventoDemo");
+    expect(ambiente).toBeGreaterThan(-1);
+    expect(frase).toBeGreaterThan(ambiente);
+    expect(marcador).toBeGreaterThan(frase);
+  });
+
+  it("a limpeza varre por ÍNDICE de usuário, nunca a tabela inteira", () => {
+    // ── O DEFEITO QUE ISTO TRANCA ─────────────────────────────────────────
+    // `.collect()` sem índice aqui apagaria a tabela inteira do deployment, e
+    // o teste de isolamento por conta continuaria verde se a demo fosse a
+    // única conta com dado.
+    const inicio = demoSource.indexOf("async function limparConta");
+    const corpo = demoSource.slice(inicio, demoSource.indexOf("\n}\n", inicio));
+    expect(corpo, "a limpeza usa collect()").not.toContain(".collect()");
+    expect(corpo).toContain('withIndex("by_user"');
+    expect(corpo).toContain("TETO_POR_TABELA");
   });
 });
 

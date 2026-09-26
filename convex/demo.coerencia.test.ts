@@ -234,7 +234,9 @@ describe("a demo dá o que as telas da live precisam mostrar", () => {
 
   it("o portfólio inteiro entrou — nenhum evento se perdeu no caminho", async () => {
     const { t, r } = await semear();
-    expect(r.portfolio?.eventos).toBe(PORTFOLIO_DEMO.length);
+    expect(r.criado).toBe(true);
+    if (!r.criado) throw new Error(r.motivo);
+    expect(r.portfolio.eventos).toBe(PORTFOLIO_DEMO.length);
 
     const esperados = PORTFOLIO_DEMO.reduce((s, p) => s + p.transacoes.length, 0);
     const doPortfolio = (await lerTudo(t, "transactions")).filter((x) =>

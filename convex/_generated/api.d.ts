@@ -88,6 +88,7 @@ import type * as lib_dataDeEvento from "../lib/dataDeEvento.js";
 import type * as lib_dataDoDia from "../lib/dataDoDia.js";
 import type * as lib_demoData from "../lib/demoData.js";
 import type * as lib_demoGuard from "../lib/demoGuard.js";
+import type * as lib_demoPortfolio from "../lib/demoPortfolio.js";
 import type * as lib_dinheiro from "../lib/dinheiro.js";
 import type * as lib_dinheiroVencido from "../lib/dinheiroVencido.js";
 import type * as lib_duplicidade from "../lib/duplicidade.js";
@@ -235,6 +236,7 @@ declare const fullApi: ApiFromModules<{
   "lib/dataDoDia": typeof lib_dataDoDia;
   "lib/demoData": typeof lib_demoData;
   "lib/demoGuard": typeof lib_demoGuard;
+  "lib/demoPortfolio": typeof lib_demoPortfolio;
   "lib/dinheiro": typeof lib_dinheiro;
   "lib/dinheiroVencido": typeof lib_dinheiroVencido;
   "lib/duplicidade": typeof lib_duplicidade;

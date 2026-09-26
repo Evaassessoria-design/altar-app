@@ -5,6 +5,7 @@ import schema from "./schema";
 import { modules } from "./test.setup";
 import { internal } from "./_generated/api";
 import { DEMO_WEDDING } from "./lib/demoData";
+import { TOTAL_DE_EVENTOS_DEMO } from "./lib/demoPortfolio";
 import { consolidarMateriais } from "./lib/fichaTecnica";
 import { ehObrigacaoDeMontagem } from "./lib/escopoDoProjeto";
 import { paraOCliente } from "./lib/propostaComercial";
@@ -36,6 +37,25 @@ async function ambienteDemo(t: ReturnType<typeof convexTest>): Promise<Id<"users
       role: "admin", subscriptionStatus: "trial",
     }),
   );
+}
+
+/**
+ * O evento HERÓI, entre os treze que o seed cria.
+ *
+ * ── POR QUE ISTO PASSOU A SER NECESSÁRIO ──────────────────────────────────
+ * Estas travas nasceram quando o seed criava um evento só, e por isso
+ * perguntavam ao banco inteiro. Desde que o portfólio entrou (doze eventos de
+ * contorno), "todos os lançamentos" deixou de significar "os lançamentos de
+ * Marina & Gabriel" — e o assunto destas travas sempre foi ele.
+ *
+ * Escopo não é abrandamento: sem ele, a trava de checklist passaria a contar
+ * itens de outro evento e pararia de defender o que defendia.
+ */
+async function heroi(ctx: { db: { query: (t: "events") => { collect: () => Promise<{ _id: Id<"events">; name: string }[]> } } }) {
+  const eventos = await ctx.db.query("events").collect();
+  const m = eventos.find((e) => e.name === "Marina & Gabriel");
+  if (!m) throw new Error("o seed não criou Marina & Gabriel");
+  return m._id;
 }
 
 describe("o seed se RECUSA a rodar fora do ambiente demo", () => {
@@ -115,11 +135,15 @@ describe("o seed cria o casamento completo", () => {
 
     await t.run(async (ctx) => {
       const eventos = await ctx.db.query("events").collect();
-      expect(eventos).toHaveLength(1);
-      expect(eventos[0].name).toBe("Marina & Gabriel");
-      expect(eventos[0].date).toBe("2026-10-10");
-      expect(eventos[0].location).toContain("Fazenda Aurora");
-      expect(eventos[0].status).toBe("confirmed");
+      expect(eventos).toHaveLength(TOTAL_DE_EVENTOS_DEMO);
+
+      // Um só com este nome: se o portfólio ganhasse outro "Marina &
+      // Gabriel", o roteiro da live abriria o evento errado.
+      const marina = eventos.filter((e) => e.name === "Marina & Gabriel");
+      expect(marina).toHaveLength(1);
+      expect(marina[0].date).toBe("2026-10-10");
+      expect(marina[0].location).toContain("Fazenda Aurora");
+      expect(marina[0].status).toBe("confirmed");
     });
   });
 
@@ -132,15 +156,21 @@ describe("o seed cria o casamento completo", () => {
       const contar = async (tabela: Parameters<typeof ctx.db.query>[0]) =>
         (await ctx.db.query(tabela).collect()).length;
 
+      // Checklist, Compras e Financeiro existem nos treze eventos; aqui só
+      // interessam os do herói.
+      const evento = await heroi(ctx);
+      const contarDoHeroi = async (tabela: "checklistItems" | "purchaseItems" | "transactions") =>
+        (await ctx.db.query(tabela).collect()).filter((l) => l.eventId === evento).length;
+
       expect(await contar("briefings"), "Briefing").toBe(1);
       expect(await contar("suppliers"), "Catálogo").toBe(DEMO_WEDDING.suppliers.length);
       expect(await contar("eventSuppliers"), "Fornecedores").toBe(DEMO_WEDDING.suppliers.length);
       expect(await contar("teamMembers"), "Equipe").toBe(DEMO_WEDDING.team.length);
       expect(await contar("eventTeam"), "Escala").toBe(DEMO_WEDDING.team.length);
-      expect(await contar("checklistItems"), "Checklist").toBe(DEMO_WEDDING.checklist.length);
-      expect(await contar("purchaseItems"), "Compras").toBe(DEMO_WEDDING.purchases.length);
+      expect(await contarDoHeroi("checklistItems"), "Checklist").toBe(DEMO_WEDDING.checklist.length);
+      expect(await contarDoHeroi("purchaseItems"), "Compras").toBe(DEMO_WEDDING.purchases.length);
       expect(await contar("budgetItems"), "Orçamento").toBe(DEMO_WEDDING.budget.length);
-      expect(await contar("transactions"), "Financeiro").toBe(DEMO_WEDDING.transactions.length);
+      expect(await contarDoHeroi("transactions"), "Financeiro").toBe(DEMO_WEDDING.transactions.length);
       expect(await contar("assemblyItems"), "Carregamento").toBe(DEMO_WEDDING.assembly.length);
       expect(await contar("leads"), "Funil").toBe(DEMO_WEDDING.leads.length);
       expect(await contar("materials"), "Materiais").toBe(DEMO_WEDDING.materials.length);
@@ -192,17 +222,21 @@ describe("o seed cria o casamento completo", () => {
     await t.mutation(seed, {});
 
     await t.run(async (ctx) => {
-      const checklist = await ctx.db.query("checklistItems").collect();
+      const evento = await heroi(ctx);
+      const doHeroi = <T extends { eventId?: Id<"events"> }>(l: T[]) =>
+        l.filter((x) => x.eventId === evento);
+
+      const checklist = doHeroi(await ctx.db.query("checklistItems").collect());
       const feitos = checklist.filter((c) => c.isChecked).length;
       expect(feitos).toBeGreaterThan(0);
       expect(feitos).toBeLessThan(checklist.length);
 
-      const compras = await ctx.db.query("purchaseItems").collect();
+      const compras = doHeroi(await ctx.db.query("purchaseItems").collect());
       const compradas = compras.filter((c) => c.isPurchased).length;
       expect(compradas).toBeGreaterThan(0);
       expect(compradas).toBeLessThan(compras.length);
 
-      const lancamentos = await ctx.db.query("transactions").collect();
+      const lancamentos = doHeroi(await ctx.db.query("transactions").collect());
       expect(lancamentos.some((l) => l.isPaid)).toBe(true);
       expect(lancamentos.some((l) => !l.isPaid)).toBe(true);
 
@@ -224,7 +258,7 @@ describe("o seed cria o casamento completo", () => {
       // disso: a parcela final ainda está no prazo.
       expect(
         lancamentos.filter((l) => !l.isPaid && l.type === "income").every((l) => l.date > "2026-09-21"),
-        "a demo não pode pintar a cliente como inadimplente",
+        "a demo não pode pintar a cliente do evento principal como inadimplente",
       ).toBe(true);
 
       // Fornecedores em estágios diferentes.
@@ -283,7 +317,7 @@ describe("o seed é idempotente e não destrói nada", () => {
     expect(r3.criado).toBe(false);
 
     await t.run(async (ctx) => {
-      expect(await ctx.db.query("events").collect()).toHaveLength(1);
+      expect(await ctx.db.query("events").collect()).toHaveLength(TOTAL_DE_EVENTOS_DEMO);
       expect(await ctx.db.query("suppliers").collect()).toHaveLength(DEMO_WEDDING.suppliers.length);
     });
   });
@@ -304,7 +338,7 @@ describe("o seed é idempotente e não destrói nada", () => {
     await t.run(async (ctx) => {
       const original = await ctx.db.get(anterior);
       expect(original?.name).toBe("Evento anterior");
-      expect(await ctx.db.query("events").collect()).toHaveLength(2);
+      expect(await ctx.db.query("events").collect()).toHaveLength(TOTAL_DE_EVENTOS_DEMO + 1);
     });
   });
 
@@ -573,10 +607,12 @@ describe("a história do demo fecha", () => {
     await t.mutation(seed, {});
 
     await t.run(async (ctx) => {
-      const evento = (await ctx.db.query("events").collect())[0];
+      const evento = (await ctx.db.get(await heroi(ctx)))!;
       const briefing = (await ctx.db.query("briefings").collect())[0];
       const orcamento = await ctx.db.query("budgetItems").collect();
-      const lancamentos = await ctx.db.query("transactions").collect();
+      const lancamentos = (await ctx.db.query("transactions").collect()).filter(
+        (l) => l.eventId === evento._id,
+      );
 
       const somar = (linhas: { amount: number }[]) =>
         linhas.reduce((s, l) => s + l.amount, 0);

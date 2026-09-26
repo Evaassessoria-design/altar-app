@@ -4,6 +4,8 @@ import type { MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { assertDemoEnvironment, inspectDemoEnvironment } from "./lib/demoGuard";
 import { DEMO_WEDDING, DEMO_MARKER } from "./lib/demoData";
+import { PORTFOLIO_DEMO } from "./lib/demoPortfolio";
+import { dataEmDias } from "./lib/dataDoDia";
 import { normalizeName, normalizePhone } from "./lib/supplierIdentity";
 
 /** O demo tem uma conta. O teto existe só para nunca varrer um banco grande. */
@@ -519,9 +521,83 @@ export const seed = internalMutation({
       updatedAt: p.decididaEm,
     });
 
+    // ── A EMPRESA EM VOLTA ───────────────────────────────────────────────────
+    // Marina & Gabriel tem profundidade; estes doze dão CONTORNO. Sem eles o
+    // Dashboard abria com um evento, a Agenda com uma data e o Financeiro com
+    // um cliente — e a primeira frase da apresentação, "essa é a sua empresa
+    // hoje", caía no vazio.
+    //
+    // São rasos de propósito: existem para os painéis terem o que somar, não
+    // para serem abertos. A live abre um evento, não doze.
+    let eventosDoPortfolio = 0;
+    let lancamentosDoPortfolio = 0;
+    let comprasDoPortfolio = 0;
+
+    for (const p of PORTFOLIO_DEMO) {
+      const { emDias, ...campos } = p.event;
+      const outroId = await ctx.db.insert("events", {
+        userId,
+        ...campos,
+        date: dataEmDias(emDias),
+      });
+      eventosDoPortfolio++;
+
+      for (const t of p.transacoes) {
+        await ctx.db.insert("transactions", {
+          userId,
+          eventId: outroId,
+          type: t.type,
+          category: t.category,
+          description: `${t.description} ${DEMO_MARKER}`,
+          amount: t.amount,
+          date: dataEmDias(t.emDias),
+          isPaid: t.isPaid,
+          // Pago diz QUANDO e COMO. Sem isto o Financeiro mostra recebimento
+          // quitado sem data — e `paidAt` ausente num lançamento pago é a
+          // diferença entre "quando era para entrar" e "quando entrou".
+          ...(t.isPaid
+            ? { paidAt: dataEmDias(t.pagoEmDias ?? t.emDias), paymentMethod: t.forma }
+            : {}),
+        });
+        lancamentosDoPortfolio++;
+      }
+
+      for (const [i, c] of (p.compras ?? []).entries()) {
+        const { prazoEmDias, ...resto } = c;
+        await ctx.db.insert("purchaseItems", {
+          userId,
+          eventId: outroId,
+          ...resto,
+          order: i,
+          // Comprado é RECEBIDO nesta demo: uma compra marcada como comprada e
+          // pendente ao mesmo tempo faria as Compras mostrarem um estado que o
+          // produto não produz sozinho.
+          ...(c.isPurchased ? { status: "recebido" as const } : {}),
+          ...(prazoEmDias !== undefined ? { dueDate: dataEmDias(prazoEmDias) } : {}),
+        });
+        comprasDoPortfolio++;
+      }
+
+      for (const [i, item] of (p.checklist ?? []).entries()) {
+        await ctx.db.insert("checklistItems", {
+          userId,
+          eventId: outroId,
+          name: item.name,
+          phase: "pre" as const,
+          isChecked: item.isChecked,
+          order: i,
+        });
+      }
+    }
+
     return {
       criado: true,
       eventId,
+      portfolio: {
+        eventos: eventosDoPortfolio,
+        lancamentos: lancamentosDoPortfolio,
+        compras: comprasDoPortfolio,
+      },
       resumo: {
         fornecedores: d.suppliers.length,
         materiais: d.materials.length,

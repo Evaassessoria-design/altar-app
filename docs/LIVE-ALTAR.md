@@ -1,5 +1,14 @@
 # Live de apresentação do ALTAR
 
+> **SUPERADO — não use para a live de 06/10/2026.**
+>
+> Este documento é de quando a data ainda não estava fechada ("28/09 a 04/10,
+> a definir"). Ele guarda decisão de produto e por isso não foi apagado, mas
+> **nada aqui decide a apresentação de 06/10**.
+>
+> A porta única da live é **`docs/live-06-10/README.md`**. Se este arquivo
+> contradisser o que está lá, o de lá vale.
+
 **Janela:** 28/09 a 04/10/2026. Data e horário a definir.
 **Duração sugerida:** 45 min — 30 de demonstração, 15 de perguntas.
 

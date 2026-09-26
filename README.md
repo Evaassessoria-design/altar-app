@@ -147,13 +147,25 @@ derivações técnicas que saem dela, onde cada uma é usada e por que a ocupaç
 do símbolo muda de um alvo para outro. A fonte fica em `brand/`, intacta; as
 derivações são geradas por `scripts/brand/gerar-icones.py`.
 
-**Para a live de 06/10/2026**, quatro arquivos com papéis distintos:
-`docs/live-altar-2026-10-06.md` (roteiro pela jornada de um casamento e o que
-NÃO demonstrar), `docs/checklist-demo-manual.md` (preparar a conta — o seed
-não cria fotos nem contrato, e sem elas o Projeto Visual abre vazio),
-`docs/checklist-pre-live.md` (T-7 até T-15min) e `docs/plano-b-live.md` (plano
-A e B de cada bloco). No produto, `health.getEventReadiness` responde "este
-evento está pronto para ser mostrado?" com número, não com promessa.
+**Para a live de 06/10/2026, comece por `docs/live-06-10/README.md`** — é a
+porta única. Ela indexa o que já existia (`docs/live-altar-2026-10-06.md`, o
+roteiro pela jornada de um casamento e o que NÃO demonstrar;
+`docs/checklist-demo-manual.md`, preparar a conta, porque o seed não cria fotos
+nem contrato; `docs/checklist-pre-live.md`, T-7 até T-15min;
+`docs/plano-b-live.md`, plano A e B de cada bloco) e acrescenta o que faltava:
+`roteiro-curto.md` (a folha que fica aberta ao lado), `mapa-demo.md` (onde cada
+número da demonstração mora), `perguntas-assistente.md` (o que perguntar, com o
+que está homologado e o que não está) e `riscos.md`.
+
+A pasta não copia nenhum documento: documento copiado diverge do original na
+primeira correção, e no dia da live divergência é pior do que ausência.
+`docs/LIVE-ALTAR.md` e `docs/META-LIVE-2026.md` são de uma janela anterior e
+estão marcados como superados.
+
+No produto, `health.getEventReadiness` responde "este evento está pronto para
+ser mostrado?" com número, não com promessa. E `internal.demo.resetar` devolve
+a demonstração ao estado ensaiado entre dois ensaios — com frase de confirmação
+digitada, e recusando quando encontra foto subida à mão.
 
 **Para OPERAR a campanha da live** — que é outro trabalho, feito antes e depois
 dela: `docs/campanha-live-altar.md` (as doze etapas, os dez modelos de

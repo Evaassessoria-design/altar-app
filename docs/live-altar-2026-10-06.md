@@ -3,7 +3,7 @@
 Roteiro, checklists e planos B da apresentação do ALTAR para decoradoras.
 
 > Este documento descreve **o que existe no código hoje**, conferido em
-> `24/09/2026`. Onde um recurso não existe, está escrito que não existe. Nada
+> `24/09/2026` e revisado em `26/09/2026` (bloco 7 e seção 7). Onde um recurso não existe, está escrito que não existe. Nada
 > aqui deve ser prometido na live sem ter sido aberto antes.
 
 ---
@@ -95,14 +95,27 @@ Mostrar a foto marcada **"Só para mim"** na Galeria e o fato de que ela **não
 aparece** no documento. É a prova de que o sistema entende a diferença entre o
 material interno e o que vai para a cliente.
 
-### Bloco 7 — Escritório de IA (3 min)
-**`/escritorio`**: fazer **duas** perguntas, não dez. Sugestões seguras:
+### Bloco 7 — Assistente (3 min)
+**`/assistente`** — **não `/escritorio`**.
 
-- *"O que precisa da minha atenção hoje?"* (Gestão)
-- *"Quais oportunidades estão paradas há mais tempo?"* (Comercial)
+> **CORREÇÃO DE ROTA, 26/09.** Este bloco dizia `/escritorio`. Essa tela é o
+> painel do NEGÓCIO ALTAR e é guardada por `requirePlatformOwner`: abri-la com
+> a conta de demonstração, ao vivo, mostraria a recusa de acesso no lugar do
+> produto. `/assistente` é a IA da decoradora sobre a empresa dela, guardada
+> por `requireUser` — é esta que a plateia precisa ver.
+
+Fazer **duas** perguntas, não dez. As duas abaixo estão homologadas em
+`convex/assistente.homologacao.test.ts`: saem verdes e vão para o agente
+indicado, com esta redação exata.
+
+- *"O que precisa da minha atenção?"* → Gestão
+- *"Como estão minhas oportunidades?"* → Comercial
 
 Mostrar que a resposta cita **as fontes consultadas** e que os agentes têm
 proibições declaradas — não enviam mensagem, não mexem em dinheiro.
+
+A lista inteira do que perguntar e do que não perguntar:
+**`docs/live-06-10/perguntas-assistente.md`**.
 
 ### Bloco 8 — Encerramento (2 min)
 Como entrar, e o convite para o teste. **Não citar preço de improviso**: usar
@@ -122,7 +135,7 @@ o que estiver na landing.
 8. `/financeiro`
 9. `/eventos/:id/fotos` (só para mostrar "Só para mim")
 10. `/eventos/:id/projeto` + PDF
-11. `/escritorio`
+11. `/assistente`
 
 ## 6. Conta que será usada
 
@@ -141,6 +154,11 @@ recusa banco com sinal de produção e é idempotente.
 O seed de demonstração cria 18 tabelas: evento, briefing, checklist,
 fornecedores, compras, financeiro, orçamento, itens de montagem, equipe,
 acervo, materiais, composições, lead e proposta.
+
+Desde 26/09 ele cria **treze eventos**, não um: Marina & Gabriel com toda a
+profundidade, mais doze de contorno para o Dashboard, a Agenda e o Financeiro
+não abrirem com uma linha cada. Onde cada número da demonstração mora, e o que
+cada tela deve estar mostrando: **`docs/live-06-10/mapa-demo.md`**.
 
 **Ele NÃO cria fotos (`eventPhotos`) nem contrato (`contracts`).**
 

@@ -686,6 +686,14 @@ const TETO_POR_TABELA = 2000;
 
 /** As tabelas que o seed escreve, todas com índice por usuário. */
 const TABELAS_DA_DEMO = [
+  // ── POR QUE `notifications` ESTÁ AQUI, SE O SEED NÃO ESCREVE NELA ────────
+  // Porque o cron diário escreve. `notifications.generateDailyAlerts` roda às
+  // 5h da manhã e cria avisos com `relatedEventId` apontando para os eventos
+  // da demonstração. Deixá-los de fora fazia o reset apagar o evento e manter
+  // o aviso: o sino mostraria uma linha que leva a um evento que não existe
+  // mais — exatamente o órfão que a ordem filho-antes-de-pai existe para
+  // evitar. E é dado DERIVADO: o cron da madrugada seguinte refaz.
+  "notifications",
   "proposals", "leads", "assemblyItems", "transactions", "purchaseItems",
   "checklistItems", "eventTeam", "teamMembers", "collectionAdjustments",
   "collectionReservations", "collectionItems", "compositions", "materials",
@@ -734,14 +742,17 @@ async function limparConta(ctx: MutationCtx, userId: Id<"users">, apagarArquivos
       code: "TEM_ARQUIVO",
       message:
         `Recusado: nada foi apagado. Esta conta tem ${anexos.fotos.length} foto(s), ` +
-        `${anexos.contratos.length} contrato(s) e ${anexos.plantas.length} planta(s) — ` +
+        `${anexos.contratos.length} contrato(s), ${anexos.plantas.length} planta(s) e ` +
+        `${anexos.documentos.length} documento(s) de lead — ` +
         "e o seed nunca criou nenhum deles, o que quer dizer que foram subidos à " +
         "mão. Apagar o evento deixaria essas linhas órfãs. Se quiser mesmo " +
         'descartá-las, informe { "apagarArquivos": true }. Os arquivos em si ' +
         "continuam no storage do Convex; só o vínculo com o evento some.",
     });
   }
-  for (const linha of [...anexos.fotos, ...anexos.contratos, ...anexos.plantas]) {
+  for (const linha of [
+    ...anexos.fotos, ...anexos.contratos, ...anexos.plantas, ...anexos.documentos,
+  ]) {
     await ctx.db.delete(linha._id);
   }
   apagadas.anexos = anexos.total;
@@ -786,6 +797,13 @@ async function anexosDaConta(
     .query("contracts")
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .take(TETO_POR_TABELA);
+  // `leadDocuments.storageId` é obrigatório: toda linha aqui É um arquivo que
+  // alguém subiu. Vale a mesma regra das fotos — o seed nunca criou nenhum, e
+  // apagar sem perguntar destruiria trabalho manual.
+  const documentos = await ctx.db
+    .query("leadDocuments")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .take(TETO_POR_TABELA);
 
   // `layoutRenders` só tem índice por evento.
   const plantas: Doc<"layoutRenders">[] = [];
@@ -798,7 +816,10 @@ async function anexosDaConta(
     );
   }
 
-  return { fotos, contratos, plantas, total: fotos.length + contratos.length + plantas.length };
+  return {
+    fotos, contratos, plantas, documentos,
+    total: fotos.length + contratos.length + plantas.length + documentos.length,
+  };
 }
 
 /** As três travas, na ordem em que precisam barrar. Devolve a conta da demo. */

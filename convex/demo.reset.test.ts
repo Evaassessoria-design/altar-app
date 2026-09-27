@@ -279,6 +279,53 @@ describe("resetar", () => {
     expect(await t.run(async (ctx) => (await ctx.db.query("eventPhotos").collect()).length)).toBe(0);
   });
 
+  it("a notificação do cron NÃO sobrevive ao reset apontando para o nada", async () => {
+    // ── O DEFEITO QUE ISTO TRANCA, ENCONTRADO AUDITANDO O CRON ────────────
+    // `notifications.generateDailyAlerts` roda às 5h e cria avisos com
+    // `relatedEventId`. Entre um ensaio e o outro, a conta de demonstração
+    // acumula avisos apontando para os treze eventos. O reset apagava os
+    // eventos e deixava os avisos: o sino mostraria uma linha que leva a um
+    // evento que não existe mais.
+    //
+    // É dado DERIVADO — o cron da madrugada seguinte refaz —, então apagar é
+    // a resposta certa, e não recusar como se faz com arquivo.
+    const { t, userId } = await semeada();
+    const aviso = await t.run(async (ctx) => {
+      const e = (await ctx.db.query("events").collect())[0];
+      return ctx.db.insert("notifications", {
+        userId,
+        type: "checklist_incomplete",
+        title: "Checklist pendente",
+        body: "Faltam itens",
+        relatedEventId: e._id,
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      });
+    });
+
+    await t.mutation(resetar, { confirmo: CONFIRMACAO_DE_RESET });
+    expect(await t.run((ctx) => ctx.db.get(aviso)), "aviso órfão sobreviveu").toBeNull();
+  });
+
+  it("documento de lead subido à mão faz o reset RECUSAR, como a foto", async () => {
+    // `leadDocuments.storageId` é obrigatório: toda linha ali É um arquivo.
+    const { t, userId } = await semeada();
+    await t.run(async (ctx) => {
+      const lead = (await ctx.db.query("leads").collect())[0];
+      await ctx.db.insert("leadDocuments", {
+        userId, leadId: lead._id,
+        storageId: await ctx.storage.store(new Blob(["contrato"])),
+        fileName: "contrato-assinado.pdf",
+        uploadedAt: new Date().toISOString(),
+      });
+    });
+
+    await expect(t.mutation(resetar, { confirmo: CONFIRMACAO_DE_RESET })).rejects.toThrow(
+      /1 documento/,
+    );
+    expect(await contar(t, "events")).toBe(TOTAL_DE_EVENTOS_DEMO);
+  });
+
   it("a demo recriada continua coerente — não é uma segunda cópia do roteiro", async () => {
     // `resetar` e `seed` chamam a MESMA função de inserção. Se um dia
     // divergirem, a demo recriada deixa de ser a demo ensaiada.

@@ -91,6 +91,47 @@ tem clientes reais, com nome, telefone e valor.
 
 ---
 
+## O que roda sozinho — auditado em 26/09
+
+Pergunta que faltava responder: **alguma coisa dispara no meio da
+apresentação?** `convex/crons.ts` tem três tarefas diárias, todas de
+madrugada:
+
+| UTC | BRT | Tarefa | O que faz |
+|---|---|---|---|
+| 07:30 | 04:30 | `adminApprovals.varreduraDiaria` | expira proposta de resposta parada. Não envia, não cobra, não altera conversa |
+| 08:00 | 05:00 | `notifications.generateDailyAlerts` | cria avisos de checklist e evento próximo |
+| 09:00 | 06:00 | `asaas.reconcileStaleSubscriptions` | só ATIVA quem pagou e ficou preso. Nunca rebaixa ninguém |
+
+A live é **19:00 BRT (22:00 UTC)**. A tarefa mais próxima fica a **treze horas
+de distância**. Nada dispara durante a apresentação.
+
+### No deployment de demonstração, especificamente
+
+- **`reconcileStaleSubscriptions` é inofensiva ali.** Ela só olha contas com
+  cliente no Asaas, e a própria trava do seed recusa um banco que tenha
+  alguma. A lista vem vazia e nenhuma chamada de rede acontece.
+- **`generateDailyAlerts` escreve.** Entre um ensaio e a live, a conta de
+  demonstração ganha avisos de checklist pendente e evento próximo. Não se
+  acumulam (há checagem por tipo + evento) e, se algo, deixam a demo mais
+  parecida com uma empresa em uso.
+
+### Um defeito que esta auditoria encontrou
+
+Os avisos apontam para o evento (`relatedEventId`), e `notifications` **não
+estava na limpeza do reset**. Resetar entre dois ensaios apagaria os treze
+eventos e manteria os avisos: o sino mostraria uma linha que leva a um evento
+que não existe mais.
+
+Corrigido — `notifications` entrou na limpeza, por ser dado derivado que o
+cron da madrugada seguinte refaz. Na mesma passada, `leadDocuments` entrou no
+caminho dos ARQUIVOS: `storageId` é obrigatório lá, então toda linha é um
+arquivo que alguém subiu, e o reset agora recusa em vez de apagar.
+
+**Nada foi desligado.** A camada temporal fica pronta e como estava.
+
+---
+
 ## Fechados — registrados para não voltarem
 
 ### O DEV rodando versão antiga do código

@@ -220,6 +220,126 @@ describe("/agenda — o que acontece nos próximos dias", () => {
   });
 });
 
+/** O evento herói, que é o único que a live abre. */
+async function heroi(dona: Awaited<ReturnType<typeof comADemo>>) {
+  const eventos = await dona.query(api.events.list, {});
+  const m = eventos.find((e) => e.name === "Marina & Gabriel");
+  expect(m, "o seed não criou Marina & Gabriel").toBeDefined();
+  return m!._id;
+}
+
+describe("/eventos/:id — o bloco 3, dentro do evento", () => {
+  it("o herói abre com briefing, itens de montagem e fornecedores", async () => {
+    const dona = await comADemo();
+    const id = await heroi(dona);
+
+    const evento = await dona.query(api.events.get, { id });
+    expect(evento?.name).toBe("Marina & Gabriel");
+
+    const resumo = await dona.query(api.health.getEventSummary, { eventId: id });
+    expect(resumo).not.toBeNull();
+    expect(resumo!.checklistPre.total, "checklist vazio").toBeGreaterThan(0);
+    expect(resumo!.fornecedores.total, "nenhum fornecedor no evento").toBeGreaterThan(0);
+    expect(resumo!.carregamento.itens, "nenhum item de montagem").toBeGreaterThan(0);
+    expect(resumo!.equipe.escalados, "escala vazia").toBeGreaterThan(0);
+    expect(resumo!.equipe.comHorario, "ninguém com horário — a Agenda não agrupa").toBeGreaterThan(0);
+  });
+
+  it("o resumo tem o que fazer a seguir — a tela não abre sem direção", async () => {
+    const dona = await comADemo();
+    const resumo = await dona.query(api.health.getEventSummary, {
+      eventId: await heroi(dona),
+    });
+    expect(resumo!.proximasAcoes.length).toBeGreaterThan(0);
+  });
+});
+
+describe("/eventos/:id/fornecedores — o bloco 4", () => {
+  it("os vínculos vêm com o nome que está no catálogo", async () => {
+    // ── O DEFEITO QUE ISTO TRANCA ─────────────────────────────────────────
+    // `listByEvent` cruza `eventSuppliers` com o catálogo justamente para que
+    // corrigir um telefone no catálogo chegue aos eventos. Se o cruzamento
+    // sumir, a tela volta a mostrar a cópia velha e nada acusa.
+    const dona = await comADemo();
+    const vinculos = await dona.query(api.suppliers.listByEvent, {
+      eventId: await heroi(dona),
+    });
+    expect(vinculos.length).toBeGreaterThan(0);
+    for (const v of vinculos) {
+      expect(v.companyName, "fornecedor sem nome na tela").toBeTruthy();
+    }
+  });
+
+  it("os fornecedores estão em estágios DIFERENTES", async () => {
+    // Todos no mesmo estágio faz o dossiê parecer uma lista, e o bloco 4
+    // existe para mostrar que cada contratação tem um estado próprio.
+    const dona = await comADemo();
+    const vinculos = await dona.query(api.suppliers.listByEvent, {
+      eventId: await heroi(dona),
+    });
+    expect(new Set(vinculos.map((v) => v.status)).size).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("/propostas/:id — o bloco 2", () => {
+  it("o evento tem a proposta aceita que o originou", async () => {
+    const dona = await comADemo();
+    const propostas = await dona.query(api.propostas.doEvento, {
+      eventId: await heroi(dona),
+    });
+    expect(propostas.length).toBe(1);
+    expect(propostas[0].status).toBe("aceita");
+  });
+
+  it("a proposta abre inteira e soma o mesmo que o evento", async () => {
+    // ── OS NÚMEROS CONVERSAM, TAMBÉM AQUI ─────────────────────────────────
+    // O contrato é UM número e aparece no evento, no orçamento, no funil e na
+    // proposta. Divergir na proposta é o pior lugar: é o documento que a
+    // cliente assinou.
+    const dona = await comADemo();
+    const id = await heroi(dona);
+    const evento = await dona.query(api.events.get, { id });
+    const [resumo] = await dona.query(api.propostas.doEvento, { eventId: id });
+
+    const proposta = await dona.query(api.propostas.get, { id: resumo._id });
+    expect(proposta).not.toBeNull();
+    const investimento = proposta!.itens.reduce((s, i) => s + i.valor, 0);
+    expect(investimento).toBe(evento!.budget);
+  });
+});
+
+describe("as duas telas de FOTO dependem do passo manual, e o produto sabe disso", () => {
+  it("recém-semeado, o herói NÃO está apresentável", async () => {
+    // ── POR QUE ISTO É UM TESTE, E NÃO UM AVISO NO DOCUMENTO ──────────────
+    // O roteiro manda: "se houver qualquer ✕ em fotos ou capa, o bloco 6 não
+    // deve ser apresentado". Nada conferia que esse aviso continuava
+    // verdadeiro. Se um dia o seed passar a criar imagem, ou se a regra de
+    // prontidão afrouxar, o aviso vira mentira — e o bloco 6 é o clímax.
+    const dona = await comADemo();
+    const p = await dona.query(api.health.getEventReadiness, {
+      eventId: await heroi(dona),
+    });
+    expect(p).not.toBeNull();
+    expect(p!.apresentavel, "o seed passou a criar foto? o roteiro precisa saber").toBe(false);
+    expect(p!.faltando).toBeGreaterThan(0);
+  });
+
+  it("e a prontidão NOMEIA capa e fotos entre o que falta", async () => {
+    // Um "não está pronto" sem dizer o que falta manda a pessoa procurar. Esta
+    // consulta existe justamente para responder com número, não com promessa.
+    const dona = await comADemo();
+    const p = await dona.query(api.health.getEventReadiness, {
+      eventId: await heroi(dona),
+    });
+    const faltando = p!.itens.filter((i) => i.situacao === "faltando").map((i) => i.chave);
+    expect(faltando, "a capa deixou de ser cobrada").toContain("capa");
+    expect(
+      faltando.some((c) => c.includes("foto")),
+      `nada sobre foto entre os faltantes: ${faltando.join(", ")}`,
+    ).toBe(true);
+  });
+});
+
 describe("a demo é de UMA conta", () => {
   it("outra pessoa logada não enxerga nada da demonstração", async () => {
     // ── O DEFEITO QUE ISTO TRANCA ─────────────────────────────────────────

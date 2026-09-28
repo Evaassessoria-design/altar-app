@@ -192,6 +192,20 @@ function linhaDoFato(f: FatoColetado): string | null {
         : `${lista.length} item(ns) no acervo.`;
     }
 
+    case "acervo.pendencias": {
+      const fora = num(d?.totalFora) ?? 0;
+      const conserto = num(d?.totalEmManutencao) ?? 0;
+      const impacto = num(d?.totalImpacto) ?? 0;
+      if (fora === 0 && conserto === 0 && impacto === 0) {
+        return "Acervo em dia: tudo voltou, nada no conserto, nenhum evento a descoberto.";
+      }
+      const partes: string[] = [];
+      if (impacto > 0) partes.push(`${impacto} reserva(s) de próximos eventos sem peça suficiente`);
+      if (fora > 0) partes.push(`${fora} item(ns) que saíram e não voltaram`);
+      if (conserto > 0) partes.push(`${conserto} item(ns) em manutenção`);
+      return `Acervo: ${partes.join("; ")}.`;
+    }
+
     case "fornecedores.catalogo": {
       const lista = Array.isArray(f.dados) ? f.dados : arr(d?.fornecedores);
       return lista.length === 0

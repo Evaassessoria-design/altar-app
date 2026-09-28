@@ -108,6 +108,8 @@ export async function lerFonte(
       return ctx.runQuery(api.dashboard.getAttentionBoard, {});
     case "acervo.itens":
       return ctx.runQuery(api.acervo.listItems, {});
+    case "acervo.pendencias":
+      return ctx.runQuery(api.acervo.pendenciasPosEvento, {});
     case "fornecedores.catalogo":
       return ctx.runQuery(api.supplierCatalog.list, {});
   }

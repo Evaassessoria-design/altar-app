@@ -178,3 +178,30 @@ describe("o executor desiste do modelo a tempo e responde com o que leu", () => 
     }
   });
 });
+
+describe("'tenho algum risco no acervo?' lê o que está fora, não só a lista", () => {
+  // O agente prometia "apontar peças que saíram e não voltaram" lendo só a
+  // lista de itens, que não diz o que está fora nem de qual evento.
+  const acervo = agentePorId("fornecedores")!;
+
+  it.each([
+    "Tenho algum risco no acervo?",
+    "o que não voltou do evento?",
+    "tem peça na manutenção?",
+    "",
+  ])("%j consulta o acervo pós-evento", (pedido) => {
+    expect(planoDeConsulta(pedido, acervo)).toContain("acervo.pendencias");
+  });
+
+  it("a resposta por regra diz o que está fora, o conserto e o impacto", () => {
+    const r = redigirLocalmente(
+      acervo,
+      "risco no acervo",
+      [fato("acervo.pendencias", { totalFora: 1, totalEmManutencao: 1, totalImpacto: 2 }, "Acervo pós-evento")],
+      "verde",
+    );
+    expect(r).toContain("2 reserva(s) de próximos eventos sem peça suficiente");
+    expect(r).toContain("1 item(ns) que saíram e não voltaram");
+    expect(r).toContain("1 item(ns) em manutenção");
+  });
+});

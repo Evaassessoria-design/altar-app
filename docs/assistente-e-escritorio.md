@@ -127,12 +127,12 @@ falhasse virando uma conta sem equipe.
 
 | Agente | Função | Alcança |
 |---|---|---|
-| **Gestão** | Coordenação | as nove fontes |
+| **Gestão** | Coordenação | as dez fontes |
 | **Financeiro** | Contas e recebimentos | resumo, vencidos, próximos eventos |
 | **Comercial** | Funil e propostas | funil, propostas |
 | **Compras** | Necessidades e prazos | painel de compras, catálogo de fornecedores |
 | **Produção** | Eventos e montagem | próximos eventos, atenção, compras |
-| **Fornecedores e Acervo** | Parceiros e peças | catálogo, acervo, próximos eventos |
+| **Fornecedores e Acervo** | Parceiros e peças | catálogo, acervo, acervo pós-evento, próximos eventos |
 | **Marketing** | Conteúdo e relacionamento | próximos eventos |
 
 **O Marketing não alcança o Financeiro nem o funil.** Conteúdo não precisa saber
@@ -178,7 +178,7 @@ A lista é de **verbos**, não de assuntos: *"resuma os pagamentos"* é verde,
    nunca um erro que confirme que ela existe;
 3. o executor carrega a tarefa **por `api.assistente.obter`** — a posse é herdada
    do guarda, não reimplementada;
-4. as nove fontes são as **mesmas consultas** das telas, com os guardas que
+4. as dez fontes são as **mesmas consultas** das telas, com os guardas que
    `tenant.isolation.test.ts` já audita. Nenhuma foi duplicada.
 
 ### A redação sem modelo
@@ -209,10 +209,10 @@ num produto usado para decidir é pior do que não ter o produto.
 
 ## 4. O que o Assistente responde hoje — e o que ainda não
 
-As nove fontes que ele alcança: `financeiro.getSummary`, `financeiro.getVencidos`,
+As dez fontes que ele alcança: `financeiro.getSummary`, `financeiro.getVencidos`,
 `funil.getFollowUp`, `propostas.list`, `purchases.listPanorama`,
 `health.listCards`, `dashboard.getAttentionBoard`, `acervo.listItems`,
-`supplierCatalog.list`.
+`acervo.pendenciasPosEvento` (desde 28/09), `supplierCatalog.list`.
 
 ### ✅ Já possível — o dado está lá e a fonte está ligada
 

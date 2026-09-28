@@ -85,7 +85,7 @@ const PERGUNTAS_REAIS: ReadonlyArray<readonly [string, string]> = [
   ["Como estão minhas oportunidades?", "comercial"],
   // Cai na GESTÃO, e não em Compras: "precisa da minha atenção" é sinal de
   // pergunta ampla, e o sinal amplo é conferido antes das áreas. Não é
-  // defeito — a Gestão alcança as nove fontes, então a resposta sai completa;
+  // defeito — a Gestão alcança todas as fontes, então a resposta sai completa;
   // o que muda é só o nome de quem assina. Distinguir "atenção" como
   // qualificador de compras de "atenção" como pedido transversal exigiria
   // mais que palavra-chave, e trocar a heurística às vésperas da live, sem

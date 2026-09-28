@@ -105,11 +105,11 @@ O modelo não tem ferramenta, não tem callback e não tem como pedir mais dados
 Escreve sobre o que já está na mão. Há teste cobrando que a chamada não ganhe
 `tools`, `tool_choice` nem `function_call`, e que o executor não tenha `ctx.db`.
 
-### As nove fontes
+### As dez fontes
 
 `financeiro.resumo` · `financeiro.vencidos` · `comercial.funil` ·
 `comercial.propostas` · `compras.panorama` · `eventos.proximos` ·
-`eventos.atencao` · `acervo.itens` · `fornecedores.catalogo`
+`eventos.atencao` · `acervo.itens` · `acervo.pendencias` · `fornecedores.catalogo`
 
 Não existe "acesso ao banco". Existe um conjunto nomeado de consultas que cada
 papel pode ler, e o executor recusa qualquer outra. Acrescentar uma fonte exige

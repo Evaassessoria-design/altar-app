@@ -60,7 +60,12 @@ const PUXA: Record<Fonte, readonly string[]> = {
   ],
   "acervo.itens": [
     "acervo", "peca", "pecas", "vaso", "vasos", "estoque", "reserva",
-    "reservas", "nao voltou", "galpao",
+    "reservas", "galpao",
+  ],
+  "acervo.pendencias": [
+    "nao voltou", "voltou", "voltaram", "retorno", "manutencao", "conserto",
+    "quebrou", "quebrada", "quebradas", "avaria", "falta", "faltar", "risco",
+    "pos evento",
   ],
   "fornecedores.catalogo": [
     "fornecedor", "fornecedores", "parceiro", "parceiros", "floricultura",
@@ -81,7 +86,7 @@ const PADRAO: Record<string, readonly Fonte[]> = {
   comercial: ["comercial.funil"],
   compras: ["compras.panorama"],
   producao: ["eventos.proximos", "eventos.atencao"],
-  fornecedores: ["fornecedores.catalogo", "acervo.itens"],
+  fornecedores: ["acervo.pendencias", "fornecedores.catalogo", "acervo.itens"],
   marketing: ["eventos.proximos"],
 };
 

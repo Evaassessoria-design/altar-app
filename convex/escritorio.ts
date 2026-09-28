@@ -16,7 +16,7 @@ import {
 //
 // ── O ERRO QUE ESTE ARQUIVO CORRIGE ─────────────────────────────────────────
 // O que se chamava "Escritório" era, no código, uma ferramenta da decoradora:
-// guardas de tenant, nove fontes de dado dela, tarefas com `userId`. Estava
+// guardas de tenant, as fontes de dado dela, tarefas com `userId`. Estava
 // certo — e com o nome errado. Virou `assistente.ts`. O nome voltou para cá,
 // para a coisa que ele sempre descreveu: a administração do SaaS.
 //

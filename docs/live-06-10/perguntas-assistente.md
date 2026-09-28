@@ -51,7 +51,7 @@ só chega à conta de demonstração quando for publicada** — confira no ensai
 Com esta redação exata — a redação é o que está homologado.
 
 > ### O que precisa da minha atenção?
-> → **Gestão**, que é o único agente que alcança as nove fontes.
+> → **Gestão**, que é o único agente que alcança todas as fontes.
 >
 > É a pergunta que mostra o produto inteiro numa frase. Com a demo semeada,
 > ela tem material real para encontrar: duas cobranças vencidas, uma despesa

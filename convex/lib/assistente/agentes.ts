@@ -42,6 +42,11 @@ export const FONTES = [
   "eventos.proximos",
   "eventos.atencao",
   "acervo.itens",
+  // O pós-evento do acervo: o que não voltou, o que está no conserto e o que
+  // vai faltar. Até 28/09 o agente de Fornecedores e Acervo PROMETIA "apontar
+  // peças que saíram e não voltaram" lendo só a lista de itens — que não diz
+  // o que está fora nem de qual evento.
+  "acervo.pendencias",
   "fornecedores.catalogo",
 ] as const;
 
@@ -57,6 +62,7 @@ export const ROTULO_DA_FONTE: Record<Fonte, string> = {
   "eventos.proximos": "Próximos eventos",
   "eventos.atencao": "Eventos que pedem atenção",
   "acervo.itens": "Acervo",
+  "acervo.pendencias": "Acervo pós-evento",
   "fornecedores.catalogo": "Catálogo de fornecedores",
 };
 
@@ -187,7 +193,7 @@ export const AGENTES: readonly Agente[] = [
       "Apontar peças que saíram e não voltaram",
       "Lembrar com quem você já trabalhou",
     ],
-    fontes: ["fornecedores.catalogo", "acervo.itens", "eventos.proximos"],
+    fontes: ["fornecedores.catalogo", "acervo.itens", "acervo.pendencias", "eventos.proximos"],
     proibicoes: [...PROIBICOES_COMUNS, "Reservar peça", "Contratar fornecedor"],
   },
   {

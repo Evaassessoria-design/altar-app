@@ -149,3 +149,139 @@ export function aplicarContagem(entrada: {
 
   return { ok: true, delta, quantidadeDepois: contada };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MANUTENÇÃO — a peça que é da empresa, mas não está disponível
+//
+// ── O BURACO QUE ISTO FECHA ─────────────────────────────────────────────────
+// Até 28/09 o acervo só conhecia dois estados: a peça está no total, ou não
+// está. Um castiçal que voltou torto do casamento de sábado tinha dois
+// destinos, os dois errados: continuar "disponível" (e ser prometido para o
+// próximo evento) ou sair do acervo para sempre como avaria. O que acontece de
+// verdade — vai para o conserto e volta em duas semanas — não tinha lugar.
+//
+// ── O NÚMERO E QUEM O MOVE ──────────────────────────────────────────────────
+// `collectionItems.emManutencao` (ausente = 0), que só muda por aqui, como o
+// total só muda por ajuste. A peça em manutenção CONTINUA no total — é da
+// empresa — e sai da disponibilidade (`disponibilidadeNaJanela`).
+//
+// Três operações, porque a manutenção termina de dois jeitos:
+//   · envio: total igual, manutenção sobe;
+//   · retorno: consertou — total igual, manutenção desce;
+//   · sem conserto: não tem volta — total E manutenção descem juntos.
+//
+// Cada uma grava uma linha no MESMO histórico de ajustes, com a manutenção
+// antes e depois. O histórico continua explicando os números, nunca somado.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const OPERACOES_DE_MANUTENCAO = [
+  "manutencao_envio",
+  "manutencao_retorno",
+  "manutencao_descarte",
+] as const;
+
+export type OperacaoDeManutencao = (typeof OPERACOES_DE_MANUTENCAO)[number];
+
+export const ROTULO_DA_MANUTENCAO: Record<OperacaoDeManutencao, string> = {
+  manutencao_envio: "Enviada para manutenção",
+  manutencao_retorno: "Voltou da manutenção",
+  manutencao_descarte: "Sem conserto",
+};
+
+/** Rótulo de qualquer linha do histórico — ajuste comum ou manutenção. */
+export function rotuloDaLinhaDoHistorico(tipo: TipoDeAjuste | OperacaoDeManutencao): string {
+  return (ROTULO_DO_AJUSTE as Record<string, string>)[tipo] ??
+    ROTULO_DA_MANUTENCAO[tipo as OperacaoDeManutencao];
+}
+
+export type ManutencaoOk = {
+  ok: true;
+  /** O que moveu o TOTAL (zero, exceto sem conserto). */
+  delta: number;
+  quantidadeDepois: number;
+  manutencaoDepois: number;
+};
+export type ResultadoDaManutencao = ManutencaoOk | AjusteErro;
+
+export function aplicarManutencao(entrada: {
+  quantidadeAtual: number;
+  /** Ausente no banco = 0. */
+  emManutencao: number | undefined;
+  operacao: OperacaoDeManutencao;
+  quantidade: number;
+  unidade: string;
+}): ResultadoDaManutencao {
+  if (!Number.isFinite(entrada.quantidade)) {
+    return { ok: false, motivo: "Informe quantas peças." };
+  }
+  const quantidade = quantidadeLimpa(entrada.quantidade);
+  if (!quantidadeFisicaValida(quantidade, entrada.unidade)) {
+    return { ok: false, motivo: `Quantidade inválida para a unidade "${entrada.unidade}".` };
+  }
+  if (quantidade === 0) {
+    return { ok: false, motivo: "Informe quantas peças." };
+  }
+
+  const total = quantidadeLimpa(entrada.quantidadeAtual);
+  const emManutencao = quantidadeLimpa(Math.max(0, entrada.emManutencao ?? 0));
+
+  if (entrada.operacao === "manutencao_envio") {
+    const livres = quantidadeLimpa(total - emManutencao);
+    if (quantidade > livres) {
+      return {
+        ok: false,
+        motivo:
+          `O acervo tem ${total}, e ${emManutencao} já estão em manutenção — ` +
+          `dá para enviar no máximo ${livres}.`,
+      };
+    }
+    return {
+      ok: true,
+      delta: 0,
+      quantidadeDepois: total,
+      manutencaoDepois: quantidadeLimpa(emManutencao + quantidade),
+    };
+  }
+
+  if (quantidade > emManutencao) {
+    return {
+      ok: false,
+      motivo:
+        emManutencao === 0
+          ? "Nenhuma peça deste item está em manutenção."
+          : `Só ${emManutencao} estão em manutenção.`,
+    };
+  }
+
+  const manutencaoDepois = quantidadeLimpa(emManutencao - quantidade);
+  if (entrada.operacao === "manutencao_retorno") {
+    return { ok: true, delta: 0, quantidadeDepois: total, manutencaoDepois };
+  }
+  // Sem conserto: a peça deixa de existir para a empresa.
+  return {
+    ok: true,
+    delta: quantidadeLimpa(-quantidade),
+    quantidadeDepois: quantidadeLimpa(total - quantidade),
+    manutencaoDepois,
+  };
+}
+
+/**
+ * Uma baixa comum pode levar o total para baixo do que está no conserto?
+ *
+ * Não: "perdi 5" num item de 10 com 7 em manutenção deixaria 5 peças no total
+ * e 7 em manutenção — mais peça no conserto do que a empresa tem. A pessoa
+ * resolve a manutenção primeiro ("sem conserto", se for o caso).
+ */
+export function baixaRespeitaManutencao(
+  quantidadeDepois: number,
+  emManutencao: number | undefined,
+): string | null {
+  const m = quantidadeLimpa(Math.max(0, emManutencao ?? 0));
+  if (quantidadeDepois >= m) return null;
+  return (
+    `${m} peça(s) deste item estão em manutenção, e o total ficaria em ` +
+    `${quantidadeDepois}. Registre primeiro o que aconteceu com elas ` +
+    `("voltou da manutenção" ou "sem conserto").`
+  );
+}

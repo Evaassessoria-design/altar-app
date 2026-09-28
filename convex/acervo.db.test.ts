@@ -229,7 +229,10 @@ describe("as travas da FONTE — o espelho do teste não protege o código real"
     // temporada. As duas passam pelo mesmo corte agora.
     const c = corpo("listItems");
     expect(c).toContain("const hoje = new Date().toISOString().slice(0, 10)");
-    expect(c, "o pico ainda olha o histórico inteiro").toContain("picoDeReservas(item.quantidadeTotal, minhas, hoje)");
+    expect(c, "o pico ainda olha o histórico inteiro").toMatch(
+      // `hoje` é o que esta trava protege; desde 28/09 a manutenção vem depois.
+      /picoDeReservas\(item\.quantidadeTotal, minhas, hoje[,)]/,
+    );
     expect(c).toContain("reservaEmAberto(r, hoje)");
     // E o que a tela lê sai do filtrado, não do bruto.
     expect(c).toContain("reservasFuturas: emAberto.length");

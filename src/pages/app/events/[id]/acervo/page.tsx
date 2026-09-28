@@ -221,6 +221,16 @@ export default function AcervoDoEventoPage() {
                       {formatEventDayOnly(c.fim)})
                     </p>
                   ))}
+                  {r.emManutencao > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {r.emManutencao} em manutenção
+                    </p>
+                  )}
+                  {r.pendentesDeRetorno.map((p) => (
+                    <p key={p.reservaId} className="text-xs text-muted-foreground mt-1">
+                      {p.quantidade} ainda não voltaram de {p.evento}
+                    </p>
+                  ))}
                 </div>
               )}
 

@@ -14,9 +14,16 @@ import { ConvexError } from "convex/values";
 import { abreviarUnidade } from "@/convex/lib/materiais.ts";
 import { formatTimestamp } from "@/lib/safe-date.ts";
 import {
-  aplicarAjuste, aplicarContagem, ROTULO_DO_AJUSTE, TIPOS_DE_AJUSTE,
-  type TipoDeAjuste,
+  aplicarAjuste, aplicarContagem, aplicarManutencao, baixaRespeitaManutencao,
+  OPERACOES_DE_MANUTENCAO, ROTULO_DA_MANUTENCAO, ROTULO_DO_AJUSTE, rotuloDaLinhaDoHistorico,
+  TIPOS_DE_AJUSTE, type OperacaoDeManutencao, type TipoDeAjuste,
 } from "@/convex/lib/ajusteDeAcervo.ts";
+
+/** O que a pessoa escolhe no diálogo: um ajuste do total, ou a manutenção. */
+type Escolha = TipoDeAjuste | OperacaoDeManutencao;
+
+const ehManutencao = (e: Escolha): e is OperacaoDeManutencao =>
+  (OPERACOES_DE_MANUTENCAO as readonly string[]).includes(e);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AJUSTAR ESTOQUE — a única tela que muda a quantidade física
@@ -33,22 +40,30 @@ export function AjusteDeAcervoDialog({
   tipoInicial,
   quantidadeInicial,
 }: {
-  item: { _id: Id<"collectionItems">; nome: string; unidade: string; quantidadeTotal: number };
+  item: {
+    _id: Id<"collectionItems">;
+    nome: string;
+    unidade: string;
+    quantidadeTotal: number;
+    /** Ausente = nenhuma peça no conserto. */
+    emManutencao?: number;
+  };
   onClose: () => void;
   /**
    * Evento de onde a baixa nasceu. So PROCEDENCIA — o ajuste nao mexe em
    * reserva, saida nem retorno daquele evento.
    */
   eventId?: Id<"events">;
-  tipoInicial?: TipoDeAjuste;
+  tipoInicial?: Escolha;
   /** Sugestao, nunca imposicao: a pessoa confirma o numero. */
   quantidadeInicial?: number;
 }) {
   const ajustar = useMutation(api.acervo.ajustarEstoque);
   const contar = useMutation(api.acervo.registrarContagem);
+  const manutencao = useMutation(api.acervo.registrarManutencao);
   const historico = useQuery(api.acervo.historicoDoItem, { collectionItemId: item._id, limite: 8 });
 
-  const [tipo, setTipo] = useState<TipoDeAjuste>(tipoInicial ?? "perda");
+  const [tipo, setTipo] = useState<Escolha>(tipoInicial ?? "perda");
   const [quantidade, setQuantidade] = useState(quantidadeInicial !== undefined ? String(quantidadeInicial) : "");
   const [motivo, setMotivo] = useState("");
   const [salvando, setSalvando] = useState(false);
@@ -57,18 +72,44 @@ export function AjusteDeAcervoDialog({
   const numero = Number(quantidade.replace(",", "."));
   const valido = Number.isFinite(numero) && quantidade.trim() !== "";
 
-  // Prévia — a decisão de verdade é do servidor (lib/ajusteDeAcervo.ts).
-  const previa = !valido
+  const emConserto = item.emManutencao ?? 0;
+
+  // Prévia — a decisão de verdade é do servidor (lib/ajusteDeAcervo.ts), que
+  // roda estas MESMAS funções na hora de gravar.
+  const previaBruta = !valido
     ? null
-    : ehContagem
-      ? aplicarContagem({ quantidadeAtual: item.quantidadeTotal, quantidadeContada: numero, unidade: item.unidade })
-      : aplicarAjuste({ quantidadeAtual: item.quantidadeTotal, tipo, quantidade: numero, unidade: item.unidade });
+    : ehManutencao(tipo)
+      ? aplicarManutencao({
+          quantidadeAtual: item.quantidadeTotal, emManutencao: item.emManutencao,
+          operacao: tipo, quantidade: numero, unidade: item.unidade,
+        })
+      : ehContagem
+        ? aplicarContagem({ quantidadeAtual: item.quantidadeTotal, quantidadeContada: numero, unidade: item.unidade })
+        : aplicarAjuste({ quantidadeAtual: item.quantidadeTotal, tipo, quantidade: numero, unidade: item.unidade });
+  // A trava do conserto também vale na prévia: o botão não pode prometer o que
+  // o servidor vai recusar.
+  const conflitoComConserto =
+    previaBruta?.ok && !ehManutencao(tipo)
+      ? baixaRespeitaManutencao(previaBruta.quantidadeDepois, item.emManutencao)
+      : null;
+  const previa = conflitoComConserto
+    ? { ok: false as const, motivo: conflitoComConserto }
+    : previaBruta;
+  const manutencaoDepois: number | undefined =
+    previa?.ok && "manutencaoDepois" in previa
+      ? (previa as { manutencaoDepois: number }).manutencaoDepois
+      : undefined;
 
   const salvar = async () => {
     if (!valido) return toast.error("Informe a quantidade.");
     setSalvando(true);
     try {
-      if (ehContagem) {
+      if (ehManutencao(tipo)) {
+        await manutencao({
+          collectionItemId: item._id, operacao: tipo, quantidade: numero,
+          motivo: motivo.trim() || undefined, eventId,
+        });
+      } else if (ehContagem) {
         await contar({ collectionItemId: item._id, quantidadeContada: numero, motivo: motivo.trim() || undefined });
       } else {
         await ajustar({
@@ -97,15 +138,26 @@ export function AjusteDeAcervoDialog({
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
             Hoje: <strong className="text-foreground">{item.quantidadeTotal} {abreviarUnidade(item.unidade)}</strong>
+            {emConserto > 0 && <> · {emConserto} em manutenção</>}
           </p>
 
           <div className="space-y-1.5">
             <Label htmlFor="aj-tipo">O que aconteceu</Label>
-            <select id="aj-tipo" value={tipo} onChange={(e) => setTipo(e.target.value as TipoDeAjuste)}
+            <select id="aj-tipo" value={tipo} onChange={(e) => setTipo(e.target.value as Escolha)}
               className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm cursor-pointer">
-              {TIPOS_DE_AJUSTE.map((t) => (
-                <option key={t} value={t}>{ROTULO_DO_AJUSTE[t]}</option>
-              ))}
+              <optgroup label="Estoque">
+                {TIPOS_DE_AJUSTE.map((t) => (
+                  <option key={t} value={t}>{ROTULO_DO_AJUSTE[t]}</option>
+                ))}
+              </optgroup>
+              {/* A peça no conserto continua sendo da empresa: o total não
+                  muda, só a disponibilidade. "Sem conserto" é o único que
+                  baixa o total. */}
+              <optgroup label="Manutenção">
+                {OPERACOES_DE_MANUTENCAO.map((t) => (
+                  <option key={t} value={t}>{ROTULO_DA_MANUTENCAO[t]}</option>
+                ))}
+              </optgroup>
             </select>
           </div>
 
@@ -127,6 +179,11 @@ export function AjusteDeAcervoDialog({
                 <span className="text-muted-foreground">{item.quantidadeTotal}</span>
                 <span className="mx-2">→</span>
                 <strong>{previa.quantidadeDepois} {abreviarUnidade(item.unidade)}</strong>
+                {manutencaoDepois !== undefined && (
+                  <span className="block text-xs text-muted-foreground mt-0.5">
+                    Em manutenção: {emConserto} → <strong className="text-foreground">{manutencaoDepois}</strong>
+                  </span>
+                )}
               </div>
             ) : (
               <p className="text-xs text-destructive">{previa.motivo}</p>
@@ -142,8 +199,12 @@ export function AjusteDeAcervoDialog({
                     <span className={h.delta > 0 ? "text-green-600 dark:text-green-400" : "text-destructive"}>
                       {h.delta > 0 ? "+" : ""}{h.delta}
                     </span>
-                    <span>{ROTULO_DO_AJUSTE[h.tipo]}</span>
-                    <span className="opacity-60">({h.quantidadeAntes} → {h.quantidadeDepois})</span>
+                    <span>{rotuloDaLinhaDoHistorico(h.tipo)}</span>
+                    {h.manutencaoAntes !== undefined && h.manutencaoDepois !== undefined ? (
+                      <span className="opacity-60">(conserto {h.manutencaoAntes} → {h.manutencaoDepois})</span>
+                    ) : (
+                      <span className="opacity-60">({h.quantidadeAntes} → {h.quantidadeDepois})</span>
+                    )}
                     {h.eventName && <span className="opacity-60 truncate">· {h.eventName}</span>}
                     <span className="ml-auto opacity-60 flex-shrink-0">{formatTimestamp(h._creationTime)}</span>
                   </li>

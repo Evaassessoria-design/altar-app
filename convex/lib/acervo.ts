@@ -117,13 +117,37 @@ export type ReservaParaCalculo = {
   quantidade: number;
   inicio: string;
   fim: string;
+  /** Movimento real. Ausente = não saiu (ver `faltaVoltar`). */
+  saiu?: number;
+  voltou?: number;
 };
+
+/**
+ * Quanto uma reserva de OUTRO evento segura enquanto a janela dela corre.
+ *
+ * O prometido — ou o que de fato saiu e não voltou, se for mais. A equipe
+ * que levou 22 de uma reserva de 20 está com 22 peças fora, e o próximo
+ * evento não pode contar com as 2 de diferença.
+ */
+function pesoDaReserva(r: ReservaParaCalculo): number {
+  return Math.max(r.quantidade, faltaVoltar(r));
+}
 
 export type Disponibilidade = {
   /** O que está cadastrado no acervo. O único número que ninguém deriva. */
   total: number;
   /** Somado das reservas de OUTROS eventos que disputam esta janela. */
   reservadoPorOutros: number;
+  /** Peças da empresa que estão no conserto (`collectionItems.emManutencao`). */
+  emManutencao: number;
+  /**
+   * Peças que saíram para um evento que JÁ TERMINOU antes desta janela e não
+   * voltaram. Estão fora do galpão, e a data do evento passado não traz de
+   * volta — ver `disponibilidadeNaJanela`.
+   */
+  foraSemVoltar: number;
+  /** De qual evento cada peça que não voltou, para a tela poder nomear. */
+  pendentesDeRetorno: { reservaId: string; eventId: string; quantidade: number }[];
   /** Sobra para este evento. Nunca negativo — sobra negativa é déficit. */
   disponivel: number;
   /** Quanto este evento já reservou nesta janela. */
@@ -144,21 +168,45 @@ export type Disponibilidade = {
  * A reserva DO PRÓPRIO evento não conta contra ele — senão editar uma reserva
  * de 20 para 25 acusaria conflito com ela mesma.
  *
- * `total` menos o que outros seguram. Reservas que não tocam a janela são
- * irrelevantes: as peças estarão de volta a tempo.
+ * `total` menos o que outros seguram, o que está no conserto e o que não
+ * voltou de evento passado.
+ *
+ * ── O DEFEITO QUE AS DUAS ÚLTIMAS PARCELAS FECHAM ───────────────────────────
+ * Até 28/09 a conta era `total − reservas que tocam a janela`. Uma reserva que
+ * NÃO toca a janela era "irrelevante: as peças estarão de volta a tempo" — o
+ * que só é verdade se elas voltaram. O casamento de domingo terminou com 2
+ * vasos fora; o evento do sábado seguinte via o total cheio e a decoradora
+ * descobria a falta no galpão, na sexta. É a segunda-feira pós-evento que a
+ * campanha promete resolver, e o número mentia exatamente nela.
+ *
+ * Só conta como "fora sem voltar" a reserva cuja janela terminou ANTES desta
+ * começar — a que ainda corre já pesa como reserva, e a que vem depois não
+ * tem peça fora ainda. `emManutencao` ausente é zero.
  */
 export function disponibilidadeNaJanela(
   total: number,
   reservas: readonly ReservaParaCalculo[],
   janela: Janela,
   eventoAtual: string | null,
+  emManutencao?: number,
 ): Disponibilidade {
+  const alvo = normalizarJanela(janela);
   const conflitantes = reservas.filter(
     (r) => r.eventId !== eventoAtual && janelasConflitam({ inicio: r.inicio, fim: r.fim }, janela),
   );
   const reservadoPorOutros = quantidadeLimpa(
-    conflitantes.reduce((s, r) => s + r.quantidade, 0),
+    conflitantes.reduce((s, r) => s + pesoDaReserva(r), 0),
   );
+  const pendentes = reservas
+    .filter(
+      (r) =>
+        r.eventId !== eventoAtual &&
+        faltaVoltar(r) > 0 &&
+        normalizarJanela({ inicio: r.inicio, fim: r.fim }).fim < alvo.inicio,
+    )
+    .map((r) => ({ reservaId: r._id, eventId: r.eventId, quantidade: faltaVoltar(r) }));
+  const foraSemVoltar = quantidadeLimpa(pendentes.reduce((s, p) => s + p.quantidade, 0));
+  const manutencao = quantidadeLimpa(Math.max(0, emManutencao ?? 0));
   const jaReservadoAqui = quantidadeLimpa(
     reservas
       .filter((r) => r.eventId === eventoAtual && janelasConflitam({ inicio: r.inicio, fim: r.fim }, janela))
@@ -168,7 +216,12 @@ export function disponibilidadeNaJanela(
   return {
     total: quantidadeLimpa(total),
     reservadoPorOutros,
-    disponivel: quantidadeLimpa(Math.max(0, total - reservadoPorOutros)),
+    emManutencao: manutencao,
+    foraSemVoltar,
+    pendentesDeRetorno: pendentes,
+    disponivel: quantidadeLimpa(
+      Math.max(0, total - reservadoPorOutros - manutencao - foraSemVoltar),
+    ),
     jaReservadoAqui,
     conflitos: conflitantes.map((r) => {
       // A janela sai normalizada para a tela nunca exibir "de 10/10 a 05/10".
@@ -236,7 +289,22 @@ export function picoDeReservas(
   total: number,
   reservas: readonly ReservaParaCalculo[],
   hoje?: string,
+  emManutencao?: number,
 ): PicoDeReservas {
+  // ── O QUE NÃO ESTÁ NO GALPÃO NÃO COBRE O PICO ─────────────────────────────
+  // Mesma correção de `disponibilidadeNaJanela`: peça no conserto e peça de
+  // evento já encerrado que não voltou são da empresa, mas não atendem a
+  // semana que vem. Sem `hoje` não há "já encerrado", e a conta é a histórica.
+  const foraSemVoltar =
+    hoje === undefined
+      ? 0
+      : reservas
+          .filter((r) => normalizarJanela({ inicio: r.inicio, fim: r.fim }).fim < hoje)
+          .reduce((s, r) => s + faltaVoltar(r), 0);
+  const utilizavel = quantidadeLimpa(
+    Math.max(0, total - Math.max(0, emManutencao ?? 0) - foraSemVoltar),
+  );
+
   // ── RESERVA QUE JÁ TERMINOU NÃO É MAIS FALTA ──────────────────────────────
   // Um evento de outubro do ano passado que prometeu 180 de um acervo de 150
   // teve um déficit REAL na época, e ele foi resolvido — alugando, comprando,
@@ -254,7 +322,7 @@ export function picoDeReservas(
   const janelas = reservas
     .map((r) => ({
       ...normalizarJanela({ inicio: r.inicio, fim: r.fim }),
-      quantidade: r.quantidade,
+      quantidade: pesoDaReserva(r),
     }))
     .filter((j) => hoje === undefined || j.fim >= hoje);
 
@@ -292,7 +360,7 @@ export function picoDeReservas(
 
   return {
     pico,
-    deficit: quantidadeLimpa(Math.max(0, pico - quantidadeLimpa(total))),
+    deficit: quantidadeLimpa(Math.max(0, pico - utilizavel)),
     dia,
   };
 }
@@ -479,5 +547,141 @@ export function substitutosCompativeis<T extends ItemDeAcervoAgrupavel>(
     compativeis,
     incompativeis,
     totalFisico: compativeis.reduce((s, i) => s + i.quantidadeTotal, 0),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A SEGUNDA-FEIRA DO ACERVO
+//
+// "O que voltou do fim de semana, o que não voltou, o que está no conserto —
+// e o que isso faz com os próximos eventos?"
+//
+// Até 28/09 a resposta existia espalhada: "falta voltar" dentro de cada
+// evento, um contador no Dashboard, e nenhum lugar dizia o IMPACTO. Para saber
+// se o sábado estava em risco, a decoradora abria evento por evento. Aqui a
+// resposta é uma só, calculada pelas mesmas funções da tela do evento — não
+// há segunda regra para divergir.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type ItemParaPendencias = {
+  _id: string;
+  nome: string;
+  unidade: string;
+  quantidadeTotal: number;
+  emManutencao?: number;
+  archived?: boolean;
+};
+
+export type ReservaParaPendencias = ReservaParaCalculo & { collectionItemId: string };
+
+export type PendenciasDoAcervo = {
+  /** Peças de eventos cuja janela já terminou e que não voltaram. */
+  fora: {
+    itemId: string;
+    nome: string;
+    unidade: string;
+    eventId: string;
+    fimDaJanela: string;
+    quantidade: number;
+  }[];
+  /** Itens com peça no conserto. */
+  emManutencao: { itemId: string; nome: string; unidade: string; quantidade: number }[];
+  /**
+   * Próximas reservas que o acervo NÃO cobre, com o porquê em números:
+   * "12 necessárias · 10 disponíveis · 2 em manutenção".
+   */
+  impacto: {
+    eventId: string;
+    itemId: string;
+    nome: string;
+    unidade: string;
+    inicio: string;
+    necessario: number;
+    disponivel: number;
+    emManutencao: number;
+    foraSemVoltar: number;
+    reservadoPorOutros: number;
+    deficit: number;
+  }[];
+};
+
+export function pendenciasDoAcervo(
+  itens: readonly ItemParaPendencias[],
+  reservas: readonly ReservaParaPendencias[],
+  hoje: string,
+): PendenciasDoAcervo {
+  const porItem = new Map<string, ReservaParaPendencias[]>();
+  for (const r of reservas) {
+    porItem.set(r.collectionItemId, [...(porItem.get(r.collectionItemId) ?? []), r]);
+  }
+  const itemPorId = new Map(itens.map((i) => [i._id, i]));
+
+  const fora: PendenciasDoAcervo["fora"] = [];
+  const impacto: PendenciasDoAcervo["impacto"] = [];
+
+  for (const r of reservas) {
+    const item = itemPorId.get(r.collectionItemId);
+    if (!item) continue;
+    const janela = normalizarJanela({ inicio: r.inicio, fim: r.fim });
+
+    // Fora: a janela acabou e a peça não voltou. Durante a janela a peça está
+    // no evento, que é onde ela deve estar — mesma regra do Dashboard.
+    if (janela.fim < hoje && faltaVoltar(r) > 0) {
+      fora.push({
+        itemId: item._id,
+        nome: item.nome,
+        unidade: item.unidade,
+        eventId: r.eventId,
+        fimDaJanela: janela.fim,
+        quantidade: faltaVoltar(r),
+      });
+    }
+
+    // Impacto: só o que ainda vai acontecer e ainda não saiu. Reserva que já
+    // saiu do galpão não depende mais do acervo — as peças estão com ela.
+    if (janela.fim >= hoje && (r.saiu ?? 0) === 0 && !item.archived) {
+      const estado = disponibilidadeNaJanela(
+        item.quantidadeTotal,
+        porItem.get(item._id) ?? [],
+        janela,
+        r.eventId,
+        item.emManutencao,
+      );
+      const deficit = deficitDaReserva(r.quantidade, estado.disponivel);
+      if (deficit > 0) {
+        impacto.push({
+          eventId: r.eventId,
+          itemId: item._id,
+          nome: item.nome,
+          unidade: item.unidade,
+          inicio: janela.inicio,
+          necessario: r.quantidade,
+          disponivel: estado.disponivel,
+          emManutencao: estado.emManutencao,
+          foraSemVoltar: estado.foraSemVoltar,
+          reservadoPorOutros: estado.reservadoPorOutros,
+          deficit,
+        });
+      }
+    }
+  }
+
+  const emManutencao = itens
+    .filter((i) => (i.emManutencao ?? 0) > 0)
+    .map((i) => ({
+      itemId: i._id,
+      nome: i.nome,
+      unidade: i.unidade,
+      quantidade: quantidadeLimpa(i.emManutencao ?? 0),
+    }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+
+  return {
+    // O mais recente primeiro: o evento do fim de semana é o que se confere
+    // na segunda; um de três semanas atrás já é caso de baixa.
+    fora: fora.sort((a, b) => b.fimDaJanela.localeCompare(a.fimDaJanela)),
+    emManutencao,
+    // O mais próximo primeiro: é o que se resolve antes.
+    impacto: impacto.sort((a, b) => a.inicio.localeCompare(b.inicio)),
   };
 }

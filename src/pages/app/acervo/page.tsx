@@ -2,6 +2,7 @@ import { useState } from "react";
 import { formatTimestamp } from "@/lib/safe-date.ts";
 import { ROTULO_DO_AJUSTE } from "@/convex/lib/ajusteDeAcervo.ts";
 import { AjusteDeAcervoDialog } from "@/components/ajuste-de-acervo-dialog.tsx";
+import { PosEvento } from "./_components/pos-evento.tsx";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
@@ -244,6 +245,8 @@ export default function AcervoPage() {
         Ver arquivados
       </label>
 
+      <PosEvento />
+
       {itens === undefined ? (
         <div className="space-y-2">
           {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
@@ -285,6 +288,7 @@ export default function AcervoPage() {
                   <p className="font-medium text-sm">{item.nome}</p>
                   <p className="text-xs text-muted-foreground">
                     {item.quantidadeTotal} {abreviarUnidade(item.unidade)}
+                    {(item.emManutencao ?? 0) > 0 && ` · ${item.emManutencao} em manutenção`}
                     {item.categoria && ` · ${item.categoria}`}
                   </p>
                   {/* Nunca "X disponíveis": sem uma janela, o número engana.
@@ -298,6 +302,7 @@ export default function AcervoPage() {
                       Faltam {item.pico.deficit} {abreviarUnidade(item.unidade)} em{" "}
                       {formatEventDayOnly(item.pico.dia!)} — {item.pico.pico} prometidos,{" "}
                       {item.quantidadeTotal} no acervo
+                      {(item.emManutencao ?? 0) > 0 && `, ${item.emManutencao} em manutenção`}
                     </p>
                   ) : (
                     item.eventosComReserva > 0 && (

@@ -145,6 +145,11 @@ const tipoDeAjusteDeAcervo = v.union(
   v.literal("avaria"),
   v.literal("descarte"),
   v.literal("acerto_inventario"),
+  // Manutencao (lib/ajusteDeAcervo.ts, OPERACOES_DE_MANUTENCAO). Mesmo
+  // historico: a linha explica o numero de `emManutencao`.
+  v.literal("manutencao_envio"),
+  v.literal("manutencao_retorno"),
+  v.literal("manutencao_descarte"),
 );
 
 const txType = v.union(v.literal("income"), v.literal("expense"));
@@ -1599,6 +1604,14 @@ export default defineSchema({
      * continua 40 ate alguem decidir o que aconteceu com a peca.
      */
     quantidadeTotal: v.number(),
+    /**
+     * Quantas pecas do total estao no conserto. AUSENTE = nenhuma.
+     *
+     * Continuam no total (sao da empresa) e saem da disponibilidade. So muda
+     * por `acervo.registrarManutencao`, que grava a linha no historico — como
+     * o total so muda por ajuste. Nunca maior que o total.
+     */
+    emManutencao: v.optional(v.number()),
     categoria: v.optional(v.string()),
     /**
      * Material tecnico correspondente. OPCIONAL e EXPLICITO: nao vinculamos
@@ -1642,6 +1655,12 @@ export default defineSchema({
     /** Antes e depois ficam gravados: o historico se le sem recalcular nada. */
     quantidadeAntes: v.number(),
     quantidadeDepois: v.number(),
+    /**
+     * A manutencao antes e depois — so nas linhas de manutencao. AUSENTE =
+     * ajuste comum, que nao mexe no conserto.
+     */
+    manutencaoAntes: v.optional(v.number()),
+    manutencaoDepois: v.optional(v.number()),
     motivo: v.optional(v.string()),
     /**
      * Evento de onde a perda veio, quando veio de um. So PROCEDENCIA: o ajuste

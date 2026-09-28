@@ -177,6 +177,8 @@ export async function carregarAtencao(ctx: QueryCtx, userId: Id<"users">) {
       ctx.db.query("collectionItems").withIndex("by_user", (q) => q.eq("userId", user._id)).collect(),
     ]);
     const totalDoItem = new Map(itensDeAcervo.map((i) => [i._id as string, i.quantidadeTotal]));
+    // Peça no conserto não atende evento — mesma conta da tela do evento.
+    const manutencaoDoItem = new Map(itensDeAcervo.map((i) => [i._id as string, i.emManutencao]));
     const reservasPorItem = new Map<string, typeof reservas>();
     for (const r of reservas) {
       const chave = r.collectionItemId as string;
@@ -242,6 +244,7 @@ export async function carregarAtencao(ctx: QueryCtx, userId: Id<"users">) {
             reservasPorItem.get(r.collectionItemId as string) ?? [],
             { inicio: r.inicio, fim: r.fim },
             e._id as string,
+            manutencaoDoItem.get(r.collectionItemId as string),
           );
           return soma + deficitDaReserva(r.quantidade, estado.disponivel);
         }, 0);

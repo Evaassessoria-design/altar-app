@@ -17,10 +17,17 @@ import {
   situacaoDaReserva,
   picoDeReservas,
   reservaEmAberto,
+  pendenciasDoAcervo,
 } from "./lib/acervo";
+import { dataDoDia } from "./lib/dataDoDia";
 import { consolidarMateriais } from "./lib/fichaTecnica";
 import { agruparAcervoPorMaterial, substitutosCompativeis } from "./lib/acervo";
-import { aplicarAjuste, aplicarContagem } from "./lib/ajusteDeAcervo";
+import {
+  aplicarAjuste,
+  aplicarContagem,
+  aplicarManutencao,
+  baixaRespeitaManutencao,
+} from "./lib/ajusteDeAcervo";
 import { ehObrigacaoDeMontagem } from "./lib/escopoDoProjeto";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -97,7 +104,7 @@ export const listItems = query({
           // prometido passa do que eu tenho?
           // `hoje` para o pico ignorar reserva que já terminou: déficit no
           // passado não tem mais conserto, e vira ruído permanente na lista.
-          pico: picoDeReservas(item.quantidadeTotal, minhas, hoje),
+          pico: picoDeReservas(item.quantidadeTotal, minhas, hoje, item.emManutencao),
         };
       })
       .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
@@ -243,6 +250,10 @@ async function reservasDoItem(ctx: QueryCtx | MutationCtx, itemId: Id<"collectio
     quantidade: r.quantidade,
     inicio: r.inicio,
     fim: r.fim,
+    // O movimento real vai junto: sem ele, a peça que não voltou de um evento
+    // encerrado some da conta de disponibilidade (ver `disponibilidadeNaJanela`).
+    saiu: r.saiu,
+    voltou: r.voltou,
   }));
 }
 
@@ -252,6 +263,55 @@ async function reservasDoItem(ctx: QueryCtx | MutationCtx, itemId: Id<"collectio
  * Query de LEITURA — a tela usa para mostrar antes de reservar. Mas nunca é a
  * fonte da decisão: a mutation recalcula na hora de gravar.
  */
+/** Quantas linhas de cada bloco a tela recebe. O resto é contado, não escondido. */
+const LINHAS_POR_BLOCO = 30;
+
+/**
+ * A segunda-feira do acervo: o que não voltou, o que está no conserto, e o
+ * que isso faz com os próximos eventos. A regra é `pendenciasDoAcervo`
+ * (lib/acervo.ts), com as mesmas funções da tela do evento.
+ *
+ * Duas leituras por dono, as mesmas de `listItems` — nada de consulta por
+ * item. Os nomes dos eventos vêm só dos eventos DESTA conta.
+ */
+export const pendenciasPosEvento = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    const [itens, reservas] = await Promise.all([
+      ctx.db.query("collectionItems").withIndex("by_user", (q) => q.eq("userId", user._id)).collect(),
+      ctx.db.query("collectionReservations").withIndex("by_user", (q) => q.eq("userId", user._id)).collect(),
+    ]);
+
+    const p = pendenciasDoAcervo(itens, reservas, dataDoDia());
+
+    const idsDeEvento = [...new Set([...p.fora, ...p.impacto].map((l) => l.eventId))];
+    const nomes = new Map<string, { nome: string; data: string }>();
+    for (const id of idsDeEvento) {
+      const evento = await ctx.db.get(id as Id<"events">);
+      // Reserva desta conta apontando para evento de outra seria dado
+      // corrompido; mesmo assim, o nome de outra empresa nunca sai daqui.
+      if (evento && evento.userId === user._id) {
+        nomes.set(id, { nome: evento.name, data: evento.date });
+      }
+    }
+    const comEvento = <T extends { eventId: string }>(l: T) => ({
+      ...l,
+      eventoNome: nomes.get(l.eventId)?.nome ?? null,
+      eventoData: nomes.get(l.eventId)?.data ?? null,
+    });
+
+    return {
+      fora: p.fora.slice(0, LINHAS_POR_BLOCO).map(comEvento),
+      totalFora: p.fora.length,
+      emManutencao: p.emManutencao.slice(0, LINHAS_POR_BLOCO),
+      totalEmManutencao: p.emManutencao.length,
+      impacto: p.impacto.slice(0, LINHAS_POR_BLOCO).map(comEvento),
+      totalImpacto: p.impacto.length,
+    };
+  },
+});
+
 export const disponibilidade = query({
   args: {
     collectionItemId: v.id("collectionItems"),
@@ -270,6 +330,7 @@ export const disponibilidade = query({
       await reservasDoItem(ctx, args.collectionItemId),
       { inicio: args.inicio, fim: args.fim },
       (args.eventId as string | undefined) ?? null,
+      item.emManutencao,
     );
   },
 });
@@ -341,6 +402,7 @@ export const reservar = mutation({
       await reservasDoItem(ctx, args.collectionItemId),
       janela,
       args.eventId as string,
+      item.emManutencao,
     );
     const deficit = deficitDaReserva(args.quantidade, estado.disponivel);
 
@@ -508,11 +570,20 @@ export const doEvento = query({
         reservasPorItem.get(r.collectionItemId) ?? [],
         { inicio: r.inicio, fim: r.fim },
         args.eventId as string,
+        item?.emManutencao,
       );
       return {
         ...r,
         item: item ? { _id: item._id, nome: item.nome, unidade: item.unidade, quantidadeTotal: item.quantidadeTotal } : null,
         disponivel: estado.disponivel,
+        // O PORQUÊ do disponível, para a tela não dizer só "faltam 2": dizer
+        // "2 em manutenção" manda a decoradora ao conserto, e não ao aluguel.
+        emManutencao: estado.emManutencao,
+        foraSemVoltar: estado.foraSemVoltar,
+        pendentesDeRetorno: estado.pendentesDeRetorno.map((p) => ({
+          ...p,
+          evento: eventos.get(p.eventId)?.name ?? "Outro evento",
+        })),
         deficit: deficitDaReserva(r.quantidade, estado.disponivel),
         situacao: situacaoDaReserva(r),
         faltaVoltar: faltaVoltar(r),
@@ -621,6 +692,7 @@ export const reservarDaFicha = mutation({
         await reservasDoItem(ctx, item._id),
         existente ? { inicio: existente.inicio, fim: existente.fim } : janela,
         args.eventId as string,
+        item.emManutencao,
       );
       const deficit = deficitDaReserva(linha.necessario, estado.disponivel);
       if (deficit > 0) comDeficit.push({ nome: linha.nome, deficit });
@@ -730,6 +802,8 @@ export const ajustarEstoque = mutation({
       unidade: item.unidade,
     });
     if (!r.ok) throw new ConvexError({ code: "AJUSTE_INVALIDO", message: r.motivo });
+    const conserto = baixaRespeitaManutencao(r.quantidadeDepois, item.emManutencao);
+    if (conserto) throw new ConvexError({ code: "AJUSTE_INVALIDO", message: conserto });
 
     await ctx.db.patch(item._id, comCarimbo({ quantidadeTotal: r.quantidadeDepois }));
     await ctx.db.insert("collectionAdjustments", {
@@ -773,6 +847,8 @@ export const registrarContagem = mutation({
       unidade: item.unidade,
     });
     if (!r.ok) throw new ConvexError({ code: "AJUSTE_INVALIDO", message: r.motivo });
+    const conserto = baixaRespeitaManutencao(r.quantidadeDepois, item.emManutencao);
+    if (conserto) throw new ConvexError({ code: "AJUSTE_INVALIDO", message: conserto });
 
     await ctx.db.patch(item._id, comCarimbo({ quantidadeTotal: r.quantidadeDepois }));
     await ctx.db.insert("collectionAdjustments", {
@@ -787,6 +863,72 @@ export const registrarContagem = mutation({
     });
 
     return { quantidadeAntes: item.quantidadeTotal, quantidadeDepois: r.quantidadeDepois };
+  },
+});
+
+/**
+ * Manutenção: enviar peça ao conserto, receber de volta, ou dar como perdida.
+ *
+ * A peça em manutenção continua no total e sai da disponibilidade — a regra
+ * mora em `lib/ajusteDeAcervo.ts` (`aplicarManutencao`). Toda operação
+ * grava a linha no histórico com a manutenção antes e depois.
+ *
+ * `eventId` é procedência ("voltou quebrado do casamento da Marina"): não mexe
+ * em reserva, saída nem retorno daquele evento.
+ */
+export const registrarManutencao = mutation({
+  args: {
+    collectionItemId: v.id("collectionItems"),
+    operacao: v.union(
+      v.literal("manutencao_envio"),
+      v.literal("manutencao_retorno"),
+      v.literal("manutencao_descarte"),
+    ),
+    quantidade: v.number(),
+    motivo: v.optional(v.string()),
+    eventId: v.optional(v.id("events")),
+    responsibleId: v.optional(v.id("teamMembers")),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const item = await itemDoUsuario(ctx, args.collectionItemId, user._id);
+    const eventId = await eventoDoUsuario(ctx, args.eventId, user._id);
+    await requireTeamMember(ctx, user._id, args.responsibleId);
+
+    const r = aplicarManutencao({
+      quantidadeAtual: item.quantidadeTotal,
+      emManutencao: item.emManutencao,
+      operacao: args.operacao,
+      quantidade: args.quantidade,
+      unidade: item.unidade,
+    });
+    if (!r.ok) throw new ConvexError({ code: "AJUSTE_INVALIDO", message: r.motivo });
+
+    const manutencaoAntes = item.emManutencao ?? 0;
+    await ctx.db.patch(
+      item._id,
+      comCarimbo({
+        quantidadeTotal: r.quantidadeDepois,
+        // Zero volta a ser AUSENTE: o schema diz que ausente é "nenhuma", e
+        // gravar 0 seria escrever o padrão no banco.
+        emManutencao: r.manutencaoDepois > 0 ? r.manutencaoDepois : undefined,
+      }),
+    );
+    await ctx.db.insert("collectionAdjustments", {
+      userId: user._id,
+      collectionItemId: item._id,
+      tipo: args.operacao,
+      delta: r.delta,
+      quantidadeAntes: item.quantidadeTotal,
+      quantidadeDepois: r.quantidadeDepois,
+      manutencaoAntes,
+      manutencaoDepois: r.manutencaoDepois,
+      motivo: args.motivo?.trim() || undefined,
+      eventId,
+      responsibleId: args.responsibleId,
+    });
+
+    return { emManutencao: r.manutencaoDepois, quantidadeTotal: r.quantidadeDepois };
   },
 });
 

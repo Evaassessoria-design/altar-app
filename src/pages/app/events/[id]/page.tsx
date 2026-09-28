@@ -20,8 +20,6 @@ import {
   User,
   DollarSign,
   Pencil,
-  ClipboardList,
-  Images,
   CheckSquare,
   Trash2,
   MessageCircle,
@@ -35,10 +33,6 @@ import {
   Image,
   Loader2,
   Download,
-  Building2,
-  Wand2,
-  Layers,
-  Boxes,
   Phone,
 } from "lucide-react";
 import { cn } from "@/lib/utils.ts";

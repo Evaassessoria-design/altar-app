@@ -63,6 +63,21 @@ export type FatosDoRelatorio = {
     decididas: readonly { em: number; status: string }[];
     expiradas: readonly { em: number }[];
   };
+  /**
+   * O Assistente das decoradoras, SÓ EM NÚMEROS: nenhum pedido, resposta ou
+   * nome de conta sai daqui. É a observabilidade da IA — sem isto, um modelo
+   * fora do ar em produção só apareceria quando alguém reclamasse, porque a
+   * resposta por regra (`redacao.ts`) esconde a queda da decoradora, de
+   * propósito. AUSENTE = não medido.
+   */
+  assistente?: {
+    trabalhos: number;
+    contas: number;
+    falharam: number;
+    contasComFalha: number;
+    /** Concluídos sem passar pelo modelo. */
+    porRegra: number;
+  };
 };
 
 export type LinhaDoRelatorio = { texto: string; link?: string };
@@ -142,6 +157,22 @@ export function montarRelatorio(f: FatosDoRelatorio): Relatorio {
       link: "/admin",
     });
   }
+  if (f.assistente && f.assistente.falharam > 0) {
+    atencao.push({
+      texto:
+        `${plural(f.assistente.falharam, "trabalho do Assistente não terminou", "trabalhos do Assistente não terminaram")}` +
+        ` (${plural(f.assistente.contasComFalha, "conta", "contas")}).`,
+    });
+  }
+  if (f.assistente && f.assistente.porRegra > 0) {
+    // Não é erro para a decoradora — ela recebeu resposta. É sinal para o
+    // dono: o modelo caiu, está lento ou não está configurado.
+    atencao.push({
+      texto:
+        `${plural(f.assistente.porRegra, "resposta do Assistente saiu", "respostas do Assistente saíram")} ` +
+        "por regra, sem o modelo de IA — ele falhou, demorou ou não está configurado.",
+    });
+  }
   if (f.central.expiradas.length > 0) {
     atencao.push({
       texto: `${plural(f.central.expiradas.length, "proposta da Central expirou", "propostas da Central expiraram")} sem decisão.`,
@@ -177,6 +208,13 @@ export function montarRelatorio(f: FatosDoRelatorio): Relatorio {
         (doSistema > 0 ? ` (${doSistema} sozinho)` : "") +
         `: acompanha ${plural(analisadas, "interessado", "interessados")} e preparou ` +
         `${plural(preparadas, "mensagem", "mensagens")}.`,
+    });
+  }
+  if (f.assistente && f.assistente.trabalhos > 0) {
+    realizado.push({
+      texto:
+        `O Assistente fez ${plural(f.assistente.trabalhos, "trabalho", "trabalhos")} ` +
+        `para ${plural(f.assistente.contas, "conta", "contas")}.`,
     });
   }
   if (f.respostas.length > 0) {

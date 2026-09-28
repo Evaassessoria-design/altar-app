@@ -213,3 +213,59 @@ describe("centroDeComando no banco", () => {
     expect(i.emAndamento).toBe(2);
   });
 });
+
+describe("observabilidade da IA — só números", () => {
+  it("trabalho que não terminou e resposta sem modelo viram ATENÇÃO para o dono", () => {
+    const r = montarRelatorio(vazio({
+      assistente: { trabalhos: 12, contas: 4, falharam: 2, contasComFalha: 1, porRegra: 5 },
+    }));
+    const atencao = r.atencao.map((l) => l.texto).join(" | ");
+    expect(atencao).toContain("2 trabalhos do Assistente não terminaram (1 conta)");
+    expect(atencao).toContain("5 respostas do Assistente saíram por regra");
+    expect(r.realizado.map((l) => l.texto)).toContain("O Assistente fez 12 trabalhos para 4 contas.");
+  });
+
+  it("tudo certo no Assistente não gera alarme", () => {
+    const r = montarRelatorio(vazio({
+      assistente: { trabalhos: 3, contas: 1, falharam: 0, contasComFalha: 0, porRegra: 0 },
+    }));
+    expect(r.atencao).toEqual([]);
+    expect(r.tudoEmDia).toBe(true);
+  });
+
+  it("no banco: conta falhas e respostas por regra, sem expor pedido nem conta", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-28T12:00:00Z"));
+    try {
+      const t = convexTest(schema, modules);
+      const dono = await autenticarComo(t, {
+        nome: "Dono", email: "dono@altar.example", role: "admin", subject: "auth|dono",
+      });
+      await t.run(async (ctx) => {
+        const u = await ctx.db
+          .query("users")
+          .withIndex("by_better_auth_id", (q) => q.eq("betterAuthId", "auth|dono"))
+          .unique();
+        await ctx.db.patch(u!._id, { platformOwner: true });
+        const deco = await ctx.db.insert("users", {
+          name: "Deco", email: "deco@example.com", role: "user", subscriptionStatus: "active",
+        });
+        const base = {
+          userId: deco, pedido: "SEGREDO DA DECORADORA", agenteId: "gestao",
+          roteadoAutomaticamente: true, cor: "verde" as const, criadoEm: Date.now(),
+        };
+        await ctx.db.insert("assistantTasks", { ...base, status: "failed", erro: "x" });
+        await ctx.db.insert("assistantTasks", { ...base, status: "completed", provedor: "local", resultado: "SEGREDO" });
+        await ctx.db.insert("assistantTasks", { ...base, status: "completed", provedor: "modelo", resultado: "SEGREDO" });
+      });
+      const c = await dono.query(api.escritorio.centroDeComando, {});
+      const tudo = JSON.stringify(c);
+      expect(tudo).toContain("1 trabalho do Assistente não terminou (1 conta)");
+      expect(tudo).toContain("1 resposta do Assistente saiu por regra");
+      expect(tudo).not.toContain("SEGREDO");
+      expect(tudo).not.toContain("deco@example.com");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

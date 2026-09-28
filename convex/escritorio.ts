@@ -262,9 +262,30 @@ export const centroDeComando = query({
       .filter((a) => a.expiraEm !== undefined && a.expiraEm >= desde && a.expiraEm <= agora)
       .map((a) => ({ em: a.expiraEm as number }));
 
+    // ── O Assistente das decoradoras, só em números ─────────────────────
+    // Status, provedor e dono — nunca pedido, resposta ou erro. Contas
+    // distintas são contadas, não nomeadas.
+    const tarefas = ler(
+      await ctx.db
+        .query("assistantTasks")
+        .withIndex("by_creation_time", (q) => q.gte("_creationTime", desde))
+        .take(TETO_DO_RELATORIO * 4),
+      TETO_DO_RELATORIO * 4,
+    );
+    const contasDe = (lista: typeof tarefas) => new Set(lista.map((t) => t.userId)).size;
+    const falharam = tarefas.filter((t) => t.status === "failed");
+    const assistente = {
+      trabalhos: tarefas.filter((t) => t.status !== "refused").length,
+      contas: contasDe(tarefas),
+      falharam: falharam.length,
+      contasComFalha: contasDe(falharam),
+      porRegra: tarefas.filter((t) => t.status === "completed" && t.provedor === "local").length,
+    };
+
     const fatos: FatosDoRelatorio = {
       desde,
       agora,
+      assistente,
       negocio: {
         inadimplentes: negocio.overdue,
         bloqueadas: negocio.overdueBlocked,

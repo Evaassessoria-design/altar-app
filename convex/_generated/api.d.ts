@@ -124,6 +124,7 @@ import type * as lib_panoramaDeCompras from "../lib/panoramaDeCompras.js";
 import type * as lib_plantaPrompt from "../lib/plantaPrompt.js";
 import type * as lib_platformGuard from "../lib/platformGuard.js";
 import type * as lib_presence from "../lib/presence.js";
+import type * as lib_prioridadeDoInteressado from "../lib/prioridadeDoInteressado.js";
 import type * as lib_projectScope from "../lib/projectScope.js";
 import type * as lib_prontidaoDaConta from "../lib/prontidaoDaConta.js";
 import type * as lib_prontidaoDoEvento from "../lib/prontidaoDoEvento.js";
@@ -275,6 +276,7 @@ declare const fullApi: ApiFromModules<{
   "lib/plantaPrompt": typeof lib_plantaPrompt;
   "lib/platformGuard": typeof lib_platformGuard;
   "lib/presence": typeof lib_presence;
+  "lib/prioridadeDoInteressado": typeof lib_prioridadeDoInteressado;
   "lib/projectScope": typeof lib_projectScope;
   "lib/prontidaoDaConta": typeof lib_prontidaoDaConta;
   "lib/prontidaoDoEvento": typeof lib_prontidaoDoEvento;

@@ -23,6 +23,8 @@ import { prepararContatos } from "./lib/contatoDaCampanha";
 import { analisar, lerArquivo, resumir } from "./lib/importacaoDeLeads";
 import { normalizarE164 } from "./lib/central/telefone";
 import { dataDoDia } from "./lib/dataDoDia";
+import { prioridadeDoInteressado } from "./lib/prioridadeDoInteressado";
+import { proximaAcao } from "./lib/proximaAcao";
 
 /** As origens aceitas — espelha a união do schema. */
 const origemValidator = v.union(
@@ -619,6 +621,13 @@ export const listLandingLeads = query({
      * o teto de 200 já atende.
      */
     status: v.optional(estagioValidator),
+    /**
+     * Ordem da lista. AUSENTE = mais recentes primeiro (o comportamento de
+     * sempre). "prioridade" ordena pela nota explicável
+     * (`lib/prioridadeDoInteressado.ts`) — ENTRE os carregados: com `temMais`,
+     * a tela diz que a ordem vale para a página, não para a campanha inteira.
+     */
+    ordem: v.optional(v.union(v.literal("recentes"), v.literal("prioridade"))),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
@@ -667,9 +676,58 @@ export const listLandingLeads = query({
         : encontrados;
     const leads = naEtapa.slice(0, LIMITE_DE_INTERESSADOS);
 
+    // ── A RESPOSTA MAIS RECENTE DE CADA UM ────────────────────────────────
+    // Uma leitura por campanha, pelo índice de tempo, e não uma por pessoa.
+    // Sem campanha escolhida não há índice que sirva, e a prioridade segue
+    // sem esse sinal — ausente não pontua, não inventa.
+    const ultimaIntencao = new Map<string, string>();
+    if (args.campanha) {
+      const respostas = await ctx.db
+        .query("respostasRegistradas")
+        .withIndex("by_campanha_criadoEm", (q) => q.eq("campanha", args.campanha!))
+        .order("desc")
+        .take(LIMITE_DE_INTERESSADOS * 10);
+      for (const r of respostas) {
+        if (!ultimaIntencao.has(r.landingLeadId)) ultimaIntencao.set(r.landingLeadId, r.intencao);
+      }
+    }
+
+    const hoje = dataDoDia();
+    const agora = Date.now();
+    const campanhaDaLista = campanhaPorSlug(args.campanha);
+    const comLeitura = leads.map((l) => {
+      const convidadoEm = l.marcosEm?.convidado;
+      // A MESMA regra que prepara os rascunhos e o briefing (`proximaAcao`),
+      // com os fatos que o registro tem. Sem os da conta de teste: ausentes,
+      // a regra cala sobre eles em vez de concluir "conta vazia".
+      const acao = proximaAcao({
+        status: l.status,
+        marcosEm: l.marcosEm,
+        temCanal: Boolean(l.whatsapp?.trim() || l.email?.trim()),
+        procurouOAltar: procurouOAltar(l),
+        diasDesdeOConvite:
+          convidadoEm === undefined ? undefined : Math.floor((agora - convidadoEm) / 86_400_000),
+        diasAteACampanha: campanhaDaLista ? diasAte(campanhaDaLista, hoje) : undefined,
+      });
+      return {
+        lead: l,
+        prioridade: prioridadeDoInteressado(
+          { ...l, ultimaIntencao: ultimaIntencao.get(l._id) },
+          hoje,
+        ),
+        proximaAcao: { acao: acao.acao, motivo: acao.motivo, urgencia: acao.urgencia },
+      };
+    });
+    if (args.ordem === "prioridade") {
+      comLeitura.sort((a, b) => b.prioridade.pontos - a.prioridade.pontos);
+    }
+
     return {
       temMais,
-      leads: leads.map((l) => ({
+      ordem: args.ordem ?? "recentes",
+      leads: comLeitura.map(({ lead: l, prioridade, proximaAcao: acao }) => ({
+        prioridade,
+        proximaAcao: acao,
         _id: l._id,
         name: l.name,
         email: l.email,

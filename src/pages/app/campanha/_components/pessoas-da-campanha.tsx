@@ -11,6 +11,66 @@ import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { cn } from "@/lib/utils.ts";
 import { Mail, MessageSquarePlus, PenLine, Phone, Search, UserX } from "lucide-react";
 import { RegistrarResposta } from "./registrar-resposta.tsx";
+import {
+  ROTULO_DA_TEMPERATURA,
+  type Prioridade,
+} from "@/convex/lib/prioridadeDoInteressado.ts";
+
+const COR_DA_TEMPERATURA: Record<Prioridade["temperatura"], string> = {
+  quente: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
+  morna: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+  fria: "bg-muted text-muted-foreground",
+  fora: "bg-muted text-muted-foreground",
+};
+
+/** O que só a listagem traz — a busca não calcula, e a linha se adapta. */
+type LeituraDaLista = {
+  prioridade?: Prioridade;
+  proximaAcao?: { acao: string; motivo: string; urgencia: string };
+};
+
+function LeituraComercial({ p }: { p: LeituraDaLista }) {
+  return (
+    <>
+      {p.proximaAcao && p.proximaAcao.urgencia !== "nenhuma" && (
+        <p className="mt-1 text-xs">
+          <span className="font-medium">Próxima ação:</span> {p.proximaAcao.acao}
+          <span className="text-muted-foreground"> — {p.proximaAcao.motivo}</span>
+        </p>
+      )}
+      {p.prioridade && <PrioridadeExplicada p={p.prioridade} />}
+    </>
+  );
+}
+
+/**
+ * A nota COM o porquê. O número sozinho seria o "87" que ninguém sabe usar
+ * (ver `lib/prioridadeDoInteressado.ts`); os motivos ficam a um toque.
+ */
+function PrioridadeExplicada({ p }: { p: Prioridade }) {
+  if (p.temperatura === "fora") return null;
+  return (
+    <details className="mt-1 text-xs">
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1.5">
+        <span className={cn("rounded-full px-1.5 py-0.5 font-medium", COR_DA_TEMPERATURA[p.temperatura])}>
+          {p.pontos} · {ROTULO_DA_TEMPERATURA[p.temperatura]}
+        </span>
+        <span className="text-muted-foreground underline-offset-2 hover:underline">por quê?</span>
+      </summary>
+      <ul className="mt-1 space-y-0.5 pl-1 text-muted-foreground">
+        {p.fatores.map((fator) => (
+          <li key={fator.texto}>
+            <span className={fator.pontos >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-destructive"}>
+              {fator.pontos >= 0 ? "+" : "−"}
+              {Math.abs(fator.pontos)}
+            </span>{" "}
+            {fator.texto}
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AS PESSOAS DA CAMPANHA
@@ -44,6 +104,7 @@ export function PessoasDaCampanha({
   const [termo, setTermo] = useState("");
   /** Em quem a caixa de resposta está aberta. `null` = nenhuma. */
   const [respondendo, setRespondendo] = useState<Id<"landingLeads"> | null>(null);
+  const [ordem, setOrdem] = useState<"recentes" | "prioridade">("recentes");
   const buscando = termo.trim().length >= MINIMO_PARA_BUSCAR;
 
   // Enquanto há busca, a listagem não roda: são duas respostas para a mesma
@@ -51,7 +112,9 @@ export function PessoasDaCampanha({
   // entre dois conjuntos diferentes.
   const lista = useQuery(
     api.admin.listLandingLeads,
-    buscando ? "skip" : { campanha, ...(etapa ? { status: etapa as EstagioDoInteressado } : {}) },
+    buscando
+      ? "skip"
+      : { campanha, ordem, ...(etapa ? { status: etapa as EstagioDoInteressado } : {}) },
   );
   const busca = useQuery(
     api.admin.buscarInteressados,
@@ -107,6 +170,32 @@ export function PessoasDaCampanha({
         >
           Filtrando por {ESTAGIOS.find((e) => e.id === etapa)?.rotulo} — mostrar todos
         </button>
+      )}
+
+      {!buscando && (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-muted-foreground">Ordenar:</span>
+          {(["recentes", "prioridade"] as const).map((o) => (
+            <button
+              key={o}
+              onClick={() => setOrdem(o)}
+              aria-pressed={ordem === o}
+              className={cn(
+                "cursor-pointer rounded-full border px-2 py-0.5",
+                ordem === o ? "border-primary bg-primary/10 text-primary" : "border-border",
+              )}
+            >
+              {o === "recentes" ? "Mais recentes" : "Prioridade"}
+            </button>
+          ))}
+          {/* A tela nunca afirma o que não sabe: ordenar a página não ordena
+              a campanha inteira. */}
+          {ordem === "prioridade" && lista?.temMais && (
+            <span className="text-muted-foreground">
+              — entre as {lista.leads.length} carregadas (há mais)
+            </span>
+          )}
+        </div>
       )}
 
       {termo.trim().length > 0 && !buscando && (
@@ -202,6 +291,7 @@ export function PessoasDaCampanha({
                     <span>convidada {diasAtras(p.convidadoEm)}</span>
                   )}
                 </div>
+                <LeituraComercial p={p as LeituraDaLista} />
               </div>
 
               <div className="mt-2 flex items-center gap-2 sm:mt-0">

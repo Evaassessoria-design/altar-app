@@ -72,12 +72,11 @@ const PUXA: Record<Fonte, readonly string[]> = {
  * Quando o pedido não diz nada de específico, o agente ainda precisa de um
  * ponto de partida — e ele é PEQUENO de propósito.
  *
- * O Gestor é o único com três fontes por padrão, porque a pergunta dele
- * ("o que precisa da minha atenção?") é genuinamente ampla. Os demais partem
- * do que define o papel.
+ * Os especialistas partem do que define o papel. A Gestão não está aqui: ela
+ * tem base fixa (`BASE_FIXA`, abaixo), porque a pergunta dela é ampla mesmo
+ * quando traz palavra-chave.
  */
 const PADRAO: Record<string, readonly Fonte[]> = {
-  gestao: ["eventos.atencao", "financeiro.vencidos", "comercial.funil"],
   financeiro: ["financeiro.vencidos", "financeiro.resumo"],
   comercial: ["comercial.funil"],
   compras: ["compras.panorama"],
@@ -88,6 +87,31 @@ const PADRAO: Record<string, readonly Fonte[]> = {
 
 /** Teto de fontes por tarefa. Mais que isso é pergunta para duas tarefas. */
 export const MAXIMO_DE_FONTES = 4;
+
+/**
+ * O que a Gestão lê SEMPRE, com ou sem palavra-chave.
+ *
+ * ── O DEFEITO QUE ISTO CORRIGE ──────────────────────────────────────────────
+ * Até 28/09 a Gestão seguia a regra dos outros agentes: palavra-chave afina,
+ * e o padrão só entra quando nenhuma palavra casa. Só que as palavras da
+ * pergunta MAIS ampla que existe — "o que precisa da minha atenção hoje?" —
+ * casam com `eventos.atencao` ("atencao", "hoje"). A pergunta ampla estreitava
+ * o plano para UMA fonte, e a resposta dizia "não há eventos pedindo atenção"
+ * com três recebimentos vencidos na mesma tela, no briefing logo acima.
+ * Aconteceu em produção, na homologação da release, e é a pergunta do bloco 7
+ * da live.
+ *
+ * Para os especialistas, afinar está certo: o Financeiro perguntado sobre
+ * vencidos não precisa do resumo. A Gestão existe para atravessar as áreas —
+ * nela, a palavra-chave ACRESCENTA ao panorama em vez de substituí-lo.
+ *
+ * A ordem é a do que custa mais caro ignorar: dinheiro vencido, evento em
+ * risco, compra estourada, oportunidade parada. É o que o briefing da manhã
+ * olha, e é o que o mapa da demo promete que esta pergunta encontra.
+ */
+const BASE_FIXA: Record<string, readonly Fonte[]> = {
+  gestao: ["financeiro.vencidos", "eventos.atencao", "compras.panorama", "comercial.funil"],
+};
 
 /**
  * As fontes que este pedido, com este agente, deve consultar.
@@ -103,11 +127,17 @@ export function planoDeConsulta(pedido: string, agente: Agente): Fonte[] {
     PUXA[fonte].some((termo) => texto.includes(` ${termo}`)),
   );
 
-  const escolhidas = puxadas.length > 0
-    ? puxadas
-    : // O padrão do papel, ainda intersectado com o que ele alcança: mudar
-      // `agente.fontes` amanhã não pode fazer o padrão abrir uma porta.
-      (PADRAO[agente.id] ?? agente.fontes).filter((f) => agente.fontes.includes(f));
+  const base = BASE_FIXA[agente.id];
+
+  const escolhidas = base
+    ? // O que o pedido citou vem primeiro — é o assunto dele e não pode cair
+      // no corte do teto; o panorama completa o que sobrar.
+      [...new Set([...puxadas, ...base])].filter((f) => agente.fontes.includes(f))
+    : puxadas.length > 0
+      ? puxadas
+      : // O padrão do papel, ainda intersectado com o que ele alcança: mudar
+        // `agente.fontes` amanhã não pode fazer o padrão abrir uma porta.
+        (PADRAO[agente.id] ?? agente.fontes).filter((f) => agente.fontes.includes(f));
 
   const final = escolhidas.slice(0, MAXIMO_DE_FONTES);
 

@@ -9,6 +9,11 @@ import {
 } from "@/components/ui/dialog.tsx";
 import { Loader2, CircleSlash, AlertCircle } from "lucide-react";
 import { ROTULO_DA_FONTE, type Fonte } from "@/convex/lib/assistente/agentes.ts";
+import {
+  RECADO_DA_TAREFA_TRAVADA,
+  situacaoDaTarefa,
+} from "@/convex/lib/assistente/situacao.ts";
+import { useAgora } from "@/hooks/use-agora.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // UM TRABALHO, ABERTO
@@ -47,8 +52,10 @@ export function TrabalhoAberto({
   // travamento.
   const tarefa = useQuery(api.assistente.obter, { taskId });
 
-  const trabalhando =
-    tarefa && (tarefa.status === "queued" || tarefa.status === "running");
+  const agora = useAgora();
+  const situacao = tarefa ? situacaoDaTarefa(tarefa, agora) : undefined;
+  const trabalhando = situacao === "trabalhando";
+  const travada = situacao === "travada";
   const areas = rotulos(tarefa?.fontesConsultadas);
 
   return (
@@ -98,13 +105,15 @@ export function TrabalhoAberto({
                   {tarefa.resultado}
                 </p>
               </div>
-            ) : tarefa.status === "failed" ? (
+            ) : tarefa.status === "failed" || travada ? (
               <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/20">
                 <p className="flex items-center gap-2 text-sm font-medium mb-1.5">
                   <AlertCircle className="size-4 text-amber-600" />
                   Não deu certo desta vez
                 </p>
-                <p className="text-sm text-muted-foreground">{tarefa.erro}</p>
+                <p className="text-sm text-muted-foreground">
+                  {travada ? RECADO_DA_TAREFA_TRAVADA : tarefa.erro}
+                </p>
               </div>
             ) : (
               <div>

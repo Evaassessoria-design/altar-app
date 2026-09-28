@@ -24,7 +24,17 @@ import { recadoDoRascunho } from "./semaforo";
 // um texto de regra achando que é de modelo.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type FatoColetado = { fonte: Fonte; rotulo: string; dados: unknown };
+export type FatoColetado = {
+  fonte: Fonte;
+  rotulo: string;
+  dados: unknown;
+  /**
+   * A leitura desta fonte falhou. O fato continua na lista para a resposta
+   * poder DIZER que não conseguiu ler — calar faria "não achei nada" parecer
+   * "está tudo em dia".
+   */
+  indisponivel?: true;
+};
 
 const brl = (centavosOuReais: number) =>
   centavosOuReais.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -45,20 +55,68 @@ function arr(v: unknown): unknown[] {
 }
 
 /**
+ * Uma fonte em JSON, cabendo no orçamento dela.
+ *
+ * ── POR QUE NÃO UM `.slice` NO FIM ──────────────────────────────────────────
+ * Até 28/09 o executor fazia `resumirFatos(fatos).slice(0, 8000)` no texto
+ * inteiro. A primeira fonte grande comia o teto e as seguintes sumiam — sem
+ * aviso ao modelo, que respondia "não há vencidos" porque o bloco de vencidos
+ * nunca chegou. Cortar no fim é esconder dado em silêncio.
+ *
+ * Aqui cada fonte tem a SUA parte. Lista é aparada item a item, do começo (as
+ * consultas já devolvem na ordem que a tela mostra), e o texto DIZ quantos
+ * itens ficaram de fora. Objeto que não cabe é cortado com o mesmo aviso. O
+ * modelo sabe o que não viu — e a instrução manda dizer quando não sabe.
+ */
+function jsonNoOrcamento(dados: unknown, orcamento: number): string {
+  const inteiro = JSON.stringify(dados ?? null);
+  if (inteiro.length <= orcamento) return inteiro;
+
+  if (Array.isArray(dados)) {
+    const aviso = (n: number) =>
+      `\n(lista cortada: ${n} de ${dados.length} itens mostrados; os demais existem e não foram lidos)`;
+    let cabem = 0;
+    let tamanho = 2; // os colchetes
+    for (const item of dados) {
+      const t = JSON.stringify(item ?? null).length + 1;
+      if (tamanho + t + aviso(cabem + 1).length > orcamento) break;
+      tamanho += t;
+      cabem++;
+    }
+    return JSON.stringify(dados.slice(0, cabem)) + aviso(cabem);
+  }
+
+  const aviso = "\n(dado cortado por tamanho: o restante existe e não foi lido)";
+  return inteiro.slice(0, Math.max(0, orcamento - aviso.length)) + aviso;
+}
+
+/**
  * Os fatos em texto, para o modelo ler.
  *
  * JSON compacto e não prosa: o modelo lê JSON melhor do que lê uma tabela mal
  * desenhada, e o custo por token é menor. O rótulo humano vai junto para a
  * resposta não citar nome técnico de consulta.
+ *
+ * `limite` é dividido igualmente entre as fontes lidas (ver `jsonNoOrcamento`).
  */
-export function resumirFatos(fatos: readonly FatoColetado[]): string {
+export function resumirFatos(
+  fatos: readonly FatoColetado[],
+  limite: number = Number.POSITIVE_INFINITY,
+): string {
+  const lidos = fatos.filter((f) => !f.indisponivel);
+  const orcamento = lidos.length > 0 ? Math.floor(limite / lidos.length) : limite;
   return fatos
-    .map((f) => `## ${f.rotulo}\n${JSON.stringify(f.dados ?? null)}`)
+    .map((f) =>
+      f.indisponivel
+        ? `## ${f.rotulo}\n(indisponível agora: esta área não pôde ser lida)`
+        : `## ${f.rotulo}\n${jsonNoOrcamento(f.dados, orcamento)}`,
+    )
     .join("\n\n");
 }
 
 /** Uma linha sobre uma fonte, quando dá para dizer algo honesto sobre ela. */
 function linhaDoFato(f: FatoColetado): string | null {
+  if (f.indisponivel) return `${f.rotulo}: não consegui ler agora.`;
   const d = obj(f.dados);
 
   switch (f.fonte) {
@@ -169,8 +227,9 @@ export function redigirLocalmente(
       : "Não encontrei nada registrado nessas áreas ainda.";
 
   const cabecalho = `${agente.nome} — ${agente.funcao}`;
-  const rodape = fatos.length
-    ? `\n\nConsultei: ${fatos.map((f) => f.rotulo).join(" · ")}.`
+  const lidos = fatos.filter((f) => !f.indisponivel);
+  const rodape = lidos.length
+    ? `\n\nConsultei: ${lidos.map((f) => f.rotulo).join(" · ")}.`
     : "";
 
   const aviso = cor === "amarelo" ? `${recadoDoRascunho(undefined)}\n\n` : "";

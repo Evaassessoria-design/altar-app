@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils.ts";
 import { Loader2, Send, CircleSlash, AlertCircle, CheckCircle2 } from "lucide-react";
 import { TrabalhoAberto } from "./_components/trabalho-aberto.tsx";
 import { BriefingDaManha } from "./_components/briefing-da-manha.tsx";
+import { situacaoDaTarefa } from "@/convex/lib/assistente/situacao.ts";
+import { useAgora } from "@/hooks/use-agora.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ESCRITÓRIO DE IA — A TELA
@@ -89,6 +91,8 @@ export default function EscritorioPage() {
   };
 
   const tarefas = historico?.tarefas ?? [];
+  // Uma tarefa parada não muda consulta nenhuma; só o relógio a denuncia.
+  const agora = useAgora();
 
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-6">
@@ -199,7 +203,7 @@ export default function EscritorioPage() {
           <div className="grid gap-2 sm:grid-cols-2">
             {equipe.map((a) => {
               const emAndamento = tarefas.find(
-                (t) => t.agenteId === a.id && (t.status === "queued" || t.status === "running"),
+                (t) => t.agenteId === a.id && situacaoDaTarefa(t, agora) === "trabalhando",
               );
               return (
                 <button
@@ -260,6 +264,7 @@ export default function EscritorioPage() {
                 <li key={t._id}>
                   <LinhaDoTrabalho
                     tarefa={t}
+                    agora={agora}
                     nomeDoAgente={(equipe ?? []).find((a) => a.id === t.agenteId)?.nome}
                     onAbrir={() => setAberto(t._id)}
                   />
@@ -291,14 +296,17 @@ export default function EscritorioPage() {
 
 function LinhaDoTrabalho({
   tarefa,
+  agora,
   nomeDoAgente,
   onAbrir,
 }: {
   tarefa: Tarefa;
+  agora: number;
   nomeDoAgente?: string;
   onAbrir: () => void;
 }) {
-  const trabalhando = tarefa.status === "queued" || tarefa.status === "running";
+  const situacao = situacaoDaTarefa(tarefa, agora);
+  const trabalhando = situacao === "trabalhando";
   return (
     <button
       onClick={onAbrir}
@@ -310,7 +318,7 @@ function LinhaDoTrabalho({
             <Loader2 className="size-4 animate-spin text-primary" />
           ) : tarefa.status === "refused" ? (
             <CircleSlash className="size-4 text-muted-foreground" />
-          ) : tarefa.status === "failed" ? (
+          ) : tarefa.status === "failed" || situacao === "travada" ? (
             <AlertCircle className="size-4 text-amber-600" />
           ) : (
             <CheckCircle2 className="size-4 text-primary" />
@@ -325,6 +333,7 @@ function LinhaDoTrabalho({
             {" · "}
             {quando(tarefa.criadoEm)}
             {trabalhando && " · trabalhando"}
+            {situacao === "travada" && " · não terminou"}
           </p>
         </div>
       </div>

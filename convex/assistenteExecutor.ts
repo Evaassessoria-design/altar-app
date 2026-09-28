@@ -10,7 +10,7 @@ import { getAiConfig } from "./lib/aiConfig";
 import { agentePorId, ROTULO_DA_FONTE, type Agente, type Fonte } from "./lib/assistente/agentes";
 import { planoDeConsulta } from "./lib/assistente/plano";
 import { recadoDoRascunho } from "./lib/assistente/semaforo";
-import { redigirLocalmente, resumirFatos } from "./lib/assistente/redacao";
+import { redigirLocalmente, resumirFatos, type FatoColetado } from "./lib/assistente/redacao";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // O EXECUTOR — A IA NUNCA TOCA NO BANCO
@@ -47,6 +47,17 @@ import { redigirLocalmente, resumirFatos } from "./lib/assistente/redacao";
 const LIMITE_DE_CONTEXTO = 8_000;
 
 /**
+ * Quanto esperar o modelo.
+ *
+ * O cliente da OpenAI sem opção espera DEZ MINUTOS e tenta de novo duas vezes.
+ * A action morre antes disso, e uma action morta não roda o `catch`: a tarefa
+ * ficava em "trabalhando" para sempre, com a decoradora olhando um spinner.
+ * Trinta segundos é muito para uma tela e pouco para um modelo lento — o
+ * suficiente para desistir a tempo de responder por regra.
+ */
+const ESPERA_DO_MODELO_MS = 30_000;
+
+/**
  * Traduz qualquer falha para uma frase que pode aparecer na tela.
  *
  * NUNCA repassa a mensagem crua do provedor. Ela pode carregar URL de gateway,
@@ -71,8 +82,15 @@ function erroSeguro(e: unknown): string {
  * fonte que não esteja aqui simplesmente não tem como ser lida. Todas as
  * consultas chamadas são as MESMAS que as telas usam — nenhuma foi duplicada,
  * e o isolamento por conta vem dos guardas que elas já têm.
+ *
+ * Exportada para o teste da live (`assistente.live.test.ts`) ler as fontes
+ * por ESTA tabela, e não por uma cópia dela que pudesse divergir. Exportar
+ * uma função comum não a registra como endpoint — só `action`/`query` viram.
  */
-async function lerFonte(ctx: ActionCtx, fonte: Fonte): Promise<unknown> {
+export async function lerFonte(
+  ctx: Pick<ActionCtx, "runQuery">,
+  fonte: Fonte,
+): Promise<unknown> {
   switch (fonte) {
     case "financeiro.resumo":
       return ctx.runQuery(api.financeiro.getSummary, {});
@@ -146,22 +164,53 @@ export const executar = action({
     try {
       const fontes = planoDeConsulta(tarefa.pedido, agente);
 
-      const fatos: { fonte: Fonte; rotulo: string; dados: unknown }[] = [];
+      const fatos: FatoColetado[] = [];
       for (const fonte of fontes) {
         // Cinto e suspensório: `planoDeConsulta` já intersecta, e ainda assim
         // conferimos. Uma fonte fora do alcance do agente é defeito de código,
         // não entrada de usuário — e defeito de código é o que passa
         // despercebido.
         if (!agente.fontes.includes(fonte)) continue;
-        fatos.push({
-          fonte,
-          rotulo: ROTULO_DA_FONTE[fonte],
-          dados: await lerFonte(ctx, fonte),
-        });
+        try {
+          fatos.push({
+            fonte,
+            rotulo: ROTULO_DA_FONTE[fonte],
+            dados: await lerFonte(ctx, fonte),
+          });
+        } catch (e) {
+          // Uma área que falha não derruba as outras. Até 28/09, uma consulta
+          // com erro jogava fora as que tinham dado certo e a decoradora lia
+          // "não consegui concluir". Agora a resposta sai com o que foi lido e
+          // DIZ o que não foi — e o registro nomeia a área, sem dado nenhum.
+          console.error(`[assistente] fonte indisponível: ${fonte}`, (e as Error)?.name ?? "erro");
+          fatos.push({ fonte, rotulo: ROTULO_DA_FONTE[fonte], dados: null, indisponivel: true });
+        }
       }
 
-      const contexto = resumirFatos(fatos).slice(0, LIMITE_DE_CONTEXTO);
-      const consultadas = fatos.map((f) => f.fonte);
+      // Nada lido: não há sobre o que escrever, e escrever assim mesmo seria
+      // responder no vácuo.
+      if (fatos.every((f) => f.indisponivel)) {
+        await ctx.runMutation(internal.assistente.falhar, {
+          taskId: args.taskId,
+          erro: erroSeguro(null),
+        });
+        return { status: "failed" };
+      }
+
+      const contexto = resumirFatos(fatos, LIMITE_DE_CONTEXTO);
+      // "Onde consultei" lista só o que foi LIDO. Citar como fonte uma área que
+      // falhou seria afirmar que ela foi olhada.
+      const consultadas = fatos.filter((f) => !f.indisponivel).map((f) => f.fonte);
+
+      const porRegra = async () => {
+        await ctx.runMutation(internal.assistente.concluir, {
+          taskId: args.taskId,
+          resultado: redigirLocalmente(agente, tarefa.pedido, fatos, tarefa.cor),
+          fontesConsultadas: consultadas,
+          provedor: "local",
+        });
+        return { status: "completed" };
+      };
 
       // ── O MODELO, SE HOUVER ───────────────────────────────────────────
       let config;
@@ -170,51 +219,53 @@ export const executar = action({
       } catch {
         // Sem chave, o produto NÃO para: os fatos são os mesmos e a redação
         // sai por regra. A tarefa registra que foi assim.
-        const local = redigirLocalmente(agente, tarefa.pedido, fatos, tarefa.cor);
-        await ctx.runMutation(internal.assistente.concluir, {
-          taskId: args.taskId,
-          resultado: local,
-          fontesConsultadas: consultadas,
-          provedor: "local",
-        });
-        return { status: "completed" };
+        return await porRegra();
       }
 
-      const client = new OpenAI({ apiKey: config.apiKey, baseURL: config.baseURL });
-      const resposta = await client.chat.completions.create({
-        model: config.model,
-        // Organizar dado que já veio pronto não precisa de raciocínio caro.
-        ...(config.supportsReasoningEffort ? { reasoning_effort: "low" as const } : {}),
-        messages: [
-          { role: "system", content: montarInstrucao(agente, tarefa.cor, tarefa.motivoDaCor) },
-          {
-            role: "user",
-            // ── POR QUE AS DUAS PARTES SÃO CERCADAS ────────────────────
-            // A primeira versão separava pedido e dados por rótulos em texto
-            // corrido ("PEDIDO DA DONA:" / "DADOS DA EMPRESA:"). Um pedido
-            // que contivesse a segunda linha conseguia forjar dados, e um
-            // nome de lead com a primeira conseguia forjar um pedido.
-            //
-            // As marcas não são segurança sozinhas — segurança é o modelo não
-            // ter ferramenta nenhuma. Mas elas dão ao modelo a fronteira que a
-            // instrução do sistema manda respeitar, e sem fronteira declarada
-            // a instrução não tem sobre o que agir.
-            content: `<pedido>\n${tarefa.pedido}\n</pedido>\n\n<dados>\n${contexto}\n</dados>`,
-          },
-        ],
+      const client = new OpenAI({
+        apiKey: config.apiKey,
+        baseURL: config.baseURL,
+        timeout: ESPERA_DO_MODELO_MS,
+        maxRetries: 1,
       });
+      let resposta;
+      try {
+        resposta = await client.chat.completions.create({
+          model: config.model,
+          // Organizar dado que já veio pronto não precisa de raciocínio caro.
+          ...(config.supportsReasoningEffort ? { reasoning_effort: "low" as const } : {}),
+          messages: [
+            { role: "system", content: montarInstrucao(agente, tarefa.cor, tarefa.motivoDaCor) },
+            {
+              role: "user",
+              // ── POR QUE AS DUAS PARTES SÃO CERCADAS ────────────────────
+              // A primeira versão separava pedido e dados por rótulos em texto
+              // corrido ("PEDIDO DA DONA:" / "DADOS DA EMPRESA:"). Um pedido
+              // que contivesse a segunda linha conseguia forjar dados, e um
+              // nome de lead com a primeira conseguia forjar um pedido.
+              //
+              // As marcas não são segurança sozinhas — segurança é o modelo não
+              // ter ferramenta nenhuma. Mas elas dão ao modelo a fronteira que a
+              // instrução do sistema manda respeitar, e sem fronteira declarada
+              // a instrução não tem sobre o que agir.
+              content: `<pedido>\n${tarefa.pedido}\n</pedido>\n\n<dados>\n${contexto}\n</dados>`,
+            },
+          ],
+        });
+      } catch (e) {
+        // Modelo fora, lento, sem cota: os fatos JÁ ESTÃO lidos. Até 28/09 a
+        // tarefa falhava aqui e jogava os fatos fora, contrariando o que
+        // `redacao.ts` promete ("se o modelo cair, continua respondendo"). O
+        // registro diz só o tipo do erro — mensagem de provedor pode carregar
+        // URL de gateway e pedaço de chave.
+        console.error("[assistente] modelo indisponível; resposta por regra", (e as Error)?.name ?? "erro");
+        return await porRegra();
+      }
 
       const texto = resposta.choices[0]?.message?.content?.trim();
       if (!texto) {
         // Modelo devolveu vazio: a regra assume, em vez de entregar silêncio.
-        const local = redigirLocalmente(agente, tarefa.pedido, fatos, tarefa.cor);
-        await ctx.runMutation(internal.assistente.concluir, {
-          taskId: args.taskId,
-          resultado: local,
-          fontesConsultadas: consultadas,
-          provedor: "local",
-        });
-        return { status: "completed" };
+        return await porRegra();
       }
 
       const comAviso =

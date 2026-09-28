@@ -35,6 +35,15 @@ Ou seja: **o encaminhamento e a permissão estão homologados; o texto da
 resposta será visto pela primeira vez no ensaio.** Ensaie as duas perguntas
 com a conta de demonstração antes do dia.
 
+**Desde 28/09, também está homologado O QUE a pergunta de atenção lê.**
+`convex/assistente.live.test.ts` semeia a demo e prova que "O que precisa da
+minha atenção?" chega nas cobranças vencidas, na despesa vencida e no painel
+de compras — e que o número é o mesmo do Financeiro. O teste existe porque,
+na homologação da release em produção, essa pergunta leu SÓ os eventos e
+respondeu "não há nada pedindo atenção" com três recebimentos vencidos no
+briefing logo acima. Corrigido no plano de consulta da Gestão; **a correção
+só chega à conta de demonstração quando for publicada** — confira no ensaio.
+
 ---
 
 ## As duas do roteiro

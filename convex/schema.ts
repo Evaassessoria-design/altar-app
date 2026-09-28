@@ -150,6 +150,18 @@ const tipoDeAjusteDeAcervo = v.union(
   v.literal("manutencao_envio"),
   v.literal("manutencao_retorno"),
   v.literal("manutencao_descarte"),
+  // Mudança de condição (lib/condicaoDoAcervo.ts): a linha guarda a condição
+  // anterior e a nova em `condicaoDe`/`condicaoPara`.
+  v.literal("condicao"),
+);
+
+/** Condição de uma peça do acervo — `lib/condicaoDoAcervo.ts`. */
+const condicaoDoAcervo = v.union(
+  v.literal("pronto"),
+  v.literal("limpeza"),
+  v.literal("reparo"),
+  v.literal("indisponivel"),
+  v.literal("conferencia"),
 );
 
 const txType = v.union(v.literal("income"), v.literal("expense"));
@@ -1622,6 +1634,15 @@ export default defineSchema({
      * o total so muda por ajuste. Nunca maior que o total.
      */
     emManutencao: v.optional(v.number()),
+    /**
+     * As outras condições fora de uso (lib/condicaoDoAcervo.ts). AUSENTE = 0.
+     * `emManutencao` acima É o "precisa de reparo" — não há um segundo campo
+     * de reparo. "Pronto" nunca é gravado: é o total menos estas quatro.
+     * Só mudam por `acervo.moverCondicao`/`conferirRetorno`, com histórico.
+     */
+    emLimpeza: v.optional(v.number()),
+    indisponivel: v.optional(v.number()),
+    emConferencia: v.optional(v.number()),
     categoria: v.optional(v.string()),
     /**
      * Material tecnico correspondente. OPCIONAL e EXPLICITO: nao vinculamos
@@ -1671,6 +1692,14 @@ export default defineSchema({
      */
     manutencaoAntes: v.optional(v.number()),
     manutencaoDepois: v.optional(v.number()),
+    /**
+     * Só nas linhas de tipo "condicao". AUSENTE = ajuste comum. `condicaoPara`
+     * "baixa" quer dizer que a peça saiu do acervo (o `delta` diz quantas).
+     */
+    condicaoDe: v.optional(condicaoDoAcervo),
+    condicaoPara: v.optional(v.union(condicaoDoAcervo, v.literal("baixa"))),
+    /** Foto da ocorrência, quando houver — "o pé traseiro com folga". */
+    fotoStorageId: v.optional(v.id("_storage")),
     motivo: v.optional(v.string()),
     /**
      * Evento de onde a perda veio, quando veio de um. So PROCEDENCIA: o ajuste
@@ -1709,6 +1738,13 @@ export default defineSchema({
     saiu: v.optional(v.number()),
     /** Voltou fisicamente. AUSENTE = nada voltou ainda. */
     voltou: v.optional(v.number()),
+    /**
+     * Quando a conferência de retorno deste evento classificou as peças que
+     * voltaram (`acervo.conferirRetorno`). AUSENTE = voltou, mas ninguém
+     * conferiu — a jornada mostra "retorno não conferido". As condições em si
+     * ficam no item e no histórico; aqui só o fato de a conferência existir.
+     */
+    conferidoEm: v.optional(v.number()),
     notes: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
   })

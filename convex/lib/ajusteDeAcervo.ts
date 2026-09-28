@@ -277,11 +277,13 @@ export function baixaRespeitaManutencao(
   quantidadeDepois: number,
   emManutencao: number | undefined,
 ): string | null {
+  // Desde 28/09 quem chama passa TODAS as peças fora de uso (limpeza,
+  // reparo, indisponível, conferência — `pecasForaDeUso`), não só o reparo.
   const m = quantidadeLimpa(Math.max(0, emManutencao ?? 0));
   if (quantidadeDepois >= m) return null;
   return (
-    `${m} peça(s) deste item estão em manutenção, e o total ficaria em ` +
-    `${quantidadeDepois}. Registre primeiro o que aconteceu com elas ` +
-    `("voltou da manutenção" ou "sem conserto").`
+    `${m} peça(s) deste item estão em manutenção, limpeza, conferência ou ` +
+    `indisponíveis, e o total ficaria em ${quantidadeDepois}. Registre primeiro ` +
+    `o que aconteceu com elas.`
   );
 }

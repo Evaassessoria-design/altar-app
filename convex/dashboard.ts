@@ -4,6 +4,7 @@ import type { Id } from "./_generated/dataModel";
 import { requireUser } from "./lib/identity";
 import { diasEntre, montarAtencao, JANELA_RETORNO_DIAS } from "./lib/attention";
 import { deficitDaReserva, disponibilidadeNaJanela, faltaVoltar } from "./lib/acervo";
+import { pecasForaDeUso } from "./lib/condicaoDoAcervo";
 import { effectivePurchaseStatus, isOverdue, isPendingStatus } from "./lib/purchaseStatus";
 import { aguardandoEntrega } from "./lib/panoramaDeCompras";
 import { dataDoDia, dataEmDias, faixaDoMes, primeiroDiaDoMes } from "./lib/dataDoDia";
@@ -178,7 +179,7 @@ export async function carregarAtencao(ctx: QueryCtx, userId: Id<"users">) {
     ]);
     const totalDoItem = new Map(itensDeAcervo.map((i) => [i._id as string, i.quantidadeTotal]));
     // Peça no conserto não atende evento — mesma conta da tela do evento.
-    const manutencaoDoItem = new Map(itensDeAcervo.map((i) => [i._id as string, i.emManutencao]));
+    const manutencaoDoItem = new Map(itensDeAcervo.map((i) => [i._id as string, pecasForaDeUso(i)]));
     const reservasPorItem = new Map<string, typeof reservas>();
     for (const r of reservas) {
       const chave = r.collectionItemId as string;

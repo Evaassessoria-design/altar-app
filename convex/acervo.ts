@@ -20,6 +20,11 @@ import {
   pendenciasDoAcervo,
 } from "./lib/acervo";
 import { dataDoDia } from "./lib/dataDoDia";
+import {
+  condicoesDoItem,
+  moverCondicao as calcularMovimento,
+  pecasForaDeUso,
+} from "./lib/condicaoDoAcervo";
 import { consolidarMateriais } from "./lib/fichaTecnica";
 import { agruparAcervoPorMaterial, substitutosCompativeis } from "./lib/acervo";
 import {
@@ -104,7 +109,9 @@ export const listItems = query({
           // prometido passa do que eu tenho?
           // `hoje` para o pico ignorar reserva que já terminou: déficit no
           // passado não tem mais conserto, e vira ruído permanente na lista.
-          pico: picoDeReservas(item.quantidadeTotal, minhas, hoje, item.emManutencao),
+          pico: picoDeReservas(item.quantidadeTotal, minhas, hoje, pecasForaDeUso(item)),
+          // Quantas prontas, para limpar, em reparo… — "pronto" derivado.
+          condicoes: condicoesDoItem(item),
         };
       })
       .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
@@ -330,7 +337,7 @@ export const disponibilidade = query({
       await reservasDoItem(ctx, args.collectionItemId),
       { inicio: args.inicio, fim: args.fim },
       (args.eventId as string | undefined) ?? null,
-      item.emManutencao,
+      pecasForaDeUso(item),
     );
   },
 });
@@ -402,7 +409,7 @@ export const reservar = mutation({
       await reservasDoItem(ctx, args.collectionItemId),
       janela,
       args.eventId as string,
-      item.emManutencao,
+      pecasForaDeUso(item),
     );
     const deficit = deficitDaReserva(args.quantidade, estado.disponivel);
 
@@ -570,7 +577,7 @@ export const doEvento = query({
         reservasPorItem.get(r.collectionItemId) ?? [],
         { inicio: r.inicio, fim: r.fim },
         args.eventId as string,
-        item?.emManutencao,
+        item ? pecasForaDeUso(item) : 0,
       );
       return {
         ...r,
@@ -583,6 +590,9 @@ export const doEvento = query({
               // O diálogo de ajuste aberto daqui precisa dele para a prévia
               // recusar o que o servidor recusaria.
               emManutencao: item.emManutencao,
+              emLimpeza: item.emLimpeza,
+              indisponivel: item.indisponivel,
+              emConferencia: item.emConferencia,
             }
           : null,
         disponivel: estado.disponivel,
@@ -702,7 +712,7 @@ export const reservarDaFicha = mutation({
         await reservasDoItem(ctx, item._id),
         existente ? { inicio: existente.inicio, fim: existente.fim } : janela,
         args.eventId as string,
-        item.emManutencao,
+        pecasForaDeUso(item),
       );
       const deficit = deficitDaReserva(linha.necessario, estado.disponivel);
       if (deficit > 0) comDeficit.push({ nome: linha.nome, deficit });
@@ -812,7 +822,7 @@ export const ajustarEstoque = mutation({
       unidade: item.unidade,
     });
     if (!r.ok) throw new ConvexError({ code: "AJUSTE_INVALIDO", message: r.motivo });
-    const conserto = baixaRespeitaManutencao(r.quantidadeDepois, item.emManutencao);
+    const conserto = baixaRespeitaManutencao(r.quantidadeDepois, pecasForaDeUso(item));
     if (conserto) throw new ConvexError({ code: "AJUSTE_INVALIDO", message: conserto });
 
     await ctx.db.patch(item._id, comCarimbo({ quantidadeTotal: r.quantidadeDepois }));
@@ -857,7 +867,7 @@ export const registrarContagem = mutation({
       unidade: item.unidade,
     });
     if (!r.ok) throw new ConvexError({ code: "AJUSTE_INVALIDO", message: r.motivo });
-    const conserto = baixaRespeitaManutencao(r.quantidadeDepois, item.emManutencao);
+    const conserto = baixaRespeitaManutencao(r.quantidadeDepois, pecasForaDeUso(item));
     if (conserto) throw new ConvexError({ code: "AJUSTE_INVALIDO", message: conserto });
 
     await ctx.db.patch(item._id, comCarimbo({ quantidadeTotal: r.quantidadeDepois }));
@@ -913,6 +923,18 @@ export const registrarManutencao = mutation({
       unidade: item.unidade,
     });
     if (!r.ok) throw new ConvexError({ code: "AJUSTE_INVALIDO", message: r.motivo });
+    // Desde que há outras condições (limpeza, conferência…), o conserto só
+    // recebe peça que está PRONTA: a que está para limpar já está fora de uso,
+    // e contá-la duas vezes faria o "pronto" ficar negativo.
+    if (args.operacao === "manutencao_envio") {
+      const prontas = condicoesDoItem(item).pronto;
+      if (args.quantidade > prontas) {
+        throw new ConvexError({
+          code: "AJUSTE_INVALIDO",
+          message: `Só ${prontas} estão prontas para uso — as outras já estão em outra condição.`,
+        });
+      }
+    }
 
     const manutencaoAntes = item.emManutencao ?? 0;
     await ctx.db.patch(
@@ -966,6 +988,224 @@ export const historicoDoItem = query({
       }
     }
 
-    return ajustes.map((a) => ({ ...a, eventName: a.eventId ? eventos.get(a.eventId) : undefined }));
+    // Quem registrou (membro da equipe) e a foto da ocorrência, resolvidos
+    // aqui pelo mesmo motivo do nome do evento.
+    const membros = new Map<string, string>();
+    for (const a of ajustes) {
+      if (a.responsibleId && !membros.has(a.responsibleId)) {
+        const m = await ctx.db.get(a.responsibleId);
+        if (m && m.userId === user._id) membros.set(a.responsibleId, m.name);
+      }
+    }
+    return Promise.all(
+      ajustes.map(async (a) => ({
+        ...a,
+        eventName: a.eventId ? eventos.get(a.eventId) : undefined,
+        responsavelNome: a.responsibleId ? membros.get(a.responsibleId) : undefined,
+        fotoUrl: a.fotoStorageId ? await ctx.storage.getUrl(a.fotoStorageId) : null,
+      })),
+    );
+  },
+});
+
+// ═════════════════════════════════════════════ CONDIÇÃO DO ACERVO (28/09)
+//
+// "Temos 40 cadeiras" não diz quantas podem sair. A regra está em
+// `lib/condicaoDoAcervo.ts` (contadores por item, "pronto" derivado); aqui
+// só se grava — sempre com a linha no histórico, nunca sobrescrevendo em
+// silêncio. Decisões: docs/jornada-evento/acervo-ciclo-de-vida.md.
+
+const condicao = v.union(
+  v.literal("pronto"),
+  v.literal("limpeza"),
+  v.literal("reparo"),
+  v.literal("indisponivel"),
+  v.literal("conferencia"),
+);
+
+/** URL para subir a foto de uma ocorrência. Só quem está logado. */
+export const gerarUrlDeFotoDeOcorrencia = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireUser(ctx);
+    return ctx.storage.generateUploadUrl();
+  },
+});
+
+/**
+ * Registra uma ocorrência: N peças mudam de condição.
+ *
+ *   "Poltrona Siena — 1 pronta → reparo — pé traseiro com folga — foto"
+ *
+ * `para: "baixa"` tira a peça do acervo (quebrou sem conserto). Toda chamada
+ * grava uma linha no histórico com a condição anterior e a nova, o membro da
+ * equipe (quando informado), o evento de procedência e a foto.
+ */
+export const moverCondicao = mutation({
+  args: {
+    collectionItemId: v.id("collectionItems"),
+    de: condicao,
+    para: v.union(condicao, v.literal("baixa")),
+    quantidade: v.number(),
+    motivo: v.optional(v.string()),
+    eventId: v.optional(v.id("events")),
+    responsibleId: v.optional(v.id("teamMembers")),
+    fotoStorageId: v.optional(v.id("_storage")),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const item = await itemDoUsuario(ctx, args.collectionItemId, user._id);
+    const eventId = await eventoDoUsuario(ctx, args.eventId, user._id);
+    await requireTeamMember(ctx, user._id, args.responsibleId);
+    if (args.fotoStorageId && !(await ctx.db.system.get(args.fotoStorageId))) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "A foto não chegou. Tente enviar de novo." });
+    }
+
+    const r = calcularMovimento({
+      item,
+      de: args.de,
+      para: args.para,
+      quantidade: args.quantidade,
+      unidade: item.unidade,
+    });
+    if (!r.ok) throw new ConvexError({ code: "AJUSTE_INVALIDO", message: r.motivo });
+
+    await ctx.db.patch(item._id, comCarimbo(r.patch));
+    await ctx.db.insert("collectionAdjustments", {
+      userId: user._id,
+      collectionItemId: item._id,
+      tipo: "condicao",
+      delta: r.delta,
+      quantidadeAntes: item.quantidadeTotal,
+      quantidadeDepois: r.quantidadeDepois,
+      condicaoDe: args.de,
+      condicaoPara: args.para,
+      motivo: args.motivo?.trim() || undefined,
+      eventId,
+      responsibleId: args.responsibleId,
+      fotoStorageId: args.fotoStorageId,
+    });
+    return { antes: r.antes, depois: r.depois };
+  },
+});
+
+/**
+ * A conferência de retorno de um evento, em lote e numa transação só.
+ *
+ *   Mesa Toscana — 8 saíram, 8 voltaram: 6 prontas, 1 limpar, 1 reparo
+ *
+ * Para cada reserva: quantas voltaram e quantas vão para limpeza, reparo ou
+ * indisponível; "pronto" é o resto, nunca informado. O que não está pronto
+ * sai da disponibilidade na hora. Uma linha errada recusa a conferência
+ * inteira — conferência pela metade deixaria metade das peças sem condição.
+ *
+ * Repetir não conta duas vezes: reserva já conferida recusa. Corrigir uma
+ * condição depois é uma ocorrência (`moverCondicao`), que fica no histórico.
+ */
+export const conferirRetorno = mutation({
+  args: {
+    eventId: v.id("events"),
+    linhas: v.array(
+      v.object({
+        reservaId: v.id("collectionReservations"),
+        voltou: v.number(),
+        limpeza: v.optional(v.number()),
+        reparo: v.optional(v.number()),
+        indisponivel: v.optional(v.number()),
+      }),
+    ),
+    responsibleId: v.optional(v.id("teamMembers")),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const eventId = (await eventoDoUsuario(ctx, args.eventId, user._id))!;
+    await requireTeamMember(ctx, user._id, args.responsibleId);
+    if (args.linhas.length === 0) {
+      throw new ConvexError({ code: "INVALID", message: "Nada para conferir." });
+    }
+
+    const agora = Date.now();
+    const vistas = new Set<string>();
+    let pecasForaDeUsoNaConferencia = 0;
+
+    for (const linha of args.linhas) {
+      if (vistas.has(linha.reservaId)) {
+        throw new ConvexError({ code: "INVALID", message: "A mesma peça apareceu duas vezes na conferência." });
+      }
+      vistas.add(linha.reservaId);
+
+      const reserva = await ctx.db.get(linha.reservaId);
+      // Reserva de outra conta ou de outro evento: NOT_FOUND, como todo id
+      // vindo do navegador que não é prova de posse.
+      if (!reserva || reserva.userId !== user._id || reserva.eventId !== eventId) {
+        throw new ConvexError({ code: "NOT_FOUND", message: "Reserva não encontrada" });
+      }
+      if (reserva.conferidoEm !== undefined) {
+        throw new ConvexError({
+          code: "INVALID",
+          message: "Este retorno já foi conferido. Para corrigir, registre uma ocorrência no item.",
+        });
+      }
+      if (!retornoPossivel(reserva.saiu, linha.voltou)) {
+        throw new ConvexError({
+          code: "INVALID",
+          message:
+            reserva.saiu === undefined || reserva.saiu === 0
+              ? "Registre primeiro quanto saiu do galpão."
+              : `Não é possível voltar mais do que saiu (${reserva.saiu}).`,
+        });
+      }
+      const item = await ctx.db.get(reserva.collectionItemId);
+      if (!item || item.userId !== user._id) {
+        throw new ConvexError({ code: "NOT_FOUND", message: "Item do acervo não encontrado" });
+      }
+      exigirQuantidade(linha.voltou, item.unidade, "Quantidade que voltou");
+
+      const destinos = (["limpeza", "reparo", "indisponivel"] as const)
+        .map((para) => ({ para, quantidade: linha[para] ?? 0 }))
+        .filter((d) => d.quantidade !== 0);
+      const naoProntas = destinos.reduce((s, d) => s + d.quantidade, 0);
+      if (destinos.some((d) => d.quantidade < 0) || naoProntas > linha.voltou) {
+        throw new ConvexError({
+          code: "INVALID",
+          message: `${item.nome}: voltaram ${linha.voltou}, e as condições somam ${naoProntas}.`,
+        });
+      }
+
+      // As peças que voltaram eram "prontas" contadas fora do galpão; cada
+      // condição é um movimento de "pronto" para ela, com a linha no
+      // histórico e o evento como procedência.
+      let atual = item;
+      for (const d of destinos) {
+        const r = calcularMovimento({
+          item: atual, de: "pronto", para: d.para, quantidade: d.quantidade, unidade: item.unidade,
+        });
+        if (!r.ok) throw new ConvexError({ code: "AJUSTE_INVALIDO", message: `${item.nome}: ${r.motivo}` });
+        await ctx.db.patch(item._id, comCarimbo(r.patch));
+        await ctx.db.insert("collectionAdjustments", {
+          userId: user._id,
+          collectionItemId: item._id,
+          tipo: "condicao",
+          delta: 0,
+          quantidadeAntes: item.quantidadeTotal,
+          quantidadeDepois: item.quantidadeTotal,
+          condicaoDe: "pronto",
+          condicaoPara: d.para,
+          motivo: "Conferência de retorno",
+          eventId,
+          responsibleId: args.responsibleId,
+        });
+        atual = { ...atual, ...r.patch } as typeof item;
+      }
+      pecasForaDeUsoNaConferencia += naoProntas;
+
+      await ctx.db.patch(reserva._id, {
+        voltou: linha.voltou,
+        conferidoEm: agora,
+        updatedAt: new Date(agora).toISOString(),
+      });
+    }
+
+    return { conferidas: args.linhas.length, pecasForaDeUso: pecasForaDeUsoNaConferencia };
   },
 });

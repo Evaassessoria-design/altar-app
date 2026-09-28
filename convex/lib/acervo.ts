@@ -1,4 +1,7 @@
 import { quantidadeLimpa } from "./fichaTecnica";
+// Ciclo de import inofensivo: condicaoDoAcervo usa `quantidadeFisicaValida`
+// daqui, e cada lado só chama o outro dentro de funções.
+import { condicoesDoItem, pecasForaDeUso, type ItemComCondicoes } from "./condicaoDoAcervo";
 import { ehIndivisivel } from "./materiais";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -563,12 +566,10 @@ export function substitutosCompativeis<T extends ItemDeAcervoAgrupavel>(
 // há segunda regra para divergir.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type ItemParaPendencias = {
+export type ItemParaPendencias = ItemComCondicoes & {
   _id: string;
   nome: string;
   unidade: string;
-  quantidadeTotal: number;
-  emManutencao?: number;
   archived?: boolean;
 };
 
@@ -584,8 +585,17 @@ export type PendenciasDoAcervo = {
     fimDaJanela: string;
     quantidade: number;
   }[];
-  /** Itens com peça no conserto. */
-  emManutencao: { itemId: string; nome: string; unidade: string; quantidade: number }[];
+  /** Itens com peça fora de uso (limpeza, reparo, indisponível, conferência). */
+  emManutencao: {
+    itemId: string;
+    nome: string;
+    unidade: string;
+    quantidade: number;
+    limpeza: number;
+    reparo: number;
+    indisponivel: number;
+    conferencia: number;
+  }[];
   /**
    * Próximas reservas que o acervo NÃO cobre, com o porquê em números:
    * "12 necessárias · 10 disponíveis · 2 em manutenção".
@@ -645,7 +655,7 @@ export function pendenciasDoAcervo(
         porItem.get(item._id) ?? [],
         janela,
         r.eventId,
-        item.emManutencao,
+        pecasForaDeUso(item),
       );
       const deficit = deficitDaReserva(r.quantidade, estado.disponivel);
       if (deficit > 0) {
@@ -666,13 +676,21 @@ export function pendenciasDoAcervo(
     }
   }
 
+  // "Fora de uso": toda condição que tira a peça do galpão pronto — limpeza,
+  // reparo, indisponível, conferência (lib/condicaoDoAcervo.ts). A chave segue
+  // `emManutencao` por compatibilidade: até 28/09 reparo era a única.
   const emManutencao = itens
-    .filter((i) => (i.emManutencao ?? 0) > 0)
-    .map((i) => ({
+    .map((i) => ({ i, c: condicoesDoItem(i) }))
+    .filter(({ c }) => c.foraDeUso > 0)
+    .map(({ i, c }) => ({
       itemId: i._id,
       nome: i.nome,
       unidade: i.unidade,
-      quantidade: quantidadeLimpa(i.emManutencao ?? 0),
+      quantidade: c.foraDeUso,
+      limpeza: c.limpeza,
+      reparo: c.reparo,
+      indisponivel: c.indisponivel,
+      conferencia: c.conferencia,
     }))
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 

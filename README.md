@@ -124,7 +124,7 @@ ALTAR_DEMO                               ← só no projeto de demonstração
 | Equipe e escala | `convex/team.ts` |
 | Ficha técnica (materiais, composições, receita) | `convex/fichaTecnica.ts`, `materials.ts`, `compositions.ts` |
 | Catálogo (a mesma base, em tela própria) | `/catalogo`, `src/components/catalogo/*` — os diálogos são os MESMOS da ficha técnica, importados dos dois lugares |
-| Acervo (reserva, saída, retorno, ajuste) | `convex/acervo.ts` |
+| Acervo (reserva, saída, retorno, ajuste, manutenção, pós-evento) | `convex/acervo.ts`, `lib/acervo.ts` (disponibilidade desconta conserto e peça que não voltou), `lib/ajusteDeAcervo.ts` |
 | Compras e panorama | `convex/purchases.ts` |
 | Financeiro (livro-caixa) | `convex/financeiro.ts`, `lib/dinheiro.ts` |
 | Orçamento, galeria, planta por IA | `convex/orcamento.ts`, `gallery.ts`, `layoutRenders.ts`, `aiVisual.ts` |
@@ -145,7 +145,9 @@ ALTAR_DEMO                               ← só no projeto de demonstração
 | Assinatura e cobrança | `convex/asaas.ts`, `asaasWebhook.ts` |
 | Central de Comunicações | `convex/communications*.ts`, `adminApprovals.ts`, `adminWorkItems.ts`, `customerVoice.ts` — veja `docs/central-comunicacoes.md` |
 | Ponte do Escritório 3D (somente leitura) | `convex/officeBridgeHttp.ts`, `officeCentralHttp.ts` |
-| Escritório ALTAR (o painel do negócio) | `convex/escritorio.ts`, `lib/escritorio/panorama.ts`, `lib/platformGuard.ts` — **não** é para administradores: é para o dono da plataforma |
+| Escritório ALTAR (o painel do negócio) | `convex/escritorio.ts`, `lib/escritorio/panorama.ts`, `lib/escritorio/relatorio.ts` (centro de comando: relatório por relevância e feed, tudo derivado), `lib/platformGuard.ts` — **não** é para administradores: é para o dono da plataforma |
+| Ciclo do Escritório (rodada manual e o cron das 07:30) | `convex/escritorioCiclo.ts`, `lib/escritorio/ciclo.ts`, `lib/escritorio/rodadaAutomatica.ts` — só prepara rascunho; não envia, não chama modelo |
+| Prioridade e próxima ação do interessado | `lib/prioridadeDoInteressado.ts` (nota com os motivos), `lib/proximaAcao.ts` (o descadastro vence qualquer regra) |
 | Seed de demonstração (Marina & Gabriel) | `convex/demo.ts`, `lib/demoData.ts`, `lib/demoGuard.ts` — três travas: `ALTAR_DEMO=1`, recusa em banco com sinal de produção, idempotência |
 
 **A identidade visual**: `docs/identidade-visual.md` — a arte oficial, as onze

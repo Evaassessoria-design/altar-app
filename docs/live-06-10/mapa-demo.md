@@ -93,6 +93,28 @@ bloco 1 do roteiro perde o argumento.
 
 ---
 
+## A segunda-feira pós-evento — o acervo (desde 28/09)
+
+Rafaela & Ian foi no fim de semana. Os números, todos no **Castiçal de vidro
+25cm** (36 no acervo):
+
+| O quê | Valor | Onde aparece |
+|---|---|---|
+| Saíram para Rafaela & Ian | 24 | tela do evento dela → Acervo |
+| Voltaram | 20 | idem |
+| **Ainda fora** | **4** | `/acervo` → Pós-evento → "Não voltou" |
+| **No conserto** (base lascada) | **8** | `/acervo` → Pós-evento → "Em manutenção"; histórico do item |
+| Sofia & Tomás pede | 30 | `/acervo` → "Vai faltar": **30 necessárias · 24 disponíveis · 8 em manutenção · 4 ainda não voltaram** |
+| Marina & Gabriel pede | 24 | coberto: 36 − 4 − 8 = **24**. O herói **não** acusa falta de castiçal |
+
+> O impacto cai no contorno de propósito: a história do bloco 3 (o evento
+> herói inteiro conectado) não muda. Quem cobra: `convex/demo.acervo.test.ts`.
+
+**Só aparece na conta de demonstração depois de publicar esta versão lá e
+rodar o reset** — o seed antigo não tinha o cenário.
+
+---
+
 ## O que só existe em Marina & Gabriel
 
 O evento herói é o único com profundidade. Os doze de contorno são rasos de

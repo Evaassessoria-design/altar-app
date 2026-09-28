@@ -5,7 +5,7 @@ import schema from "./schema";
 import { modules } from "./test.setup";
 import { internal } from "./_generated/api";
 import { DEMO_WEDDING } from "./lib/demoData";
-import { TOTAL_DE_EVENTOS_DEMO } from "./lib/demoPortfolio";
+import { PORTFOLIO_DEMO, TOTAL_DE_EVENTOS_DEMO } from "./lib/demoPortfolio";
 import { consolidarMateriais } from "./lib/fichaTecnica";
 import { ehObrigacaoDeMontagem } from "./lib/escopoDoProjeto";
 import { paraOCliente } from "./lib/propostaComercial";
@@ -176,11 +176,15 @@ describe("o seed cria o casamento completo", () => {
       expect(await contar("materials"), "Materiais").toBe(DEMO_WEDDING.materials.length);
       expect(await contar("compositions"), "Composições").toBe(DEMO_WEDDING.compositions.length);
       expect(await contar("collectionItems"), "Acervo").toBe(DEMO_WEDDING.collection.length);
+      // O herói e o contorno: desde 28/09, dois eventos de contorno carregam
+      // a segunda-feira pós-evento do acervo (ver `lib/demoPortfolio.ts`).
+      const doContorno = (k: "acervo" | "manutencao") =>
+        PORTFOLIO_DEMO.reduce((s, p) => s + (p[k]?.length ?? 0), 0);
       expect(await contar("collectionReservations"), "Reservas").toBe(
-        DEMO_WEDDING.reservations.length,
+        DEMO_WEDDING.reservations.length + doContorno("acervo"),
       );
       expect(await contar("collectionAdjustments"), "Ajustes").toBe(
-        DEMO_WEDDING.adjustments.length,
+        DEMO_WEDDING.adjustments.length + doContorno("manutencao"),
       );
     });
   });

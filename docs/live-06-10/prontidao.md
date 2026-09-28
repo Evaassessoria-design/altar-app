@@ -75,6 +75,8 @@ feito não é evidência.
 - **O centro de comando, o ciclo automático e a prioridade da campanha**
   (novos em 28/09) — são ferramentas do negócio ALTAR, não da decoradora;
   ficam para depois da live
-- **Manutenção e pós-evento do acervo** (novos em 28/09) — reais e testados,
-  mas **não semeados na demo**: abrir ao vivo mostraria o bloco vazio. Se
-  quiser demonstrar, é preciso preparar o dado à mão antes e ensaiar
+- **Manutenção e pós-evento do acervo** (novos em 28/09) — reais, testados e
+  **semeados** (Rafaela & Ian → Sofia & Tomás, ver
+  [`mapa-demo.md`](mapa-demo.md)). Só aparecem depois de C5 (publicar) e de
+  um reset. **Candidato a "UAU" no bloco 3**, se for ensaiado — não
+  improvisar

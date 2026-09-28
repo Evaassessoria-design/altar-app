@@ -6,6 +6,7 @@ import { assertDemoEnvironment, inspectDemoEnvironment } from "./lib/demoGuard";
 import { DEMO_WEDDING, DEMO_MARKER } from "./lib/demoData";
 import { PORTFOLIO_DEMO } from "./lib/demoPortfolio";
 import { dataEmDias } from "./lib/dataDoDia";
+import { janelaSugerida } from "./lib/acervo";
 import { normalizeName, normalizePhone } from "./lib/supplierIdentity";
 
 /** O demo tem uma conta. O teto existe só para nunca varrer um banco grande. */
@@ -602,6 +603,44 @@ async function inserirDemonstracao(ctx: MutationCtx, userId: Id<"users">) {
         phase: "pre" as const,
         isChecked: item.isChecked,
         order: i,
+      });
+    }
+
+    // ── Acervo do contorno: a segunda-feira pós-evento ──────────────────
+    // A janela vem da data RELATIVA do evento, como a de qualquer reserva
+    // feita pela tela — a demo não afirma uma operação em data inventada.
+    const janelaDoContorno = janelaSugerida(dataEmDias(emDias));
+    for (const r of p.acervo ?? []) {
+      await ctx.db.insert("collectionReservations", {
+        userId,
+        collectionItemId: acervoPorNome(r.item),
+        eventId: outroId,
+        quantidade: r.quantidade,
+        inicio: janelaDoContorno.inicio,
+        fim: janelaDoContorno.fim,
+        origem: "manual" as const,
+        ...(r.saiu !== undefined ? { saiu: r.saiu } : {}),
+        ...(r.voltou !== undefined ? { voltou: r.voltou } : {}),
+        notes: r.notes,
+        updatedAt: agora,
+      });
+    }
+    for (const m of p.manutencao ?? []) {
+      const itemId = acervoPorNome(m.item);
+      const item = (await ctx.db.get(itemId))!;
+      const antes = item.emManutencao ?? 0;
+      await ctx.db.patch(itemId, { emManutencao: antes + m.quantidade });
+      await ctx.db.insert("collectionAdjustments", {
+        userId,
+        collectionItemId: itemId,
+        tipo: "manutencao_envio" as const,
+        delta: 0,
+        quantidadeAntes: item.quantidadeTotal,
+        quantidadeDepois: item.quantidadeTotal,
+        manutencaoAntes: antes,
+        manutencaoDepois: antes + m.quantidade,
+        motivo: m.motivo,
+        eventId: outroId,
       });
     }
   }

@@ -98,6 +98,18 @@ export type EventoDoPortfolio = {
   }[];
   /** Itens de checklist da fase pré. Só onde o evento está próximo. */
   checklist?: { name: string; isChecked: boolean }[];
+  /**
+   * Reservas do acervo deste evento, pelo NOME do item em `DEMO_WEDDING`.
+   * A janela é a sugerida pela data do evento (`janelaSugerida`). `saiu` e
+   * `voltou` só onde a operação já aconteceu — ver Rafaela & Ian.
+   */
+  acervo?: { item: string; quantidade: number; saiu?: number; voltou?: number; notes?: string }[];
+  /**
+   * Peças que voltaram deste evento e foram para o conserto. Gravado pelo
+   * mesmo caminho de `acervo.registrarManutencao`: sobe `emManutencao` do
+   * item e deixa a linha no histórico, com o evento como procedência.
+   */
+  manutencao?: { item: string; quantidade: number; motivo: string }[];
 };
 
 /**
@@ -223,6 +235,13 @@ export const PORTFOLIO_DEMO: readonly EventoDoPortfolio[] = [
       status: "confirmed",
       notes: `Casamento no campo, 120 convidados, cerimônia sob as oliveiras. ${DEMO_MARKER}`,
     },
+    // ── O IMPACTO DO PÓS-EVENTO ─────────────────────────────────────────────
+    // Pede 30 castiçais. O acervo tem 36, mas 4 não voltaram de Rafaela & Ian
+    // e 8 estão no conserto: sobram 24. É o "30 necessárias · 24 disponíveis
+    // · 8 em manutenção · 4 ainda não voltaram" do bloco Pós-evento — e ele
+    // cai AQUI, num evento de contorno, e não em Marina & Gabriel, cujos 24
+    // castiçais continuam cobertos (36 − 4 − 8 = 24).
+    acervo: [{ item: "Castiçal de vidro 25cm", quantidade: 30 }],
     // Recebimento VENCIDO: é o que faz o Financeiro ter uma cobrança real
     // para o Assistente encontrar quando perguntarem "o que precisa de mim".
     transacoes: [
@@ -352,6 +371,22 @@ export const PORTFOLIO_DEMO: readonly EventoDoPortfolio[] = [
       // mostrava isso.
       notes: `Realizado no fim de semana. Fechando acertos com fornecedores. ${DEMO_MARKER}`,
     },
+    // ── A SEGUNDA-FEIRA PÓS-EVENTO ──────────────────────────────────────────
+    // Saíram 24 castiçais, voltaram 20: 4 ainda estão fora (no carro, no
+    // salão, ou perdidos — o sistema NÃO decide, só uma pessoa decide). Dos
+    // 20 que voltaram, 8 vieram com a base lascada e foram para o conserto.
+    acervo: [
+      {
+        item: "Castiçal de vidro 25cm", quantidade: 24, saiu: 24, voltou: 20,
+        notes: "Conferência de segunda: faltaram 4.",
+      },
+    ],
+    manutencao: [
+      {
+        item: "Castiçal de vidro 25cm", quantidade: 8,
+        motivo: "Base lascada no retorno — conserto na vidraçaria, previsão de 10 dias.",
+      },
+    ],
     transacoes: [
       { type: "income", category: "Sinal", description: "Sinal do contrato", amount: 51_200, emDias: -120, isPaid: true, forma: "PIX" },
       { type: "income", category: "Parcela", description: "Parcela final", amount: 76_800, emDias: -7, isPaid: true, forma: "Transferência" },

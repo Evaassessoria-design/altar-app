@@ -19,20 +19,29 @@ Conferido em `26/09/2026`, lendo o banco depois de rodar
 | Conta | uma só, `demo@exemplo.com.br` |
 
 Abrir a demo — o `.env.local` do repositório aponta para o DEV; as variáveis
-do comando têm prioridade sobre ele (conferido em 28/09 pelo bundle):
+do comando têm prioridade sobre ele (conferido em 28/09 pelo bundle).
+
+> **⚠️ A PORTA 5173 PRECISA ESTAR LIVRE.** O projeto **ALTAR Buffet**
+> (`buffet-app`) também sobe em `localhost:5173`. Em 28/09 os dois estavam
+> rodando juntos e o navegador abriu o **Buffet** — tela "ALTAR Buffet", rota
+> `/entrar` — em vez da demo. Pare o servidor do Buffet antes, e use
+> `--strictPort`: com ele o comando FALHA se a porta estiver ocupada, em vez
+> de subir em outra porta onde o login da demo não funciona (o `SITE_URL` da
+> demo é exatamente `localhost:5173`). Na tela certa o título é o da
+> decoradora, não "ALTAR Buffet".
 
 ```bash
 # bash
 VITE_CONVEX_URL=https://insightful-goldfish-950.convex.cloud \
 VITE_CONVEX_SITE_URL=https://insightful-goldfish-950.convex.site \
-pnpm dev
+pnpm dev --port 5173 --strictPort
 ```
 
 ```powershell
 # PowerShell
 $env:VITE_CONVEX_URL="https://insightful-goldfish-950.convex.cloud"
 $env:VITE_CONVEX_SITE_URL="https://insightful-goldfish-950.convex.site"
-pnpm dev
+pnpm dev --port 5173 --strictPort
 ```
 
 Publicar código na demo:

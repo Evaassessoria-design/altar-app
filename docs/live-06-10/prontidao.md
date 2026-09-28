@@ -31,12 +31,12 @@ feito não é evidência.
 
 | # | Item | Status | Evidência de feito | Dono | Prazo | Bloqueio |
 |---|---|---|---|---|---|---|
-| C1 | Conta de demonstração loga e abre `/dashboard` com os 13 eventos | ⬜ | login feito no computador da live; Dashboard conta 13 | operadora | T-3 (03/10) | **a demo tem hoje 2 eventos** — dois "Marina & Gabriel" e nada do portfólio: foi semeada por um seed antigo. **Depende de C6** |
+| C1 | Conta de demonstração loga e abre `/dashboard` com os 13 eventos | ⬜ | login feito no computador da live; Dashboard conta 13 | operadora | T-3 (03/10) | dados prontos (13 eventos após C6). Falta o **login humano**, com a porta 5173 livre — o ALTAR Buffet ocupa a mesma porta ([`mapa-demo.md`](mapa-demo.md)) |
 | C2 | Acesso da conta demo liberado (`internal`) e sem menu de admin | ✅ | `demo:prepararConta` em 28/09 → `internal`, `role: user`, `bloqueada: false`. Falta só abrir a conversão uma vez no ensaio | — | — | — |
 | C3 | Fotos e capa de Marina & Gabriel | ⬜ | **"Pronto para mostrar?"** sem nenhum ✕ em fotos e capa | operadora | T-1 (05/10) | depende de C6 (resetar **antes** das fotos) |
 | C4 | **Link da sala definido** em `LIVE_ALTAR.linkDaReuniao` (`convex/lib/campanha.ts`) | ⬜ | um lembrete de 24h preparado **sem pendência** em `/campanha` | dona do negócio | T-3 (03/10) | **decisão humana: qual é a sala.** Sem ele, confirmação e lembretes nascem com pendência e não podem ser aprovados |
 | C5 | Correções de 28/09 publicadas **no deployment de demonstração** | ✅ código | 249 de 249 funções publicadas = código da branch (`0530dce`), conferido por `function-spec`. A resposta só muda de verdade depois de C6 | — | — | — |
-| C6 | **Reset da demo** | ⬜ | resposta `resetou: true`; depois, `checkEnvironment` e o Dashboard com 13 eventos | **você** | **já** — antes das fotos | a automação foi barrada pela camada de permissão (apaga e recria dados). Nenhuma foto, contrato, planta ou documento existe na conta hoje: o reset **não** vai recusar nem destruir trabalho manual. Comando em [`mapa-demo.md`](mapa-demo.md) |
+| C6 | **Reset da demo** | ✅ | 28/09, autorizado por você: `resetou: true`; banco com 13 eventos, herói único, R$ 928.500 / 674.800 / 253.700, os vencidos do roteiro e o cenário do castiçal — conferido por leitura direta | — | — | **não resetar depois das fotos** |
 | C7 | As duas perguntas do bloco 7 vistas respondendo | ⬜ | as duas respostas lidas inteiras, sem bobagem, **citando os vencidos** | quem apresenta | T-3 (03/10) | depende de C5 |
 | C8 | Roteiro ensaiado inteiro, cronometrado | ⬜ | um ensaio de ponta a ponta dentro de 28–33 min | quem apresenta | T-1 (05/10) | depende de C1–C3 |
 | C9 | Vídeo de contingência gravado e testado | ⬜ | abre e toca no computador da live | operadora | T-1 (05/10) | depende de C8 |

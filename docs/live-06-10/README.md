@@ -26,6 +26,7 @@ documento divergente no dia da live é pior do que documento nenhum.
 | Saber onde cada número mora | [`mapa-demo.md`](mapa-demo.md) | 5 min |
 | Decidir o que perguntar ao Assistente | [`perguntas-assistente.md`](perguntas-assistente.md) | 5 min |
 | Ver o que ainda pode dar errado | [`riscos.md`](riscos.md) | 5 min |
+| **Saber se estamos prontos** | [`prontidao.md`](prontidao.md) — status geral, com regra | 3 min |
 
 ## No dia
 

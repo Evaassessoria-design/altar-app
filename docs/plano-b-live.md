@@ -63,12 +63,22 @@ ambientes e fotos — conta a mesma história sem depender de nada.
 > A geração roda no navegador e monta imagem. Num computador ocupado pela
 > transmissão, pode demorar mais que o normal.
 
-### Escritório de IA — **o único bloco descartável**
+### Assistente (`/assistente`) — **o único bloco descartável**
+> Até 28/09 este bloco se chamava "Escritório de IA" aqui. A tela da live é
+> `/assistente`; `/escritorio` é o painel do negócio ALTAR e recusa a conta
+> de demonstração.
+
 **A.** Duas perguntas, ao vivo.
-**B.** Pular. Frase pronta: *"a IA está fora agora; o que ela faz é ler o que
-já está aqui e resumir — e é exatamente isso que eu acabei de mostrar à mão."*
-> Depende de chamada externa. É o último bloco antes do fechamento justamente
-> por isso: some sem deixar buraco.
+**B.** Se o modelo cair, **a resposta ainda vem** — escrita por regra, com os
+mesmos números, e a tela avisa que não passou por modelo. Leia-a como está:
+*"isto é o ALTAR lendo os seus dados; a redação por IA está fora agora"*.
+**C.** Se nem isso vier (a tela ficar em "trabalhando"), pular. Frase pronta:
+*"o que ela faz é ler o que já está aqui e resumir — e é exatamente isso que eu
+acabei de mostrar à mão."*
+> Desde 28/09 o Assistente desiste do modelo em 30 s e responde por regra com
+> o que já leu; uma área que falhe não derruba as outras. A tarefa que parar
+> de verdade aparece como "não terminou" em até 5 min, em vez de girar para
+> sempre.
 
 ---
 
@@ -88,7 +98,9 @@ já está aqui e resumir — e é exatamente isso que eu acabei de mostrar à m�
 3. Tenha o **roteador do celular** pareado **antes** da live.
 
 ### A IA demora
-Conte até cinco. Passou disso, plano B do bloco.
+Conte até cinco. Passou disso, **narre** ("ele está lendo o financeiro, os
+eventos e as compras") — a resposta por regra chega sozinha se o modelo não
+responder em 30 s. Não repita a pergunta.
 
 ### Apareceu dado que não devia
 Se `/admin`, a Central ou uma conta real aparecer: **feche a aba imediatamente**

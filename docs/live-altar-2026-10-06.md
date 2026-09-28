@@ -50,7 +50,7 @@ responde a uma pergunta que a decoradora já se faz.
 | 4 | Fornecedores e compras | 4 min | "E o que eu contratei e comprei?" |
 | 5 | Financeiro | 3 min | "Estou ganhando dinheiro neste evento?" |
 | 6 | Projeto Visual + PDF | 6 min | "O que a noiva recebe?" |
-| 7 | Escritório de IA | 3 min | "Preciso aprender o sistema todo?" |
+| 7 | Assistente | 3 min | "Preciso aprender o sistema todo?" |
 | 8 | Encerramento e convite | 2 min | "Como eu entro?" |
 
 ### Bloco 0 — Abertura (2 min)

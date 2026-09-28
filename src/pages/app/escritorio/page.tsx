@@ -4,6 +4,7 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Building2, Users, TrendingUp, DollarSign, CalendarDays, Radio } from "lucide-react";
+import { CentroDeComando } from "./_components/centro-de-comando.tsx";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // ESCRITÓRIO ALTAR — a mesa de quem administra o NEGÓCIO.
@@ -82,6 +83,9 @@ export default function EscritorioPage() {
         </p>
       </header>
 
+      {/* Primeiro o que pede ação; os números do negócio vêm depois. */}
+      <CentroDeComando />
+
       {panorama === undefined ? (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
@@ -148,25 +152,29 @@ export default function EscritorioPage() {
               <Numero icone={Users} rotulo="Novos" valor={String(panorama.interessados.novo)} />
               <Numero
                 icone={Users}
-                rotulo="Contatados"
-                valor={String(panorama.interessados.contatado)}
+                rotulo="Em andamento"
+                valor={String(panorama.interessados.emAndamento)}
+                detalhe="convidados, em conversa, testando"
               />
               <Numero
                 icone={Users}
-                rotulo="Convertidos"
+                rotulo="Clientes"
                 valor={String(panorama.interessados.convertido)}
               />
               <Numero
                 icone={Users}
-                rotulo="Descartados"
+                rotulo="Perdidos"
                 valor={String(panorama.interessados.descartado)}
               />
             </div>
           </section>
 
+          {/* O que o Escritório faz HOJE, sem prometer o que não faz. */}
           <p className="text-xs text-muted-foreground">
-            O Escritório de IA interno — comercial, marketing, CS e assinaturas do ALTAR —
-            ainda não existe. Quando vier, nasce aqui, atrás da mesma permissão.
+            Hoje o Escritório acompanha a campanha sozinho (todo dia às 07:30), prepara
+            mensagens e classifica respostas registradas. Ele não envia nada: nenhum canal
+            está conectado, e toda mensagem sai pelas suas mãos. Marketing, CS e
+            assinaturas ainda não têm agentes.
           </p>
         </>
       )}

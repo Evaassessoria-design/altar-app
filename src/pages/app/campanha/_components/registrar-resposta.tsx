@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ROTULO_DA_INTENCAO as ROTULO_DA_INTENCAO_DOMINIO } from "@/convex/lib/respostaDoInteressado.ts";
 import { useMutation } from "convex/react";
 import { toast } from "sonner";
 import { ConvexError } from "convex/values";
@@ -23,17 +24,9 @@ import { MessageSquarePlus } from "lucide-react";
 // porque não há destino honesto para uma resposta ambígua.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ROTULO_DA_INTENCAO: Record<string, string> = {
-  quero_participar: "Quer participar",
-  confirmacao: "Confirmou presença",
-  informou_email: "Mandou o e-mail",
-  duvida_preco: "Perguntou o preço",
-  duvida_funcionalidade: "Dúvida sobre o produto",
-  nao_tenho_interesse: "Não tem interesse",
-  nao_posso_participar: "Não pode participar",
-  pedir_contato_humano: "Quer falar com alguém",
-  incerto: "Não deu para entender",
-};
+// Os rótulos moram no domínio (um lugar só): o relatório do Escritório usa
+// os mesmos.
+const ROTULO_DA_INTENCAO: Record<string, string> = ROTULO_DA_INTENCAO_DOMINIO;
 
 type Leitura = {
   intencao: string;

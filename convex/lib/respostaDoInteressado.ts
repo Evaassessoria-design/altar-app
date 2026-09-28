@@ -401,3 +401,26 @@ export function classificarResposta(texto: string): LeituraDaResposta {
     estagioSugerido: ESTAGIO_SUGERIDO[intencao],
   };
 }
+
+/**
+ * Como cada intenção aparece na tela. Um lugar só: o registro da resposta em
+ * /campanha e o relatório do Escritório dizem a mesma coisa.
+ */
+export const ROTULO_DA_INTENCAO: Record<IntencaoDoInteressado, string> = {
+  quero_participar: "Quer participar",
+  confirmacao: "Confirmou presença",
+  informou_email: "Mandou o e-mail",
+  duvida_preco: "Perguntou o preço",
+  duvida_funcionalidade: "Dúvida sobre o produto",
+  nao_tenho_interesse: "Não tem interesse",
+  nao_posso_participar: "Não pode participar",
+  pedir_contato_humano: "Quer falar com alguém",
+  incerto: "Não deu para entender",
+};
+
+/** Intenções que são interesse: viram "oportunidade" no relatório. */
+export const INTENCOES_DE_INTERESSE: ReadonlySet<string> = new Set([
+  "quero_participar",
+  "confirmacao",
+  "informou_email",
+]);

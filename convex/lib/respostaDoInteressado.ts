@@ -68,12 +68,43 @@ export type LeituraDaResposta = {
   email?: string;
   /** Uma pessoa precisa ler isto antes de qualquer coisa acontecer. */
   precisaDeHumano: boolean;
+  /**
+   * Pediu para NÃO RECEBER mensagens — não só "não tenho interesse".
+   *
+   * São coisas diferentes: "não tenho interesse na live" encerra a campanha
+   * para ela; "para de me mandar" encerra QUALQUER mensagem. A segunda é
+   * consentimento, e por isso é gravada sempre que aparece
+   * (`escritorioCiclo.registrarResposta`), sem depender de autonomia.
+   */
+  pediuParaSair: boolean;
   /** Para onde MOVER, se uma pessoa concordar. Nunca aplicado sozinho. */
   estagioSugerido?: EstagioDoInteressado;
 };
 
 /** Abaixo disto nada é afirmado: a mensagem sobe para uma pessoa. */
 export const CONFIANCA_MINIMA = 0.5;
+
+/**
+ * Frases de quem pede para não receber mais nada. Frases inteiras, de
+ * propósito: "sair" sozinho aparece em "vou sair mais cedo do evento".
+ */
+export const TERMOS_DE_DESCADASTRO = [
+  "pode me tirar",
+  "me tira da lista",
+  "me tire da lista",
+  "sair da lista",
+  "para de me mandar",
+  "pare de me mandar",
+  "nao envie mais",
+  "nao me mande mais",
+  "nao quero receber",
+  "nao quero mais receber",
+  "descadastrar",
+  "descadastre",
+  "remova meu numero",
+  "remove meu numero",
+  "remova meu contato",
+] as const;
 
 /**
  * Texto comparável: sem acento, sem caixa, com bordas de palavra preservadas.
@@ -244,9 +275,17 @@ const REGRAS: readonly Regra[] = [
       "pode me tirar",
       "me tira da lista",
       "para de me mandar",
+      "pare de me mandar",
       "nao envie mais",
+      "nao me mande mais",
+      "nao quero receber",
       "descadastrar",
+      "descadastre",
       "sair da lista",
+      "me tire da lista",
+      "remova meu numero",
+      "remove meu numero",
+      "remova meu contato",
     ],
   },
   {
@@ -336,6 +375,9 @@ export function classificarResposta(texto: string): LeituraDaResposta {
   const cru = texto ?? "";
   const normalizado = normalizar(cru);
   const email = acharEmail(cru);
+  // Olhado no texto inteiro, antes de qualquer peso: consentimento não
+  // disputa com as outras intenções nem cai abaixo da confiança mínima.
+  const pediuParaSair = TERMOS_DE_DESCADASTRO.some((t) => normalizado.includes(` ${t} `));
 
   const achados: { intencao: IntencaoDoInteressado; peso: number; sinal: string }[] = [];
 
@@ -372,6 +414,7 @@ export function classificarResposta(texto: string): LeituraDaResposta {
       outras: [],
       email,
       precisaDeHumano: true,
+      pediuParaSair,
     };
   }
 
@@ -399,6 +442,7 @@ export function classificarResposta(texto: string): LeituraDaResposta {
     email,
     precisaDeHumano: EXIGEM_HUMANO.has(intencao),
     estagioSugerido: ESTAGIO_SUGERIDO[intencao],
+    pediuParaSair,
   };
 }
 

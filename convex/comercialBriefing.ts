@@ -93,6 +93,7 @@ export const hoje = query({
             status: lead.status,
             marcosEm: lead.marcosEm,
             temCanal: Boolean(lead.whatsapp?.trim() || lead.email?.trim()),
+            descadastrado: lead.descadastradoEm !== undefined,
             procurouOAltar: procurouOAltar(lead),
             diasDesdeOConvite:
               convidadoEm === undefined

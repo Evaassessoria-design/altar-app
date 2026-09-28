@@ -69,6 +69,7 @@ async function fatosDe(
     status: lead.status,
     marcosEm: lead.marcosEm,
     temCanal: Boolean(lead.whatsapp?.trim() || lead.email?.trim()),
+    descadastrado: lead.descadastradoEm !== undefined,
     procurouOAltar: procurouOAltar(lead),
     diasDesdeOConvite:
       convidadoEm === undefined
@@ -110,6 +111,12 @@ async function redigirPara(
   tipoPedido: TipoDeMensagem | undefined,
   agora: number,
 ) {
+  // ── QUEM PEDIU SILÊNCIO NÃO GANHA RASCUNHO — NEM ESCOLHIDO À MÃO ─────────
+  // A escolha de quem clica vale sobre a sugestão da regra, exceto aqui: um
+  // tipo escolhido na tela não pode reabrir a porta que a própria pessoa
+  // fechou. Todo preparo (um a um, em lote) passa por esta função.
+  if (lead.descadastradoEm !== undefined) return null;
+
   const campanha = campanhaPorSlug(lead.campanha);
   const sugestao = proximaAcao(await fatosDe(ctx, lead, campanha, agora));
 
@@ -374,6 +381,19 @@ export const decidir = mutation({
     }
 
     const agora = Date.now();
+
+    // Rascunho preparado ANTES do pedido de silêncio continua na fila, mas
+    // não anda: aprovar ou marcar como enviado seria mandar mensagem para
+    // quem pediu para não receber. Descartar continua permitido.
+    if (args.decisao !== "descartar") {
+      const lead = await ctx.db.get(rascunho.landingLeadId);
+      if (lead?.descadastradoEm !== undefined) {
+        throw new ConvexError({
+          code: "INVALID",
+          message: "Esta pessoa pediu para não receber mensagens. Descarte o rascunho.",
+        });
+      }
+    }
 
     if (args.decisao === "aprovar") {
       if (rascunho.pendencias.length > 0) {

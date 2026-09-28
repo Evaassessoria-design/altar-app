@@ -177,6 +177,7 @@ function retratoDe(lead: Doc<"landingLeads">, diasAteACampanha: number | undefin
       status: lead.status,
       marcosEm: lead.marcosEm,
       temCanal: Boolean(lead.whatsapp?.trim() || lead.email?.trim()),
+      descadastrado: lead.descadastradoEm !== undefined,
       procurouOAltar: procurouOAltar(lead),
       diasDesdeOConvite:
         convidadoEm === undefined ? undefined : Math.floor((agora - convidadoEm) / 86_400_000),
@@ -490,6 +491,16 @@ export const registrarResposta = mutation({
       });
     }
 
+    // ── CONSENTIMENTO NÃO ESPERA AUTONOMIA ──────────────────────────────
+    // Mover de estágio depende de a pessoa aplicar a sugestão e de a
+    // capacidade estar ligada. Parar de mandar mensagem, não: "me tira da
+    // lista" gravado só depois de alguém clicar deixaria o ciclo das 07:30
+    // preparar o próximo lembrete para quem acabou de pedir silêncio.
+    const descadastrou = leitura.pediuParaSair && lead.descadastradoEm === undefined;
+    if (descadastrou) {
+      await ctx.db.patch(args.leadId, { descadastradoEm: agora });
+    }
+
     await ctx.db.insert("respostasRegistradas", {
       landingLeadId: args.leadId,
       campanha: lead.campanha ?? "",
@@ -516,6 +527,8 @@ export const registrarResposta = mutation({
       // Quando a capacidade está desligada, o texto entra e a leitura aparece
       // — mas nada se move. A tela precisa poder explicar a diferença.
       classificacaoAtiva: podeClassificar,
+      /** Pediu para não receber mensagens — e ficou gravado agora. */
+      descadastrou,
     };
   },
 });

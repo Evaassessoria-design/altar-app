@@ -1182,6 +1182,16 @@ export default defineSchema({
     /** Quem, da ALTAR, está cuidando deste interessado. */
     responsavelUserId: v.optional(v.id("users")),
     /** "AAAA-MM-DD" do próximo retorno combinado. Dia civil, nunca instante. */
+    /**
+     * Quando pediu para NÃO RECEBER mensagens. AUSENTE = não pediu.
+     *
+     * Consentimento, não etapa: vale em qualquer estágio, inclusive para
+     * cliente. Gravado quando uma resposta registrada traz o pedido
+     * (`escritorioCiclo.registrarResposta`) ou à mão
+     * (`admin.definirDescadastro`). Com ele, nenhuma mensagem é preparada nem
+     * aprovada para a pessoa (`lib/proximaAcao.ts`, `campanhaRascunhos.ts`).
+     */
+    descadastradoEm: v.optional(v.number()),
     proximoContato: v.optional(v.string()),
     /** "AAAA-MM-DD" da última conversa. Sem ela não se afirma abandono. */
     ultimaInteracao: v.optional(v.string()),

@@ -37,6 +37,11 @@ export type FatosDoInteressado = InteressadoNoFunil & {
   /** Existe telefone ou e-mail gravado? Sem canal, nenhuma mensagem faz sentido. */
   temCanal: boolean;
   /**
+   * Pediu para não receber mensagens (`landingLeads.descadastradoEm`).
+   * AUSENTE = não pediu. Vence qualquer outra regra — ver `proximaAcao`.
+   */
+  descadastrado?: boolean;
+  /**
    * Ela procurou a ALTAR, ou foi procurada? Ver `procurouOAltar` em
    * `lib/campanha.ts`.
    *
@@ -126,6 +131,20 @@ const NADA_A_FAZER: ProximaAcao = {
  */
 export function proximaAcao(f: FatosDoInteressado): ProximaAcao {
   const estagio = estagioDe(f);
+
+  // ── Consentimento: antes de tudo ─────────────────────────────────────────
+  // Quem pediu para não receber mensagens não recebe — nem convite, nem
+  // lembrete, nem "ajuda para começar", por mais quente que o resto pareça.
+  // Vem ANTES dos terminais porque um cliente também pode pedir silêncio, e
+  // "tirar da campanha" não diz o mesmo que "não mande nada".
+  if (f.descadastrado) {
+    return {
+      mensagem: null,
+      acao: "Não enviar mensagens",
+      motivo: "Pediu para não receber mensagens.",
+      urgencia: "nenhuma",
+    };
+  }
 
   // ── Terminais: sair da campanha de aquisição ─────────────────────────────
   if (estagio === "convertido") {

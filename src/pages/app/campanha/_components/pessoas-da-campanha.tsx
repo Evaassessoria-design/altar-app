@@ -25,11 +25,21 @@ const COR_DA_TEMPERATURA: Record<Prioridade["temperatura"], string> = {
 
 /** O que só a listagem traz — a busca não calcula, e a linha se adapta. */
 type LeituraDaLista = {
+  descadastradoEm?: number;
   prioridade?: Prioridade;
   proximaAcao?: { acao: string; motivo: string; urgencia: string };
 };
 
 function LeituraComercial({ p }: { p: LeituraDaLista }) {
+  // Quem pediu silêncio não tem "próxima ação" nem nota: tem o pedido, e a
+  // tela o mostra antes de qualquer outra coisa.
+  if (p.descadastradoEm !== undefined) {
+    return (
+      <p className="mt-1 text-xs font-medium text-destructive">
+        Pediu para não receber mensagens.
+      </p>
+    );
+  }
   return (
     <>
       {p.proximaAcao && p.proximaAcao.urgencia !== "nenhuma" && (
@@ -123,6 +133,20 @@ export function PessoasDaCampanha({
 
   const setStatus = useMutation(api.admin.setLandingLeadStatus);
   const preparar = useMutation(api.campanhaRascunhos.preparar);
+  const definirDescadastro = useMutation(api.admin.definirDescadastro);
+
+  async function alternarDescadastro(leadId: Id<"landingLeads">, descadastrado: boolean) {
+    try {
+      await definirDescadastro({ leadId, descadastrado });
+      toast.success(
+        descadastrado
+          ? "Anotado: nenhuma mensagem será preparada para esta pessoa."
+          : "Pedido desfeito.",
+      );
+    } catch {
+      toast.error("Não deu para registrar agora.");
+    }
+  }
 
   const pessoas = buscando ? busca?.resultados : lista?.leads;
   const carregando = pessoas === undefined;
@@ -292,6 +316,21 @@ export function PessoasDaCampanha({
                   )}
                 </div>
                 <LeituraComercial p={p as LeituraDaLista} />
+                {/* Só a listagem traz a leitura comercial; a busca não. `prioridade`
+                    está em toda linha da lista — `descadastradoEm` não, porque o
+                    Convex omite o campo ausente na resposta. */}
+                {"prioridade" in p && (
+                  <button
+                    onClick={() =>
+                      void alternarDescadastro(p._id, (p as LeituraDaLista).descadastradoEm === undefined)
+                    }
+                    className="mt-1 cursor-pointer text-[11px] text-muted-foreground underline-offset-2 hover:underline"
+                  >
+                    {(p as LeituraDaLista).descadastradoEm === undefined
+                      ? "Pediu para não receber mensagens?"
+                      : "Desfazer pedido de não receber"}
+                  </button>
+                )}
               </div>
 
               <div className="mt-2 flex items-center gap-2 sm:mt-0">

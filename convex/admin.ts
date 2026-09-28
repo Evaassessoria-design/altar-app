@@ -704,6 +704,7 @@ export const listLandingLeads = query({
         status: l.status,
         marcosEm: l.marcosEm,
         temCanal: Boolean(l.whatsapp?.trim() || l.email?.trim()),
+        descadastrado: l.descadastradoEm !== undefined,
         procurouOAltar: procurouOAltar(l),
         diasDesdeOConvite:
           convidadoEm === undefined ? undefined : Math.floor((agora - convidadoEm) / 86_400_000),
@@ -753,6 +754,7 @@ export const listLandingLeads = query({
         // Ausente = não há registro de convite enviado. A tela escreve "sem
         // registro" em vez de calcular "há 57 anos" a partir de um zero.
         convidadoEm: l.marcosEm?.convidado,
+        descadastradoEm: l.descadastradoEm,
         createdAt: new Date(l._creationTime).toISOString(),
       })),
     };
@@ -1342,6 +1344,29 @@ export const contatosAPreparar = query({
   },
 });
 
+
+/**
+ * Marcar (ou desfazer) que a pessoa pediu para não receber mensagens.
+ *
+ * Para o pedido que chegou por outro caminho — de viva voz, num direct, num
+ * e-mail que ninguém colou em "registrar resposta". Desfazer existe para o
+ * engano de clique e para quem voltou a pedir contato; ele NUNCA acontece
+ * sozinho.
+ */
+export const definirDescadastro = mutation({
+  args: { leadId: v.id("landingLeads"), descadastrado: v.boolean() },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const lead = await ctx.db.get(args.leadId);
+    if (!lead) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Interessado não encontrado" });
+    }
+    await ctx.db.patch(args.leadId, {
+      // Desfazer volta a AUSENTE: o schema diz que ausente é "não pediu".
+      descadastradoEm: args.descadastrado ? (lead.descadastradoEm ?? Date.now()) : undefined,
+    });
+  },
+});
 
 export const setLandingLeadStatus = mutation({
   args: {

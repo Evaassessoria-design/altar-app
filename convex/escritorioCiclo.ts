@@ -1,9 +1,10 @@
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
+import { internalMutation, mutation, query } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireAdmin } from "./lib/adminGuard";
 import {
+  CAMPANHAS,
   campanhaPorSlug,
   carimbosAGravar,
   definicaoDoEstagio,
@@ -34,6 +35,7 @@ import {
 import { envioExternoHabilitado } from "./lib/central/autonomia";
 import { adaptadorDe } from "./lib/channels/registro";
 import { redigirParaLead } from "./lib/escritorio/redacaoDaCampanha";
+import { campanhasDaRodadaAutomatica } from "./lib/escritorio/rodadaAutomatica";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // RODAR O ESCRITÓRIO
@@ -194,129 +196,164 @@ export const rodarAgora = mutation({
   args: { campanha: v.string() },
   handler: async (ctx, args) => {
     const admin = await requireAdmin(ctx);
-    const campanha = campanhaPorSlug(args.campanha);
-    if (!campanha) {
-      throw new ConvexError({ code: "NOT_FOUND", message: "Campanha não encontrada" });
-    }
-
-    const agora = Date.now();
-    const dias = diasAte(campanha, dataDoDia());
-
-    const lidos = await ctx.db
-      .query("landingLeads")
-      .withIndex("by_campanha", (q) => q.eq("campanha", args.campanha))
-      .take(VARREDURA_DO_CICLO + 1);
-    const leads = lidos.slice(0, VARREDURA_DO_CICLO);
-
-    // ── O QUE JÁ EXISTE ─────────────────────────────────────────────────
-    // Rascunhos vivos (por revisar ou aprovados) são trabalho já feito. Uma
-    // leitura por índice, não uma por pessoa: o índice `by_campanha_status`
-    // responde as duas perguntas em duas consultas, independentemente de a
-    // campanha ter dez pessoas ou dois mil.
-    const [porRevisar, aprovados] = await Promise.all([
-      ctx.db
-        .query("campaignDrafts")
-        .withIndex("by_campanha_status", (q) =>
-          q.eq("campanha", args.campanha).eq("status", "rascunho"),
-        )
-        .take(VARREDURA_DO_CICLO),
-      ctx.db
-        .query("campaignDrafts")
-        .withIndex("by_campanha_status", (q) =>
-          q.eq("campanha", args.campanha).eq("status", "aprovado"),
-        )
-        .take(VARREDURA_DO_CICLO),
-    ]);
-
-    const jaFeito = new Set(
-      [...porRevisar, ...aprovados].map((d) =>
-        chaveDaIntencao(args.campanha, "preparar_mensagem", d.landingLeadId as string, d.tipo),
-      ),
-    );
-
-    const politica = await lerPolitica(ctx, args.campanha);
-    const canal = temCanal();
-    const podeFazer = new Set<Capacidade>(
-      CATALOGO.map((c) => c.id).filter((id) => podeAgir(id, politica, canal)),
-    );
-
-    const plano = planejarCiclo({
-      campanha: args.campanha,
-      pessoas: leads.map((l) => retratoDe(l, dias, agora)),
-      duplicidades: possiveisDuplicados(
-        leads.map((l) => ({
-          _id: l._id as string,
-          name: l.name,
-          email: l.email,
-          whatsappE164: l.whatsappE164,
-          empresa: l.empresa,
-        })),
-      ),
-      podeFazer,
-      jaFeito,
-    });
-
-    // ── EXECUTAR ────────────────────────────────────────────────────────
-    // Só `preparar_mensagem` grava. Decisões e duplicidades já são derivadas
-    // ao vivo pelo briefing — persisti-las criaria uma segunda lista das
-    // mesmas coisas, e as duas divergiriam na primeira que alguém resolvesse.
-    const porId = new Map(leads.map((l) => [l._id as string, l]));
-    let escritas = 0;
-    let naoCouberam = 0;
-
-    for (const i of plano.intencoes) {
-      if (i.tipo !== "preparar_mensagem" || !i.leadId || !i.mensagem) continue;
-      if (escritas >= LIMITE_POR_RODADA) {
-        naoCouberam++;
-        continue;
-      }
-      const lead = porId.get(i.leadId);
-      const modelo = modeloPorId(i.mensagem);
-      if (!lead || !modelo) continue;
-
-      await ctx.db.insert("campaignDrafts", {
-        landingLeadId: lead._id,
-        campanha: args.campanha,
-        ...redigirParaLead(lead, modelo as never, i.motivo),
-        status: "rascunho",
-        geradoPor: "modelo",
-        criadoEm: agora,
-        atualizadoEm: agora,
-      });
-      escritas++;
-    }
-
-    const resumo = resumirCiclo(plano);
-    const frase = fraseDoCiclo(resumo);
-
-    // A rodada é registrada MESMO quando não produziu nada. Sem isso, "o
-    // Escritório rodou e estava tudo em dia" não deixaria prova nenhuma.
-    await ctx.db.insert("escritorioExecucoes", {
-      campanha: args.campanha,
-      disparadoPor: "humano",
-      disparadoPorUserId: admin._id,
-      analisadas: resumo.analisadas,
-      mensagensPreparadas: escritas,
-      duplicidadesApontadas: resumo.duplicidadesApontadas,
-      decisoesParaVoce: resumo.decisoesParaVoce,
-      jaExistiam: resumo.jaExistiam,
-      bloqueadasPorAutonomia: resumo.bloqueadasPorAutonomia,
-      resumo: frase,
-      // Zero, e o campo existe para que ligar IA no ciclo tenha onde aparecer
-      // antes de virar fatura.
-      chamadasDeIa: 0,
-      criadoEm: agora,
-    });
-
-    return {
-      ...resumo,
-      mensagensPreparadas: escritas,
-      naoCouberam,
-      resumo: frase,
-      varreduraIncompleta: lidos.length > VARREDURA_DO_CICLO,
-    };
+    return executarCiclo(ctx, args, { por: "humano", userId: admin._id });
   },
 });
+
+/**
+ * A rodada do sistema — o cron diário (`crons.ts`).
+ *
+ * `internalMutation`: ninguém de fora dispara. Roda cada campanha ainda em
+ * rotina (`lib/escritorio/rodadaAutomatica.ts`) pelo MESMO `executarCiclo`
+ * do botão — nada de segunda regra. Uma campanha que falha não impede a
+ * próxima, e a falha fica no log pelo nome da campanha, sem dado de ninguém.
+ */
+export const rodarPeloSistema = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const feitas: string[] = [];
+    for (const c of campanhasDaRodadaAutomatica(CAMPANHAS, dataDoDia())) {
+      try {
+        await executarCiclo(ctx, { campanha: c.slug }, { por: "sistema" });
+        feitas.push(c.slug);
+      } catch (e) {
+        console.error(`[escritorio] rodada automática falhou: ${c.slug}`, (e as Error)?.name ?? "erro");
+      }
+    }
+    return { campanhas: feitas };
+  },
+});
+
+type Disparo = { por: "humano"; userId: Id<"users"> } | { por: "sistema" };
+
+/**
+ * O ciclo em si. Quem chama já decidiu que PODE chamar: o botão exige admin,
+ * o cron é interno. Daqui para baixo, humano e sistema são tratados igual —
+ * a única diferença gravada é quem disparou.
+ */
+async function executarCiclo(ctx: MutationCtx, args: { campanha: string }, disparo: Disparo) {
+  const campanha = campanhaPorSlug(args.campanha);
+  if (!campanha) {
+    throw new ConvexError({ code: "NOT_FOUND", message: "Campanha não encontrada" });
+  }
+
+  const agora = Date.now();
+  const dias = diasAte(campanha, dataDoDia());
+
+  const lidos = await ctx.db
+    .query("landingLeads")
+    .withIndex("by_campanha", (q) => q.eq("campanha", args.campanha))
+    .take(VARREDURA_DO_CICLO + 1);
+  const leads = lidos.slice(0, VARREDURA_DO_CICLO);
+
+  // ── O QUE JÁ EXISTE ─────────────────────────────────────────────────
+  // Rascunhos vivos (por revisar ou aprovados) são trabalho já feito. Uma
+  // leitura por índice, não uma por pessoa: o índice `by_campanha_status`
+  // responde as duas perguntas em duas consultas, independentemente de a
+  // campanha ter dez pessoas ou dois mil.
+  const [porRevisar, aprovados] = await Promise.all([
+    ctx.db
+      .query("campaignDrafts")
+      .withIndex("by_campanha_status", (q) =>
+        q.eq("campanha", args.campanha).eq("status", "rascunho"),
+      )
+      .take(VARREDURA_DO_CICLO),
+    ctx.db
+      .query("campaignDrafts")
+      .withIndex("by_campanha_status", (q) =>
+        q.eq("campanha", args.campanha).eq("status", "aprovado"),
+      )
+      .take(VARREDURA_DO_CICLO),
+  ]);
+
+  const jaFeito = new Set(
+    [...porRevisar, ...aprovados].map((d) =>
+      chaveDaIntencao(args.campanha, "preparar_mensagem", d.landingLeadId as string, d.tipo),
+    ),
+  );
+
+  const politica = await lerPolitica(ctx, args.campanha);
+  const canal = temCanal();
+  const podeFazer = new Set<Capacidade>(
+    CATALOGO.map((c) => c.id).filter((id) => podeAgir(id, politica, canal)),
+  );
+
+  const plano = planejarCiclo({
+    campanha: args.campanha,
+    pessoas: leads.map((l) => retratoDe(l, dias, agora)),
+    duplicidades: possiveisDuplicados(
+      leads.map((l) => ({
+        _id: l._id as string,
+        name: l.name,
+        email: l.email,
+        whatsappE164: l.whatsappE164,
+        empresa: l.empresa,
+      })),
+    ),
+    podeFazer,
+    jaFeito,
+  });
+
+  // ── EXECUTAR ────────────────────────────────────────────────────────
+  // Só `preparar_mensagem` grava. Decisões e duplicidades já são derivadas
+  // ao vivo pelo briefing — persisti-las criaria uma segunda lista das
+  // mesmas coisas, e as duas divergiriam na primeira que alguém resolvesse.
+  const porId = new Map(leads.map((l) => [l._id as string, l]));
+  let escritas = 0;
+  let naoCouberam = 0;
+
+  for (const i of plano.intencoes) {
+    if (i.tipo !== "preparar_mensagem" || !i.leadId || !i.mensagem) continue;
+    if (escritas >= LIMITE_POR_RODADA) {
+      naoCouberam++;
+      continue;
+    }
+    const lead = porId.get(i.leadId);
+    const modelo = modeloPorId(i.mensagem);
+    if (!lead || !modelo) continue;
+
+    await ctx.db.insert("campaignDrafts", {
+      landingLeadId: lead._id,
+      campanha: args.campanha,
+      ...redigirParaLead(lead, modelo as never, i.motivo),
+      status: "rascunho",
+      geradoPor: "modelo",
+      criadoEm: agora,
+      atualizadoEm: agora,
+    });
+    escritas++;
+  }
+
+  const resumo = resumirCiclo(plano);
+  const frase = fraseDoCiclo(resumo);
+
+  // A rodada é registrada MESMO quando não produziu nada. Sem isso, "o
+  // Escritório rodou e estava tudo em dia" não deixaria prova nenhuma.
+  await ctx.db.insert("escritorioExecucoes", {
+    campanha: args.campanha,
+    disparadoPor: disparo.por,
+    disparadoPorUserId: disparo.por === "humano" ? disparo.userId : undefined,
+    analisadas: resumo.analisadas,
+    mensagensPreparadas: escritas,
+    duplicidadesApontadas: resumo.duplicidadesApontadas,
+    decisoesParaVoce: resumo.decisoesParaVoce,
+    jaExistiam: resumo.jaExistiam,
+    bloqueadasPorAutonomia: resumo.bloqueadasPorAutonomia,
+    resumo: frase,
+    // Zero, e o campo existe para que ligar IA no ciclo tenha onde aparecer
+    // antes de virar fatura.
+    chamadasDeIa: 0,
+    criadoEm: agora,
+  });
+
+  return {
+    ...resumo,
+    mensagensPreparadas: escritas,
+    naoCouberam,
+    resumo: frase,
+    varreduraIncompleta: lidos.length > VARREDURA_DO_CICLO,
+  };
+}
 
 /** Quantas rodadas o histórico mostra. Além disso é arqueologia. */
 export const LIMITE_DO_HISTORICO = 20;

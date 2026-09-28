@@ -42,4 +42,20 @@ crons.daily(
   {},
 );
 
+// O Escritório rodando sozinho.
+//
+// O MESMO ciclo do botão "Rodar agora" (`escritorioCiclo.executarCiclo`), com
+// `disparadoPor: "sistema"`. Às 07:30 de Brasília para a fila de rascunhos
+// estar pronta quando alguém abrir o painel de manhã.
+//
+// NÃO envia nada, NÃO chama modelo e NÃO muda estágio de ninguém: escreve
+// rascunho para revisão e registra a rodada. Capacidade desligada na
+// política continua desligada. No dia da live (19:00 BRT) roda 11h30 antes.
+crons.daily(
+  "escritorio roda sozinho",
+  { hourUTC: 10, minuteUTC: 30 },
+  internal.escritorioCiclo.rodarPeloSistema,
+  {},
+);
+
 export default crons;

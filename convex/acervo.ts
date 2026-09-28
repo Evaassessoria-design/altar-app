@@ -574,7 +574,17 @@ export const doEvento = query({
       );
       return {
         ...r,
-        item: item ? { _id: item._id, nome: item.nome, unidade: item.unidade, quantidadeTotal: item.quantidadeTotal } : null,
+        item: item
+          ? {
+              _id: item._id,
+              nome: item.nome,
+              unidade: item.unidade,
+              quantidadeTotal: item.quantidadeTotal,
+              // O diálogo de ajuste aberto daqui precisa dele para a prévia
+              // recusar o que o servidor recusaria.
+              emManutencao: item.emManutencao,
+            }
+          : null,
         disponivel: estado.disponivel,
         // O PORQUÊ do disponível, para a tela não dizer só "faltam 2": dizer
         // "2 em manutenção" manda a decoradora ao conserto, e não ao aluguel.

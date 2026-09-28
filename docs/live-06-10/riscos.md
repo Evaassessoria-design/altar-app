@@ -94,17 +94,18 @@ tem clientes reais, com nome, telefone e valor.
 ## O que roda sozinho — auditado em 26/09
 
 Pergunta que faltava responder: **alguma coisa dispara no meio da
-apresentação?** `convex/crons.ts` tem três tarefas diárias, todas de
-madrugada:
+apresentação?** `convex/crons.ts` tem quatro tarefas diárias, todas de
+manhã cedo (a quarta entrou em 28/09):
 
 | UTC | BRT | Tarefa | O que faz |
 |---|---|---|---|
 | 07:30 | 04:30 | `adminApprovals.varreduraDiaria` | expira proposta de resposta parada. Não envia, não cobra, não altera conversa |
 | 08:00 | 05:00 | `notifications.generateDailyAlerts` | cria avisos de checklist e evento próximo |
 | 09:00 | 06:00 | `asaas.reconcileStaleSubscriptions` | só ATIVA quem pagou e ficou preso. Nunca rebaixa ninguém |
+| 10:30 | 07:30 | `escritorioCiclo.rodarPeloSistema` | o Escritório prepara RASCUNHOS da campanha. Não envia, não chama modelo, não muda estágio |
 
-A live é **19:00 BRT (22:00 UTC)**. A tarefa mais próxima fica a **treze horas
-de distância**. Nada dispara durante a apresentação.
+A live é **19:00 BRT (22:00 UTC)**. A tarefa mais próxima fica a **onze horas
+e meia de distância**. Nada dispara durante a apresentação.
 
 ### No deployment de demonstração, especificamente
 

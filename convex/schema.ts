@@ -1698,6 +1698,12 @@ export default defineSchema({
      */
     condicaoDe: v.optional(condicaoDoAcervo),
     condicaoPara: v.optional(v.union(condicaoDoAcervo, v.literal("baixa"))),
+    /**
+     * Quantas peças mudaram de condição. Só nas linhas "condicao": o `delta`
+     * explica o TOTAL e é zero numa mudança de condição — sem este campo o
+     * histórico diria "pronto → reparo" sem dizer quantas.
+     */
+    quantidadeMovida: v.optional(v.number()),
     /** Foto da ocorrência, quando houver — "o pé traseiro com folga". */
     fotoStorageId: v.optional(v.id("_storage")),
     motivo: v.optional(v.string()),

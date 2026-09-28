@@ -149,6 +149,8 @@ describe("ocorrência — o histórico nunca é sobrescrito", () => {
       ["pronto", "reparo", "Pé traseiro com folga"],
     ]);
     expect(hist[1]).toMatchObject({ responsavelNome: "João", eventName: "Marina & Gabriel", fotoUrl: null });
+    // Quantas peças — o delta é zero numa mudança de condição.
+    expect(hist.map((h) => h.quantidadeMovida)).toEqual([1, 1]);
   });
 
   it("peça indisponível não é reservável sem aviso: o déficit aparece", async () => {

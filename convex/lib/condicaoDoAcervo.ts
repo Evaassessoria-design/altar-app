@@ -98,6 +98,8 @@ export type MovimentoOk = {
   ok: true;
   /** Os campos de `collectionItems` a gravar. `undefined` = volta a ausente. */
   patch: Partial<Record<(typeof CAMPO_DA_CONDICAO)[CondicaoForaDeUso] | "quantidadeTotal", number | undefined>>;
+  /** Quantas peças mudaram de condição (já limpa e validada). */
+  quantidade: number;
   /** O que moveu o TOTAL: zero, exceto na baixa. */
   delta: number;
   quantidadeDepois: number;
@@ -150,5 +152,5 @@ export function moverCondicao(entrada: {
   }
 
   const depois = condicoesDoItem({ ...item, ...patch, quantidadeTotal: quantidadeDepois });
-  return { ok: true, patch, delta, quantidadeDepois, antes, depois };
+  return { ok: true, patch, quantidade, delta, quantidadeDepois, antes, depois };
 }

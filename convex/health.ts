@@ -8,6 +8,10 @@ import { getOwnedEvent, requireUser } from "./lib/identity";
 import { montarResumoOperacional } from "./lib/eventSummary";
 import { saudeDoEvento } from "./lib/saudeDoEvento";
 import { prontidaoDoEvento } from "./lib/prontidaoDoEvento";
+import { jornadaDoEvento, operacaoDoEvento, resumoDaJornada } from "./lib/jornadaDoEvento";
+import { deficitDaReserva, disponibilidadeNaJanela } from "./lib/acervo";
+import { pecasForaDeUso } from "./lib/condicaoDoAcervo";
+import { estaVencida } from "./lib/propostaComercial";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SAÚDE DO EVENTO (CORE). Calculada SOMENTE a partir de dados reais já existentes
@@ -263,51 +267,204 @@ export const getEventReadiness = query({
   handler: async (ctx, args) => {
     const event = await getOwnedEvent(ctx, args.eventId);
     if (!event) return null;
+    return lerProntidao(ctx, event);
+  },
+});
+
+/**
+ * A leitura da prontidão, separada da query para a jornada do evento
+ * (`getEventJourney`) usar a MESMA conta — "projeto visual pronto" na jornada
+ * e "Pronto para mostrar?" na tela não podem discordar.
+ */
+async function lerProntidao(ctx: QueryCtx, event: Doc<"events">) {
+  const eventId = event._id;
+
+  const [fotos, itens, documentos, fornecedores, briefing] = await Promise.all([
+    ctx.db.query("eventPhotos").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+    ctx.db.query("assemblyItems").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+    ctx.db.query("contracts").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+    ctx.db.query("eventSuppliers").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+    ctx.db.query("briefings").withIndex("by_event", (q) => q.eq("eventId", eventId)).unique(),
+  ]);
+
+  // Os materiais da ficha e quantos deles têm foto no catálogo. Uma leitura
+  // por material DISTINTO — dezenas, não o catálogo inteiro.
+  const materiais = new Set<string>();
+  for (const item of itens) {
+    for (const linha of item.receita ?? []) {
+      if (linha.materialId) materiais.add(linha.materialId);
+    }
+  }
+  let materiaisComFoto = 0;
+  for (const id of materiais) {
+    const material = await ctx.db.get(id as Id<"materials">);
+    if (material && material.userId === event.userId && material.fotoStorageId) {
+      materiaisComFoto++;
+    }
+  }
+
+  return prontidaoDoEvento({
+    temCapa: !!event.coverPhotoId,
+    fotos: fotos.length,
+    fotosClassificadas: fotos.filter((f) => !!f.projectScope).length,
+    fotosComAmbiente: fotos.filter((f) => !!f.ambiente?.trim()).length,
+    temFotoInterna: fotos.some((f) => f.visibility === "interno"),
+    itensDeMontagem: itens.length,
+    itensComFotoDaGaleria: itens.filter(
+      (i) => !!i.referencePhotoId || !!i.contractedPhotoId,
+    ).length,
+    materiaisNaFicha: materiais.size,
+    materiaisComFoto,
+    documentos: documentos.length,
+    fornecedores: fornecedores.length,
+    temConceito: !!(
+      briefing?.decorStyle?.trim() ||
+      briefing?.colorPalette?.trim() ||
+      briefing?.atmosphereDescription?.trim()
+    ),
+  });
+}
+
+// ═════════════════════════════════════════════════ JORNADA DO EVENTO (28/09)
+
+/**
+ * A jornada do evento: em que etapa o projeto está, o que vem depois, e a
+ * operação das peças até voltarem ao galpão.
+ *
+ * Tudo DERIVADO do que cada tela já grava — a regra é
+ * `lib/jornadaDoEvento.ts`, pura. Aqui só se lê: uma consulta por tabela,
+ * pelo índice do evento; as reservas de acervo trazem as dos mesmos itens
+ * (para o déficit) e o histórico deles (para o que a conferência mandou
+ * para limpeza/reparo). Poucos itens por evento — nunca o acervo inteiro.
+ *
+ * A Saúde e a Prontidão são as MESMAS contas das outras telas (`computeHealth`,
+ * `lerProntidao`): a jornada não pode discordar delas.
+ */
+export const getEventJourney = query({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    const event = await getOwnedEvent(ctx, args.eventId);
+    if (!event) return null;
     const eventId = event._id;
+    const hoje = dataDoDia();
 
-    const [fotos, itens, documentos, fornecedores, briefing] = await Promise.all([
-      ctx.db.query("eventPhotos").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
-      ctx.db.query("assemblyItems").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
-      ctx.db.query("contracts").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
-      ctx.db.query("eventSuppliers").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
-      ctx.db.query("briefings").withIndex("by_event", (q) => q.eq("eventId", eventId)).unique(),
-    ]);
+    const [briefing, orcamento, propostas, documentos, fotos, fornecedores, itens, reservas, renders] =
+      await Promise.all([
+        ctx.db.query("briefings").withIndex("by_event", (q) => q.eq("eventId", eventId)).unique(),
+        ctx.db.query("budgetItems").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+        ctx.db.query("proposals").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+        ctx.db.query("contracts").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+        ctx.db.query("eventPhotos").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+        ctx.db.query("eventSuppliers").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+        ctx.db.query("assemblyItems").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+        ctx.db.query("collectionReservations").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+        ctx.db.query("layoutRenders").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+      ]);
 
-    // Os materiais da ficha e quantos deles têm foto no catálogo. Uma leitura
-    // por material DISTINTO — dezenas, não o catálogo inteiro.
-    const materiais = new Set<string>();
-    for (const item of itens) {
-      for (const linha of item.receita ?? []) {
-        if (linha.materialId) materiais.add(linha.materialId);
+    // ── Acervo: déficit por reserva e o que a conferência deixou fora de uso ──
+    let comDeficit = 0;
+    let pecasForaDeUsoNosItens = 0;
+    let pecasEnviadasNaConferencia = 0;
+    for (const r of reservas) {
+      const item = await ctx.db.get(r.collectionItemId);
+      if (!item || item.userId !== event.userId) continue;
+      const doItem = await ctx.db
+        .query("collectionReservations")
+        .withIndex("by_item", (q) => q.eq("collectionItemId", item._id))
+        .collect();
+      const estado = disponibilidadeNaJanela(
+        item.quantidadeTotal,
+        doItem,
+        { inicio: r.inicio, fim: r.fim },
+        eventId as string,
+        pecasForaDeUso(item),
+      );
+      // Reserva que já saiu do galpão não depende mais da disponibilidade.
+      if ((r.saiu ?? 0) === 0 && deficitDaReserva(r.quantidade, estado.disponivel) > 0) comDeficit++;
+      pecasForaDeUsoNosItens += pecasForaDeUso(item);
+      if (r.conferidoEm !== undefined) {
+        const linhas = await ctx.db
+          .query("collectionAdjustments")
+          .withIndex("by_item", (q) => q.eq("collectionItemId", item._id))
+          .collect();
+        pecasEnviadasNaConferencia += linhas
+          .filter((a) => a.tipo === "condicao" && a.eventId === eventId && a.condicaoDe === "pronto")
+          .reduce((s, a) => s + (a.quantidadeMovida ?? 0), 0);
       }
     }
-    let materiaisComFoto = 0;
-    for (const id of materiais) {
-      const material = await ctx.db.get(id as Id<"materials">);
-      if (material && material.userId === event.userId && material.fotoStorageId) {
-        materiaisComFoto++;
-      }
-    }
 
-    return prontidaoDoEvento({
-      temCapa: !!event.coverPhotoId,
-      fotos: fotos.length,
-      fotosClassificadas: fotos.filter((f) => !!f.projectScope).length,
-      fotosComAmbiente: fotos.filter((f) => !!f.ambiente?.trim()).length,
-      temFotoInterna: fotos.some((f) => f.visibility === "interno"),
-      itensDeMontagem: itens.length,
-      itensComFotoDaGaleria: itens.filter(
-        (i) => !!i.referencePhotoId || !!i.contractedPhotoId,
-      ).length,
-      materiaisNaFicha: materiais.size,
-      materiaisComFoto,
-      documentos: documentos.length,
-      fornecedores: fornecedores.length,
-      temConceito: !!(
-        briefing?.decorStyle?.trim() ||
-        briefing?.colorPalette?.trim() ||
-        briefing?.atmosphereDescription?.trim()
+    const [saude, prontidao] = await Promise.all([computeHealth(ctx, event), lerProntidao(ctx, event)]);
+
+    const jornada = jornadaDoEvento({
+      briefing: {
+        existe: !!briefing,
+        temConvidados: !!briefing?.guestCount?.trim(),
+        temConceito: !!(
+          briefing?.decorStyle?.trim() ||
+          briefing?.colorPalette?.trim() ||
+          briefing?.atmosphereDescription?.trim()
+        ),
+      },
+      comercial: {
+        itensDeReceita: orcamento.filter((b) => b.type === "income").length,
+        propostas: propostas.map((p) => ({
+          status: p.status,
+          vencida: estaVencida(p.validadeAte, p.status, hoje),
+        })),
+      },
+      contrato: {
+        // O contrato da CLIENTE: a mesma regra da Saúde.
+        anexado: documentos.some((d) => (d.kind ?? "contract") === "contract" && !d.supplierId),
+        pendencias: event.contractPendings?.length ?? 0,
+      },
+      inspiracoes: { referencias: fotos.filter((f) => f.projectScope === "referencia").length },
+      fornecedores: fornecedores.map((f) => ({ status: f.status })),
+      ficha: {
+        itens: itens.length,
+        itensComMateriais: itens.filter((i) => (i.receita ?? []).length > 0).length,
+      },
+      acervo: { reservas: reservas.length, comDeficit },
+      projeto: {
+        apresentavel: prontidao.apresentavel,
+        prontos: prontidao.pronto,
+        totalDeItens: prontidao.itens.length,
+      },
+      croqui: { enviados: renders.filter((r) => !!r.originalSketchStorageId).length },
+      planta: {
+        geradas: renders.filter((r) => r.status === "done" && !!r.outputStorageId).length,
+        gerando: renders.some((r) => r.status === "generating"),
+      },
+    });
+
+    const aconteceu =
+      event.status === "completed" || event.status === "in_progress" || event.date.slice(0, 10) <= hoje;
+
+    const operacao = operacaoDoEvento({
+      dataDoEvento: event.date.slice(0, 10),
+      hoje,
+      statusDoEvento: event.status,
+      itensDeMontagem: itens.map((i) => ({ operationalStatus: i.operationalStatus })),
+      reservas: reservas.map((r) => ({ saiu: r.saiu, voltou: r.voltou, conferidoEm: r.conferidoEm })),
+      pecasForaDeUsoNosItens,
+      pecasEnviadasNaConferencia,
+    });
+
+    const resumo = resumoDaJornada({
+      jornada,
+      operacao,
+      aconteceu,
+      atencaoDaSaude: saude.attention,
+      reservasComDeficit: comDeficit,
+      retornoPorConferir: reservas.some(
+        (r) => (r.voltou ?? 0) > 0 && r.conferidoEm === undefined,
       ),
     });
+
+    return {
+      saude: { percent: saude.percent, status: saude.status, checks: saude.checks },
+      jornada,
+      operacao,
+      ...resumo,
+    };
   },
 });

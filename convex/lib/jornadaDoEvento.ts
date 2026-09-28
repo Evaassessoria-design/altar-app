@@ -358,3 +358,70 @@ export function operacaoDoEvento(f: FatosDaOperacao): {
   const atual = etapas.find((e) => e.status === "nao_iniciado" || e.status === "em_andamento");
   return { etapas, atual: atual?.chave ?? null };
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// O RESUMO QUE ABRE A PÁGINA — fase atual, próximo passo, o que precisa de você
+//
+// ── QUANDO O PROJETO VIRA OPERAÇÃO ──────────────────────────────────────────
+// Antes da data, a fase é o PROJETO e o próximo passo é "você está aqui". A
+// partir do dia do evento a fase é a OPERAÇÃO, mesmo com etapa de projeto em
+// aberto: na segunda-feira pós-evento, o retorno do acervo importa mais do que
+// a planta premium que ninguém gerou. E sem nada pendente, "tudo feito".
+//
+// A atenção junta o que a Saúde já aponta (cadastro) com o que só a jornada
+// sabe (acervo sem peça, retorno não conferido) — sem repetir, com teto.
+// ═════════════════════════════════════════════════════════════════════════════
+
+export type ResumoDaJornada = {
+  fase: "projeto" | "operacao" | "concluido";
+  /** O que fazer agora, com o caminho (relativo ao evento) — `null` = nada. */
+  proximoPasso: { rotulo: string; detalhe: string; rota?: string } | null;
+  atencao: string[];
+};
+
+export const TETO_DE_ATENCAO = 6;
+
+export function resumoDaJornada(e: {
+  jornada: Jornada;
+  operacao: ReturnType<typeof operacaoDoEvento>;
+  aconteceu: boolean;
+  /** Os avisos que a Saúde já calcula (`saudeDoEvento().attention`). */
+  atencaoDaSaude: readonly string[];
+  reservasComDeficit: number;
+  retornoPorConferir: boolean;
+}): ResumoDaJornada {
+  const extras = [
+    e.reservasComDeficit > 0 &&
+      `${plural(e.reservasComDeficit, "reserva de acervo sem peça suficiente", "reservas de acervo sem peça suficiente")}`,
+    e.retornoPorConferir && "Acervo voltou e o retorno ainda não foi conferido",
+  ].filter((x): x is string => typeof x === "string");
+  // O que só a jornada sabe vem primeiro: a Saúde já aparece inteira na sua
+  // própria lista, e o teto não pode cortar justamente o aviso novo.
+  const atencao = [...new Set([...extras, ...e.atencaoDaSaude])].slice(0, TETO_DE_ATENCAO);
+
+  const etapaOperacional = e.operacao.etapas.find((x) => x.chave === e.operacao.atual);
+  const etapaDoProjeto = e.jornada.etapas.find((x) => x.chave === e.jornada.atual);
+
+  if (e.aconteceu && etapaOperacional) {
+    return {
+      fase: "operacao",
+      proximoPasso: { rotulo: etapaOperacional.rotulo, detalhe: etapaOperacional.detalhe, rota: "acervo" },
+      atencao,
+    };
+  }
+  if (etapaDoProjeto) {
+    return {
+      fase: "projeto",
+      proximoPasso: { rotulo: etapaDoProjeto.rotulo, detalhe: etapaDoProjeto.detalhe, rota: etapaDoProjeto.rota },
+      atencao,
+    };
+  }
+  if (etapaOperacional) {
+    return {
+      fase: "operacao",
+      proximoPasso: { rotulo: etapaOperacional.rotulo, detalhe: etapaOperacional.detalhe, rota: "acervo" },
+      atencao,
+    };
+  }
+  return { fase: "concluido", proximoPasso: null, atencao };
+}

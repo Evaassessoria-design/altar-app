@@ -3,6 +3,8 @@ import {
   ETAPAS_DO_PROJETO,
   jornadaDoEvento,
   operacaoDoEvento,
+  resumoDaJornada,
+  TETO_DE_ATENCAO,
   type FatosDaJornada,
   type FatosDaOperacao,
 } from "./jornadaDoEvento";
@@ -164,5 +166,40 @@ describe("a operação do evento", () => {
   it("sem itens nem acervo: tudo 'sem registro' não prende o ponteiro", () => {
     const f = op();
     expect(operacaoDoEvento(f).atual).toBe("evento");
+  });
+});
+
+
+describe("o resumo que abre a página", () => {
+  const base = {
+    atencaoDaSaude: [] as string[],
+    reservasComDeficit: 0,
+    retornoPorConferir: false,
+  };
+
+  it("antes do evento: fase PROJETO, próximo passo é 'você está aqui'", () => {
+    const r = resumoDaJornada({
+      ...base, jornada: jornadaDoEvento(nada), operacao: operacaoDoEvento(op()), aconteceu: false,
+    });
+    expect(r).toMatchObject({ fase: "projeto", proximoPasso: { rotulo: "Briefing", rota: "briefing" } });
+  });
+
+  it("depois do evento: fase OPERAÇÃO, mesmo com projeto em aberto", () => {
+    const operacao = operacaoDoEvento(op({ hoje: "2026-10-12", reservas: [{ saiu: 8, voltou: 8 }] }));
+    const r = resumoDaJornada({ ...base, jornada: jornadaDoEvento(nada), operacao, aconteceu: true, retornoPorConferir: true });
+    expect(r.fase).toBe("operacao");
+    expect(r.proximoPasso?.rotulo).toBe("Conferência de retorno");
+    expect(r.atencao[0]).toBe("Acervo voltou e o retorno ainda não foi conferido");
+  });
+
+  it("o aviso da jornada não é cortado pelo teto, e nada se repete", () => {
+    const muitos = Array.from({ length: 20 }, (_, i) => `aviso ${i}`);
+    const r = resumoDaJornada({
+      ...base, jornada: jornadaDoEvento(nada), operacao: operacaoDoEvento(op()), aconteceu: false,
+      atencaoDaSaude: [...muitos, "aviso 1"], reservasComDeficit: 2,
+    });
+    expect(r.atencao).toHaveLength(TETO_DE_ATENCAO);
+    expect(r.atencao[0]).toBe("2 reservas de acervo sem peça suficiente");
+    expect(new Set(r.atencao).size).toBe(r.atencao.length);
   });
 });

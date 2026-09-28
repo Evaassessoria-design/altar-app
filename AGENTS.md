@@ -25,6 +25,8 @@ Este arquivo guarda só o que costuma ser esquecido no meio de uma tarefa.
 
 1. **PROD é `mellow-goose-539`. Não se toca.** DEV é `healthy-pika-907`.
    Confirme o alvo antes de qualquer `convex deploy`, `env set` ou `run`.
+   Merge na `main` NÃO publica o site nem o Convex: release é manual, em
+   ordem, e está em `docs/release-producao.md`.
 2. **Id vindo do navegador não é prova de posse.** Toda função que recebe
    `v.id(...)` confere o dono (`requireEventOwner`, `requireLeadOwner`,
    `requireAdmin`). Dado de outra conta responde `NOT_FOUND`.

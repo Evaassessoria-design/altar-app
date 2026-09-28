@@ -72,6 +72,12 @@ Antes de qualquer `convex deploy`, `convex env set` ou `convex run`, **confirme
 o deployment alvo**. O script de homologação se recusa a rodar contra produção
 — mas a checagem no seu terminal vem antes.
 
+**Merge na `main` não publica nada no site oficial.** O frontend oficial
+(`www.appaltar.com.br`) é o projeto Vercel `altar-app-sg8v` e só troca por
+promoção manual; o Convex PROD só muda com `convex deploy`, separado. O mapa,
+a ordem, o rollback e o checklist estão em **`docs/release-producao.md`** —
+leia antes de qualquer release.
+
 A homologação da Central roda igual nos dois sistemas, porque é o mesmo Node:
 
 ```bash

@@ -223,7 +223,7 @@ export default function AcervoDoEventoPage() {
                   ))}
                   {r.emManutencao > 0 && (
                     <p className="text-xs text-muted-foreground mt-1">
-                      {r.emManutencao} em manutenção
+                      {r.emManutencao} fora de uso (limpeza, reparo ou indisponível)
                     </p>
                   )}
                   {r.pendentesDeRetorno.map((p) => (

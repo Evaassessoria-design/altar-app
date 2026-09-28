@@ -48,6 +48,9 @@ import { useRef, useState } from "react";
 import EventFormDialog from "../_components/event-form-dialog.tsx";
 import { ContractImportDialog } from "./_components/contract-import-dialog.tsx";
 import { ProntoParaMostrar } from "./_components/pronto-para-mostrar.tsx";
+import { SaudeDoEvento } from "./_components/saude-do-evento.tsx";
+import { JornadaDoProjeto } from "./_components/jornada-do-projeto.tsx";
+import { OperacaoDoEvento } from "./_components/operacao-do-evento.tsx";
 import { LayoutAnalysisDialog } from "./_components/layout-analysis-dialog.tsx";
 import {
   AlertDialog,
@@ -98,10 +101,8 @@ export default function EventDetailsPage() {
   const postChecklist = useQuery(api.briefing.getChecklist, { eventId: id as Id<"events">, phase: "post" });
   const eventTeam = useQuery(api.team.listEventTeam, { eventId: id as Id<"events"> });
   const allMembers = useQuery(api.team.listMembers);
-  const fichaTecnica = useQuery(api.fichaTecnica.getFicha, { eventId: id as Id<"events"> });
-  const resumoDaFicha = fichaTecnica?.resumo;
-  const acervoDoEvento = useQuery(api.acervo.doEvento, { eventId: id as Id<"events"> });
-  const resumoDoAcervo = acervoDoEvento?.resumo;
+  // Saúde, jornada e operação — uma query, regra em lib/jornadaDoEvento.ts.
+  const jornada = useQuery(api.health.getEventJourney, { eventId: id as Id<"events"> });
   const addToEventTeam = useMutation(api.team.addToEventTeam);
   const removeFromEventTeam = useMutation(api.team.removeFromEventTeam);
   const updateEventTeamMember = useMutation(api.team.updateEventTeamMember);
@@ -118,7 +119,6 @@ export default function EventDetailsPage() {
 
   // AI / Contract state
   const contract = useQuery(api.contracts.getContract, { eventId: id as Id<"events"> });
-  const health = useQuery(api.health.getEventHealth, { eventId: id as Id<"events"> });
   const generateUploadUrl = useMutation(api.contracts.generateUploadUrl);
   const { enviar } = useEnvioDeArquivo(generateUploadUrl, { tipo: "documento" });
   const saveContract = useMutation(api.contracts.saveContract);
@@ -376,175 +376,46 @@ export default function EventDetailsPage() {
         </div>
       </div>
 
-      {/* Ações Rápidas */}
-      <div className="bg-card rounded-xl border border-border overflow-hidden">
-        <h2 className="font-semibold px-5 py-4 border-b border-border flex items-center gap-2">
-          <span className="text-lg">⚡</span> Ações Rápidas
-        </h2>
-        <div className="divide-y divide-border">
-          <Link
-            to={`/eventos/${id}/briefing`}
-            className="flex items-center justify-between px-5 py-3.5 hover:bg-accent/50 transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-3">
-              <ClipboardList className="size-5 text-primary" />
-              <div>
-                <p className="font-medium text-sm">Questionário</p>
-                <p className="text-xs text-muted-foreground">Briefing completo do evento</p>
-              </div>
-            </div>
-            <ChevronRight className="size-4 text-muted-foreground" />
-          </Link>
-          <Link
-            to={`/eventos/${id}/orcamento`}
-            className="flex items-center justify-between px-5 py-3.5 hover:bg-accent/50 transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-3">
-              <DollarSign className="size-5 text-primary" />
-              <div>
-                <p className="font-medium text-sm">Orçamento</p>
-                {/* "Uso interno" no subtítulo porque o documento gerado ali
-                    carrega custo, lucro e margem — e o erro caro é anexar o
-                    arquivo errado no WhatsApp da cliente. */}
-                <p className="text-xs text-muted-foreground">
-                  Receitas, custos e lucro · uso interno
-                </p>
-              </div>
-            </div>
-            <ChevronRight className="size-4 text-muted-foreground" />
-          </Link>
-          <PropostaDoEvento eventId={id as Id<"events">} />
-          <Link
-            to={`/eventos/${id}/fotos`}
-            className="flex items-center justify-between px-5 py-3.5 hover:bg-accent/50 transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-3">
-              <Images className="size-5 text-primary" />
-              <div>
-                <p className="font-medium text-sm">Galeria de Fotos</p>
-                <p className="text-xs text-muted-foreground">Antes, montagem, evento e desmontagem</p>
-              </div>
-            </div>
-            <ChevronRight className="size-4 text-muted-foreground" />
-          </Link>
-          <Link
-            to={`/eventos/${id}/fornecedores`}
-            className="flex items-center justify-between px-5 py-3.5 hover:bg-accent/50 transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-3">
-              <Building2 className="size-5 text-primary" />
-              <div>
-                <p className="font-medium text-sm">Fornecedores</p>
-                <p className="text-xs text-muted-foreground">Dossiê operacional: assessoria, local, buffet, bar, doces, som & iluminação</p>
-              </div>
-            </div>
-            <ChevronRight className="size-4 text-muted-foreground" />
-          </Link>
-          <Link
-            to={`/eventos/${id}/projeto`}
-            className="flex items-center justify-between px-5 py-3.5 hover:bg-accent/50 transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-3">
-              <Layers className="size-5 text-primary" />
-              <div>
-                <p className="font-medium text-sm">Projeto visual</p>
-                <p className="text-xs text-muted-foreground">
-                  Como o evento deve ficar: referências, contratado e resultado, ambiente por
-                  ambiente
-                </p>
-              </div>
-            </div>
-            <ChevronRight className="size-4 text-muted-foreground" />
-          </Link>
-          {/* Ficha Técnica vem logo depois do Projeto de propósito: uma
-              responde "o que vai ter", a outra "do que isso é feito". */}
-          <Link
-            to={`/eventos/${id}/ficha-tecnica`}
-            className="flex items-center justify-between px-5 py-3.5 hover:bg-accent/50 transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-3">
-              <ClipboardList className="size-5 text-primary" />
-              <div>
-                <p className="font-medium text-sm">Ficha técnica</p>
-                {/* O resumo vem do backend, já calculado. A página do evento
-                    não recalcula nada — seria a segunda conta. */}
-                <p className="text-xs text-muted-foreground">
-                  {resumoDaFicha && resumoDaFicha.materiais > 0
-                    ? `${resumoDaFicha.composicoes} ${resumoDaFicha.composicoes === 1 ? "composição" : "composições"} · ${resumoDaFicha.materiais} ${resumoDaFicha.materiais === 1 ? "material" : "materiais"}` +
-                      (resumoDaFicha.pendencias > 0
-                        ? ` · ${resumoDaFicha.pendencias} ${resumoDaFicha.pendencias === 1 ? "pendência" : "pendências"}`
-                        : "")
-                    : "Do que cada composição é feita e quanto o evento inteiro precisa"}
-                </p>
-              </div>
-            </div>
-            <ChevronRight className="size-4 text-muted-foreground" />
-          </Link>
-          {/* Acervo vem depois da Ficha: uma diz do que é feito, a outra diz
-              quanto disso já é seu. */}
-          <Link
-            to={`/eventos/${id}/acervo`}
-            className="flex items-center justify-between px-5 py-3.5 hover:bg-accent/50 transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-3">
-              <Boxes className="size-5 text-primary" />
-              <div>
-                <p className="font-medium text-sm">Acervo do evento</p>
-                <p className="text-xs text-muted-foreground">
-                  {resumoDoAcervo && resumoDoAcervo.itens > 0
-                    ? `${resumoDoAcervo.itens} ${resumoDoAcervo.itens === 1 ? "item reservado" : "itens reservados"}` +
-                      (resumoDoAcervo.comConflito > 0 ? ` · ${resumoDoAcervo.comConflito} com conflito` : "") +
-                      (resumoDoAcervo.retornoPendente > 0 ? ` · ${resumoDoAcervo.retornoPendente} sem retorno` : "")
-                    : "Quais peças suas saem do galpão para este evento"}
-                </p>
-              </div>
-            </div>
-            <ChevronRight className="size-4 text-muted-foreground" />
-          </Link>
-          <Link
-            to={`/eventos/${id}/planta`}
-            className="flex items-center justify-between px-5 py-3.5 hover:bg-accent/50 transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-3">
-              <Wand2 className="size-5 text-primary" />
-              <div>
-                <p className="font-medium text-sm">Planta Premium</p>
-                <p className="text-xs text-muted-foreground">Transforme o croqui em uma planta 2D profissional, preservando o projeto</p>
-              </div>
-            </div>
-            <ChevronRight className="size-4 text-muted-foreground" />
-          </Link>
+      {/* ── SAÚDE, JORNADA E OPERAÇÃO ─────────────────────────────────────
+          Até 28/09 aqui ficavam nove "Ações Rápidas" de peso igual e, abaixo
+          delas, a Saúde. Agora a Saúde vem primeiro e diz a fase e o próximo
+          passo; a Jornada traz os MESMOS destinos na ordem em que o projeto
+          acontece, cada um dizendo em que pé está; e a Operação, separada,
+          acompanha as peças até voltarem ao galpão. Tudo vem de uma query só
+          (`health.getEventJourney`, regra em `lib/jornadaDoEvento.ts`). */}
+      {jornada === undefined ? (
+        <div className="space-y-3">
+          <Skeleton className="h-36 w-full rounded-xl" />
+          <Skeleton className="h-96 w-full rounded-xl" />
         </div>
-      </div>
-
-      {/* Saúde do Evento */}
-      {health && (
-        <div className="bg-card rounded-xl border border-border overflow-hidden">
-          <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3">
-            <h2 className="font-semibold flex items-center gap-2">
-              {health.status === "complete" ? "🟢" : health.status === "attention" ? "🟡" : "🔴"} Saúde do Evento
-            </h2>
-            <span className="text-lg font-bold">{health.percent}%</span>
-          </div>
-          <div className="p-5 space-y-3">
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-              {health.checks.map((c) => (
-                <div key={c.key} className="flex items-center gap-1.5 text-sm">
-                  <span>{c.ok ? "✓" : "○"}</span>
-                  <span className={c.ok ? "" : "text-muted-foreground"}>{c.label}</span>
-                </div>
-              ))}
-            </div>
-            {health.attention.length > 0 && (
-              <div className="border-t border-border pt-3 space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">O que falta</p>
-                {health.attention.map((a, i) => (
-                  <p key={i} className="text-sm text-amber-600 dark:text-amber-500">⚠️ {a}</p>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+      ) : jornada === null ? null : (
+        <>
+          <SaudeDoEvento
+            eventId={id!}
+            saude={jornada.saude}
+            fase={jornada.fase}
+            proximoPasso={jornada.proximoPasso}
+            atencao={jornada.atencao}
+          />
+          <JornadaDoProjeto
+            eventId={id!}
+            etapas={jornada.jornada.etapas}
+            atual={jornada.jornada.atual}
+            proxima={jornada.jornada.proxima}
+            concluidas={jornada.jornada.concluidas}
+            extras={{
+              // A proposta continua com o atalho próprio (criar / abrir), dentro
+              // da etapa comercial — orçamento e proposta são uma etapa, duas
+              // estruturas (docs/jornada-evento/decisoes.md, D3).
+              comercial: <PropostaDoEvento eventId={id as Id<"events">} />,
+            }}
+          />
+          <OperacaoDoEvento
+            eventId={id!}
+            etapas={jornada.operacao.etapas}
+            atual={jornada.operacao.atual}
+          />
+        </>
       )}
 
       {/* Pronto para mostrar? — a pergunta de quem vai APRESENTAR, que a
@@ -553,7 +424,7 @@ export default function EventDetailsPage() {
       <ProntoParaMostrar eventId={id as Id<"events">} />
 
       {/* Contrato + IA */}
-      <div className="bg-card rounded-xl border border-border overflow-hidden">
+      <div id="contrato" className="bg-card rounded-xl border border-border overflow-hidden scroll-mt-4">
         <h2 className="font-semibold px-5 py-4 border-b border-border flex items-center gap-2">
           <FileText className="size-4 text-primary" /> Contrato
         </h2>

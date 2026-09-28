@@ -34,6 +34,7 @@ const CODIGO = TELA.split("\n")
   .join("\n");
 const PRATELEIRA = readFileSync("src/components/projeto/prateleira-de-fotos.tsx", "utf-8");
 const EVENTO = readFileSync("src/pages/app/events/[id]/page.tsx", "utf-8");
+const JORNADA = readFileSync("convex/lib/jornadaDoEvento.ts", "utf-8");
 const ROTAS = readFileSync("src/App.tsx", "utf-8");
 
 describe("não nasceu tela nova", () => {
@@ -42,13 +43,17 @@ describe("não nasceu tela nova", () => {
     expect(ROTAS).not.toContain("projeto-visual");
   });
 
+  // Desde 28/09 a entrada nasce da JORNADA do evento (lib/jornadaDoEvento.ts):
+  // a página não escreve mais o link à mão, desenha as etapas. A proteção é a
+  // mesma — uma entrada só, com o nome "Projeto visual" — lida onde mora.
   it("e a entrada no evento continua sendo um botão só", () => {
-    expect((EVENTO.match(/\$\{id\}\/projeto`/g) ?? []).length).toBe(1);
+    expect((JORNADA.match(/rota: "projeto"/g) ?? []).length).toBe(1);
+    expect(EVENTO).not.toMatch(/\$\{id\}\/projeto`/);
   });
 
   it("o nome que a usuária lê é 'Projeto visual'", () => {
-    expect(EVENTO).toContain("Projeto visual");
-    expect(EVENTO).not.toContain("Projeto de decoração");
+    expect(JORNADA).toContain(`projeto: { rotulo: "Projeto visual", rota: "projeto" }`);
+    expect(EVENTO + JORNADA).not.toContain("Projeto de decoração");
   });
 });
 

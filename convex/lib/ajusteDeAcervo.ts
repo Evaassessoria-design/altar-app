@@ -1,5 +1,6 @@
 import { quantidadeLimpa } from "./fichaTecnica";
 import { quantidadeFisicaValida } from "./acervo";
+import { ROTULO_DA_CONDICAO, type Condicao } from "./condicaoDoAcervo";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AJUSTE DE ESTOQUE DO ACERVO
@@ -188,8 +189,21 @@ export const ROTULO_DA_MANUTENCAO: Record<OperacaoDeManutencao, string> = {
   manutencao_descarte: "Sem conserto",
 };
 
-/** Rótulo de qualquer linha do histórico — ajuste comum ou manutenção. */
-export function rotuloDaLinhaDoHistorico(tipo: TipoDeAjuste | OperacaoDeManutencao): string {
+/**
+ * Rótulo de qualquer linha do histórico — ajuste comum, manutenção ou
+ * mudança de condição. A de condição diz quantas peças e de onde para onde:
+ * "1 · Pronto para uso → Precisa de reparo".
+ */
+export function rotuloDaLinhaDoHistorico(
+  tipo: TipoDeAjuste | OperacaoDeManutencao | "condicao",
+  linha?: { condicaoDe?: Condicao; condicaoPara?: Condicao | "baixa"; quantidadeMovida?: number },
+): string {
+  if (tipo === "condicao") {
+    const para = linha?.condicaoPara === "baixa" ? "Baixa (saiu do acervo)" : linha?.condicaoPara && ROTULO_DA_CONDICAO[linha.condicaoPara];
+    const de = linha?.condicaoDe && ROTULO_DA_CONDICAO[linha.condicaoDe];
+    const q = linha?.quantidadeMovida !== undefined ? `${linha.quantidadeMovida} · ` : "";
+    return de && para ? `${q}${de} → ${para}` : "Mudança de condição";
+  }
   return (ROTULO_DO_AJUSTE as Record<string, string>)[tipo] ??
     ROTULO_DA_MANUTENCAO[tipo as OperacaoDeManutencao];
 }

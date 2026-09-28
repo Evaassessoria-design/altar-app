@@ -52,7 +52,7 @@ export function PosEvento() {
                 )}
                 <span className="block text-xs text-muted-foreground">
                   {l.nome}: {l.necessario} necessárias · {l.disponivel} disponíveis
-                  {l.emManutencao > 0 && ` · ${l.emManutencao} em manutenção`}
+                  {l.emManutencao > 0 && ` · ${l.emManutencao} fora de uso`}
                   {l.foraSemVoltar > 0 && ` · ${l.foraSemVoltar} ainda não voltaram`}
                   {l.reservadoPorOutros > 0 && ` · ${l.reservadoPorOutros} com outro evento`}
                 </span>
@@ -94,12 +94,20 @@ export function PosEvento() {
       {p.totalEmManutencao > 0 && (
         <div>
           <p className="flex items-center gap-1.5 text-xs font-semibold mb-1">
-            <Wrench className="size-3.5" /> Em manutenção
+            <Wrench className="size-3.5" /> Fora de uso
           </p>
           <ul className="space-y-1">
             {p.emManutencao.map((l) => (
               <li key={l.itemId} className="text-sm">
                 {l.quantidade} {abreviarUnidade(l.unidade)} · {l.nome}
+                <span className="block text-xs text-muted-foreground">
+                  {[
+                    l.limpeza > 0 && `${l.limpeza} para limpar`,
+                    l.reparo > 0 && `${l.reparo} em reparo`,
+                    l.indisponivel > 0 && `${l.indisponivel} indisponíveis`,
+                    l.conferencia > 0 && `${l.conferencia} em conferência`,
+                  ].filter(Boolean).join(" · ")}
+                </span>
               </li>
             ))}
             <Mais mostrados={p.emManutencao.length} total={p.totalEmManutencao} />

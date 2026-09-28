@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { ConvexError } from "convex/values";
 import { abreviarUnidade } from "@/convex/lib/materiais.ts";
 import { formatTimestamp } from "@/lib/safe-date.ts";
+import { pecasForaDeUso } from "@/convex/lib/condicaoDoAcervo.ts";
 import {
   aplicarAjuste, aplicarContagem, aplicarManutencao, baixaRespeitaManutencao,
   OPERACOES_DE_MANUTENCAO, ROTULO_DA_MANUTENCAO, ROTULO_DO_AJUSTE, rotuloDaLinhaDoHistorico,
@@ -47,6 +48,9 @@ export function AjusteDeAcervoDialog({
     quantidadeTotal: number;
     /** Ausente = nenhuma peça no conserto. */
     emManutencao?: number;
+    emLimpeza?: number;
+    indisponivel?: number;
+    emConferencia?: number;
   };
   onClose: () => void;
   /**
@@ -90,7 +94,7 @@ export function AjusteDeAcervoDialog({
   // o servidor vai recusar.
   const conflitoComConserto =
     previaBruta?.ok && !ehManutencao(tipo)
-      ? baixaRespeitaManutencao(previaBruta.quantidadeDepois, item.emManutencao)
+      ? baixaRespeitaManutencao(previaBruta.quantidadeDepois, pecasForaDeUso(item))
       : null;
   const previa = conflitoComConserto
     ? { ok: false as const, motivo: conflitoComConserto }
@@ -196,11 +200,20 @@ export function AjusteDeAcervoDialog({
               <ul className="space-y-1">
                 {historico.map((h) => (
                   <li key={h._id} className="text-xs text-muted-foreground flex items-baseline gap-1.5">
-                    <span className={h.delta > 0 ? "text-green-600 dark:text-green-400" : "text-destructive"}>
-                      {h.delta > 0 ? "+" : ""}{h.delta}
-                    </span>
-                    <span>{rotuloDaLinhaDoHistorico(h.tipo)}</span>
-                    {h.manutencaoAntes !== undefined && h.manutencaoDepois !== undefined ? (
+                    {h.delta !== 0 && (
+                      <span className={h.delta > 0 ? "text-green-600 dark:text-green-400" : "text-destructive"}>
+                        {h.delta > 0 ? "+" : ""}{h.delta}
+                      </span>
+                    )}
+                    <span>{rotuloDaLinhaDoHistorico(h.tipo, h)}</span>
+                    {h.tipo === "condicao" ? (
+                      <span className="opacity-60 truncate">
+                        {h.responsavelNome && `· ${h.responsavelNome}`}
+                        {h.fotoUrl && (
+                          <a href={h.fotoUrl} target="_blank" rel="noreferrer" className="ml-1 underline">foto</a>
+                        )}
+                      </span>
+                    ) : h.manutencaoAntes !== undefined && h.manutencaoDepois !== undefined ? (
                       <span className="opacity-60">(conserto {h.manutencaoAntes} → {h.manutencaoDepois})</span>
                     ) : (
                       <span className="opacity-60">({h.quantidadeAntes} → {h.quantidadeDepois})</span>

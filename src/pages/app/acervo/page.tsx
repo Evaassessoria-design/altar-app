@@ -3,6 +3,13 @@ import { formatTimestamp } from "@/lib/safe-date.ts";
 import { ROTULO_DO_AJUSTE } from "@/convex/lib/ajusteDeAcervo.ts";
 import { AjusteDeAcervoDialog } from "@/components/ajuste-de-acervo-dialog.tsx";
 import { PosEvento } from "./_components/pos-evento.tsx";
+import { OcorrenciaDeAcervoDialog } from "@/components/ocorrencia-de-acervo-dialog.tsx";
+import {
+  CONDICOES,
+  ROTULO_CURTO_DA_CONDICAO,
+  ROTULO_DA_CONDICAO,
+  type Condicao,
+} from "@/convex/lib/condicaoDoAcervo.ts";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
@@ -174,9 +181,15 @@ export default function AcervoPage() {
   const [criando, setCriando] = useState(false);
   const [editando, setEditando] = useState<string | null>(null);
   const [ajustando, setAjustando] = useState<string | null>(null);
+  const [ocorrencia, setOcorrencia] = useState<string | null>(null);
+  // Filtro por condição — sobre a lista INTEIRA (`listItems` não pagina), então
+  // "em reparo" quer dizer todos os itens em reparo, não os da página.
+  const [filtro, setFiltro] = useState<Condicao | "tudo">("tudo");
 
-  const visiveis = (itens ?? []).filter((i) =>
-    i.nome.toLowerCase().includes(busca.trim().toLowerCase()),
+  const visiveis = (itens ?? []).filter(
+    (i) =>
+      i.nome.toLowerCase().includes(busca.trim().toLowerCase()) &&
+      (filtro === "tudo" || i.condicoes[filtro] > 0),
   );
 
   /**
@@ -277,6 +290,28 @@ export default function AcervoPage() {
               placeholder="Buscar no acervo" className="pl-9" />
           </div>
 
+          {/* Filtros rápidos por condição — a pergunta do galpão é "o que
+              está para limpar?", não "onde está o item X?". */}
+          <div className="mb-3 flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filtrar por condição">
+            {(["tudo", ...CONDICOES] as const).map((c) => (
+              <button key={c} type="button" onClick={() => setFiltro(c)} aria-pressed={filtro === c}
+                className={cn(
+                  "min-h-10 flex-shrink-0 rounded-full border px-3 text-sm cursor-pointer",
+                  filtro === c ? "border-primary bg-primary/10 font-medium text-primary" : "border-border",
+                )}>
+                {c === "tudo" ? "Tudo" : ROTULO_DA_CONDICAO[c]}
+              </button>
+            ))}
+          </div>
+          {visiveis.length === 0 && filtro !== "tudo" && (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Nenhum item em "{ROTULO_DA_CONDICAO[filtro]}".{" "}
+              <button onClick={() => setFiltro("tudo")} className="text-primary hover:underline cursor-pointer">
+                Ver tudo
+              </button>
+            </p>
+          )}
+
           <div className="space-y-2">
             {visiveis.map((item) => (
               <div key={item._id}
@@ -288,8 +323,19 @@ export default function AcervoPage() {
                   <p className="font-medium text-sm">{item.nome}</p>
                   <p className="text-xs text-muted-foreground">
                     {item.quantidadeTotal} {abreviarUnidade(item.unidade)}
-                    {(item.emManutencao ?? 0) > 0 && ` · ${item.emManutencao} em manutenção`}
                     {item.categoria && ` · ${item.categoria}`}
+                  </p>
+                  {/* Quantas podem sair AGORA — "pronto" é derivado, e as
+                      outras condições só aparecem quando existem. */}
+                  <p className="mt-0.5 text-sm">
+                    <strong>{item.condicoes.pronto}</strong> {ROTULO_CURTO_DA_CONDICAO.pronto}
+                    {(["limpeza", "reparo", "indisponivel", "conferencia"] as const)
+                      .filter((c) => item.condicoes[c] > 0)
+                      .map((c) => (
+                        <span key={c} className="text-amber-700 dark:text-amber-400">
+                          {" · "}{item.condicoes[c]} {ROTULO_CURTO_DA_CONDICAO[c]}
+                        </span>
+                      ))}
                   </p>
                   {/* Nunca "X disponíveis": sem uma janela, o número engana.
                       O DÉFICIT, porém, não depende de janela escolhida — é a
@@ -302,7 +348,7 @@ export default function AcervoPage() {
                       Faltam {item.pico.deficit} {abreviarUnidade(item.unidade)} em{" "}
                       {formatEventDayOnly(item.pico.dia!)} — {item.pico.pico} prometidos,{" "}
                       {item.quantidadeTotal} no acervo
-                      {(item.emManutencao ?? 0) > 0 && `, ${item.emManutencao} em manutenção`}
+                      {item.condicoes.foraDeUso > 0 && `, ${item.condicoes.foraDeUso} fora de uso`}
                     </p>
                   ) : (
                     item.eventosComReserva > 0 && (
@@ -314,6 +360,15 @@ export default function AcervoPage() {
                   )}
                 </button>
                 <div className="flex items-center gap-1 flex-shrink-0">
+                  {/* A ação mais frequente do galpão, com alvo de 44 px e
+                      texto: "quebrou", "precisa lavar", "voltou do conserto". */}
+                  {!item.archived && (
+                    <button onClick={() => setOcorrencia(item._id)}
+                      aria-label={`Registrar ocorrência em ${item.nome}`}
+                      className="min-h-11 rounded-lg border border-border px-3 text-sm font-medium hover:bg-accent cursor-pointer">
+                      Ocorrência
+                    </button>
+                  )}
                   {/* Alvo de toque de 40px: esta tela e usada no galpao, em pe. */}
                   {!item.archived && (
                     <button onClick={() => setAjustando(item._id)}
@@ -349,6 +404,10 @@ export default function AcervoPage() {
       {ajustando && (() => {
         const alvo = (itens ?? []).find((i) => i._id === ajustando);
         return alvo ? <AjusteDeAcervoDialog item={alvo} onClose={() => setAjustando(null)} /> : null;
+      })()}
+      {ocorrencia && (() => {
+        const alvo = (itens ?? []).find((i) => i._id === ocorrencia);
+        return alvo ? <OcorrenciaDeAcervoDialog item={alvo} onClose={() => setOcorrencia(null)} /> : null;
       })()}
       {editando && (
         <ItemDialog open onClose={() => setEditando(null)}

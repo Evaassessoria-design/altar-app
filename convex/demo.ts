@@ -8,6 +8,7 @@ import { PORTFOLIO_DEMO } from "./lib/demoPortfolio";
 import { dataEmDias } from "./lib/dataDoDia";
 import { janelaSugerida } from "./lib/acervo";
 import { normalizeName, normalizePhone } from "./lib/supplierIdentity";
+import { resolveAccess } from "./lib/access";
 
 /** O demo tem uma conta. O teto existe só para nunca varrer um banco grande. */
 const MAX_CONTAS_LISTADAS = 5;
@@ -943,5 +944,59 @@ export const resetar = internalMutation({
     // seria a demo ensaiada.
     const criado = await inserirDemonstracao(ctx, userId);
     return { resetou: true as const, apagadas, ...criado };
+  },
+});
+
+/**
+ * Deixa a CONTA de demonstração pronta para a live — acesso, não conteúdo.
+ *
+ *   internal.demo.prepararConta  { }
+ *   internal.demo.prepararConta  { "email": "demo@exemplo.com.br" }
+ *
+ * ── OS DOIS DEFEITOS QUE A AUDITORIA DE 28/09 ACHOU NA DEMO ─────────────────
+ *   · teste vencido em 15/09 e sem acesso `internal`: o paywall cortaria o
+ *     bloco 2 (converter proposta em evento) e a IA, ao vivo;
+ *   · `role: "admin"`: a barra lateral mostraria "Painel Admin" e "Campanha"
+ *     na transmissão — justamente as telas que o roteiro manda não abrir.
+ *
+ * O caminho que existia, `admin.grantInternalAccessByEmail`, libera o acesso
+ * MAS promove a admin (é a ferramenta de SUPORTE, e por isso a demo estava
+ * admin). Aqui é o contrário: `internal` e `user`.
+ *
+ * Mesma trava do seed (`assertDemoEnvironment`): ALTAR_DEMO=1, nenhum rastro
+ * de cobrança, no máximo três contas. Em produção, recusa antes de ler. Não
+ * cria conta, não mexe em senha nem em conteúdo, e é idempotente.
+ */
+export const prepararConta = internalMutation({
+  args: { email: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    await assertDemoEnvironment(ctx);
+    const usuarios = await ctx.db.query("users").take(MAX_CONTAS_LISTADAS);
+    const conta = args.email
+      ? usuarios.find((u) => u.email.trim().toLowerCase() === args.email!.trim().toLowerCase())
+      : usuarios.length === 1
+        ? usuarios[0]
+        : undefined;
+    if (!conta) {
+      throw new ConvexError({
+        code: "AMBIGUOUS_USER",
+        message: args.email
+          ? `Nenhum usuário com o e-mail ${args.email}. Nada foi alterado.`
+          : `Há ${usuarios.length} usuários neste banco. Informe { "email": "..." }. Nada foi alterado.`,
+      });
+    }
+    await ctx.db.patch(conta._id, {
+      accessType: "internal",
+      accessExpiresAt: undefined,
+      role: "user",
+    });
+    const depois = (await ctx.db.get(conta._id))!;
+    return {
+      email: depois.email,
+      role: depois.role,
+      accessType: depois.accessType,
+      // A pergunta que importa no dia: o paywall corta alguma coisa?
+      bloqueada: resolveAccess(depois).blocked,
+    };
   },
 });

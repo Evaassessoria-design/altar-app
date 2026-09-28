@@ -163,7 +163,7 @@ Rafaela & Ian foi no fim de semana. Os números, todos no **Castiçal de vidro
 | Voltaram | 20 | idem |
 | **Ainda fora** | **4** | `/acervo` → Pós-evento → "Não voltou" |
 | **No conserto** (base lascada) | **8** | `/acervo` → Pós-evento → "Em manutenção"; histórico do item |
-| Sofia & Tomás pede | 30 | `/acervo` → "Vai faltar": **30 necessárias · 24 disponíveis · 8 em manutenção · 4 ainda não voltaram** |
+| Sofia & Tomás pede | 30 | `/acervo` → "Vai faltar": **30 necessárias · 24 disponíveis · 8 fora de uso · 4 ainda não voltaram** (na branch da jornada, "fora de uso" soma todas as condições; aqui as 8 são de reparo) |
 | Marina & Gabriel pede | 24 | coberto: 36 − 4 − 8 = **24**. O herói **não** acusa falta de castiçal |
 
 > O impacto cai no contorno de propósito: a história do bloco 3 (o evento

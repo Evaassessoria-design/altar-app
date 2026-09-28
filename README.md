@@ -124,7 +124,8 @@ ALTAR_DEMO                               ← só no projeto de demonstração
 | Equipe e escala | `convex/team.ts` |
 | Ficha técnica (materiais, composições, receita) | `convex/fichaTecnica.ts`, `materials.ts`, `compositions.ts` |
 | Catálogo (a mesma base, em tela própria) | `/catalogo`, `src/components/catalogo/*` — os diálogos são os MESMOS da ficha técnica, importados dos dois lugares |
-| Acervo (reserva, saída, retorno, ajuste, manutenção, pós-evento) | `convex/acervo.ts`, `lib/acervo.ts` (disponibilidade desconta conserto e peça que não voltou), `lib/ajusteDeAcervo.ts` |
+| Acervo (reserva, saída, retorno, ajuste, condição, pós-evento) | `convex/acervo.ts`, `lib/acervo.ts` (disponibilidade desconta peça fora de uso e peça que não voltou), `lib/condicaoDoAcervo.ts` (pronto derivado; limpeza, reparo, indisponível, conferência), `lib/ajusteDeAcervo.ts` — ver `docs/jornada-evento/` |
+| Jornada do evento (fase, próximo passo, operação) | `lib/jornadaDoEvento.ts`, `health.getEventJourney` — derivada, nunca gravada; ver `docs/jornada-evento/` |
 | Compras e panorama | `convex/purchases.ts` |
 | Financeiro (livro-caixa) | `convex/financeiro.ts`, `lib/dinheiro.ts` |
 | Orçamento, galeria, planta por IA | `convex/orcamento.ts`, `gallery.ts`, `layoutRenders.ts`, `aiVisual.ts` |

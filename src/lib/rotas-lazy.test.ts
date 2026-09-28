@@ -105,8 +105,11 @@ describe("tela que não chega tem saída", () => {
     expect(BOUNDARY).toContain("window.location.reload()");
   });
 
-  it("a mensagem técnica não vai para a tela nesse caso", () => {
-    expect(BOUNDARY).toMatch(/!naoChegou &&[\s\S]{0,200}error\.message/);
+  it("a mensagem técnica não vai para a tela nesse caso — nem em nenhum outro", () => {
+    // Desde 28/09 a mensagem crua não aparece NUNCA: só a que o ALTAR
+    // escreveu para a tela (lib/mensagem-segura.ts), e só fora deste caso.
+    expect(BOUNDARY).toMatch(/!naoChegou && mensagemSeguraDoErro\(error\)/);
+    expect(BOUNDARY).not.toMatch(/\{error\.message/);
   });
 });
 

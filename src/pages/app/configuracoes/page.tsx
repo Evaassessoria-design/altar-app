@@ -41,6 +41,7 @@ import { authClient } from "@/lib/auth-client.ts";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { mensagemDeErroDeAutenticacao } from "@/lib/erro-de-autenticacao.ts";
 
 const CURRENCIES = [
   { value: "BRL", label: "R$ — Real Brasileiro" },
@@ -669,7 +670,7 @@ function SecuritySection() {
         revokeOtherSessions: true,
       });
       if (error) {
-        toast.error(error.message ?? "Não foi possível alterar a senha. Confira a senha atual.");
+        toast.error(mensagemDeErroDeAutenticacao(error, "trocar_senha"));
         return;
       }
       // revokeOtherSessions apaga TODAS as sessões e cria uma nova no servidor.

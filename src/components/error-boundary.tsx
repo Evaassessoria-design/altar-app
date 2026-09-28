@@ -2,6 +2,7 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button.tsx";
 import { ehFalhaDeCarregamentoDeTela } from "@/lib/falha-de-tela.ts";
+import { mensagemSeguraDoErro } from "@/lib/mensagem-segura.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ErrorBoundary do ALTAR.
@@ -86,12 +87,13 @@ export class ErrorBoundary extends Component<Props, State> {
               ? "Pode ser uma atualização do ALTAR ou uma queda de internet. Recarregar resolve — sua sessão continua ativa."
               : "Não foi possível carregar esta parte do ALTAR. Isso pode ser temporário — sua sessão continua ativa."}
           </p>
-          {/* A mensagem tecnica so aparece quando pode ajudar. "Failed to fetch
-              dynamically imported module" nao diz nada a quem esta montando um
-              evento — e continua no console para quem for depurar. */}
-          {!naoChegou && (
+          {/* A mensagem crua NUNCA vai para a tela: "Cannot read properties of
+              undefined" ou o nome interno de uma função do Convex não ajudam
+              quem está montando um evento. Só passa o que o ALTAR escreveu
+              para a tela (lib/mensagem-segura.ts); o resto fica no console. */}
+          {!naoChegou && mensagemSeguraDoErro(error) && (
             <p className="mb-6 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground break-words">
-              {error.message || "Erro desconhecido"}
+              {mensagemSeguraDoErro(error)}
             </p>
           )}
           <Button

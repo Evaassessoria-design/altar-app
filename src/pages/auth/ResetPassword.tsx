@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner";
 import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import { MarcaAltar } from "@/components/marca-altar.tsx";
+import { mensagemDeErroDeAutenticacao } from "@/lib/erro-de-autenticacao.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Página pública de redefinição de senha.
@@ -54,10 +55,7 @@ export default function ResetPasswordPage() {
     try {
       const { error } = await authClient.resetPassword({ newPassword: password, token });
       if (error) {
-        toast.error(
-          error.message ??
-            "Não foi possível redefinir a senha. O link pode ter expirado — solicite um novo.",
-        );
+        toast.error(mensagemDeErroDeAutenticacao(error, "redefinir_senha"));
         return;
       }
       // revokeSessionsOnPasswordReset apagou todas as sessões no servidor.

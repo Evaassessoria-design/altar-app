@@ -4,6 +4,7 @@ import { Loader2, LogIn, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth.ts";
 import { Button, buttonVariants } from "@/components/ui/button.tsx";
+import { mensagemDeErroDeAutenticacao } from "@/lib/erro-de-autenticacao.ts";
 
 export interface SignInButtonProps
   extends
@@ -65,9 +66,8 @@ export const SignInButton = forwardRef<HTMLButtonElement, SignInButtonProps>(
 
     useEffect(() => {
       if (error) {
-        toast.error("Login error", {
-          description: error.message,
-        });
+        // Em português e sem o texto cru do provedor (lib/erro-de-autenticacao).
+        toast.error(mensagemDeErroDeAutenticacao(error as { code?: string }, "entrar"));
         console.error("Login error", error);
       }
     }, [error]);

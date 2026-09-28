@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs.t
 import { toast } from "sonner";
 import { Loader2, MailCheck } from "lucide-react";
 import { MarcaAltar } from "@/components/marca-altar.tsx";
+import { mensagemDeErroDeAutenticacao } from "@/lib/erro-de-autenticacao.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tela única de autenticação (Fase 4B) — Better Auth e-mail/senha.
@@ -88,7 +89,7 @@ export default function LoginPage() {
         password: loginPassword,
       });
       if (error) {
-        toast.error(error.message ?? "E-mail ou senha inválidos");
+        toast.error(mensagemDeErroDeAutenticacao(error, "entrar"));
         return;
       }
       await finishAuth();
@@ -107,7 +108,7 @@ export default function LoginPage() {
         name: name.trim(),
       });
       if (error) {
-        toast.error(error.message ?? "Erro ao criar conta");
+        toast.error(mensagemDeErroDeAutenticacao(error, "cadastrar"));
         return;
       }
       await finishAuth(company.trim() || undefined);

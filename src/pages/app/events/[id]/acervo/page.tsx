@@ -18,6 +18,7 @@ import { formatEventDayOnly } from "@/lib/event-date.ts";
 import { abreviarUnidade } from "@/convex/lib/materiais.ts";
 import { ROTULO_DA_RESERVA } from "@/convex/lib/acervo.ts";
 import { ReservaManualDialog } from "./_components/reserva-manual-dialog.tsx";
+import { ConferenciaDeRetorno } from "./_components/conferencia-de-retorno.tsx";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ACERVO DO EVENTO
@@ -160,6 +161,14 @@ export default function AcervoDoEventoPage() {
           </Button>
         </div>
       </div>
+
+      {/* A segunda-feira: some quando tudo que saiu já foi conferido. A `key`
+          reinicia o formulário quando uma reserva nova passa a precisar. */}
+      <ConferenciaDeRetorno
+        key={acervo.reservas.filter((r) => (r.saiu ?? 0) > 0 && r.conferidoEm === undefined).map((r) => r._id).join()}
+        eventId={eventId}
+        reservas={acervo.reservas}
+      />
 
       {acervo.reservas.length === 0 ? (
         <Empty>

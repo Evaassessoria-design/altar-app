@@ -1,6 +1,7 @@
 # Prontidão da live — estamos prontos?
 
-**06/10/2026 · 19:00 BRT** · conferido em **28/09/2026**
+**06/10/2026 · 19:00 BRT** · conferido em **28/09/2026**, com a demo
+auditada no deployment `insightful-goldfish-950` ([`mapa-demo.md`](mapa-demo.md))
 
 ## STATUS GERAL: **AT RISK**
 
@@ -30,16 +31,17 @@ feito não é evidência.
 
 | # | Item | Status | Evidência de feito | Dono | Prazo | Bloqueio |
 |---|---|---|---|---|---|---|
-| C1 | Conta de demonstração loga e abre `/dashboard` com os 13 eventos | ⬜ | login feito no computador da live; Dashboard conta 13 | operadora | T-3 (03/10) | — |
-| C2 | Acesso da conta demo liberado (`internal`) | ⬜ | abrir a conversão de proposta em evento uma vez, sem paywall | operadora | T-3 (03/10) | — |
+| C1 | Conta de demonstração loga e abre `/dashboard` com os 13 eventos | ⬜ | login feito no computador da live; Dashboard conta 13 | operadora | T-3 (03/10) | **a demo tem hoje 2 eventos** — dois "Marina & Gabriel" e nada do portfólio: foi semeada por um seed antigo. **Depende de C6** |
+| C2 | Acesso da conta demo liberado (`internal`) e sem menu de admin | ✅ | `demo:prepararConta` em 28/09 → `internal`, `role: user`, `bloqueada: false`. Falta só abrir a conversão uma vez no ensaio | — | — | — |
 | C3 | Fotos e capa de Marina & Gabriel | ⬜ | **"Pronto para mostrar?"** sem nenhum ✕ em fotos e capa | operadora | T-1 (05/10) | depende de C6 (resetar **antes** das fotos) |
 | C4 | **Link da sala definido** em `LIVE_ALTAR.linkDaReuniao` (`convex/lib/campanha.ts`) | ⬜ | um lembrete de 24h preparado **sem pendência** em `/campanha` | dona do negócio | T-3 (03/10) | **decisão humana: qual é a sala.** Sem ele, confirmação e lembretes nascem com pendência e não podem ser aprovados |
-| C5 | Correções de 28/09 publicadas **no deployment de demonstração** | ⬜ | a pergunta "O que precisa da minha atenção?" cita os vencidos (ver C7) | operadora | T-3 (03/10) | release humana — esta branch não publica nada |
-| C6 | Reset da demo rodado uma vez contra banco de verdade | ⬜ | resposta `resetou: true` e `apagadas.events: 13` ([`riscos.md`](riscos.md) §4) | operadora | antes do 1º ensaio | — |
+| C5 | Correções de 28/09 publicadas **no deployment de demonstração** | ✅ código | 249 de 249 funções publicadas = código da branch (`0530dce`), conferido por `function-spec`. A resposta só muda de verdade depois de C6 | — | — | — |
+| C6 | **Reset da demo** | ⬜ | resposta `resetou: true`; depois, `checkEnvironment` e o Dashboard com 13 eventos | **você** | **já** — antes das fotos | a automação foi barrada pela camada de permissão (apaga e recria dados). Nenhuma foto, contrato, planta ou documento existe na conta hoje: o reset **não** vai recusar nem destruir trabalho manual. Comando em [`mapa-demo.md`](mapa-demo.md) |
 | C7 | As duas perguntas do bloco 7 vistas respondendo | ⬜ | as duas respostas lidas inteiras, sem bobagem, **citando os vencidos** | quem apresenta | T-3 (03/10) | depende de C5 |
 | C8 | Roteiro ensaiado inteiro, cronometrado | ⬜ | um ensaio de ponta a ponta dentro de 28–33 min | quem apresenta | T-1 (05/10) | depende de C1–C3 |
 | C9 | Vídeo de contingência gravado e testado | ⬜ | abre e toca no computador da live | operadora | T-1 (05/10) | depende de C8 |
 | C10 | Preço e CTA decididos e escritos | ⬜ | o texto está na landing; ninguém fala preço de improviso | dona do negócio | T-3 (03/10) | decisão de negócio |
+| C11 | **Chave de IA no deployment da demo** | ⬜ | `npx convex env list --deployment altar-demo:dev` mostra `ALTAR_AI_API_KEY` e `ALTAR_AI_MODEL`; a resposta do bloco 7 NÃO traz o aviso de "por regra" | **você** | T-3 (03/10) | **segredo** — não se inventa e não se copia de produção sem decisão sua. Sem ela, o bloco 7 responde por regra (números certos, texto seco): funciona, mas não mostra IA |
 
 ## Importantes — não mudam o status
 

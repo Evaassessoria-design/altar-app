@@ -9,6 +9,56 @@ Conferido em `26/09/2026`, lendo o banco depois de rodar
 
 ---
 
+## Onde a demo mora, e como abrir
+
+| Peça | Valor |
+|---|---|
+| Convex | projeto **`altar-demo`**, deployment **`insightful-goldfish-950`** (`altar-demo:dev`) — nem DEV (`healthy-pika-907`) nem PROD (`mellow-goose-539`) |
+| Variáveis | `ALTAR_DEMO=1`, `BETTER_AUTH_SECRET`, `SITE_URL=http://localhost:5173` — **nenhuma de IA** (ver prontidão, C11) |
+| Frontend | **local**, no computador da live: o `SITE_URL` do Better Auth é `localhost:5173` |
+| Conta | uma só, `demo@exemplo.com.br` |
+
+Abrir a demo — o `.env.local` do repositório aponta para o DEV; as variáveis
+do comando têm prioridade sobre ele (conferido em 28/09 pelo bundle):
+
+```bash
+# bash
+VITE_CONVEX_URL=https://insightful-goldfish-950.convex.cloud \
+VITE_CONVEX_SITE_URL=https://insightful-goldfish-950.convex.site \
+pnpm dev
+```
+
+```powershell
+# PowerShell
+$env:VITE_CONVEX_URL="https://insightful-goldfish-950.convex.cloud"
+$env:VITE_CONVEX_SITE_URL="https://insightful-goldfish-950.convex.site"
+pnpm dev
+```
+
+Publicar código na demo:
+
+```bash
+printf 'CONVEX_DEPLOYMENT=dev:insightful-goldfish-950\n' > /fora/do/repo/demo.env
+cp .env.local /fora/do/repo/env.local.bak
+npx convex dev --once --env-file /fora/do/repo/demo.env
+cp /fora/do/repo/env.local.bak .env.local   # ⚠️ OBRIGATÓRIO
+```
+
+> **`convex dev` REESCREVE o `.env.local`** para o deployment que usou,
+> mesmo com `--env-file`. Sem restaurar, o próximo comando no repositório
+> cai na demo achando que está no DEV. Aconteceu em 28/09.
+
+Os comandos internos da demo, sempre com `--deployment altar-demo:dev`:
+
+| Comando | O que faz |
+|---|---|
+| `demo:checkEnvironment` | só lê: o ambiente aceita o seed? já está semeado? |
+| `demo:contaDoDemo` | só lê: quem é a conta |
+| `demo:prepararConta` | acesso `internal` e `role: user` — sem paywall e sem menu de admin na transmissão |
+| `demo:resetar {"confirmo": "APAGAR E RECRIAR A DEMONSTRACAO"}` | apaga o conteúdo da conta e recria pelo seed atual |
+
+---
+
 ## A regra que este arquivo existe para provar
 
 **Os números conversam.** Se o Dashboard diz X, o detalhe justifica X. Evento

@@ -292,7 +292,36 @@ export const pendenciasPosEvento = query({
 
     const p = pendenciasDoAcervo(itens, reservas, dataDoDia());
 
-    const idsDeEvento = [...new Set([...p.fora, ...p.impacto].map((l) => l.eventId))];
+    // ── O QUE VOLTOU COM PROBLEMA, E DE QUAL EVENTO ────────────────────────
+    // Das linhas de histórico que as conferências de retorno e as ocorrências
+    // gravaram (tipo "condicao", saindo de "pronto", com evento). É o que
+    // responde "o que voltou com problema do casamento da Marina?" com dado
+    // real. As mais recentes, com teto — e a tela diz quando cortou.
+    const TETO_DO_HISTORICO = 300;
+    const recentes = await ctx.db
+      .query("collectionAdjustments")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .order("desc")
+      .take(TETO_DO_HISTORICO);
+    const nomeDoItem = new Map(itens.map((i) => [i._id as string, { nome: i.nome, unidade: i.unidade }]));
+    const agrupado = new Map<string, { eventId: string; itemId: string; nome: string; unidade: string; condicao: string; quantidade: number }>();
+    for (const a of recentes) {
+      if (a.tipo !== "condicao" || a.condicaoDe !== "pronto" || !a.eventId || !a.condicaoPara) continue;
+      const item = nomeDoItem.get(a.collectionItemId);
+      if (!item) continue;
+      const chave = `${a.eventId}|${a.collectionItemId}|${a.condicaoPara}`;
+      const atual = agrupado.get(chave);
+      if (atual) atual.quantidade += a.quantidadeMovida ?? 0;
+      else agrupado.set(chave, {
+        eventId: a.eventId, itemId: a.collectionItemId, ...item,
+        condicao: a.condicaoPara, quantidade: a.quantidadeMovida ?? 0,
+      });
+    }
+    const voltaramComProblema = [...agrupado.values()];
+
+    const idsDeEvento = [
+      ...new Set([...p.fora, ...p.impacto, ...voltaramComProblema].map((l) => l.eventId)),
+    ];
     const nomes = new Map<string, { nome: string; data: string }>();
     for (const id of idsDeEvento) {
       const evento = await ctx.db.get(id as Id<"events">);
@@ -315,6 +344,10 @@ export const pendenciasPosEvento = query({
       totalEmManutencao: p.emManutencao.length,
       impacto: p.impacto.slice(0, LINHAS_POR_BLOCO).map(comEvento),
       totalImpacto: p.impacto.length,
+      voltaramComProblema: voltaramComProblema.slice(0, LINHAS_POR_BLOCO).map(comEvento),
+      totalVoltaramComProblema: voltaramComProblema.length,
+      /** O histórico lido bateu no teto: pode haver problema mais antigo. */
+      historicoIncompleto: recentes.length === TETO_DO_HISTORICO,
     };
   },
 });

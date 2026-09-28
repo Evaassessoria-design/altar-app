@@ -189,3 +189,22 @@ describe("ocorrência — o histórico nunca é sobrescrito", () => {
     ).rejects.toThrow(/limpeza/);
   });
 });
+
+describe("'o que voltou com problema do casamento?' — do histórico, não de memória", () => {
+  it("depois da conferência, o pós-evento lista item, condição, quantidade e evento", async () => {
+    const { dona, outra, casamento, reserva } = await cenario();
+    await dona.mutation(api.acervo.conferirRetorno, {
+      eventId: casamento, linhas: [{ reservaId: reserva, voltou: 8, limpeza: 1, reparo: 1 }],
+    });
+    const p = await dona.query(api.acervo.pendenciasPosEvento, {});
+    expect(p.voltaramComProblema).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ nome: "Mesa Toscana", condicao: "limpeza", quantidade: 1, eventoNome: "Marina & Gabriel" }),
+        expect.objectContaining({ nome: "Mesa Toscana", condicao: "reparo", quantidade: 1, eventoNome: "Marina & Gabriel" }),
+      ]),
+    );
+    // Outra conta não vê nada disso.
+    const daOutra = await outra.query(api.acervo.pendenciasPosEvento, {});
+    expect(daOutra.totalVoltaramComProblema).toBe(0);
+  });
+});

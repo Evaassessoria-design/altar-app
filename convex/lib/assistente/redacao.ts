@@ -187,9 +187,12 @@ function linhaDoFato(f: FatoColetado): string | null {
 
     case "acervo.itens": {
       const lista = Array.isArray(f.dados) ? f.dados : arr(d?.itens);
-      return lista.length === 0
-        ? "Acervo vazio."
-        : `${lista.length} item(ns) no acervo.`;
+      if (lista.length === 0) return "Acervo vazio.";
+      // "Quantas estão disponíveis" pede o PRONTO de cada item, não o total.
+      const prontas = lista.reduce<number>((s, x) => s + (num(obj(obj(x)?.condicoes)?.pronto) ?? 0), 0);
+      const foraDeUso = lista.reduce<number>((s, x) => s + (num(obj(obj(x)?.condicoes)?.foraDeUso) ?? 0), 0);
+      return `${lista.length} item(ns) no acervo: ${prontas} peça(s) prontas para uso` +
+        (foraDeUso > 0 ? `, ${foraDeUso} fora de uso.` : ".");
     }
 
     case "acervo.pendencias": {
@@ -197,12 +200,28 @@ function linhaDoFato(f: FatoColetado): string | null {
       const conserto = num(d?.totalEmManutencao) ?? 0;
       const impacto = num(d?.totalImpacto) ?? 0;
       if (fora === 0 && conserto === 0 && impacto === 0) {
-        return "Acervo em dia: tudo voltou, nada no conserto, nenhum evento a descoberto.";
+        return "Acervo em dia: tudo voltou, nada fora de uso, nenhum evento a descoberto.";
       }
       const partes: string[] = [];
       if (impacto > 0) partes.push(`${impacto} reserva(s) de próximos eventos sem peça suficiente`);
       if (fora > 0) partes.push(`${fora} item(ns) que saíram e não voltaram`);
-      if (conserto > 0) partes.push(`${conserto} item(ns) em manutenção`);
+      if (conserto > 0) {
+        // Nomeia os itens e a condição — "quais precisam de reparo?" pede nome.
+        const nomes = arr(d?.emManutencao)
+          .slice(0, 5)
+          .map((x) => {
+            const l = obj(x);
+            const cond = [
+              num(l?.reparo) && `${num(l?.reparo)} em reparo`,
+              num(l?.limpeza) && `${num(l?.limpeza)} para limpar`,
+              num(l?.indisponivel) && `${num(l?.indisponivel)} indisponíveis`,
+              num(l?.conferencia) && `${num(l?.conferencia)} em conferência`,
+            ].filter(Boolean).join(", ");
+            return l?.nome ? `${l.nome} (${cond})` : null;
+          })
+          .filter(Boolean);
+        partes.push(`fora de uso: ${nomes.join("; ")}${conserto > nomes.length ? ` e mais ${conserto - nomes.length}` : ""}`);
+      }
       return `Acervo: ${partes.join("; ")}.`;
     }
 

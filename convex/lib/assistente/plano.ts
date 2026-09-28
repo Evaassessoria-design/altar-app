@@ -60,12 +60,13 @@ const PUXA: Record<Fonte, readonly string[]> = {
   ],
   "acervo.itens": [
     "acervo", "peca", "pecas", "vaso", "vasos", "estoque", "reserva",
-    "reservas", "galpao",
+    "reservas", "galpao", "disponive", "prontas", "quantas",
   ],
   "acervo.pendencias": [
     "nao voltou", "voltou", "voltaram", "retorno", "manutencao", "conserto",
     "quebrou", "quebrada", "quebradas", "avaria", "falta", "faltar", "risco",
-    "pos evento",
+    "pos evento", "reparo", "reparar", "limpar", "limpeza", "lavar", "problema",
+    "danificad", "indisponive",
   ],
   "fornecedores.catalogo": [
     "fornecedor", "fornecedores", "parceiro", "parceiros", "floricultura",

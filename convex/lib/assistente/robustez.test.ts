@@ -197,11 +197,35 @@ describe("'tenho algum risco no acervo?' lê o que está fora, não só a lista"
     const r = redigirLocalmente(
       acervo,
       "risco no acervo",
-      [fato("acervo.pendencias", { totalFora: 1, totalEmManutencao: 1, totalImpacto: 2 }, "Acervo pós-evento")],
+      [fato("acervo.pendencias", {
+        totalFora: 1, totalEmManutencao: 1, totalImpacto: 2,
+        emManutencao: [{ nome: "Poltrona Siena", reparo: 1, limpeza: 2, indisponivel: 0, conferencia: 0 }],
+      }, "Acervo pós-evento")],
       "verde",
     );
     expect(r).toContain("2 reserva(s) de próximos eventos sem peça suficiente");
     expect(r).toContain("1 item(ns) que saíram e não voltaram");
-    expect(r).toContain("1 item(ns) em manutenção");
+    // "Quais precisam de reparo?" pede NOME e condição, não uma contagem.
+    expect(r).toContain("fora de uso: Poltrona Siena (1 em reparo, 2 para limpar)");
   });
+
+  it("'quantas estão disponíveis?' responde com as PRONTAS, não com o total", () => {
+    const r = redigirLocalmente(
+      acervo,
+      "quantas poltronas estão disponíveis",
+      [fato("acervo.itens", [
+        { nome: "Poltrona Siena", condicoes: { pronto: 22, foraDeUso: 1 } },
+        { nome: "Mesa Toscana", condicoes: { pronto: 38, foraDeUso: 6 } },
+      ], "Acervo")],
+      "verde",
+    );
+    expect(r).toContain("2 item(ns) no acervo: 60 peça(s) prontas para uso, 7 fora de uso.");
+  });
+
+  it.each(["Quais itens precisam de reparo?", "o que precisa lavar?"])(
+    "%j lê o pós-evento do acervo",
+    (pedido) => {
+      expect(planoDeConsulta(pedido, acervo)).toContain("acervo.pendencias");
+    },
+  );
 });

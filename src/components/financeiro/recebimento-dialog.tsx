@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog.tsx";
 import { Textarea } from "@/components/ui/textarea.tsx";
 import { useEnvioDeArquivo } from "@/hooks/use-upload.ts";
+import { dicaDeTamanho } from "@/convex/lib/arquivos.ts";
 import { formatDateInput } from "@/lib/event-date.ts";
 import {
   FORMAS_DE_PAGAMENTO,
@@ -309,7 +310,12 @@ export function RecebimentoDialog({
               Adicionar comprovante
             </span>
           </label>
-          <p className="text-[11px] text-muted-foreground">PDF ou imagem, até 10 MB.</p>
+          {/* O número vem da constante, não da mão: dizia "10 MB" e o teto de
+              documento passou a 20 MB nesta correção. Dica escrita à mão é
+              dica que envelhece sem ninguém notar. */}
+          <p className="text-[11px] text-muted-foreground">
+            PDF ou imagem, {dicaDeTamanho("documento").replace("Máximo de ", "até ").replace(" por arquivo.", ".")}
+          </p>
         </div>
       </DialogContent>
     </Dialog>

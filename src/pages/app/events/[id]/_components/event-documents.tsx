@@ -1,5 +1,11 @@
 import { useRef, useState } from "react";
 import { useEnvioDeArquivo } from "@/hooks/use-upload.ts";
+import {
+  ACCEPT_DE_DOCUMENTO,
+  dicaDeTamanho,
+  EXTENSOES_DE_DOCUMENTO,
+  MIMES_DE_DOCUMENTO,
+} from "@/convex/lib/arquivos.ts";
 import { formatTimestamp } from "@/lib/safe-date.ts";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
@@ -41,7 +47,15 @@ export function EventDocuments({ eventId }: { eventId: Id<"events"> }) {
   // convex/leadDocuments.ts: copiar criaria dois donos para o mesmo arquivo.
   const daNegociacao = useQuery(api.leadDocuments.listForEvent, { eventId });
   const generateUploadUrl = useMutation(api.contracts.generateUploadUrl);
-  const { enviar } = useEnvioDeArquivo(generateUploadUrl, { tipo: "documento", aceitos: ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain"] });
+  // Aceitava PDF, DOC, DOCX e TXT — faltavam planilha e apresentação, que é
+  // o que fornecedor manda como orçamento. E conferia só o MIME: DOCX chega
+  // como `application/octet-stream` em máquina sem Office, então papelada
+  // legítima era recusada por palpite do sistema. Agora vale extensão OU MIME.
+  const { enviar } = useEnvioDeArquivo(generateUploadUrl, {
+    tipo: "documento",
+    aceitos: MIMES_DE_DOCUMENTO,
+    extensoes: EXTENSOES_DE_DOCUMENTO,
+  });
   const saveContract = useMutation(api.contracts.saveContract);
 
   // Os fornecedores DESTE evento — a etiqueta de quem é o documento. A mesma
@@ -239,6 +253,9 @@ export function EventDocuments({ eventId }: { eventId: Id<"events"> }) {
         <input
           ref={inputRef}
           type="file"
+          // Extensões E MIMEs: é o que os navegadores entendem, e cada um
+          // entende um dos dois melhor. Lista vem da fonte única.
+          accept={ACCEPT_DE_DOCUMENTO}
           className="hidden"
           onChange={(e) => void handleUpload(e.target.files?.[0])}
         />
@@ -252,6 +269,11 @@ export function EventDocuments({ eventId }: { eventId: Id<"events"> }) {
           {enviando ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
           {enviando ? "Enviando..." : "Anexar arquivo"}
         </Button>
+
+        {/* O limite dito antes de ser esbarrado, da mesma constante que valida. */}
+        <p className="text-[11px] text-muted-foreground">
+          PDF, Word, Excel ou PowerPoint. {dicaDeTamanho("documento")}
+        </p>
 
         {/* O backend substitui o documento do mesmo tipo. Avisar antes é mais
             honesto do que deixar a pessoa descobrir perdendo o anterior. */}

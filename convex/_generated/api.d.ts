@@ -60,6 +60,7 @@ import type * as lib_ajusteDeAcervo from "../lib/ajusteDeAcervo.js";
 import type * as lib_ambiente from "../lib/ambiente.js";
 import type * as lib_asaasEvents from "../lib/asaasEvents.js";
 import type * as lib_assemblyStatus from "../lib/assemblyStatus.js";
+import type * as lib_arquivos from "../lib/arquivos.js";
 import type * as lib_assistente_agentes from "../lib/assistente/agentes.js";
 import type * as lib_assistente_briefing from "../lib/assistente/briefing.js";
 import type * as lib_assistente_plano from "../lib/assistente/plano.js";
@@ -208,6 +209,7 @@ declare const fullApi: ApiFromModules<{
   "lib/ambiente": typeof lib_ambiente;
   "lib/asaasEvents": typeof lib_asaasEvents;
   "lib/assemblyStatus": typeof lib_assemblyStatus;
+  "lib/arquivos": typeof lib_arquivos;
   "lib/assistente/agentes": typeof lib_assistente_agentes;
   "lib/assistente/briefing": typeof lib_assistente_briefing;
   "lib/assistente/plano": typeof lib_assistente_plano;

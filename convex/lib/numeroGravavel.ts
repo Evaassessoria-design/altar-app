@@ -1,5 +1,6 @@
 import { ConvexError } from "convex/values";
 import { VALOR_MAXIMO } from "./dinheiro";
+import { cabeNoTeto, recadoDeTamanho, TAMANHO_MAXIMO_DOCUMENTO } from "./arquivos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // O NÚMERO QUE PODE SER GRAVADO
@@ -75,6 +76,46 @@ export function exigirQuantidadeGravavel(
     recusar(campo, `acima do limite de ${QUANTIDADE_MAXIMA.toLocaleString("pt-BR")}. Confira os zeros.`);
   }
   if (opcoes.inteiro && !Number.isInteger(valor)) recusar(campo, "precisa ser um número inteiro.");
+}
+
+/**
+ * TAMANHO DE ARQUIVO, EM BYTES.
+ *
+ * ── POR QUE NÃO SERVE `exigirQuantidadeGravavel` ────────────────────────────
+ * Porque byte não é quantidade física. `leadDocuments.save` usava a de
+ * quantidade, cujo teto é um milhão — escrito para "um milhão de vasos é
+ * sempre erro de digitação". Em bytes, isso virou um teto de upload de
+ * 0,95 MiB: uma decoradora foi recusada ao anexar um DOCX de 3,9 MB, e leu
+ * "Confira os zeros" sem ter digitado zero nenhum.
+ *
+ * Duas coisas, então, e não uma: o teto certo, e um recado de gente.
+ *
+ * ── O TETO VEM DA MESMA CONSTANTE QUE A TELA USA ────────────────────────────
+ * `cabeNoTeto` é o predicado de `lib/arquivos.ts`, o mesmo que o front chama.
+ * O backend segue sendo a autoridade — o que ele deixou de ser é CONTRADITÓRIO:
+ * o que a tela aceita, ele aceita, porque é a mesma conta.
+ *
+ * `undefined` e `null` PASSAM: o tamanho é informado pelo navegador para ser
+ * exibido, e documento antigo gravado antes do campo não tem nenhum. Exigir
+ * número aqui quebraria a listagem de quem já tem papelada guardada.
+ */
+export function exigirTamanhoDeArquivoGravavel(
+  bytes: number | null | undefined,
+  campo: string,
+  teto: number = TAMANHO_MAXIMO_DOCUMENTO,
+): void {
+  if (bytes === null || bytes === undefined) return;
+  // Um recado por motivo: "arquivo inválido" não diz a ninguém o que fazer.
+  if (!Number.isFinite(bytes)) recusar(campo, "não é um tamanho válido.");
+  if (bytes < 0) recusar(campo, "não pode ser negativo.");
+  if (bytes === 0) {
+    throw new ConvexError({ code: "VALOR_INVALIDO", message: "O arquivo está vazio." });
+  }
+  if (!cabeNoTeto(bytes, teto)) {
+    // A mensagem é a MESMA que a tela mostra. Quem cair aqui pelo caminho
+    // raro (chamada direta à mutation) lê a frase de gente, não o número cru.
+    throw new ConvexError({ code: "VALOR_INVALIDO", message: recadoDeTamanho(teto) });
+  }
 }
 
 /**

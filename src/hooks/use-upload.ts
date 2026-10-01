@@ -31,10 +31,16 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type EnvioOpcoes = {
-  /** Decide o teto de tamanho (ver lib/upload.ts). */
+  /** Decide o teto de tamanho (ver convex/lib/arquivos.ts). */
   tipo: TipoDeEnvio;
   /** Tipos MIME aceitos. Vazio = o que o seletor da tela já restringiu. */
   aceitos?: readonly string[];
+  /**
+   * Extensões aceitas (".docx"). Vale em OU com o MIME: o do Office é
+   * inconfiável e DOCX chega como `application/octet-stream` em máquina sem
+   * Office. Sem isto, papelada legítima era recusada por palpite do sistema.
+   */
+  extensoes?: readonly string[];
 };
 
 export type ResultadoDoEnvio =

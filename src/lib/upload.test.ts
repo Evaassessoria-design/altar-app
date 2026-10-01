@@ -21,8 +21,12 @@ describe("tamanho", () => {
     const r = validarArquivo(arq({ size: 90 * MB }), { tipo: "imagem" });
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.motivo).toContain("90,0 MB");
-      expect(r.motivo).toContain("15,0 MB");
+      // A mensagem deixou de recitar bytes dos dois lados ("tem 90,0 MB — o
+      // limite é 15,0 MB"). Diz o limite e o que fazer, porque é isso que a
+      // pessoa precisa decidir. Ver `recadoDeTamanho`.
+      expect(r.motivo).toContain("15 MB");
+      expect(r.motivo).toContain("Escolha um arquivo menor");
+      expect(r.motivo).not.toMatch(/bytes/i);
     }
   });
 
@@ -31,9 +35,16 @@ describe("tamanho", () => {
     expect(validarArquivo(arq({ size: TAMANHO_MAXIMO_IMAGEM + 1 }), { tipo: "imagem" }).ok).toBe(false);
   });
 
-  it("documento tem teto próprio, menor que o de foto", () => {
+  it("documento tem teto próprio, e agora é MAIOR que o de foto", () => {
+    // Era `toBeLessThan`, e a inversão é decisão de produto desta correção:
+    // uma proposta em DOCX ou PPTX com fotos de ambiente passa de 15 MB sem
+    // esforço — foi o caso real que falhou, um DOCX de 3,9 MB recusado por um
+    // teto de 0,95 MiB no backend.
+    //
+    // O que NÃO mudou é a existência de dois tetos: quem desenha imagem na
+    // tela é a galeria, e esse custo é da foto, não do documento.
     expect(tetoDoTipo("documento")).toBe(TAMANHO_MAXIMO_DOCUMENTO);
-    expect(TAMANHO_MAXIMO_DOCUMENTO).toBeLessThan(TAMANHO_MAXIMO_IMAGEM);
+    expect(TAMANHO_MAXIMO_DOCUMENTO).toBeGreaterThan(TAMANHO_MAXIMO_IMAGEM);
   });
 
   it("arquivo vazio é recusado", () => {

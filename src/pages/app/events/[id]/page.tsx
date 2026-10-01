@@ -1,5 +1,10 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useEnvioDeArquivo } from "@/hooks/use-upload.ts";
+import {
+  ACCEPT_DE_DOCUMENTO,
+  EXTENSOES_DE_DOCUMENTO,
+  MIMES_DE_DOCUMENTO,
+} from "@/convex/lib/arquivos.ts";
 import { AutoTextarea } from "@/components/ui/auto-textarea.tsx";
 import { formatTimestamp } from "@/lib/safe-date.ts";
 import { useQuery, useMutation, useAction } from "convex/react";
@@ -120,7 +125,11 @@ export default function EventDetailsPage() {
   const contract = useQuery(api.contracts.getContract, { eventId: id as Id<"events"> });
   const health = useQuery(api.health.getEventHealth, { eventId: id as Id<"events"> });
   const generateUploadUrl = useMutation(api.contracts.generateUploadUrl);
-  const { enviar } = useEnvioDeArquivo(generateUploadUrl, { tipo: "documento" });
+  const { enviar } = useEnvioDeArquivo(generateUploadUrl, {
+    tipo: "documento",
+    aceitos: MIMES_DE_DOCUMENTO,
+    extensoes: EXTENSOES_DE_DOCUMENTO,
+  });
   const saveContract = useMutation(api.contracts.saveContract);
   const generateChecklist = useAction(api.ai.generateChecklistFromBriefing);
   const briefing = useQuery(api.briefing.getBriefing, { eventId: id as Id<"events"> });
@@ -584,7 +593,9 @@ export default function EventDetailsPage() {
             <input
               ref={contractInputRef}
               type="file"
-              accept=".pdf,.doc,.docx,.txt"
+              // Planilha e apresentação faltavam: é o formato em que
+              // fornecedor manda orçamento. Lista vem da fonte única.
+              accept={ACCEPT_DE_DOCUMENTO}
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];

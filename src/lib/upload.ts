@@ -1,3 +1,18 @@
+// Caminho RELATIVO, e não o alias `@/convex/…` que o resto do front usa: este
+// módulo é importado por um teste de banco que roda no projeto `convex`, onde
+// esse alias não está mapeado — com ele, o typecheck do backend quebra.
+//
+// E o alias NÃO é escrito aqui nem dentro de comentário: a barra-asterisco da
+// forma curta abre um bloco de comentário para as travas que leem a fonte, e
+// foi assim que este teste quebrou antes de o caminho estar certo.
+import {
+  cabeNoTeto,
+  formatoPermitido,
+  recadoDeTamanho,
+  tetoDoTipo as tetoDaCategoria,
+  type TipoDeEnvio as Categoria,
+} from "../../convex/lib/arquivos.ts";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // ARQUIVOS QUE ENTRAM NO ALTAR
 //
@@ -16,20 +31,23 @@
 // era upload que nunca terminava e galeria que travava ao desenhar.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Um megabyte, em bytes. */
-const MB = 1024 * 1024;
-
-/**
- * Teto das FOTOS. Generoso de propósito: foto de celular atual passa fácil de
- * 10 MB, e recusar o trabalho da pessoa seria pior que aceitar um arquivo
- * grande.
- */
-export const TAMANHO_MAXIMO_IMAGEM = 15 * MB;
-
-/** Teto dos DOCUMENTOS — contrato e proposta em PDF cabem de sobra. */
-export const TAMANHO_MAXIMO_DOCUMENTO = 10 * MB;
-
-export type TipoDeEnvio = "imagem" | "documento";
+// ── OS NÚMEROS NÃO MORAM MAIS AQUI ──────────────────────────────────────────
+// Moravam, e era o defeito: este módulo dizia 10 MB para documento, a tela do
+// funil dizia 20 MB e o backend aplicava 1.000.000 bytes. Três fontes, três
+// respostas, e a decoradora descobria qual valia sendo recusada.
+//
+// Agora há uma: `convex/lib/arquivos.ts`, importável pelos dois lados. Este
+// módulo continua existindo porque a CHECAGEM de experiência é do front — ele
+// só deixou de inventar os limites.
+export {
+  MB,
+  TAMANHO_MAXIMO_IMAGEM,
+  TAMANHO_MAXIMO_DOCUMENTO,
+  tamanhoEmMB,
+  tetoDoTipo,
+  dicaDeTamanho,
+  type TipoDeEnvio,
+} from "../../convex/lib/arquivos.ts";
 
 export type ArquivoAceito = { ok: true };
 export type ArquivoRecusado = { ok: false; motivo: string };
@@ -38,50 +56,38 @@ export type ResultadoDaValidacao = ArquivoAceito | ArquivoRecusado;
 /** Só o que interessa de um `File` — para o teste não precisar de DOM. */
 export type ArquivoParaValidar = { name: string; type: string; size: number };
 
-/** "3,2 MB" — para a mensagem dizer o tamanho em vez de só reclamar. */
-export function tamanhoEmMB(bytes: number): string {
-  return `${(bytes / MB).toFixed(1).replace(".", ",")} MB`;
-}
-
-export function tetoDoTipo(tipo: TipoDeEnvio): number {
-  return tipo === "imagem" ? TAMANHO_MAXIMO_IMAGEM : TAMANHO_MAXIMO_DOCUMENTO;
-}
-
 /**
  * O arquivo pode subir?
  *
- * @param aceitos  Prefixos ou tipos MIME completos ("image/", "application/pdf").
- *                 Vazio = qualquer tipo, usado onde a tela já restringe pelo
- *                 `accept` do seletor.
+ * @param aceitos    Prefixos ou MIMEs completos ("image/", "application/pdf").
+ * @param extensoes  Extensões com ponto (".docx"). Entrou nesta correção: o
+ *                   MIME do Office é inconfiável, e DOCX chega como
+ *                   `application/octet-stream` em máquina sem Office
+ *                   instalado. Basta UM dos dois reconhecer.
+ *
+ * Nenhuma das duas listas = qualquer formato. É o caso de Referência e "Outro
+ * documento" no funil, que de propósito recebem imagem, planilha e o que mais
+ * a negociação produzir.
  */
 export function validarArquivo(
   arquivo: ArquivoParaValidar,
-  opcoes: { tipo: TipoDeEnvio; aceitos?: readonly string[] },
+  opcoes: { tipo: Categoria; aceitos?: readonly string[]; extensoes?: readonly string[] },
 ): ResultadoDaValidacao {
   if (arquivo.size <= 0) {
     return { ok: false, motivo: `"${arquivo.name}" está vazio.` };
   }
 
-  const teto = tetoDoTipo(opcoes.tipo);
-  if (arquivo.size > teto) {
-    return {
-      ok: false,
-      motivo:
-        `"${arquivo.name}" tem ${tamanhoEmMB(arquivo.size)} — o limite é ` +
-        `${tamanhoEmMB(teto)}. Tente uma versão menor.`,
-    };
+  // O MESMO predicado e o MESMO teto que o backend aplica — ver
+  // `convex/lib/arquivos.ts`. Enquanto os dois lados chamarem isto, não há
+  // como a tela aceitar o que o servidor recusa, que era exatamente o defeito:
+  // o arquivo subia e só então era rejeitado, deixando órfão no storage.
+  const teto = tetoDaCategoria(opcoes.tipo);
+  if (!cabeNoTeto(arquivo.size, teto)) {
+    return { ok: false, motivo: recadoDeTamanho(teto, arquivo.name) };
   }
 
-  const aceitos = opcoes.aceitos ?? [];
-  if (aceitos.length > 0) {
-    const mime = (arquivo.type || "").toLowerCase();
-    // Sem tipo declarado o navegador não soube dizer o que é. Deixamos passar
-    // em vez de recusar o trabalho de alguém por causa de um palpite do
-    // navegador — o backend continua sendo quem decide o que vira registro.
-    const combina = mime === "" || aceitos.some((a) => (a.endsWith("/") ? mime.startsWith(a) : mime === a));
-    if (!combina) {
-      return { ok: false, motivo: `"${arquivo.name}" não é um tipo aceito aqui.` };
-    }
+  if (!formatoPermitido(arquivo, opcoes.aceitos ?? [], opcoes.extensoes ?? [])) {
+    return { ok: false, motivo: `"${arquivo.name}" não é um tipo aceito aqui.` };
   }
 
   return { ok: true };

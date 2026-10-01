@@ -73,7 +73,12 @@ describe("recusa de arquivo", () => {
 
   it("recusa acima do limite, com o limite na mensagem", () => {
     const grande = { name: "video.mp4", size: (TAMANHO_MAXIMO_MB + 1) * 1024 * 1024 };
-    expect(motivoParaRecusarArquivo(grande)).toBe(`Arquivo maior que ${TAMANHO_MAXIMO_MB} MB.`);
+    // Era "Arquivo maior que 20 MB." — correto e seco. Agora é a MESMA frase
+    // que o hook e o backend usam, para a pessoa não ler três redações do
+    // mesmo limite dependendo de qual das portas barrou.
+    expect(motivoParaRecusarArquivo(grande)).toBe(
+      `Este arquivo ultrapassa o limite de ${TAMANHO_MAXIMO_MB} MB. Escolha um arquivo menor e tente novamente.`,
+    );
   });
 
   it("aceita exatamente no limite", () => {

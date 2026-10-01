@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useEnvioDeArquivo } from "@/hooks/use-upload.ts";
+import { dicaDeTamanho } from "@/convex/lib/arquivos.ts";
 import { formatTimestamp } from "@/lib/safe-date.ts";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
@@ -220,6 +221,10 @@ export function LeadDocumentsDialog({
             ))}
           </select>
 
+          {/* SEM `accept`, e isso é deliberado. "Referência" e "Outro
+              documento" recebem imagem, planilha e o que mais a negociação
+              produzir — restringir aqui seria resolver o defeito de TAMANHO
+              criando um de FORMATO. */}
           <input
             ref={inputRef}
             type="file"
@@ -237,6 +242,12 @@ export function LeadDocumentsDialog({
             {enviando ? "Enviando..." : "Anexar arquivo"}
           </Button>
         </div>
+
+        {/* O limite dito ANTES de ser esbarrado. A decoradora que teve o DOCX
+            de 3,9 MB recusado não tinha como saber que havia limite nenhum —
+            e o que ela leu foi "Confira os zeros". O texto vem da mesma
+            constante que valida, então não há como a dica mentir. */}
+        <p className="text-[11px] text-muted-foreground">{dicaDeTamanho("documento")}</p>
       </DialogContent>
     </Dialog>
   );

@@ -12,6 +12,13 @@
 // front (tsconfig mapeia `@/convex/*`).
 // ─────────────────────────────────────────────────────────────────────────────
 
+import {
+  cabeNoTeto,
+  MB,
+  recadoDeTamanho,
+  TAMANHO_MAXIMO_DOCUMENTO,
+} from "./arquivos";
+
 export const TIPOS_DE_DOCUMENTO_DO_LEAD = [
   { valor: "proposta", rotulo: "Proposta" },
   { valor: "contrato", rotulo: "Contrato" },
@@ -43,11 +50,23 @@ export function ordenarDocumentosDoLead<T extends { uploadedAt: string }>(
   return [...docs].sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
 }
 
-/** Limite por arquivo. Acima disso o upload falha no meio, sem mensagem útil. */
-export const TAMANHO_MAXIMO_MB = 20;
+/**
+ * Limite por arquivo.
+ *
+ * NÃO é um número próprio: é o teto de documento de `lib/arquivos.ts`, lido em
+ * MB. Era declarado aqui como `20` à mão, enquanto o hook dizia 10 MB e o
+ * backend aplicava 1.000.000 bytes — três fontes para a mesma regra, e a
+ * decoradora descobria qual valia sendo recusada depois do upload.
+ */
+export const TAMANHO_MAXIMO_MB = Math.round(TAMANHO_MAXIMO_DOCUMENTO / MB);
 
 /**
  * Diz por que o arquivo não pode ser enviado, ou `null` se pode.
+ *
+ * Primeira das duas portas da tela do funil. A segunda é `validarArquivo`, no
+ * hook — e as duas chamam `cabeNoTeto` agora, então não há mais como uma
+ * dizer sim e a outra não.
+ *
  * Puro de propósito: a mesma regra é testada sem navegador.
  */
 export function motivoParaRecusarArquivo(
@@ -56,8 +75,11 @@ export function motivoParaRecusarArquivo(
   if (!arquivo) return "Nenhum arquivo selecionado.";
   if (!arquivo.name.trim()) return "Arquivo sem nome.";
   if (arquivo.size === 0) return "O arquivo está vazio.";
-  if (arquivo.size > TAMANHO_MAXIMO_MB * 1024 * 1024) {
-    return `Arquivo maior que ${TAMANHO_MAXIMO_MB} MB.`;
+  if (!cabeNoTeto(arquivo.size, TAMANHO_MAXIMO_DOCUMENTO)) {
+    // Era "Arquivo maior que 20 MB." — correto e seco. Agora é a MESMA frase
+    // que o hook e o backend usam, para a pessoa não ler três redações do
+    // mesmo limite dependendo de onde bateu.
+    return recadoDeTamanho(TAMANHO_MAXIMO_DOCUMENTO);
   }
   return null;
 }

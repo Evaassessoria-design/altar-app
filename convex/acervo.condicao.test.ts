@@ -154,10 +154,14 @@ describe("ocorrência — o histórico nunca é sobrescrito", () => {
   });
 
   it("peça indisponível não é reservável sem aviso: o déficit aparece", async () => {
-    const { dona, mesa, proximo, reserva } = await cenario();
-    // As 8 voltaram do casamento — senão contariam como fora, não como indisponíveis.
+    const { dona, mesa, proximo, reserva, casamento } = await cenario();
+    // As 8 voltaram do casamento — senão contariam como fora, não como
+    // indisponíveis. Desde 30/09 o retorno entra em "em conferência", e é a
+    // conferência que diz que 3 delas não têm uso.
     await dona.mutation(api.acervo.registrarRetorno, { id: reserva, voltou: 8 });
-    await dona.mutation(api.acervo.moverCondicao, { collectionItemId: mesa, de: "pronto", para: "indisponivel", quantidade: 3 });
+    await dona.mutation(api.acervo.conferirRetorno, {
+      eventId: casamento, linhas: [{ reservaId: reserva, voltou: 8, indisponivel: 3 }],
+    });
     const r = await dona.mutation(api.acervo.reservar, {
       collectionItemId: mesa, eventId: proximo as Id<"events">, quantidade: 8,
     });

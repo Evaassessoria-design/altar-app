@@ -91,6 +91,34 @@ export function pecasForaDeUso(item: ItemComCondicoes): number {
   return condicoesDoItem(item).foraDeUso;
 }
 
+/**
+ * Esta linha do histórico diz que uma peça VOLTOU COM PROBLEMA de um evento?
+ *
+ * Saiu de "pronto" (retorno antigo, ou ocorrência) ou de "em conferência"
+ * (retorno registrado desde 30/09) para limpeza, reparo, indisponível ou
+ * baixa, com o evento de procedência. NÃO é problema a entrada em "em
+ * conferência" — é só o retorno chegando — nem a saída de lá para "pronto".
+ *
+ * Uma regra só: o bloco Pós-evento do acervo e a etapa "Limpeza e reparo" da
+ * jornada contam com ela, e não podem discordar.
+ */
+export function voltouComProblema(a: {
+  tipo: string;
+  eventId?: string;
+  condicaoDe?: string;
+  condicaoPara?: string;
+}): boolean {
+  return (
+    a.tipo === "condicao" &&
+    !!a.eventId &&
+    (a.condicaoDe === "pronto" || a.condicaoDe === "conferencia") &&
+    (a.condicaoPara === "limpeza" ||
+      a.condicaoPara === "reparo" ||
+      a.condicaoPara === "indisponivel" ||
+      a.condicaoPara === "baixa")
+  );
+}
+
 /** Para onde a peça pode ir: uma condição, ou "baixa" (sai do acervo). */
 export type Destino = Condicao | "baixa";
 

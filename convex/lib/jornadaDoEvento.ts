@@ -256,6 +256,25 @@ export type EtapaDaOperacao = {
   rotulo: string;
   status: StatusDaOperacao;
   detalhe: string;
+  /**
+   * Onde a etapa se resolve, relativo ao evento. Ausente = não há tela para
+   * ela (montagem, evento, desmontagem). Mora AQUI para a faixa da Operação e
+   * o "Próximo passo" da Saúde levarem ao mesmo lugar — até 30/09 cada um
+   * decidia o seu, e o da Saúde mandava a separação para o acervo.
+   */
+  rota?: string;
+};
+
+const ROTA_DA_OPERACAO: Partial<Record<ChaveDaOperacao, string>> = {
+  // Separado, carregado e conferido são marcados nos itens de montagem.
+  separacao: "briefing",
+  carregamento: "briefing",
+  conferencia: "briefing",
+  // Retorno, conferência e condições se resolvem no acervo do evento.
+  retorno: "acervo",
+  conferenciaDeRetorno: "acervo",
+  limpezaReparo: "acervo",
+  disponivel: "acervo",
 };
 
 export type FatosDaOperacao = {
@@ -355,8 +374,9 @@ export function operacaoDoEvento(f: FatosDaOperacao): {
   // Onde a operação está: a primeira etapa COM registro que não terminou.
   // "Sem registro" não prende o ponteiro — seria travar a tela no que o
   // sistema nem acompanha.
-  const atual = etapas.find((e) => e.status === "nao_iniciado" || e.status === "em_andamento");
-  return { etapas, atual: atual?.chave ?? null };
+  const comRota = etapas.map((e) => (ROTA_DA_OPERACAO[e.chave] ? { ...e, rota: ROTA_DA_OPERACAO[e.chave] } : e));
+  const atual = comRota.find((e) => e.status === "nao_iniciado" || e.status === "em_andamento");
+  return { etapas: comRota, atual: atual?.chave ?? null };
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -372,14 +392,145 @@ export function operacaoDoEvento(f: FatosDaOperacao): {
 // sabe (acervo sem peça, retorno não conferido) — sem repetir, com teto.
 // ═════════════════════════════════════════════════════════════════════════════
 
+export type ProximoPasso = { rotulo: string; detalhe: string; rota?: string };
+
+/**
+ * "Esse evento está saudável?" — em palavras, e com o porquê.
+ *
+ *   em_dia     nada bloqueando
+ *   atencao    algo pede você, sem ameaçar o evento ainda
+ *   risco      o evento (ou o acervo) é prejudicado se ninguém agir
+ *   cancelado  o evento não vai acontecer
+ */
+export type Veredito = {
+  nivel: "em_dia" | "atencao" | "risco" | "cancelado";
+  titulo: string;
+  /** O motivo principal, numa frase. */
+  porque: string;
+  /** Todos os motivos, do mais grave ao mais leve (riscos, depois atenção). */
+  motivos: string[];
+};
+
 export type ResumoDaJornada = {
   fase: "projeto" | "operacao" | "concluido";
   /** O que fazer agora, com o caminho (relativo ao evento) — `null` = nada. */
-  proximoPasso: { rotulo: string; detalhe: string; rota?: string } | null;
+  proximoPasso: ProximoPasso | null;
   atencao: string[];
+  veredito: Veredito;
 };
 
 export const TETO_DE_ATENCAO = 6;
+
+/** Até quantos dias antes do evento etapa crítica aberta é RISCO. */
+export const DIAS_DE_RISCO = 7;
+/** Até quantos dias antes do evento etapa crítica aberta é ATENÇÃO. */
+export const DIAS_DE_ATENCAO = 30;
+
+/**
+ * Etapas cuja falta perto da data prejudica o EVENTO, não só o cadastro.
+ * Inspirações, projeto visual, croqui e planta são apresentação: atrasá-los
+ * é desconfortável, não perigoso. Briefing e comercial já passaram quando o
+ * evento está a uma semana.
+ */
+const ETAPAS_CRITICAS: readonly ChaveDaEtapa[] = ["contrato", "fornecedores", "acervo"];
+
+/** Avisos de `saudeDoEvento` que dizem o mesmo que um motivo de etapa. */
+const AVISO_COBERTO_PELA_ETAPA: Record<string, string> = {
+  "Contrato ainda não anexado": "Contrato",
+  "Nenhum fornecedor cadastrado": "Fornecedores",
+};
+
+function aDiasDoEvento(dias: number): string {
+  if (dias === 0) return "no dia do evento";
+  return `a ${plural(dias, "dia", "dias")} do evento`;
+}
+
+/**
+ * ── O DEFEITO QUE ESTE VEREDITO RESOLVE ─────────────────────────────────────
+ * A Saúde dizia "71%" e uma lista. 71% de um evento daqui a seis meses é
+ * normal; 71% a três dias, com o contrato sem anexar, não é — e os dois
+ * apareciam iguais. O percentual mede CADASTRO (D5, e continua igual); o
+ * veredito mede se alguém precisa agir, e por quê.
+ *
+ * ── SÓ O QUE O SISTEMA SABE ─────────────────────────────────────────────────
+ * Nenhum prazo é inventado: a única data é a do evento. "Atrasado" quer dizer
+ * "etapa crítica aberta perto da data", não "passou do prazo que alguém
+ * definiu" — não há prazo cadastrado. Aviso de cadastro (fornecedor sem
+ * alinhamento, por exemplo) longe da data continua na lista, mas não muda o
+ * veredito: um evento de março com fornecedor sem alinhamento está em dia.
+ */
+export function vereditoDoEvento(e: {
+  jornada: Jornada;
+  cancelado: boolean;
+  /** A data passou ou o evento está marcado como em andamento/realizado. */
+  aconteceu: boolean;
+  /** Dias até o evento (negativo = já passou). `null` = data ilegível. */
+  diasParaOEvento: number | null;
+  reservasComDeficit: number;
+  /** Peças deste evento que saíram, a janela acabou e não voltaram. */
+  pecasForaSemVoltar: number;
+  retornoPorConferir: boolean;
+  proximoPasso: ProximoPasso | null;
+}): Veredito {
+  const naoVoltaram =
+    e.pecasForaSemVoltar > 0 &&
+    `${plural(e.pecasForaSemVoltar, "peça do acervo ainda não voltou", "peças do acervo ainda não voltaram")}`;
+
+  if (e.cancelado) {
+    return naoVoltaram
+      ? { nivel: "atencao", titulo: "Evento cancelado", porque: naoVoltaram, motivos: [naoVoltaram] }
+      : {
+          nivel: "cancelado",
+          titulo: "Evento cancelado",
+          porque: "As reservas de acervo dele não seguram mais peça.",
+          motivos: [],
+        };
+  }
+
+  const riscos: string[] = [];
+  const atencoes: string[] = [];
+
+  if (!e.aconteceu && e.reservasComDeficit > 0) {
+    riscos.push(
+      `Falta peça do acervo em ${plural(e.reservasComDeficit, "reserva", "reservas")}`,
+    );
+  }
+  if (naoVoltaram) riscos.push(naoVoltaram);
+
+  const d = e.diasParaOEvento;
+  if (!e.aconteceu && d !== null && d >= 0 && d <= DIAS_DE_ATENCAO) {
+    for (const chave of ETAPAS_CRITICAS) {
+      const etapa = e.jornada.etapas.find((x) => x.chave === chave);
+      // Acervo com déficit já entrou acima, com o número.
+      if (!etapa || etapa.status === "concluido") continue;
+      if (chave === "acervo" && e.reservasComDeficit > 0) continue;
+      // Nenhuma peça reservada não é risco: muito evento não usa acervo.
+      if (chave === "acervo" && etapa.status === "nao_iniciado") continue;
+      const frase = `${etapa.rotulo} em aberto ${aDiasDoEvento(d)} — ${etapa.detalhe.toLowerCase()}`;
+      (d <= DIAS_DE_RISCO ? riscos : atencoes).push(frase);
+    }
+  }
+
+  if (e.retornoPorConferir) atencoes.push("Acervo voltou e o retorno ainda não foi conferido");
+  const contrato = e.jornada.etapas.find((x) => x.chave === "contrato");
+  if (contrato?.status === "em_andamento" && !(d !== null && d >= 0 && d <= DIAS_DE_ATENCAO && !e.aconteceu)) {
+    atencoes.push(`Contrato: ${contrato.detalhe.toLowerCase()}`);
+  }
+
+  const motivos = [...riscos, ...atencoes];
+  if (riscos.length > 0) return { nivel: "risco", titulo: "Em risco", porque: riscos[0], motivos };
+  if (atencoes.length > 0) {
+    return { nivel: "atencao", titulo: "Precisa de atenção", porque: atencoes[0], motivos };
+  }
+  return {
+    nivel: "em_dia",
+    titulo: "Em dia",
+    porque: e.proximoPasso
+      ? `Nada bloqueando. Próximo passo: ${e.proximoPasso.rotulo.toLowerCase()}.`
+      : "Nada pendente.",
+    motivos,
+  };
+}
 
 export function resumoDaJornada(e: {
   jornada: Jornada;
@@ -389,39 +540,76 @@ export function resumoDaJornada(e: {
   atencaoDaSaude: readonly string[];
   reservasComDeficit: number;
   retornoPorConferir: boolean;
+  /** Ausentes = comportamento anterior a 30/09 (sem veredito de data). */
+  cancelado?: boolean;
+  diasParaOEvento?: number | null;
+  pecasForaSemVoltar?: number;
 }): ResumoDaJornada {
-  const extras = [
-    e.reservasComDeficit > 0 &&
-      `${plural(e.reservasComDeficit, "reserva de acervo sem peça suficiente", "reservas de acervo sem peça suficiente")}`,
-    e.retornoPorConferir && "Acervo voltou e o retorno ainda não foi conferido",
-  ].filter((x): x is string => typeof x === "string");
-  // O que só a jornada sabe vem primeiro: a Saúde já aparece inteira na sua
-  // própria lista, e o teto não pode cortar justamente o aviso novo.
-  const atencao = [...new Set([...extras, ...e.atencaoDaSaude])].slice(0, TETO_DE_ATENCAO);
-
   const etapaOperacional = e.operacao.etapas.find((x) => x.chave === e.operacao.atual);
   const etapaDoProjeto = e.jornada.etapas.find((x) => x.chave === e.jornada.atual);
 
+  // O passo da operação leva aonde a etapa se resolve (`rota` da etapa) — e
+  // "Evento", antes da data, não é passo: é espera. Até 30/09 a Saúde
+  // mandava "Próximo passo: Evento — Ainda não aconteceu".
+  const passoDaOperacao = (etapa: EtapaDaOperacao): ProximoPasso =>
+    etapa.chave === "evento" && etapa.status !== "concluido"
+      ? {
+          rotulo: "Aguardar o evento",
+          detalhe:
+            e.diasParaOEvento != null && e.diasParaOEvento > 0
+              ? `Faltam ${plural(e.diasParaOEvento, "dia", "dias")}. Projeto e preparação em dia.`
+              : "Projeto e preparação em dia.",
+        }
+      : { rotulo: etapa.rotulo, detalhe: etapa.detalhe, rota: etapa.rota };
+
+  let fase: ResumoDaJornada["fase"];
+  let proximoPasso: ProximoPasso | null;
   if (e.aconteceu && etapaOperacional) {
-    return {
-      fase: "operacao",
-      proximoPasso: { rotulo: etapaOperacional.rotulo, detalhe: etapaOperacional.detalhe, rota: "acervo" },
-      atencao,
-    };
+    fase = "operacao";
+    proximoPasso = passoDaOperacao(etapaOperacional);
+  } else if (etapaDoProjeto) {
+    fase = "projeto";
+    proximoPasso = { rotulo: etapaDoProjeto.rotulo, detalhe: etapaDoProjeto.detalhe, rota: etapaDoProjeto.rota };
+  } else if (etapaOperacional) {
+    fase = "operacao";
+    proximoPasso = passoDaOperacao(etapaOperacional);
+  } else {
+    fase = "concluido";
+    proximoPasso = null;
   }
-  if (etapaDoProjeto) {
-    return {
-      fase: "projeto",
-      proximoPasso: { rotulo: etapaDoProjeto.rotulo, detalhe: etapaDoProjeto.detalhe, rota: etapaDoProjeto.rota },
-      atencao,
-    };
-  }
-  if (etapaOperacional) {
-    return {
-      fase: "operacao",
-      proximoPasso: { rotulo: etapaOperacional.rotulo, detalhe: etapaOperacional.detalhe, rota: "acervo" },
-      atencao,
-    };
-  }
-  return { fase: "concluido", proximoPasso: null, atencao };
+
+  const veredito = vereditoDoEvento({
+    jornada: e.jornada,
+    cancelado: e.cancelado ?? false,
+    aconteceu: e.aconteceu,
+    diasParaOEvento: e.diasParaOEvento ?? null,
+    reservasComDeficit: e.reservasComDeficit,
+    pecasForaSemVoltar: e.pecasForaSemVoltar ?? 0,
+    retornoPorConferir: e.retornoPorConferir,
+    proximoPasso,
+  });
+
+  // O déficit antes do evento e o retorno não conferido já estão nos motivos
+  // do veredito; depois do evento, o déficit de reserva que nunca saiu ainda
+  // é dito aqui (o veredito não o conta: o evento passou).
+  const extras =
+    e.aconteceu && e.reservasComDeficit > 0
+      ? [plural(e.reservasComDeficit, "reserva de acervo sem peça suficiente", "reservas de acervo sem peça suficiente")]
+      : [];
+  // O que só a jornada sabe vem primeiro — e o veredito antes de tudo: a
+  // Saúde já aparece inteira na sua própria lista, e o teto não pode cortar
+  // justamente o aviso que decide o veredito.
+  // Aviso da Saúde que o veredito já disse com a data junto não se repete:
+  // "Contrato ainda não anexado" logo abaixo de "Contrato em aberto a 5 dias
+  // do evento — contrato não anexado" é a mesma notícia duas vezes.
+  const daSaude = e.atencaoDaSaude.filter((a) => {
+    const etapa = AVISO_COBERTO_PELA_ETAPA[a];
+    return !etapa || !veredito.motivos.some((m) => m.startsWith(etapa));
+  });
+  const atencao = [...new Set([...veredito.motivos, ...extras, ...daSaude])].slice(
+    0,
+    TETO_DE_ATENCAO,
+  );
+
+  return { fase, proximoPasso, atencao, veredito };
 }

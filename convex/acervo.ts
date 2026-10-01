@@ -4,6 +4,8 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getOwnedEvent, requireEventOwner, requireTeamMember, requireUser } from "./lib/identity";
 import { comCarimbo } from "./lib/ultimaAtualizacao";
+import { canceladosDoUsuario, paraCalculo, reservasDoItem } from "./lib/reservasDoAcervo";
+import { logisticaDoItem } from "./lib/logisticaDoAcervo";
 import { chaveDoMaterial, normalizeName } from "./lib/materiais";
 import {
   deficitDaReserva,
@@ -24,6 +26,8 @@ import {
   condicoesDoItem,
   moverCondicao as calcularMovimento,
   pecasForaDeUso,
+  voltouComProblema,
+  type Condicao,
 } from "./lib/condicaoDoAcervo";
 import { consolidarMateriais } from "./lib/fichaTecnica";
 import { agruparAcervoPorMaterial, substitutosCompativeis } from "./lib/acervo";
@@ -73,10 +77,12 @@ export const listItems = query({
   args: { incluirArquivados: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    const [itens, reservas] = await Promise.all([
+    const [itens, brutas, cancelados] = await Promise.all([
       ctx.db.query("collectionItems").withIndex("by_user", (q) => q.eq("userId", user._id)).collect(),
       ctx.db.query("collectionReservations").withIndex("by_user", (q) => q.eq("userId", user._id)).collect(),
+      canceladosDoUsuario(ctx, user._id),
     ]);
+    const reservas = brutas.map((r) => paraCalculo(r, cancelados));
 
     const visiveis = args.incluirArquivados ? itens : itens.filter((i) => !i.archived);
     const hoje = new Date().toISOString().slice(0, 10);
@@ -94,7 +100,11 @@ export const listItems = query({
         // aparecia reservada em eventos que já tinham acontecido e sido
         // desmontados. `reservaEmAberto` mantém o que ainda vale — e mantém
         // também a peça que saiu e não voltou, que a data sozinha perderia.
-        const emAberto = minhas.filter((r) => reservaEmAberto(r, hoje));
+        // Evento cancelado não conta como "reservado em" — a não ser que as
+        // peças dele estejam na rua, e aí `reservaEmAberto` já as mantém.
+        const emAberto = minhas.filter(
+          (r) => reservaEmAberto(r, hoje) && (!r.eventoCancelado || faltaVoltar(r) > 0),
+        );
         return {
           ...item,
           // NÃO mostramos "disponível agora": disponibilidade depende de uma
@@ -112,6 +122,9 @@ export const listItems = query({
           pico: picoDeReservas(item.quantidadeTotal, minhas, hoje, pecasForaDeUso(item)),
           // Quantas prontas, para limpar, em reparo… — "pronto" derivado.
           condicoes: condicoesDoItem(item),
+          // ONDE estão — o outro eixo: no galpão, fora, aguardando conferência
+          // (lib/logisticaDoAcervo.ts). Nunca somado com a condição.
+          logistica: logisticaDoItem(item, minhas, hoje),
         };
       })
       .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
@@ -245,24 +258,8 @@ export const setItemArchived = mutation({
 
 // ═════════════════════════════════════════════════════════════ RESERVAS
 
-/** Todas as reservas de um item, no formato que a regra pura consulta. */
-async function reservasDoItem(ctx: QueryCtx | MutationCtx, itemId: Id<"collectionItems">) {
-  const reservas = await ctx.db
-    .query("collectionReservations")
-    .withIndex("by_item", (q) => q.eq("collectionItemId", itemId))
-    .collect();
-  return reservas.map((r) => ({
-    _id: r._id as string,
-    eventId: r.eventId as string,
-    quantidade: r.quantidade,
-    inicio: r.inicio,
-    fim: r.fim,
-    // O movimento real vai junto: sem ele, a peça que não voltou de um evento
-    // encerrado some da conta de disponibilidade (ver `disponibilidadeNaJanela`).
-    saiu: r.saiu,
-    voltou: r.voltou,
-  }));
-}
+// `reservasDoItem` mora em lib/reservasDoAcervo.ts desde 30/09: ali a reserva
+// ganha o cancelamento do evento, que nenhuma tela mandava para a regra.
 
 /**
  * Disponibilidade de um item para um evento, numa janela.
@@ -285,12 +282,17 @@ export const pendenciasPosEvento = query({
   args: {},
   handler: async (ctx) => {
     const user = await requireUser(ctx);
-    const [itens, reservas] = await Promise.all([
+    const [itens, brutas, cancelados] = await Promise.all([
       ctx.db.query("collectionItems").withIndex("by_user", (q) => q.eq("userId", user._id)).collect(),
       ctx.db.query("collectionReservations").withIndex("by_user", (q) => q.eq("userId", user._id)).collect(),
+      canceladosDoUsuario(ctx, user._id),
     ]);
 
-    const p = pendenciasDoAcervo(itens, reservas, dataDoDia());
+    const p = pendenciasDoAcervo(
+      itens.map((i) => ({ ...i, _id: i._id as string })),
+      brutas.map((r) => paraCalculo(r, cancelados)),
+      dataDoDia(),
+    );
 
     // ── O QUE VOLTOU COM PROBLEMA, E DE QUAL EVENTO ────────────────────────
     // Das linhas de histórico que as conferências de retorno e as ocorrências
@@ -306,7 +308,7 @@ export const pendenciasPosEvento = query({
     const nomeDoItem = new Map(itens.map((i) => [i._id as string, { nome: i.nome, unidade: i.unidade }]));
     const agrupado = new Map<string, { eventId: string; itemId: string; nome: string; unidade: string; condicao: string; quantidade: number }>();
     for (const a of recentes) {
-      if (a.tipo !== "condicao" || a.condicaoDe !== "pronto" || !a.eventId || !a.condicaoPara) continue;
+      if (!voltouComProblema(a) || !a.eventId || !a.condicaoPara) continue;
       const item = nomeDoItem.get(a.collectionItemId);
       if (!item) continue;
       const chave = `${a.eventId}|${a.collectionItemId}|${a.condicaoPara}`;
@@ -557,10 +559,64 @@ export const registrarRetorno = mutation({
       });
     }
 
-    await ctx.db.patch(args.id, { voltou: args.voltou, updatedAt: new Date().toISOString() });
+    // ── DEPOIS DA CONFERÊNCIA, O RETORNO SÓ SOBE ───────────────────────────
+    // A conferência já classificou as peças que voltaram (pronto, limpar,
+    // reparo…). Baixar o "voltou" agora faria as mesmas peças contarem duas
+    // vezes fora de uso: no contador da condição E como "não voltou". Era
+    // possível até 30/09. Corrigir uma condição é ocorrência, com histórico.
+    const voltouAntes = reserva.voltou ?? 0;
+    const conferida = reserva.conferidoEm !== undefined;
+    if (conferida && args.voltou < voltouAntes) {
+      throw new ConvexError({
+        code: "INVALID",
+        message:
+          "Este retorno já foi conferido, e as peças já estão classificadas. Para corrigir, registre uma ocorrência no item.",
+      });
+    }
+
+    // ── O QUE VOLTA ENTRA EM "EM CONFERÊNCIA" ──────────────────────────────
+    // Até 30/09, registrado o retorno, as peças voltavam a contar como prontas
+    // para o evento seguinte antes de alguém olhar se vieram sujas ou
+    // quebradas. Agora entram no contador `emConferencia` do item — fora da
+    // disponibilidade — e a conferência de retorno (ou uma ocorrência no
+    // galpão) é que as libera. Peça que chega DEPOIS da conferência também
+    // entra aqui: antes, entrava como pronta sem ninguém ver.
+    //
+    // A correção para baixo, antes da conferência, devolve ao "fora" só o
+    // que esta reserva pôs em conferência (`retornoAConferir`).
+    const diferenca = args.voltou - voltouAntes;
+    const aConferirAntes = reserva.retornoAConferir ?? 0;
+    let aConferir = aConferirAntes;
+    if (diferenca > 0) {
+      await moverComHistorico(ctx, user._id, reserva.collectionItemId, {
+        de: "pronto",
+        para: "conferencia",
+        quantidade: diferenca,
+        motivo: conferida ? "Chegou depois da conferência de retorno" : "Retorno do evento — aguardando conferência",
+        eventId: reserva.eventId,
+      });
+      if (!conferida) aConferir += diferenca;
+    } else if (diferenca < 0 && aConferirAntes > 0) {
+      const devolver = await moverComHistorico(ctx, user._id, reserva.collectionItemId, {
+        de: "conferencia",
+        para: "pronto",
+        quantidade: Math.min(-diferenca, aConferirAntes),
+        motivo: "Correção do retorno — as peças não tinham voltado",
+        eventId: reserva.eventId,
+        ateOQueExiste: true,
+      });
+      aConferir -= devolver;
+    }
+
+    await ctx.db.patch(args.id, {
+      voltou: args.voltou,
+      retornoAConferir: aConferir > 0 ? aConferir : undefined,
+      updatedAt: new Date().toISOString(),
+    });
     return {
       faltaVoltar: faltaVoltar({ ...reserva, voltou: args.voltou }),
       situacao: situacaoDaReserva({ ...reserva, voltou: args.voltou }),
+      emConferencia: diferenca > 0 ? diferenca : 0,
     };
   },
 });
@@ -816,6 +872,57 @@ async function eventoDoUsuario(
     throw new ConvexError({ code: "NOT_FOUND", message: "Evento não encontrado" });
   }
   return eventId;
+}
+
+/**
+ * Move N peças de uma condição para outra e grava a linha no histórico — o
+ * passo que retorno e conferência repetem. Devolve quantas moveu.
+ *
+ * Nunca mexe no TOTAL: só condição (`para` nunca é "baixa" aqui). A baixa
+ * mora em `moverCondicao`, que é a decisão de alguém.
+ *
+ * `ateOQueExiste`: move até o que houver na origem, em vez de recusar — para
+ * desfazer algo que outra pessoa pode já ter mexido no galpão (uma ocorrência
+ * que tirou peça de "em conferência" antes da correção do retorno).
+ */
+async function moverComHistorico(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  itemId: Id<"collectionItems">,
+  m: {
+    de: Condicao;
+    para: Condicao;
+    quantidade: number;
+    motivo: string;
+    eventId?: Id<"events">;
+    responsibleId?: Id<"teamMembers">;
+    ateOQueExiste?: boolean;
+  },
+): Promise<number> {
+  const item = await itemDoUsuario(ctx, itemId, userId);
+  const quantidade = m.ateOQueExiste
+    ? Math.min(m.quantidade, condicoesDoItem(item)[m.de])
+    : m.quantidade;
+  if (quantidade <= 0) return 0;
+  const r = calcularMovimento({ item, de: m.de, para: m.para, quantidade, unidade: item.unidade });
+  if (!r.ok) throw new ConvexError({ code: "AJUSTE_INVALIDO", message: `${item.nome}: ${r.motivo}` });
+  await ctx.db.patch(item._id, comCarimbo(r.patch));
+  const total = r.quantidadeDepois;
+  await ctx.db.insert("collectionAdjustments", {
+    userId,
+    collectionItemId: item._id,
+    tipo: "condicao",
+    delta: 0,
+    quantidadeAntes: total,
+    quantidadeDepois: total,
+    condicaoDe: m.de,
+    condicaoPara: m.para,
+    quantidadeMovida: r.quantidade,
+    motivo: m.motivo,
+    eventId: m.eventId,
+    responsibleId: m.responsibleId,
+  });
+  return r.quantidade;
 }
 
 /**
@@ -1206,37 +1313,45 @@ export const conferirRetorno = mutation({
         });
       }
 
-      // As peças que voltaram eram "prontas" contadas fora do galpão; cada
-      // condição é um movimento de "pronto" para ela, com a linha no
-      // histórico e o evento como procedência.
-      let atual = item;
+      // ── DE ONDE AS PEÇAS SAEM ─────────────────────────────────────────────
+      // O retorno registrado desde 30/09 está em "em conferência" — e esta
+      // reserva sabe quantas são dela (`retornoAConferir`). O retorno antigo,
+      // ou o que voltou direto nesta conferência, ainda conta como "pronto"
+      // (saiu pronto e ninguém o tirou de lá). Cada condição sai primeiro de
+      // "em conferência", depois de "pronto": a mesma peça nunca é contada
+      // nas duas. Cada movimento é uma linha no histórico, com o evento.
+      const mover = (de: Condicao, para: Condicao, quantidade: number, motivo: string) =>
+        moverComHistorico(ctx, user._id, item._id, {
+          de, para, quantidade, motivo, eventId, responsibleId: args.responsibleId,
+        });
+      let emConferencia = Math.min(reserva.retornoAConferir ?? 0, condicoesDoItem(item).conferencia);
+      // Voltaram MENOS do que o retorno registrado: o excedente não está no
+      // galpão, e volta a contar como fora (sai de "em conferência").
+      const naoVoltaram = Math.max(0, emConferencia - linha.voltou);
+      if (naoVoltaram > 0) {
+        await mover("conferencia", "pronto", naoVoltaram, "Conferência de retorno — não tinham voltado");
+        emConferencia -= naoVoltaram;
+      }
       for (const d of destinos) {
-        const r = calcularMovimento({
-          item: atual, de: "pronto", para: d.para, quantidade: d.quantidade, unidade: item.unidade,
-        });
-        if (!r.ok) throw new ConvexError({ code: "AJUSTE_INVALIDO", message: `${item.nome}: ${r.motivo}` });
-        await ctx.db.patch(item._id, comCarimbo(r.patch));
-        await ctx.db.insert("collectionAdjustments", {
-          userId: user._id,
-          collectionItemId: item._id,
-          tipo: "condicao",
-          delta: 0,
-          quantidadeAntes: item.quantidadeTotal,
-          quantidadeDepois: item.quantidadeTotal,
-          condicaoDe: "pronto",
-          condicaoPara: d.para,
-          quantidadeMovida: d.quantidade,
-          motivo: "Conferência de retorno",
-          eventId,
-          responsibleId: args.responsibleId,
-        });
-        atual = { ...atual, ...r.patch } as typeof item;
+        const daConferencia = Math.min(d.quantidade, emConferencia);
+        if (daConferencia > 0) {
+          await mover("conferencia", d.para, daConferencia, "Conferência de retorno");
+          emConferencia -= daConferencia;
+        }
+        if (d.quantidade - daConferencia > 0) {
+          await mover("pronto", d.para, d.quantidade - daConferencia, "Conferência de retorno");
+        }
+      }
+      // O que sobrou em conferência voltou inteiro: fica pronto.
+      if (emConferencia > 0) {
+        await mover("conferencia", "pronto", emConferencia, "Conferência de retorno — pronta");
       }
       pecasForaDeUsoNaConferencia += naoProntas;
 
       await ctx.db.patch(reserva._id, {
         voltou: linha.voltou,
         conferidoEm: agora,
+        retornoAConferir: undefined,
         updatedAt: new Date(agora).toISOString(),
       });
     }

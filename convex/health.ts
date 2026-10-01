@@ -9,8 +9,10 @@ import { montarResumoOperacional } from "./lib/eventSummary";
 import { saudeDoEvento } from "./lib/saudeDoEvento";
 import { prontidaoDoEvento } from "./lib/prontidaoDoEvento";
 import { jornadaDoEvento, operacaoDoEvento, resumoDaJornada } from "./lib/jornadaDoEvento";
-import { deficitDaReserva, disponibilidadeNaJanela } from "./lib/acervo";
-import { pecasForaDeUso } from "./lib/condicaoDoAcervo";
+import { deficitDaReserva, disponibilidadeNaJanela, faltaVoltar, normalizarJanela } from "./lib/acervo";
+import { diasEntre } from "./lib/attention";
+import { reservasDoItem } from "./lib/reservasDoAcervo";
+import { pecasForaDeUso, voltouComProblema } from "./lib/condicaoDoAcervo";
 import { estaVencida } from "./lib/propostaComercial";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -368,10 +370,9 @@ export const getEventJourney = query({
     for (const r of reservas) {
       const item = await ctx.db.get(r.collectionItemId);
       if (!item || item.userId !== event.userId) continue;
-      const doItem = await ctx.db
-        .query("collectionReservations")
-        .withIndex("by_item", (q) => q.eq("collectionItemId", item._id))
-        .collect();
+      // Pelo mesmo caminho do acervo: com o cancelamento de cada evento e o
+      // retorno que espera conferência (lib/reservasDoAcervo.ts).
+      const doItem = await reservasDoItem(ctx, item._id);
       const estado = disponibilidadeNaJanela(
         item.quantidadeTotal,
         doItem,
@@ -388,7 +389,7 @@ export const getEventJourney = query({
           .withIndex("by_item", (q) => q.eq("collectionItemId", item._id))
           .collect();
         pecasEnviadasNaConferencia += linhas
-          .filter((a) => a.tipo === "condicao" && a.eventId === eventId && a.condicaoDe === "pronto")
+          .filter((a) => a.eventId === eventId && voltouComProblema(a))
           .reduce((s, a) => s + (a.quantidadeMovida ?? 0), 0);
       }
     }
@@ -457,6 +458,14 @@ export const getEventJourney = query({
       reservasComDeficit: comDeficit,
       retornoPorConferir: reservas.some(
         (r) => (r.voltou ?? 0) > 0 && r.conferidoEm === undefined,
+      ),
+      cancelado: event.status === "cancelled",
+      diasParaOEvento: Number.isNaN(diasEntre(hoje, event.date)) ? null : diasEntre(hoje, event.date),
+      // Mesma regra do painel: só depois que a janela da reserva terminou.
+      // Durante ela a peça está no evento, que é onde ela deve estar.
+      pecasForaSemVoltar: reservas.reduce(
+        (s, r) => (normalizarJanela({ inicio: r.inicio, fim: r.fim }).fim < hoje ? s + faltaVoltar(r) : s),
+        0,
       ),
     });
 

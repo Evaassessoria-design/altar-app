@@ -1751,6 +1751,18 @@ export default defineSchema({
      * ficam no item e no histórico; aqui só o fato de a conferência existir.
      */
     conferidoEm: v.optional(v.number()),
+    /**
+     * Quantas peças que voltaram POR ESTA RESERVA estão no contador
+     * `emConferencia` do item, esperando a conferência dela (30/09 em
+     * diante: `acervo.registrarRetorno` põe o que volta em "em conferência",
+     * e `acervo.conferirRetorno` tira de lá). É o que permite à conferência
+     * classificar as peças certas sem contá-las duas vezes.
+     *
+     * AUSENTE = 0: retorno antigo, de antes desta regra, cujas peças voltaram
+     * contando como prontas — e a conferência delas sai de "pronto", como
+     * sempre saiu. Sem backfill: ninguém vai conferir as peças de agosto.
+     */
+    retornoAConferir: v.optional(v.number()),
     notes: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
   })

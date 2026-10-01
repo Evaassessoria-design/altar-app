@@ -123,6 +123,11 @@ export type ReservaParaCalculo = {
   /** Movimento real. Ausente = não saiu (ver `faltaVoltar`). */
   saiu?: number;
   voltou?: number;
+  /**
+   * O evento desta reserva foi cancelado. Ausente = não (quem lê o banco
+   * marca, lendo o evento — ver `lib/reservasDoAcervo.ts`).
+   */
+  eventoCancelado?: boolean;
 };
 
 /**
@@ -131,8 +136,17 @@ export type ReservaParaCalculo = {
  * O prometido — ou o que de fato saiu e não voltou, se for mais. A equipe
  * que levou 22 de uma reserva de 20 está com 22 peças fora, e o próximo
  * evento não pode contar com as 2 de diferença.
+ *
+ * ── EVENTO CANCELADO SÓ SEGURA O QUE ESTÁ NA RUA ───────────────────────────
+ * Até 30/09 a reserva de um evento cancelado continuava prometendo as peças:
+ * o casamento desmarcado em agosto tirava 20 castiçais do sábado de outubro,
+ * e o déficit apontava para um evento que não ia acontecer. Liberar a reserva
+ * sozinho seria apagar dado (e o evento pode ser reativado); então ela fica
+ * gravada e passa a pesar zero — menos o que de fato saiu e não voltou, que
+ * continua fora do galpão com ou sem evento.
  */
 function pesoDaReserva(r: ReservaParaCalculo): number {
+  if (r.eventoCancelado) return faltaVoltar(r);
   return Math.max(r.quantidade, faltaVoltar(r));
 }
 
@@ -194,8 +208,13 @@ export function disponibilidadeNaJanela(
   emManutencao?: number,
 ): Disponibilidade {
   const alvo = normalizarJanela(janela);
+  // Reserva que pesa zero (evento cancelado, nada na rua) não é conflito: a
+  // tela não pode mandar a decoradora negociar peça com um evento desmarcado.
   const conflitantes = reservas.filter(
-    (r) => r.eventId !== eventoAtual && janelasConflitam({ inicio: r.inicio, fim: r.fim }, janela),
+    (r) =>
+      r.eventId !== eventoAtual &&
+      pesoDaReserva(r) > 0 &&
+      janelasConflitam({ inicio: r.inicio, fim: r.fim }, janela),
   );
   const reservadoPorOutros = quantidadeLimpa(
     conflitantes.reduce((s, r) => s + pesoDaReserva(r), 0),
@@ -649,7 +668,9 @@ export function pendenciasDoAcervo(
 
     // Impacto: só o que ainda vai acontecer e ainda não saiu. Reserva que já
     // saiu do galpão não depende mais do acervo — as peças estão com ela.
-    if (janela.fim >= hoje && (r.saiu ?? 0) === 0 && !item.archived) {
+    // Evento cancelado não precisa de peça: o déficit dele não é problema de
+    // ninguém.
+    if (janela.fim >= hoje && (r.saiu ?? 0) === 0 && !item.archived && !r.eventoCancelado) {
       const estado = disponibilidadeNaJanela(
         item.quantidadeTotal,
         porItem.get(item._id) ?? [],

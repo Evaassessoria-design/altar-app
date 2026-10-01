@@ -5,6 +5,7 @@ import { requireUser } from "./lib/identity";
 import { diasEntre, montarAtencao, JANELA_RETORNO_DIAS } from "./lib/attention";
 import { deficitDaReserva, disponibilidadeNaJanela, faltaVoltar } from "./lib/acervo";
 import { pecasForaDeUso } from "./lib/condicaoDoAcervo";
+import { canceladosDoUsuario, paraCalculo } from "./lib/reservasDoAcervo";
 import { effectivePurchaseStatus, isOverdue, isPendingStatus } from "./lib/purchaseStatus";
 import { aguardandoEntrega } from "./lib/panoramaDeCompras";
 import { dataDoDia, dataEmDias, faixaDoMes, primeiroDiaDoMes } from "./lib/dataDoDia";
@@ -173,10 +174,14 @@ export async function carregarAtencao(ctx: QueryCtx, userId: Id<"users">) {
 
     // Acervo em DUAS consultas, não uma por evento: o N+1 aqui multiplicaria
     // por todo evento do painel. As regras continuam em lib/acervo.ts.
-    const [reservas, itensDeAcervo] = await Promise.all([
+    const [brutas, itensDeAcervo, cancelados] = await Promise.all([
       ctx.db.query("collectionReservations").withIndex("by_user", (q) => q.eq("userId", user._id)).collect(),
       ctx.db.query("collectionItems").withIndex("by_user", (q) => q.eq("userId", user._id)).collect(),
+      canceladosDoUsuario(ctx, user._id),
     ]);
+    // Com o cancelamento de cada evento: o evento desmarcado não segura peça
+    // de quem está no painel (lib/reservasDoAcervo.ts).
+    const reservas = brutas.map((r) => paraCalculo(r, cancelados));
     const totalDoItem = new Map(itensDeAcervo.map((i) => [i._id as string, i.quantidadeTotal]));
     // Peça no conserto não atende evento — mesma conta da tela do evento.
     const manutencaoDoItem = new Map(itensDeAcervo.map((i) => [i._id as string, pecasForaDeUso(i)]));
@@ -207,7 +212,7 @@ export async function carregarAtencao(ctx: QueryCtx, userId: Id<"users">) {
       ]);
 
     /** Agrupa por evento de uma vez — `filter` por evento seria O(n²). */
-    function porEvento<T extends { eventId?: Id<"events"> }>(linhas: readonly T[]) {
+    function porEvento<T extends { eventId?: string }>(linhas: readonly T[]) {
       const mapa = new Map<string, T[]>();
       for (const linha of linhas) {
         if (!linha.eventId) continue;

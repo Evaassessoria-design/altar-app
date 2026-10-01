@@ -199,7 +199,129 @@ describe("o resumo que abre a página", () => {
       atencaoDaSaude: [...muitos, "aviso 1"], reservasComDeficit: 2,
     });
     expect(r.atencao).toHaveLength(TETO_DE_ATENCAO);
-    expect(r.atencao[0]).toBe("2 reservas de acervo sem peça suficiente");
+    // Desde 30/09 o déficit entra pelo veredito (que decide o "Em risco"),
+    // com a mesma notícia em palavras de risco — e continua em primeiro.
+    expect(r.atencao[0]).toBe("Falta peça do acervo em 2 reservas");
+    expect(r.veredito.nivel).toBe("risco");
     expect(new Set(r.atencao).size).toBe(r.atencao.length);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// O REFINO DE 30/09 — o próximo passo leva ao lugar certo, e a Saúde diz em
+// palavras se o evento está saudável
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("o próximo passo da operação leva aonde a etapa se resolve", () => {
+  const base = { atencaoDaSaude: [] as string[], reservasComDeficit: 0, retornoPorConferir: false };
+
+  it("separação vai para os itens de montagem — não para o acervo (o defeito de antes)", () => {
+    const operacao = operacaoDoEvento(op({ itensDeMontagem: [{}, {}] }));
+    const r = resumoDaJornada({ ...base, jornada: jornadaDoEvento(tudo), operacao, aconteceu: false });
+    expect(r).toMatchObject({ fase: "operacao", proximoPasso: { rotulo: "Separação", rota: "briefing" } });
+  });
+
+  it("depois do evento, a conferência de retorno vai para o acervo", () => {
+    const operacao = operacaoDoEvento(op({ hoje: "2026-10-12", reservas: [{ saiu: 8, voltou: 8 }] }));
+    const r = resumoDaJornada({ ...base, jornada: jornadaDoEvento(tudo), operacao, aconteceu: true });
+    expect(r.proximoPasso).toMatchObject({ rotulo: "Conferência de retorno", rota: "acervo" });
+  });
+
+  it("a faixa e a Saúde usam a MESMA rota: ela mora na etapa", () => {
+    const etapas = operacaoDoEvento(op()).etapas;
+    expect(Object.fromEntries(etapas.map((e) => [e.chave, e.rota]))).toEqual({
+      separacao: "briefing", carregamento: "briefing", conferencia: "briefing",
+      montagem: undefined, evento: undefined, desmontagem: undefined,
+      retorno: "acervo", conferenciaDeRetorno: "acervo", limpezaReparo: "acervo", disponivel: "acervo",
+    });
+  });
+
+  it("projeto feito, sem itens, evento no futuro: o passo é esperar — nunca 'Evento: ainda não aconteceu'", () => {
+    const r = resumoDaJornada({
+      ...base, jornada: jornadaDoEvento(tudo), operacao: operacaoDoEvento(op()), aconteceu: false, diasParaOEvento: 12,
+    });
+    expect(r.proximoPasso).toEqual({ rotulo: "Aguardar o evento", detalhe: "Faltam 12 dias. Projeto e preparação em dia." });
+    expect(r.proximoPasso?.rota).toBeUndefined();
+  });
+});
+
+describe("o veredito — 'esse evento está saudável?' e por quê", () => {
+  const base = { atencaoDaSaude: [] as string[], reservasComDeficit: 0, retornoPorConferir: false };
+  const resumo = (over: Partial<Parameters<typeof resumoDaJornada>[0]> = {}) =>
+    resumoDaJornada({
+      ...base, jornada: jornadaDoEvento(tudo), operacao: operacaoDoEvento(op()), aconteceu: false, ...over,
+    });
+
+  it("tudo feito, longe da data: EM DIA, dizendo o próximo passo", () => {
+    const r = resumo({ diasParaOEvento: 60 });
+    expect(r.veredito).toMatchObject({ nivel: "em_dia", titulo: "Em dia" });
+    expect(r.veredito.porque).toMatch(/^Nada bloqueando/);
+  });
+
+  it("contrato sem anexar a 5 dias: EM RISCO, com o número de dias", () => {
+    const j = jornadaDoEvento({ ...tudo, contrato: { anexado: false, pendencias: 0 } });
+    const r = resumo({ jornada: j, diasParaOEvento: 5 });
+    expect(r.veredito.nivel).toBe("risco");
+    expect(r.veredito.porque).toBe("Contrato em aberto a 5 dias do evento — contrato não anexado");
+  });
+
+  it("a mesma falta a 20 dias é ATENÇÃO; a 90 dias não muda o veredito", () => {
+    const j = jornadaDoEvento({ ...tudo, contrato: { anexado: false, pendencias: 0 } });
+    expect(resumo({ jornada: j, diasParaOEvento: 20 }).veredito.nivel).toBe("atencao");
+    expect(resumo({ jornada: j, diasParaOEvento: 90 }).veredito.nivel).toBe("em_dia");
+  });
+
+  it("no dia do evento a frase não diz '0 dias'", () => {
+    const j = jornadaDoEvento({ ...tudo, fornecedores: [{ status: "orcado" }] });
+    const r = resumo({ jornada: j, diasParaOEvento: 0 });
+    expect(r.veredito.porque).toBe("Fornecedores em aberto no dia do evento — 0 de 1 fechados");
+  });
+
+  it("déficit de acervo antes do evento é RISCO, a qualquer distância da data", () => {
+    const r = resumo({ diasParaOEvento: 120, reservasComDeficit: 1 });
+    expect(r.veredito).toMatchObject({ nivel: "risco", porque: "Falta peça do acervo em 1 reserva" });
+  });
+
+  it("nenhuma peça reservada perto da data NÃO é risco — muito evento não usa acervo", () => {
+    const j = jornadaDoEvento({ ...tudo, acervo: { reservas: 0, comDeficit: 0 } });
+    expect(resumo({ jornada: j, diasParaOEvento: 3 }).veredito.nivel).toBe("em_dia");
+  });
+
+  it("aviso de cadastro da Saúde longe da data fica na lista, mas não muda o veredito", () => {
+    const r = resumo({ diasParaOEvento: 90, atencaoDaSaude: ["Fornecedor sem alinhamento: Flora"] });
+    expect(r.veredito.nivel).toBe("em_dia");
+    expect(r.atencao).toEqual(["Fornecedor sem alinhamento: Flora"]);
+  });
+
+  it("depois do evento: peça que não voltou é RISCO e entra na lista (o defeito de antes: sumia)", () => {
+    const operacao = operacaoDoEvento(op({ hoje: "2026-10-14", reservas: [{ saiu: 24, voltou: 20 }] }));
+    const r = resumo({ operacao, aconteceu: true, diasParaOEvento: -4, pecasForaSemVoltar: 4 });
+    expect(r.veredito).toMatchObject({ nivel: "risco", porque: "4 peças do acervo ainda não voltaram" });
+    expect(r.atencao).toContain("4 peças do acervo ainda não voltaram");
+  });
+
+  it("retorno por conferir é ATENÇÃO", () => {
+    const operacao = operacaoDoEvento(op({ hoje: "2026-10-12", reservas: [{ saiu: 8, voltou: 8 }] }));
+    const r = resumo({ operacao, aconteceu: true, diasParaOEvento: -2, retornoPorConferir: true });
+    expect(r.veredito).toMatchObject({
+      nivel: "atencao", porque: "Acervo voltou e o retorno ainda não foi conferido",
+    });
+  });
+
+  it("evento cancelado: veredito próprio — e as peças na rua ainda pedem atenção", () => {
+    expect(resumo({ cancelado: true, diasParaOEvento: 3 }).veredito.nivel).toBe("cancelado");
+    const comPecaFora = resumo({ cancelado: true, pecasForaSemVoltar: 2 });
+    expect(comPecaFora.veredito).toMatchObject({ nivel: "atencao", porque: "2 peças do acervo ainda não voltaram" });
+  });
+
+  it("o veredito não repete o aviso da Saúde que diz a mesma coisa", () => {
+    const j = jornadaDoEvento({ ...tudo, contrato: { anexado: false, pendencias: 0 } });
+    const r = resumo({ jornada: j, diasParaOEvento: 4, atencaoDaSaude: ["Contrato ainda não anexado", "Outro"] });
+    expect(r.atencao).toEqual(["Contrato em aberto a 4 dias do evento — contrato não anexado", "Outro"]);
+  });
+
+  it("data ilegível: nada é afirmado sobre prazo", () => {
+    const j = jornadaDoEvento({ ...tudo, contrato: { anexado: false, pendencias: 0 } });
+    expect(resumo({ jornada: j, diasParaOEvento: null }).veredito.nivel).toBe("em_dia");
   });
 });

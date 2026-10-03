@@ -27,6 +27,7 @@ import { toast } from "sonner";
 import { ConvexError } from "convex/values";
 import { ArchiveRestore, Boxes, Plus, Archive, Search, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
+import { linhasDoItem } from "@/lib/acervo-na-tela.ts";
 import { UNIDADES, abreviarUnidade } from "@/convex/lib/materiais.ts";
 import { formatEventDayOnly } from "@/lib/event-date.ts";
 
@@ -316,48 +317,38 @@ export default function AcervoPage() {
             {visiveis.map((item) => (
               <div key={item._id}
                 className={cn(
-                  "bg-card border border-border rounded-xl px-4 py-3 flex items-start justify-between gap-3",
+                  // ── O NOME DEIXA DE SER ESPREMIDO (B8 da auditoria) ──────
+                  // Eram três ações à direita de cada item, e no telefone elas
+                  // comprimiam nome e contagens em ~150 px. Agora a linha
+                  // EMPILHA abaixo de `sm`: o item ocupa a largura toda e as
+                  // ações viram uma faixa própria, com alvo de toque inteiro.
+                  "bg-card border border-border rounded-xl px-4 py-3",
+                  "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between",
                   item.archived && "opacity-60",
                 )}>
                 <button onClick={() => setEditando(item._id)} className="text-left min-w-0 cursor-pointer">
                   <p className="font-medium text-sm">{item.nome}</p>
                   <p className="text-xs text-muted-foreground">
-                    {item.quantidadeTotal} {abreviarUnidade(item.unidade)}
+                    {item.quantidadeTotal} {abreviarUnidade(item.unidade)} no total
                     {item.categoria && ` · ${item.categoria}`}
                   </p>
-                  {/* Quantas podem sair AGORA — "pronto" é derivado, e as
-                      outras condições só aparecem quando existem. */}
-                  <p className="mt-0.5 text-sm">
-                    <strong>{item.condicoes.pronto}</strong> {ROTULO_CURTO_DA_CONDICAO.pronto}
-                    {(["limpeza", "reparo", "indisponivel", "conferencia"] as const)
-                      .filter((c) => item.condicoes[c] > 0)
-                      .map((c) => (
-                        <span key={c} className="text-amber-700 dark:text-amber-400">
-                          {" · "}{item.condicoes[c]} {ROTULO_CURTO_DA_CONDICAO[c]}
-                        </span>
-                      ))}
-                  </p>
-                  {/* Nunca "X disponíveis": sem uma janela, o número engana.
-                      O DÉFICIT, porém, não depende de janela escolhida — é a
-                      resposta a "existe algum dia em que o prometido passa do
-                      que eu tenho?", e essa pergunta o backend já responde
-                      (`picoDeReservas`). Até aqui só aparecia dentro do evento,
-                      e quem abria o acervo para planejar a semana não a via. */}
-                  {item.pico.deficit > 0 ? (
-                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                      Faltam {item.pico.deficit} {abreviarUnidade(item.unidade)} em{" "}
-                      {formatEventDayOnly(item.pico.dia!)} — {item.pico.pico} prometidos,{" "}
-                      {item.quantidadeTotal} no acervo
-                      {item.condicoes.foraDeUso > 0 && `, ${item.condicoes.foraDeUso} fora de uso`}
+                  {/* ── AS DUAS PERGUNTAS, SEPARADAS ──────────────────────
+                      Condição é do item, lugar é das reservas, e as duas nunca
+                      viram um total. A regra e o motivo moram em
+                      `src/lib/acervo-na-tela.ts`, com teste. */}
+                  {linhasDoItem(item, abreviarUnidade, formatEventDayOnly).map((linha) => (
+                    <p
+                      key={linha.chave}
+                      className={cn(
+                        "mt-0.5",
+                        linha.tom === "destaque" && "text-sm font-semibold",
+                        linha.tom === "atencao" && "text-xs text-amber-700 dark:text-amber-400",
+                        linha.tom === "neutro" && "text-xs text-muted-foreground",
+                      )}
+                    >
+                      {linha.texto}
                     </p>
-                  ) : (
-                    item.eventosComReserva > 0 && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Reservado em {item.eventosComReserva}{" "}
-                        {item.eventosComReserva === 1 ? "evento" : "eventos"}
-                      </p>
-                    )
-                  )}
+                  ))}
                 </button>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   {/* A ação mais frequente do galpão, com alvo de 44 px e
@@ -365,7 +356,7 @@ export default function AcervoPage() {
                   {!item.archived && (
                     <button onClick={() => setOcorrencia(item._id)}
                       aria-label={`Registrar ocorrência em ${item.nome}`}
-                      className="min-h-11 rounded-lg border border-border px-3 text-sm font-medium hover:bg-accent cursor-pointer">
+                      className="min-h-11 flex-1 sm:flex-none rounded-lg border border-border px-3 text-sm font-medium hover:bg-accent cursor-pointer">
                       Ocorrência
                     </button>
                   )}
@@ -374,7 +365,7 @@ export default function AcervoPage() {
                     <button onClick={() => setAjustando(item._id)}
                       aria-label={`Ajustar estoque de ${item.nome}`}
                       title="Ajustar estoque"
-                      className="p-2.5 rounded-lg hover:bg-accent text-muted-foreground cursor-pointer">
+                      className="min-h-11 p-2.5 rounded-lg hover:bg-accent text-muted-foreground cursor-pointer">
                       <SlidersHorizontal className="size-4" />
                     </button>
                   )}
@@ -386,7 +377,7 @@ export default function AcervoPage() {
                       item.archived ? `Reativar ${item.nome}` : `Arquivar ${item.nome}`
                     }
                     title={item.archived ? "Trazer de volta ao acervo" : "Arquivar"}
-                    className="p-2.5 rounded-lg hover:bg-accent text-muted-foreground cursor-pointer">
+                    className="min-h-11 p-2.5 rounded-lg hover:bg-accent text-muted-foreground cursor-pointer">
                     {item.archived ? (
                       <ArchiveRestore className="size-4" />
                     ) : (

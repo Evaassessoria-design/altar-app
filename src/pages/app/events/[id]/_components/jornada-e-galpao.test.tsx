@@ -103,20 +103,81 @@ describe("Operação", () => {
 });
 
 describe("Saúde", () => {
-  it("mostra fase, próximo passo com link, e atenção — o percentual continua lá", () => {
+  const saude = {
+    percent: 72,
+    status: "attention" as const,
+    checks: [{ key: "contrato", label: "Contrato anexado", ok: false }],
+  };
+  const proximoPasso = {
+    rotulo: "Ficha técnica", detalhe: "2 de 5 itens com materiais", rota: "ficha-tecnica",
+  };
+
+  it("mostra o veredito em palavras, a fase, o próximo passo e a atenção", () => {
     naRota(
       <SaudeDoEvento
         eventId="e1"
-        saude={{ percent: 72, status: "attention", checks: [{ key: "contrato", label: "Contrato anexado", ok: false }] }}
+        saude={saude}
+        veredito={{ nivel: "atencao", titulo: "Precisa de atenção", porque: "Fornecedor sem status." }}
         fase="projeto"
-        proximoPasso={{ rotulo: "Ficha técnica", detalhe: "2 de 5 itens com materiais", rota: "ficha-tecnica" }}
+        proximoPasso={proximoPasso}
         atencao={["Fornecedor sem status"]}
       />,
     );
-    expect(screen.getByText("72%")).toBeInTheDocument();
+    // A manchete é a FRASE, não o número.
+    expect(screen.getByText("Precisa de atenção")).toBeInTheDocument();
+    expect(screen.getByText("Fornecedor sem status.")).toBeInTheDocument();
     expect(screen.getByText("Projeto")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Ficha técnica/ })).toHaveAttribute("href", "/eventos/e1/ficha-tecnica");
     expect(screen.getByText("Fornecedor sem status")).toBeInTheDocument();
+  });
+
+  it("o percentual continua lá, rotulado como PROGRESSO do cadastro", () => {
+    naRota(
+      <SaudeDoEvento
+        eventId="e1"
+        saude={saude}
+        veredito={{ nivel: "atencao", titulo: "Precisa de atenção", porque: "Fornecedor sem status." }}
+        fase="projeto"
+        proximoPasso={proximoPasso}
+        atencao={[]}
+      />,
+    );
+    expect(screen.getByText("72%")).toBeInTheDocument();
+    expect(screen.getByText(/Progresso do cadastro/)).toBeInTheDocument();
+  });
+
+  it("85% de cadastro com contrato faltando é RISCO, e a cor é do veredito", () => {
+    // O defeito que a separação corrige: o percentual alto pintava a tela de
+    // "quase lá" enquanto o documento que sustenta o evento não existia.
+    naRota(
+      <SaudeDoEvento
+        eventId="e1"
+        saude={{ ...saude, percent: 85 }}
+        veredito={{ nivel: "risco", titulo: "Em risco", porque: "Contrato não anexado." }}
+        fase="projeto"
+        proximoPasso={proximoPasso}
+        atencao={["Contrato não anexado"]}
+      />,
+    );
+    const manchete = screen.getByText("Em risco");
+    expect(manchete.className).toMatch(/text-destructive/);
+    // E o 85% NÃO herda a cor de alarme: ele é progresso, não risco.
+    expect(screen.getByText("85%").className).not.toMatch(/text-destructive/);
+  });
+
+  it("evento em dia não é pintado de âmbar por ter cadastro incompleto", () => {
+    naRota(
+      <SaudeDoEvento
+        eventId="e1"
+        saude={{ ...saude, percent: 40 }}
+        veredito={{ nivel: "em_dia", titulo: "Em dia", porque: "Nada bloqueando." }}
+        fase="projeto"
+        proximoPasso={proximoPasso}
+        atencao={[]}
+      />,
+    );
+    // 40% de cadastro num evento de março é normal, e a tela diz isso.
+    expect(screen.getByText("Em dia").className).toMatch(/emerald/);
   });
 });
 

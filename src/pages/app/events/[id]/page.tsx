@@ -396,6 +396,7 @@ export default function EventDetailsPage() {
           <SaudeDoEvento
             eventId={id!}
             saude={jornada.saude}
+            veredito={jornada.veredito}
             fase={jornada.fase}
             proximoPasso={jornada.proximoPasso}
             atencao={jornada.atencao}

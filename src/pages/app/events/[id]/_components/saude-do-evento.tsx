@@ -3,15 +3,28 @@ import { AlertTriangle, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SAÚDE DO EVENTO — agora no topo, e dizendo o que fazer
+// SAÚDE DO EVENTO — PROGRESSO E RISCO SÃO COISAS DIFERENTES
 //
-// O percentual é o mesmo de sempre (`lib/saudeDoEvento.ts`, 7 critérios de
-// cadastro) — não se inventa número. O que mudou é o que vem junto: a FASE em
-// que o evento está, o PRÓXIMO PASSO (com o link para ele) e o que PRECISA DE
-// ATENÇÃO. Tudo vem pronto de `health.getEventJourney`; esta tela só desenha.
+// ── O QUE ESTAVA MISTURADO ──────────────────────────────────────────────────
+// O número grande era o percentual, e a COR dele vinha de `saude.status` — que
+// mede quanto do cadastro está preenchido. Um casamento com 85% e o CONTRATO
+// faltando aparecia em âmbar de "quase lá", quando o certo era alarme: 85% de
+// cadastro feito e o documento que sustenta o evento inexistente.
 //
-// Os critérios do percentual ficam a um toque: explicam o número, mas não são
-// o que a decoradora precisa ler primeiro.
+// Progresso responde "quanto do processo andou". Saúde responde "alguém precisa
+// agir, e por quê". As duas perguntas não se somam, e a cor é da segunda.
+//
+// ── A SEPARAÇÃO, COM A MENOR MUDANÇA POSSÍVEL ───────────────────────────────
+// Nenhum número novo foi inventado e nenhuma regra nova foi escrita aqui. O
+// veredito é `vereditoDoEvento` (`convex/lib/jornadaDoEvento.ts`, R4 da
+// auditoria de 30/09): determinístico, puro, com teste, e já vinha chegando a
+// esta tela dentro de `health.getEventJourney` — só não era lido.
+//
+// O que mudou no desenho:
+//   · o VEREDITO em palavras é a manchete, e dá a cor;
+//   · o percentual continua existindo, rotulado como PROGRESSO, sem cor de
+//     risco — ele não é um alarme;
+//   · "Precisa de atenção" e os critérios continuam onde estavam.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const FASE = {
@@ -20,25 +33,30 @@ const FASE = {
   concluido: "Tudo em dia",
 } as const;
 
+/** A cor é do VEREDITO, nunca do percentual. */
+const COR_DO_NIVEL = {
+  em_dia: "text-emerald-700 dark:text-emerald-400",
+  atencao: "text-amber-700 dark:text-amber-400",
+  risco: "text-destructive",
+  cancelado: "text-muted-foreground",
+} as const;
+
 export function SaudeDoEvento({
   eventId,
   saude,
+  veredito,
   fase,
   proximoPasso,
   atencao,
 }: {
   eventId: string;
   saude: { percent: number; status: "complete" | "attention" | "incomplete"; checks: { key: string; label: string; ok: boolean }[] };
+  veredito: { nivel: keyof typeof COR_DO_NIVEL; titulo: string; porque: string };
   fase: keyof typeof FASE;
   proximoPasso: { rotulo: string; detalhe: string; rota?: string } | null;
   atencao: string[];
 }) {
-  const cor =
-    saude.status === "complete"
-      ? "text-emerald-700 dark:text-emerald-400"
-      : saude.status === "attention"
-        ? "text-amber-700 dark:text-amber-400"
-        : "text-destructive";
+  const cor = COR_DO_NIVEL[veredito.nivel];
   const destino =
     proximoPasso?.rota === undefined
       ? undefined
@@ -48,10 +66,19 @@ export function SaudeDoEvento({
 
   return (
     <section aria-label="Saúde do evento" className="bg-card rounded-xl border border-border overflow-hidden">
+      {/* A MANCHETE É A FRASE, não o número: "esse evento está saudável?"
+          tem resposta em português, com o motivo ao lado. */}
       <div className="grid gap-4 p-5 sm:grid-cols-[auto_1fr]">
-        <div className="flex items-baseline gap-2 sm:flex-col sm:gap-0">
+        <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Saúde</p>
-          <p className={cn("text-3xl font-bold tabular-nums", cor)}>{saude.percent}%</p>
+          <p className={cn("text-2xl font-bold leading-tight", cor)}>{veredito.titulo}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{veredito.porque}</p>
+          {/* O percentual continua, e continua útil — mas como PROGRESSO de
+              cadastro, sem a cor que o fazia parecer alarme. */}
+          <p className="mt-2 text-xs text-muted-foreground">
+            Progresso do cadastro:{" "}
+            <strong className="tabular-nums text-foreground">{saude.percent}%</strong>
+          </p>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
@@ -80,8 +107,13 @@ export function SaudeDoEvento({
 
       {atencao.length > 0 && (
         <div className="border-t border-border px-5 py-3">
+          {/* NÃO "Precisa de atenção": é exatamente o título do veredito
+              quando ele é âmbar, e o cartão passava a dizer a mesma frase
+              duas vezes, uma como resposta e outra como rótulo de lista. O
+              veredito é a CONCLUSÃO; esta lista são os FATOS que levaram a
+              ela. Foi um teste de componente que cobrou a diferença. */}
           <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Precisa de atenção
+            Riscos e pendências
           </p>
           <ul className="space-y-1">
             {atencao.map((a) => (
@@ -95,7 +127,7 @@ export function SaudeDoEvento({
 
       {/* O que forma o percentual — a explicação do número, não a notícia. */}
       <details className="border-t border-border px-5 py-3 text-sm">
-        <summary className="cursor-pointer text-xs text-muted-foreground">Como a saúde é calculada</summary>
+        <summary className="cursor-pointer text-xs text-muted-foreground">Como o progresso é calculado</summary>
         <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
           {saude.checks.map((c) => (
             <p key={c.key} className={cn("flex items-center gap-1.5", !c.ok && "text-muted-foreground")}>
@@ -104,8 +136,10 @@ export function SaudeDoEvento({
           ))}
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
-          Cada item vale o mesmo. A saúde mede o cadastro do evento; a fase e o próximo passo
-          vêm da jornada abaixo.
+          Cada item vale o mesmo, e o percentual mede o <strong>cadastro</strong> — quanto do
+          processo já foi preenchido. A <strong>saúde</strong> acima é outra coisa: ela olha
+          risco e prazo, e um evento pode estar 85% cadastrado e em risco por causa do que
+          falta. A fase e o próximo passo vêm da jornada abaixo.
         </p>
       </details>
     </section>

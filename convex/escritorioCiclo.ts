@@ -3,6 +3,7 @@ import { internalMutation, mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { requireAdmin } from "./lib/adminGuard";
+import { requirePlatformOwner } from "./lib/platformGuard";
 import {
   CAMPANHAS,
   campanhaPorSlug,
@@ -60,6 +61,32 @@ import { campanhasDaRodadaAutomatica } from "./lib/escritorio/rodadaAutomatica";
 // ═════════════════════════════════════════════════════════════════════════════
 
 /** Até onde a rodada varre antes de admitir que não viu tudo. */
+// ─────────────────────────────────────────────────────────────────────────────
+// DUAS GUARDAS NESTE ARQUIVO, E A DIFERENÇA NÃO É DETALHE
+//
+// Este módulo é o ciclo do ESCRITÓRIO rodando sobre CAMPANHAS — importa
+// `lib/campanha` e `lib/escritorio/autonomia`. Estava inteiro atrás de
+// `requireAdmin`, e isso contrariava a decisão de produto:
+//
+//   Escritório → só `platformOwner`. Admin NÃO recebe por ser admin.
+//   Campanhas  → `platformOwner` e admin.
+//
+// A consequência era concreta: `definirAutonomia` LIGA e DESLIGA o quanto a IA
+// do ALTAR age sozinha. Qualquer conta com `role: "admin"` — uma pessoa de
+// suporte, amanhã — podia aumentar a autonomia da IA sem que ninguém tivesse
+// decidido isso. É a quarta trava do CLAUDE.md pela porta de trás.
+//
+// A linha fica onde o DADO manda, função por função:
+//
+//   autonomia, definirAutonomia, rodarAgora, execucoes
+//     → requirePlatformOwner: configuração da IA, disparo do ciclo e
+//       histórico de execução são a mesa de quem administra o negócio ALTAR.
+//
+//   registrarResposta, respostasDe
+//     → requireAdmin: alguém respondeu, e quem atende registra. Não
+//       configura nada, não dispara nada. É operação de campanha.
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const VARREDURA_DO_CICLO = 2_000;
 
 /**
@@ -100,7 +127,7 @@ function temCanal(): boolean {
 export const autonomia = query({
   args: { campanha: v.string() },
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requirePlatformOwner(ctx);
     const situacoes = situacaoDasCapacidades(
       await lerPolitica(ctx, args.campanha),
       temCanal(),
@@ -131,7 +158,9 @@ export const autonomia = query({
 export const definirAutonomia = mutation({
   args: { campanha: v.string(), capacidade: v.string(), ligada: v.boolean() },
   handler: async (ctx, args) => {
-    const admin = await requireAdmin(ctx);
+    // A ação mais sensível do módulo: liga e desliga o quanto a IA age
+    // sozinha. Admin de suporte não decide isso.
+    const dono = await requirePlatformOwner(ctx);
     if (!campanhaPorSlug(args.campanha)) {
       throw new ConvexError({ code: "NOT_FOUND", message: "Campanha não encontrada" });
     }
@@ -155,7 +184,7 @@ export const definirAutonomia = mutation({
 
     const campos = {
       ligada: args.ligada,
-      alteradoPorUserId: admin._id,
+      alteradoPorUserId: dono._id,
       alteradoEm: Date.now(),
     };
     if (existente) await ctx.db.patch(existente._id, campos);
@@ -196,8 +225,8 @@ function retratoDe(lead: Doc<"landingLeads">, diasAteACampanha: number | undefin
 export const rodarAgora = mutation({
   args: { campanha: v.string() },
   handler: async (ctx, args) => {
-    const admin = await requireAdmin(ctx);
-    return executarCiclo(ctx, args, { por: "humano", userId: admin._id });
+    const dono = await requirePlatformOwner(ctx);
+    return executarCiclo(ctx, args, { por: "humano", userId: dono._id });
   },
 });
 
@@ -362,7 +391,7 @@ export const LIMITE_DO_HISTORICO = 20;
 export const execucoes = query({
   args: { campanha: v.string() },
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requirePlatformOwner(ctx);
     const rodadas = await ctx.db
       .query("escritorioExecucoes")
       .withIndex("by_campanha_criadoEm", (q) => q.eq("campanha", args.campanha))

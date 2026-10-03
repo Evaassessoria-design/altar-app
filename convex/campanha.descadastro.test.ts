@@ -23,7 +23,7 @@ import { convexTest } from "convex-test";
 import schema from "./schema";
 import { modules } from "./test.setup";
 import { api, internal } from "./_generated/api";
-import { autenticarComoAdmin, autenticarComoDecoradora } from "./test.auth";
+import { autenticarComoDonoDaPlataforma, autenticarComoDecoradora } from "./test.auth";
 import type { MutationCtx } from "./_generated/server";
 import { LIVE_ALTAR } from "./lib/campanha";
 import { classificarResposta } from "./lib/respostaDoInteressado";
@@ -81,7 +81,7 @@ describe("no banco: nenhuma porta reabre", () => {
 
   async function cenario() {
     const t = convexTest(schema, modules);
-    const admin = await autenticarComoAdmin(t);
+    const admin = await autenticarComoDonoDaPlataforma(t);
     const decoradora = await autenticarComoDecoradora(t);
     const leadId = await t.run(async (ctx: MutationCtx) =>
       ctx.db.insert("landingLeads", {

@@ -24,7 +24,7 @@ import { convexTest } from "convex-test";
 import schema from "./schema";
 import { modules } from "./test.setup";
 import { api, internal } from "./_generated/api";
-import { autenticarComoAdmin } from "./test.auth";
+import { autenticarComoDonoDaPlataforma } from "./test.auth";
 import type { MutationCtx } from "./_generated/server";
 import { LIVE_ALTAR, type Campanha } from "./lib/campanha";
 import {
@@ -64,7 +64,10 @@ describe("a rodada do sistema no banco", () => {
 
   async function cenario() {
     const t = convexTest(schema, modules);
-    const admin = await autenticarComoAdmin(t);
+    // O ciclo do Escritório passou a exigir `platformOwner`. Esta sessão é
+  // do dono — que também é admin, então as chamadas de campanha no mesmo
+  // teste continuam legítimas (a decisão dá Campanhas ao dono E ao admin).
+  const admin = await autenticarComoDonoDaPlataforma(t);
     for (let n = 1; n <= 3; n++) {
       await t.run(async (ctx: MutationCtx) =>
         ctx.db.insert("landingLeads", {

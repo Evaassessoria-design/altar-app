@@ -24,7 +24,7 @@ import { convexTest } from "convex-test";
 import schema from "./schema";
 import { modules } from "./test.setup";
 import { api } from "./_generated/api";
-import { autenticarComoAdmin } from "./test.auth";
+import { autenticarComoDonoDaPlataforma } from "./test.auth";
 import type { MutationCtx } from "./_generated/server";
 import { LIVE_ALTAR } from "./lib/campanha";
 import { LIMITE_POR_RODADA } from "./escritorioCiclo";
@@ -56,7 +56,7 @@ const SOB = ["Alves", "Costa", "Moreira", "Pacheco", "Rangel", "Vieira"];
 
 async function comPessoas(n: number, over: Record<string, unknown> = {}) {
   const t = convexTest(schema, modules);
-  const admin = await autenticarComoAdmin(t);
+  const admin = await autenticarComoDonoDaPlataforma(t);
   await t.run(async (ctx: MutationCtx) => {
     for (let i = 0; i < n; i++) {
       await ctx.db.insert("landingLeads", {

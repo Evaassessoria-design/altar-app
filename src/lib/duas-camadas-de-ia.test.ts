@@ -87,16 +87,42 @@ describe("a concessão é um ato deliberado", () => {
 
   it("nenhum caminho automático do produto concede a permissão", () => {
     // `platformOwner: true` só pode ser escrito pela concessão explícita.
-    // Qualquer outro arquivo do backend que escreva isso está promovendo
+    // Qualquer outro arquivo do PRODUTO que escreva isso está promovendo
     // alguém por inferência — exatamente o que não pode acontecer.
-    const backend = readdirSync("convex")
-      .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))
-      .map((f) => `convex/${f}`);
+    //
+    // ── POR QUE O ANDAIME DE TESTE SAI DA VARREDURA ────────────────────
+    // `test.auth.ts` concede a permissão de propósito: é como a sessão do
+    // dono nasce nos testes de banco, e sem ela não haveria como provar que
+    // o admin NÃO alcança o Escritório — que é o teste que mais importa.
+    //
+    // Ele não é código de produto: não tem função Convex, não entra em
+    // `api.d.ts` (ver `api-gerada.test.ts`) e nunca sobe para deployment
+    // nenhum. A varredura o incluía só porque o nome não termina em
+    // `.test.ts`, e foi ele que quebrou esta trava quando o helper do dono
+    // foi criado.
+    const ANDAIME_DE_TESTE = new Set(["convex/test.auth.ts", "convex/test.setup.ts"]);
 
-    for (const arquivo of backend) {
+    const produto = readdirSync("convex")
+      .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts"))
+      .map((f) => `convex/${f}`)
+      .filter((f) => !ANDAIME_DE_TESTE.has(f));
+
+    for (const arquivo of produto) {
       const fonte = semComentarios(arquivo);
       if (!fonte.includes("platformOwner: true")) continue;
       expect(arquivo).toBe("convex/admin.ts");
+    }
+  });
+
+  it("e o andaime excluído realmente é andaime — não função Convex", () => {
+    // A exclusão acima só é legítima enquanto esses arquivos não virarem
+    // produto. Se alguém exportar uma mutation de `test.auth.ts`, a trava
+    // volta a valer e este teste cobra.
+    for (const arquivo of ["convex/test.auth.ts", "convex/test.setup.ts"]) {
+      const fonte = semComentarios(arquivo);
+      for (const publico of ["= mutation(", "= query(", "= action(", "= internalMutation("]) {
+        expect(`${arquivo}: ${fonte.includes(publico)}`).toBe(`${arquivo}: false`);
+      }
     }
   });
 });

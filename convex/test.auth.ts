@@ -55,6 +55,32 @@ export async function autenticarComo(
   });
 }
 
+/**
+ * O DONO DA PLATAFORMA — quem administra o negócio ALTAR.
+ *
+ * Existe porque admin e dono deixaram de ser a mesma coisa: o Escritório e o
+ * ciclo da IA pedem `platformOwner`, e `role: "admin"` não concede isso.
+ * Promover a admin e conceder a plataforma são dois atos separados no produto,
+ * e aqui também — `platformOwner` entra por patch, depois da sessão existir.
+ */
+export async function autenticarComoDonoDaPlataforma(t: Teste) {
+  const sessao = await autenticarComo(t, {
+    nome: "Dono da plataforma",
+    email: "dono@altar.example",
+    role: "admin",
+    subject: "auth|dono-plataforma",
+  });
+  await t.run(async (ctx) => {
+    const linha = await ctx.db
+      .query("users")
+      .withIndex("by_better_auth_id", (q) => q.eq("betterAuthId", "auth|dono-plataforma"))
+      .unique();
+    if (!linha) throw new Error("conta do dono não criada");
+    await ctx.db.patch(linha._id, { platformOwner: true });
+  });
+  return sessao;
+}
+
 /** Atalho para quem opera o SaaS. */
 export function autenticarComoAdmin(t: Teste) {
   return autenticarComo(t, {

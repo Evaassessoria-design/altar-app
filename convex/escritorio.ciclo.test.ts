@@ -24,7 +24,7 @@ import { convexTest } from "convex-test";
 import schema from "./schema";
 import { modules } from "./test.setup";
 import { api } from "./_generated/api";
-import { autenticarComoAdmin, autenticarComoDecoradora } from "./test.auth";
+import { autenticarComoDonoDaPlataforma, autenticarComoDecoradora } from "./test.auth";
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { LIVE_ALTAR } from "./lib/campanha";
@@ -57,7 +57,10 @@ import { nomeParaMensagem } from "./lib/escritorio/redacaoDaCampanha";
 
 async function cenario() {
   const t = convexTest(schema, modules);
-  const admin = await autenticarComoAdmin(t);
+  // O ciclo do Escritório passou a exigir `platformOwner`. Esta sessão é
+  // do dono — que também é admin, então as chamadas de campanha no mesmo
+  // teste continuam legítimas (a decisão dá Campanhas ao dono E ao admin).
+  const admin = await autenticarComoDonoDaPlataforma(t);
   const decoradora = await autenticarComoDecoradora(t);
 
   let n = 0;

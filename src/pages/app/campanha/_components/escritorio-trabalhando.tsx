@@ -34,12 +34,32 @@ const TOM: Record<Cor, string> = {
 };
 
 export function EscritorioTrabalhando({ campanha }: { campanha: string }) {
-  const politica = useQuery(api.escritorioCiclo.autonomia, { campanha });
-  const historico = useQuery(api.escritorioCiclo.execucoes, { campanha });
+  // ── ESTE PAINEL É DO ESCRITÓRIO, DENTRO DA PÁGINA DE CAMPANHAS ────────
+  // E era a inconsistência: Campanhas é acessível a `role: "admin"`, e este
+  // bloco configura a AUTONOMIA DA IA — decisão de quem administra o negócio
+  // ALTAR, não de quem atende. Um admin de suporte podia ligar capacidade da
+  // IA por aqui sem que ninguém tivesse decidido isso.
+  //
+  // O backend passou a exigir `platformOwner` nas quatro funções do ciclo
+  // (`convex/escritorioCiclo.ts`), e é ELE quem protege. Esta checagem existe
+  // para a tela não pedir o que vai ser recusado: sem ela, o admin abriria
+  // Campanhas e veria quatro erros de consulta onde antes havia um painel.
+  //
+  // `souDono` responde `false` em vez de recusar — justamente para poder ser
+  // chamada por qualquer conta, em qualquer navegação.
+  const souDono = useQuery(api.escritorio.souDono);
+  const podeVer = souDono === true;
+
+  const politica = useQuery(api.escritorioCiclo.autonomia, podeVer ? { campanha } : "skip");
+  const historico = useQuery(api.escritorioCiclo.execucoes, podeVer ? { campanha } : "skip");
   const rodar = useMutation(api.escritorioCiclo.rodarAgora);
   const definir = useMutation(api.escritorioCiclo.definirAutonomia);
   const [rodando, setRodando] = useState(false);
   const [config, setConfig] = useState(false);
+
+  // Quem não é dono não vê o painel, e não vê um buraco explicado tampouco: a
+  // ferramenta interna não anuncia a própria existência para quem não a opera.
+  if (souDono !== true) return null;
 
   if (politica === undefined || historico === undefined) {
     return (

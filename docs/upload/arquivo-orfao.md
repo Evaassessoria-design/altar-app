@@ -131,3 +131,33 @@ referência, com data e tamanho, e revisar à mão antes de qualquer `delete`.
 **Nenhuma limpeza retroativa foi feita nesta rodada**, e nenhuma deve ser feita
 sem esse inventário: não sabemos quais arquivos são órfãos, e um `delete`
 baseado em suposição apaga papelada de cliente real.
+
+---
+
+## PENDÊNCIA DE PRODUTO — o limite de 20 MB e os orçamentos de 30–36 MB
+
+Registrada em 03/10/2026. **Não alterada.**
+
+O limite de documento é **20 MB**, numa fonte única (`convex/lib/arquivos.ts`),
+e foi assim que a correção de `a1b54db` fechou o defeito dos 1.000.000 bytes.
+
+Existem relatos históricos de **orçamentos de fornecedor com 30 a 36 MB** —
+PPTX e PDF com fotos de ambiente em alta. Esses arquivos **não entram hoje**.
+
+**O limite não foi mexido, e não deve ser sem decisão humana.** O que está em
+jogo de cada lado:
+
+| Subir para 40 MB | Manter 20 MB |
+|---|---|
+| a papelada real do fornecedor entra | o envio continua terminando no 4G do galpão |
+| menos atrito no cadastro | storage e banda crescem por conta própria |
+| — | o navegador segura o arquivo em memória durante o POST |
+
+**O que NÃO é argumento:** "é só trocar o número". É só trocar o número — e é
+exatamente por isso que a decisão tem de ser de produto: a troca é trivial e a
+consequência não é. Um único lugar muda (`TAMANHO_MAXIMO_DOCUMENTO`), e as três
+portas acompanham sozinhas.
+
+**Sugestão, para quando houver decisão:** medir primeiro. Quantos documentos
+acima de 15 MB já entraram? A resposta está em `leadDocuments.fileSize` e em
+`transactions.comprovantes`, e decide a conversa melhor do que o relato.

@@ -1,6 +1,13 @@
 import { query } from "./_generated/server";
 import { requirePlatformOwner, ehPlatformOwner } from "./lib/platformGuard";
 import { panoramaDoNegocio } from "./lib/escritorio/panorama";
+import { montarPainel } from "./communications";
+import { verticalDoAmbiente } from "./lib/central/vertical";
+import {
+  diaCivil,
+  trabalhoVenceHoje,
+  trabalhoVencido,
+} from "./lib/central/prazos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ESCRITÓRIO ALTAR — a mesa de quem administra o NEGÓCIO.
@@ -90,6 +97,136 @@ export const panorama = query({
         eventosLidos: eventos.length,
         haMaisEventos: eventos.length === TETO_DE_EVENTOS,
       },
+    };
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMANDO OPERACIONAL
+//
+// O Escritório não cria uma segunda Central. Ele resume a operação que já
+// existe em `communications`, `adminWorkItems`, `adminApprovals` e
+// `customerVoiceSignals`, e manda o trabalho detalhado para as telas próprias.
+// Assim uma tarefa continua tendo UMA fonte, um histórico e um responsável.
+//
+// A consulta usa `requirePlatformOwner`, e não `requireAdmin`: enxergar o
+// comando executivo do negócio é poder do dono. Executar a operação detalhada
+// continua atrás dos guardas de cada módulo administrativo.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const LIMITE_DE_TAREFAS_DO_COMANDO = 1_000;
+const LIMITE_DE_SINAIS_DO_COMANDO = 500;
+
+const pesoDaPrioridade = {
+  urgente: 0,
+  alta: 1,
+  normal: 2,
+  baixa: 3,
+} as const;
+
+/**
+ * Pressão operacional do SaaS, sem conteúdo de conversa nem dado pessoal.
+ *
+ * Serve à mesa web do dono. A ponte 3D continua lendo os contratos HTTP já
+ * congelados; quando o HOME chegar, ele consumirá API, não estas tabelas.
+ */
+export const comando = query({
+  args: {},
+  handler: async (ctx) => {
+    await requirePlatformOwner(ctx);
+
+    const agora = Date.now();
+    const hoje = diaCivil(agora);
+    const vertical = verticalDoAmbiente();
+
+    const [central, abertasLidas, emAndamentoLidas, sinaisLidos] =
+      await Promise.all([
+        montarPainel(ctx, agora),
+        ctx.db
+          .query("adminWorkItems")
+          .withIndex("by_vertical_status", (q) =>
+            q.eq("vertical", vertical).eq("status", "aberto"),
+          )
+          .take(LIMITE_DE_TAREFAS_DO_COMANDO + 1),
+        ctx.db
+          .query("adminWorkItems")
+          .withIndex("by_vertical_status", (q) =>
+            q.eq("vertical", vertical).eq("status", "em_andamento"),
+          )
+          .take(LIMITE_DE_TAREFAS_DO_COMANDO + 1),
+        ctx.db
+          .query("customerVoiceSignals")
+          .withIndex("by_vertical_ocorrencias", (q) =>
+            q.eq("vertical", vertical),
+          )
+          .order("desc")
+          .take(LIMITE_DE_SINAIS_DO_COMANDO + 1),
+      ]);
+
+    const tarefas = [
+      ...abertasLidas.slice(0, LIMITE_DE_TAREFAS_DO_COMANDO),
+      ...emAndamentoLidas.slice(0, LIMITE_DE_TAREFAS_DO_COMANDO),
+    ];
+    const sinais = sinaisLidos
+      .slice(0, LIMITE_DE_SINAIS_DO_COMANDO)
+      .filter((s) => s.status !== "entregue" && s.status !== "descartado");
+
+    const proximas = [...tarefas]
+      .sort((a, b) => {
+        const porVencimento = (a.venceEm ?? "9999-12-31").localeCompare(
+          b.venceEm ?? "9999-12-31",
+        );
+        if (porVencimento !== 0) return porVencimento;
+        return (
+          pesoDaPrioridade[a.prioridade ?? "normal"] -
+          pesoDaPrioridade[b.prioridade ?? "normal"]
+        );
+      })
+      .slice(0, 6);
+
+    const nomes = new Map<string, string>();
+    for (const tarefa of proximas) {
+      if (!tarefa.responsavelUserId || nomes.has(tarefa.responsavelUserId))
+        continue;
+      const responsavel = await ctx.db.get(tarefa.responsavelUserId);
+      if (responsavel) nomes.set(tarefa.responsavelUserId, responsavel.name);
+    }
+
+    return {
+      geradoEm: agora,
+      central,
+      tarefas: {
+        abertas: tarefas.length,
+        emAndamento: tarefas.filter((t) => t.status === "em_andamento").length,
+        urgentes: tarefas.filter((t) => t.prioridade === "urgente").length,
+        vencidas: tarefas.filter((t) => trabalhoVencido(t, hoje)).length,
+        vencemHoje: tarefas.filter((t) => trabalhoVenceHoje(t, hoje)).length,
+        semResponsavel: tarefas.filter((t) => !t.responsavelUserId).length,
+        proximas: proximas.map((t) => ({
+          _id: t._id,
+          titulo: t.titulo,
+          tipo: t.tipo,
+          status: t.status,
+          prioridade: t.prioridade ?? ("normal" as const),
+          venceEm: t.venceEm,
+          responsavel: t.responsavelUserId
+            ? (nomes.get(t.responsavelUserId) ?? "Responsável não encontrado")
+            : null,
+        })),
+      },
+      vozDoCliente: {
+        sinaisAbertos: sinais.length,
+        ocorrenciasAbertas: sinais.reduce(
+          (total, sinal) => total + sinal.ocorrencias,
+          0,
+        ),
+        criticos: sinais.filter((s) => s.severidade === "critica").length,
+      },
+      amostraParcial:
+        central.amostraParcial ||
+        abertasLidas.length > LIMITE_DE_TAREFAS_DO_COMANDO ||
+        emAndamentoLidas.length > LIMITE_DE_TAREFAS_DO_COMANDO ||
+        sinaisLidos.length > LIMITE_DE_SINAIS_DO_COMANDO,
     };
   },
 });

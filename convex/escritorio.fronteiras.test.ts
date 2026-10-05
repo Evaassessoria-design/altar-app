@@ -2,11 +2,20 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("./auth", () => {
   const usuarioDaSessao = async (ctx: {
-    auth: { getUserIdentity: () => Promise<{ subject: string; email?: string } | null> };
+    auth: {
+      getUserIdentity: () => Promise<{
+        subject: string;
+        email?: string;
+      } | null>;
+    };
   }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
-    return { _id: identity.subject, email: identity.email ?? "", name: "Pessoa" };
+    return {
+      _id: identity.subject,
+      email: identity.email ?? "",
+      name: "Pessoa",
+    };
   };
   return {
     authComponent: {
@@ -85,7 +94,10 @@ async function cenario(contas: Conta[]) {
 }
 
 const DONO = {
-  nome: "Dono", email: "dono@altar.example", role: "admin" as const, platformOwner: true,
+  nome: "Dono",
+  email: "dono@altar.example",
+  role: "admin" as const,
+  platformOwner: true,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -100,10 +112,20 @@ const QUASE: Conta[] = [
   { nome: "Suporte", email: "suporte@altar.example", role: "admin" },
   // Isenção de cobrança não é poder. Uma conta interna é uma decoradora que
   // não paga.
-  { nome: "Interna", email: "interna@ex.com", role: "user", accessType: "internal" },
+  {
+    nome: "Interna",
+    email: "interna@ex.com",
+    role: "user",
+    accessType: "internal",
+  },
   { nome: "Beta", email: "beta@ex.com", role: "user", accessType: "beta" },
   // Dona da própria empresa dentro do ALTAR ≠ dona do ALTAR.
-  { nome: "Dona do tenant", email: "dona@ex.com", role: "user", accessType: "client" },
+  {
+    nome: "Dona do tenant",
+    email: "dona@ex.com",
+    role: "user",
+    accessType: "client",
+  },
 ];
 
 describe("o Escritório interno recusa quem não é dono da plataforma", () => {
@@ -118,10 +140,22 @@ describe("o Escritório interno recusa quem não é dono da plataforma", () => {
   );
 
   it.each(QUASE.map((c) => [c.nome, c] as const))(
+    "%s não lê o comando operacional",
+    async (_nome, conta) => {
+      const { sessoes } = await cenario([conta]);
+      await expect(
+        sessoes[conta.email].query(api.escritorio.comando, {}),
+      ).rejects.toThrow(/NOT_FOUND|não encontrado/i);
+    },
+  );
+
+  it.each(QUASE.map((c) => [c.nome, c] as const))(
     "%s se reconhece como não-dona",
     async (_nome, conta) => {
       const { sessoes } = await cenario([conta]);
-      expect(await sessoes[conta.email].query(api.escritorio.souDono, {})).toBe(false);
+      expect(await sessoes[conta.email].query(api.escritorio.souDono, {})).toBe(
+        false,
+      );
     },
   );
 
@@ -147,14 +181,22 @@ describe("o dono da plataforma lê o negócio", () => {
 
     await t.run(async (ctx) => {
       await ctx.db.insert("landingLeads", {
-        name: "Interessada", email: "quer@ex.com", intent: "demo",
+        name: "Interessada",
+        email: "quer@ex.com",
+        intent: "demo",
       });
       await ctx.db.insert("landingLeads", {
-        name: "Outra", email: "outra@ex.com", intent: "beta", status: "convertido",
+        name: "Outra",
+        email: "outra@ex.com",
+        intent: "beta",
+        status: "convertido",
       });
     });
 
-    const panorama = await sessoes[DONO.email].query(api.escritorio.panorama, {});
+    const panorama = await sessoes[DONO.email].query(
+      api.escritorio.panorama,
+      {},
+    );
     expect(panorama.negocio.total).toBe(2);
     expect(panorama.interessados.total).toBe(2);
     // AUSENTE = "novo": o registro sem status conta como novo, sem backfill.
@@ -167,7 +209,74 @@ describe("o dono da plataforma lê o negócio", () => {
 
   it("`souDono` responde true", async () => {
     const { sessoes } = await cenario([DONO]);
-    expect(await sessoes[DONO.email].query(api.escritorio.souDono, {})).toBe(true);
+    expect(await sessoes[DONO.email].query(api.escritorio.souDono, {})).toBe(
+      true,
+    );
+  });
+
+  it("resume tarefas, responsáveis, aprovações e Voz do Cliente sem duplicar entidades", async () => {
+    const { t, sessoes } = await cenario([DONO]);
+
+    await t.run(async (ctx) => {
+      const dono = await ctx.db
+        .query("users")
+        .withIndex("by_email", (q) => q.eq("email", DONO.email))
+        .unique();
+      if (!dono) throw new Error("dono não criado");
+
+      await ctx.db.insert("adminWorkItems", {
+        vertical: "altar_decor",
+        tipo: "follow_up",
+        titulo: "Retornar demonstração",
+        prioridade: "urgente",
+        status: "aberto",
+        responsavelUserId: dono._id,
+        venceEm: "2020-01-01",
+        criadoPor: "humano",
+        criadoPorUserId: dono._id,
+        criadoEm: 1,
+        atualizadoEm: 1,
+      });
+      await ctx.db.insert("customerVoiceSignals", {
+        vertical: "altar_decor",
+        tipo: "funcionalidade",
+        titulo: "Agenda compartilhada",
+        descricao: "Pedido recorrente",
+        severidade: "critica",
+        status: "novo",
+        ocorrencias: 3,
+        ultimoRelatoEm: 1,
+        registradoPor: "humano",
+        registradoPorUserId: dono._id,
+        criadoEm: 1,
+        atualizadoEm: 1,
+      });
+      await ctx.db.insert("adminApprovals", {
+        vertical: "altar_decor",
+        proposta: { kind: "mensagem_saida", texto: "Olá" },
+        status: "pendente",
+        geradoPor: "ia",
+        criadoEm: 1,
+      });
+    });
+
+    const comando = await sessoes[DONO.email].query(api.escritorio.comando, {});
+    expect(comando.tarefas).toMatchObject({
+      abertas: 1,
+      urgentes: 1,
+      vencidas: 1,
+      semResponsavel: 0,
+    });
+    expect(comando.tarefas.proximas[0]).toMatchObject({
+      titulo: "Retornar demonstração",
+      responsavel: "Dono",
+    });
+    expect(comando.central.aguardandoAprovacao).toBe(1);
+    expect(comando.vozDoCliente).toEqual({
+      sinaisAbertos: 1,
+      ocorrenciasAbertas: 3,
+      criticos: 1,
+    });
   });
 });
 
@@ -206,18 +315,24 @@ describe("ninguém vira dono da plataforma por inferência", () => {
 
     await expect(sessao.query(api.escritorio.panorama, {})).rejects.toThrow();
 
-    const concedido = await t.mutation(internal.admin.grantPlatformOwnerByEmail, {
-      email: "operador@ex.com",
-    });
+    const concedido = await t.mutation(
+      internal.admin.grantPlatformOwnerByEmail,
+      {
+        email: "operador@ex.com",
+      },
+    );
     expect(concedido.platformOwner).toBe(true);
     expect(concedido.donosDaPlataforma).toEqual(["operador@ex.com"]);
     // Conceder a plataforma não promoveu a admin de tabela: são duas chamadas
     // porque são dois conceitos.
     expect(concedido.role).toBe("user");
-    await expect(sessao.query(api.escritorio.panorama, {})).resolves.toBeTruthy();
+    await expect(
+      sessao.query(api.escritorio.panorama, {}),
+    ).resolves.toBeTruthy();
 
     await t.mutation(internal.admin.grantPlatformOwnerByEmail, {
-      email: "operador@ex.com", revoke: true,
+      email: "operador@ex.com",
+      revoke: true,
     });
     await expect(sessao.query(api.escritorio.panorama, {})).rejects.toThrow();
     // Removido vira ausente, e não `false` gravado: o schema diz que ausente é
@@ -234,7 +349,9 @@ describe("ninguém vira dono da plataforma por inferência", () => {
   it("o e-mail que não existe recusa em vez de criar conta", async () => {
     const { t } = await cenario([]);
     await expect(
-      t.mutation(internal.admin.grantPlatformOwnerByEmail, { email: "ninguem@ex.com" }),
+      t.mutation(internal.admin.grantPlatformOwnerByEmail, {
+        email: "ninguem@ex.com",
+      }),
     ).rejects.toThrow(/NOT_FOUND|Nenhum usuário/i);
   });
 });
@@ -268,7 +385,10 @@ describe("uma fronteira não abre a outra", () => {
     });
 
     // O panorama conta eventos; contar não é ler. Nenhum nome, nenhum id.
-    const panorama = await sessoes[DONO.email].query(api.escritorio.panorama, {});
+    const panorama = await sessoes[DONO.email].query(
+      api.escritorio.panorama,
+      {},
+    );
     expect(panorama.negocio.eventsTotal).toBe(1);
     expect(JSON.stringify(panorama)).not.toContain("Casamento da Aurora");
     expect(JSON.stringify(panorama)).not.toContain(eventoDaAurora);

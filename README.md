@@ -139,7 +139,7 @@ ALTAR_DEMO                               ← só no projeto de demonstração
 | Assinatura e cobrança | `convex/asaas.ts`, `asaasWebhook.ts` |
 | Central de Comunicações | `convex/communications*.ts`, `adminApprovals.ts`, `adminWorkItems.ts`, `customerVoice.ts` — veja `docs/central-comunicacoes.md` |
 | Ponte do Escritório 3D (somente leitura) | `convex/officeBridgeHttp.ts`, `officeCentralHttp.ts` |
-| Escritório ALTAR (o painel do negócio) | `convex/escritorio.ts`, `lib/escritorio/panorama.ts`, `lib/platformGuard.ts` — **não** é para administradores: é para o dono da plataforma |
+| Escritório ALTAR (painel do negócio + comando operacional) | `convex/escritorio.ts`, `lib/escritorio/panorama.ts`, `lib/platformGuard.ts` — resume Central, tarefas, aprovações e Voz do Cliente sem duplicar registros; **não** é para administradores: é para o dono da plataforma |
 | Seed de demonstração (Marina & Gabriel) | `convex/demo.ts`, `lib/demoData.ts`, `lib/demoGuard.ts` — três travas: `ALTAR_DEMO=1`, recusa em banco com sinal de produção, idempotência |
 
 **A identidade visual**: `docs/identidade-visual.md` — a arte oficial, as onze

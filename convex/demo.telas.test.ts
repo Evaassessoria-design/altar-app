@@ -150,12 +150,29 @@ describe("/financeiro — o bloco 5", () => {
     // O painel de atenção e o Assistente precisam ter o que apontar. Duas
     // cobranças vencidas é o que o portfólio semeia de propósito, e não pode
     // virar zero por causa de um teto de leitura.
-    const dona = await comADemo();
-    const hoje = dataDoDia();
-    const { itens, temMais } = await dona.query(api.financeiro.listTransactions, {});
-    expect(temMais, "a demo não cabe numa página do livro").toBe(false);
-    const vencidas = itens.filter((x) => x.type === "income" && !x.isPaid && x.date < hoje);
-    expect(vencidas.length).toBe(2);
+    //
+    // ── POR QUE O RELÓGIO É FIXO ──────────────────────────────────────────
+    // A semente mistura datas RELATIVAS (o portfólio, `emDias`) com datas
+    // FIXAS (o casamento Marina & Gabriel, `lib/demoData.ts`). A "Parcela
+    // final" dele vence em 2026-10-05: até esse dia o roteiro tem duas
+    // vencidas; a partir de 06/10 tem três, e este teste quebrava sozinho com
+    // o calendário, sem nenhuma linha de código mudar.
+    //
+    // O relógio fica numa data em que a semente é coerente com o roteiro. A
+    // expectativa continua 2, exata. O que este teste NÃO prova é que a demo
+    // esteja coerente HOJE — isso depende da data em que ela for semeada.
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-01T15:00:00Z") });
+    try {
+      const dona = await comADemo();
+      const hoje = dataDoDia();
+      expect(hoje).toBe("2026-10-01");
+      const { itens, temMais } = await dona.query(api.financeiro.listTransactions, {});
+      expect(temMais, "a demo não cabe numa página do livro").toBe(false);
+      const vencidas = itens.filter((x) => x.type === "income" && !x.isPaid && x.date < hoje);
+      expect(vencidas.length).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("o resumo e a lista somam o MESMO conjunto", async () => {

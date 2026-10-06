@@ -77,6 +77,22 @@ describe("acima do saldo", () => {
   });
 });
 
+describe("a lista do Financeiro protege a parcela com recebimentos", () => {
+  const lista = readFileSync("src/pages/app/financeiro/page.tsx", "utf-8");
+
+  it("excluir fica desativado pela MESMA regra do servidor", () => {
+    expect(lista).toMatch(/aria-label=\{`Excluir \$\{tx\.description\}`\}[\s\S]{0,200}disabled=\{usaRecebimentos\(tx\)\}/);
+    const servidor = readFileSync("convex/financeiro.ts", "utf-8");
+    expect(servidor).toContain("Esta parcela tem recebimentos registrados e não pode ser excluída.");
+  });
+
+  it("a linha explica e aponta para Pagamentos da cliente", () => {
+    expect(lista).toContain("Tem recebimentos registrados: não pode ser excluída.");
+    expect(lista).toContain("to={`/eventos/${tx.eventId}/pagamentos`}");
+    expect(lista).toContain("aria-describedby={usaRecebimentos(tx) ? `protegida-${tx._id}` : undefined}");
+  });
+});
+
 describe("o diálogo do Financeiro leva aos pagamentos do evento", () => {
   it("diz que a parcela é controlada pelos recebimentos e tem o atalho", () => {
     const dialogo = readFileSync("src/components/financeiro/recebimento-dialog.tsx", "utf-8");

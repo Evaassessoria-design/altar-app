@@ -42,7 +42,9 @@ import {
   Trash2,
   Check,
   Paperclip,
+  ArrowRight,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -655,6 +657,27 @@ export default function FinanceiroPage() {
                       </>
                     )}
                   </div>
+                  {/* Parcela com recebimentos é histórico financeiro: o servidor
+                      recusa excluí-la (`deleteTransaction`), e o botão abaixo
+                      fica desativado. A linha diz POR QUÊ e aponta onde os
+                      registros são consultados e corrigidos — botão apagado
+                      sem explicação parece defeito. */}
+                  {usaRecebimentos(tx) && (
+                    <p
+                      id={`protegida-${tx._id}`}
+                      className="mt-0.5 text-[11px] text-muted-foreground flex flex-wrap items-center gap-x-1"
+                    >
+                      <span>Tem recebimentos registrados: não pode ser excluída.</span>
+                      {tx.eventId && (
+                        <Link
+                          to={`/eventos/${tx.eventId}/pagamentos`}
+                          className="inline-flex items-center gap-0.5 text-primary hover:underline min-h-6"
+                        >
+                          Ver em Pagamentos da cliente <ArrowRight className="size-3" />
+                        </Link>
+                      )}
+                    </p>
+                  )}
                 </div>
                 <div className="text-right flex-shrink-0">
                   <p
@@ -689,7 +712,15 @@ export default function FinanceiroPage() {
                   <button
                     onClick={() => setDeleting(tx)}
                     aria-label={`Excluir ${tx.description}`}
-                    className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer text-muted-foreground hover:text-destructive"
+                    // Mesma regra do servidor: com recebimentos, não se exclui.
+                    disabled={usaRecebimentos(tx)}
+                    aria-describedby={usaRecebimentos(tx) ? `protegida-${tx._id}` : undefined}
+                    title={
+                      usaRecebimentos(tx)
+                        ? "Não pode ser excluída: tem recebimentos registrados. Consulte e corrija em Pagamentos da cliente."
+                        : undefined
+                    }
+                    className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer text-muted-foreground hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
                   >
                     <Trash2 className="size-3.5" />
                   </button>

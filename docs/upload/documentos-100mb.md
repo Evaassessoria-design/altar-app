@@ -164,3 +164,26 @@ frontend, como manda o procedimento.
 7. Smoke test em `www.appaltar.com.br/funil` com **conta de teste**: anexar um
    DOCX de ~4 MB e um PDF de ~30 MB; conferir que a dica diz "Máximo de 100 MB".
 8. Avisar a cliente.
+
+## 8. O que a produção já comprovou — e o que ainda não (06/10/2026)
+
+O backend do hotfix (`50926a8`) foi publicado em `mellow-goose-539` às 15:28
+UTC e o frontend promovido no Vercel (`index-BjmNlhb2.css` no ar).
+
+| Teste em PROD, conta da dona, lead de teste | Situação |
+|---|---|
+| Arquivo **acima de 1.000.000 bytes** entra no Funil | **Comprovado** — 5,5 MB anexados (`leadDocuments.save` com sucesso nos logs). |
+| **Documento válido** grande (PDF/DOCX/PPTX de dezenas de MB) entra, abre e persiste | **Não comprovado** — o arquivo de 5,5 MB era um `.exe`, não um documento. |
+| Limite de **100 MB** (aceita perto do limite, recusa acima) | **Não comprovado** em PROD; só no DEV. |
+
+Isto confirma que a trava antiga (0,95 MiB) saiu do ar. Não confirma ainda o
+caso que motivou a correção — proposta em documento de verdade — nem o teto
+novo. Falta, em PROD, com conta e lead de teste: um PDF ou DOCX de 30 a
+100 MB (anexar, abrir, recarregar) e um arquivo pouco acima de 100 MB
+(recusado na tela).
+
+**Observação, sem mudança nesta rodada:** o diálogo de documentos do Funil
+não restringe formato (decisão registrada no componente: "Referência" e
+"Outro documento" aceitam o que a negociação produzir) — por isso o `.exe`
+entrou. Se executável não deve ser guardado como documento de cliente, é
+uma decisão de produto a tomar à parte.

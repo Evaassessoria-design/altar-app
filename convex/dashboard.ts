@@ -8,7 +8,7 @@ import { pecasForaDeUso } from "./lib/condicaoDoAcervo";
 import { canceladosDoUsuario, paraCalculo } from "./lib/reservasDoAcervo";
 import { effectivePurchaseStatus, isOverdue, isPendingStatus } from "./lib/purchaseStatus";
 import { aguardandoEntrega } from "./lib/panoramaDeCompras";
-import { dataDoDia, dataEmDias, faixaDoMes, primeiroDiaDoMes } from "./lib/dataDoDia";
+import { dataDoDia, dataDoDiaNoFuso, dataEmDias, faixaDoMes } from "./lib/dataDoDia";
 import { resumirFornecedores } from "./lib/eventSummary";
 import { fornecedoresDaDecoradora } from "./lib/escopoDecoradora";
 
@@ -40,7 +40,11 @@ export const getDashboardStats = query({
     // O dia 1º ficava DE FORA de "este mês" com o ISO completo, enquanto o
     // Financeiro (que já cortava em 10 caracteres) o incluía: duas telas
     // mostrando números diferentes para o mesmo mês.
-    const monthStart = primeiroDiaDoMes(now);
+    //
+    // E o mês é o do NEGÓCIO (fuso de Configurações, padrão São Paulo): é
+    // dinheiro, e pelo relógio UTC o dia 1º começava às 21h do último dia do
+    // mês anterior em Brasília — o mesmo critério do Financeiro e do vencido.
+    const monthStart = `${dataDoDiaNoFuso(now, user.timezone).slice(0, 7)}-01`;
     const monthTransactions = await ctx.db
       .query("transactions")
       .withIndex("by_user_date", (q) =>

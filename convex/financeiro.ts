@@ -5,7 +5,7 @@ import { ConvexError } from "convex/values";
 import { getOwnedEvent, requireEventOwner, requireUser } from "./lib/identity";
 import { emCentavos, motivoDoValorInvalido, somaEmDinheiro } from "./lib/dinheiro";
 import { dinheiroVencido } from "./lib/dinheiroVencido";
-import { dataDoDiaNoFuso, fusoDoNegocio } from "./lib/dataDoDia";
+import { dataDoDiaNoFuso, faixaDoMes, fusoDoNegocio } from "./lib/dataDoDia";
 import { requireActiveAccess } from "./lib/accessGuard";
 import { safeDeleteFile } from "./lib/cascade";
 import { limparCampos } from "./lib/limparCampos";
@@ -108,16 +108,18 @@ export const getSummary = query({
     const totalExpense = soma((t) => t.type === "expense" && t.isPaid);
     const pendingIncome = deCentavos(receitas.reduce((s, t) => s + saldoEmCentavos(t), 0));
 
-    // Last 6 months breakdown (paid only)
-    const now = new Date();
+    // Últimos 6 meses (só o que foi pago).
+    //
+    // O "mês atual" sai do dia no fuso do NEGÓCIO, como o vencido do
+    // Dashboard e a aba Pagamentos da cliente. Pelo relógio do servidor
+    // (UTC), no último dia do mês, a partir das 21h de Brasília, o gráfico já
+    // mostrava o mês seguinte como o atual. O meio-dia do dia de negócio é a
+    // âncora: longe das duas viradas, o mês dele é o mês certo.
+    const hojeNoNegocio = dataDoDiaNoFuso(new Date(), user.timezone);
+    const ancora = new Date(`${hojeNoNegocio}T12:00:00Z`);
     const months: { label: string; income: number; expense: number }[] = [];
     for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const start = d.toISOString().slice(0, 10);
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0)
-        .toISOString()
-        .slice(0, 10);
-      const label = d.toLocaleString("pt-BR", { month: "short" });
+      const { inicio: start, fim: end, rotulo: label } = faixaDoMes(-i, ancora);
       const inMonth = txs.filter((t) => t.isPaid && t.date >= start && t.date <= end);
       months.push({
         label,

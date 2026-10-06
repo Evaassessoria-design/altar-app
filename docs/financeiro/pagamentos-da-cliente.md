@@ -52,8 +52,10 @@ Dashboard passaram a contar o recebimento parcial.
 - **Atraso** = saldo > 0 e vencimento antes de hoje, inclusive na parcela
   parcialmente recebida. "Hoje" é o dia no **fuso do negócio**
   (`dataDoDiaNoFuso`): o escolhido em Configurações (`users.timezone`),
-  padrão America/Sao_Paulo. A aba, o cartão do evento e o vencido do
-  Dashboard usam o mesmo dia — nem o do aparelho, nem a virada do UTC às 21h.
+  padrão America/Sao_Paulo. A aba, o cartão do evento, o vencido e a receita
+  do mês do Dashboard e o gráfico de meses do Financeiro usam o mesmo dia —
+  nem o do aparelho, nem a virada do UTC às 21h. Agenda e contagem de eventos
+  continuam em `dataDoDia` (UTC): não são dinheiro e não entraram na decisão.
 
 ## Limites conhecidos
 

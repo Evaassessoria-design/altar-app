@@ -404,6 +404,53 @@ describe("os totais do Financeiro e do Dashboard enxergam o parcial", () => {
     expect((await vencidosAs("2026-10-07T03:00:00Z")).aReceber.quantidade).toBe(2);
   });
 
+  it("o gráfico do Financeiro vira o MÊS na meia-noite de Brasília, não às 21h", async () => {
+    const c = await cenario();
+    await c.t.run((ctx) =>
+      ctx.db.insert("transactions", {
+        userId: c.ids.donaId, eventId: c.ids.evento, type: "income", category: "Contrato",
+        description: "Paga dia 31", amount: 777, date: "2026-10-31", isPaid: true,
+      }),
+    );
+    const ultimoMesAs = async (instante: string) => {
+      vi.useFakeTimers({ toFake: ["Date"], now: new Date(instante) });
+      try {
+        const s = await c.dona.query(api.financeiro.getSummary, {});
+        return s.months[s.months.length - 1];
+      } finally {
+        vi.useRealTimers();
+      }
+    };
+    // 31/10 às 22h em Brasília = 01/11 01h UTC. Ainda é outubro no negócio.
+    const as22h = await ultimoMesAs("2026-11-01T01:00:00Z");
+    expect(as22h.label).toMatch(/^out/);
+    expect(as22h.income).toBe(777);
+    // 01/11 às 00h em Brasília: agora sim, novembro.
+    expect((await ultimoMesAs("2026-11-01T03:00:00Z")).label).toMatch(/^nov/);
+  });
+
+  it("a receita do mês no Dashboard também vira na meia-noite de Brasília", async () => {
+    const c = await cenario();
+    await c.t.run((ctx) =>
+      ctx.db.insert("transactions", {
+        userId: c.ids.donaId, eventId: c.ids.evento, type: "income", category: "Contrato",
+        description: "Paga dia 31", amount: 777, date: "2026-10-31", isPaid: true,
+      }),
+    );
+    const receitaAs = async (instante: string) => {
+      vi.useFakeTimers({ toFake: ["Date"], now: new Date(instante) });
+      try {
+        return (await c.dona.query(api.dashboard.getDashboardStats, {})).revenueThisMonth;
+      } finally {
+        vi.useRealTimers();
+      }
+    };
+    // 31/10 às 22h em Brasília: ainda outubro — os R$ 777 do dia 31 contam.
+    expect(await receitaAs("2026-11-01T01:00:00Z")).toBe(777);
+    // 01/11 à 00h em Brasília: novembro, e outubro sai.
+    expect(await receitaAs("2026-11-01T03:00:00Z")).toBe(0);
+  });
+
   it("o fuso escolhido pela conta vale (Manaus, UTC−4)", async () => {
     const c = await cenario();
     await c.t.run(async (ctx) => {

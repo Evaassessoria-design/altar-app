@@ -63,5 +63,7 @@ quatorze momentos acima, a semeadura precisa produzir:
   ALTAR, e desde 03/10 recusa para qualquer conta sem `platformOwner`.
   Mostrar levanta a pergunta errada no palco.
 - **Central de Comunicações**: envio externo fechado por decisão.
-- **Qualquer upload feito na hora**: o limite é 20 MB e há pendência aberta
-  sobre 30–36 MB (ver `docs/upload/arquivo-orfao.md`).
+- **Qualquer upload feito na hora**: desde 06/10 o limite de documento é
+  100 MB (`fix/documentos-100mb`), mas um arquivo grande depende da subida da
+  rede do palco e o POST do Convex corta aos 2 minutos. Se precisar mostrar,
+  use um arquivo pequeno (ver `docs/upload/documentos-100mb.md`).

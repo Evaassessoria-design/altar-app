@@ -74,11 +74,28 @@ async function cenario() {
   });
 
   /** Um arquivo de verdade no storage, como o POST do navegador deixaria. */
-  const subir = async (conteudo = "docx") =>
+  const subir = async (conteudo: BlobPart = "docx") =>
     t.run(async (ctx) => ctx.storage.store(new Blob([conteudo], { type: MIME_DOCX })));
 
-  const anexar = async (bytes: number | undefined, nome = "Orçamento Marina.docx") => {
-    const storageId = await subir();
+  /** Um arquivo com EXATAMENTE `bytes` bytes no storage. */
+  const subirComTamanho = (bytes: number) => subir(new Uint8Array(bytes));
+
+  /**
+   * Anexa como a tela faria: o arquivo guardado TEM o tamanho declarado.
+   *
+   * Desde 06/10 o backend confere o tamanho do storage, não o declarado — um
+   * blob de 4 bytes declarando 3,9 MB deixou de ser um cenário honesto. Quando
+   * o valor declarado não é um tamanho possível (NaN, negativo, ausente), o
+   * arquivo guardado é pequeno e válido: o que se testa é a declaração.
+   */
+  const anexar = async (
+    bytes: number | undefined,
+    nome = "Orçamento Marina.docx",
+    guardados?: number,
+  ) => {
+    const real =
+      guardados ?? (bytes !== undefined && Number.isFinite(bytes) && bytes > 0 ? bytes : 4);
+    const storageId = await subirComTamanho(real);
     return dona.mutation(api.leadDocuments.save, {
       leadId: ids.lead,
       storageId,
@@ -89,7 +106,7 @@ async function cenario() {
     });
   };
 
-  return { t, dona, ids, subir, anexar };
+  return { t, dona, ids, subir, subirComTamanho, anexar };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -139,8 +156,10 @@ describe("o backend é autoridade final, e concorda com a tela", () => {
     ["1 MB", 1 * MB],
     ["3,9 MB", DOCX_39MB],
     ["10 MB", 10 * MB],
-    ["19,9 MB", Math.round(19.9 * MB)],
-    ["20 MB exatos", TAMANHO_MAXIMO_DOCUMENTO],
+    ["20 MB (o teto anterior)", 20 * MB],
+    ["36 MB (o orçamento de fornecedor do relato)", 36 * MB],
+    ["99,9 MB", Math.round(99.9 * MB)],
+    ["100 MB exatos", TAMANHO_MAXIMO_DOCUMENTO],
   ])("%s é aceito e gera registro", async (_r, bytes) => {
     const c = await cenario();
     await expect(c.anexar(bytes)).resolves.toBeTruthy();
@@ -148,10 +167,10 @@ describe("o backend é autoridade final, e concorda com a tela", () => {
     expect(docs[0]?.fileSize).toBe(bytes);
   });
 
-  it("20 MB + 1 byte é recusado, com a frase de gente", async () => {
+  it("100 MB + 1 byte é recusado, com a frase de gente", async () => {
     const c = await cenario();
     await expect(c.anexar(TAMANHO_MAXIMO_DOCUMENTO + 1)).rejects.toThrow(
-      /ultrapassa o limite de 20 MB/,
+      /ultrapassa o limite de 100 MB/,
     );
   });
 
@@ -186,11 +205,73 @@ describe("o backend é autoridade final, e concorda com a tela", () => {
     await expect(c.anexar(0)).rejects.toThrow(/vazio/i);
   });
 
-  it("tamanho AUSENTE passa — documento antigo foi gravado antes do campo", async () => {
+  it("tamanho AUSENTE passa, e o registro guarda o tamanho do storage", async () => {
+    // O argumento continua opcional (chamada antiga sem o campo não quebra),
+    // mas a linha nova sempre nasce com o tamanho verdadeiro.
     const c = await cenario();
-    await expect(c.anexar(undefined)).resolves.toBeTruthy();
+    await expect(c.anexar(undefined, "antigo.pdf", 2048)).resolves.toBeTruthy();
     const docs = await c.dona.query(api.leadDocuments.list, { leadId: c.ids.lead });
-    expect(docs[0]?.fileSize).toBeUndefined();
+    expect(docs[0]?.fileSize).toBe(2048);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// O TAMANHO QUE VALE É O DO STORAGE
+//
+// Antes de 06/10, `save` conferia `fileSize` — um número que o navegador
+// manda. Quem chamasse a mutation direto declarava 1 byte e anexava 500 MB.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("o navegador não decide o tamanho", () => {
+  it("declarar 1 MB com 100 MB + 1 guardados é recusado, e nenhuma linha nasce", async () => {
+    const c = await cenario();
+    await expect(c.anexar(1 * MB, "mentira.pdf", TAMANHO_MAXIMO_DOCUMENTO + 1)).rejects.toThrow(
+      /ultrapassa o limite de 100 MB/,
+    );
+    const docs = await c.dona.query(api.leadDocuments.list, { leadId: c.ids.lead });
+    expect(docs).toEqual([]);
+  });
+
+  it("declarar 90 MB com 3 KB guardados grava 3 KB — a lista não exibe número inventado", async () => {
+    const c = await cenario();
+    await c.anexar(90 * MB, "inflado.pdf", 3 * 1024);
+    const docs = await c.dona.query(api.leadDocuments.list, { leadId: c.ids.lead });
+    expect(docs[0]?.fileSize).toBe(3 * 1024);
+  });
+
+  it("storageId de arquivo que já não existe é recusado com frase de gente", async () => {
+    // O POST não terminou, ou o arquivo foi apagado entre o envio e o save.
+    const c = await cenario();
+    const storageId = await c.subirComTamanho(1024);
+    await c.t.run(async (ctx) => ctx.storage.delete(storageId));
+    await expect(
+      c.dona.mutation(api.leadDocuments.save, {
+        leadId: c.ids.lead,
+        storageId,
+        fileName: "sumiu.pdf",
+        fileSize: 1024,
+      }),
+    ).rejects.toThrow(/não chegou ao servidor/);
+    const docs = await c.dona.query(api.leadDocuments.list, { leadId: c.ids.lead });
+    expect(docs).toEqual([]);
+  });
+
+  it("a rival recebe NOT_FOUND antes de qualquer conferência de arquivo", async () => {
+    // Posse primeiro: o erro de tamanho não pode virar oráculo sobre o lead
+    // de outra conta.
+    const c = await cenario();
+    const rival = await autenticarComo(c.t, {
+      nome: "Rival", email: "rival@ex.com", role: "user", subject: "auth|rival",
+    });
+    const storageId = await c.subirComTamanho(TAMANHO_MAXIMO_DOCUMENTO + 1);
+    await expect(
+      rival.mutation(api.leadDocuments.save, {
+        leadId: c.ids.lead,
+        storageId,
+        fileName: "grande.pdf",
+        fileSize: 1,
+      }),
+    ).rejects.toThrow(/NOT_FOUND|não encontrado/i);
   });
 });
 
@@ -211,7 +292,7 @@ describe("tela e servidor não discordam em nenhuma borda", () => {
     TAMANHO_MAXIMO_DOCUMENTO - 1,
     TAMANHO_MAXIMO_DOCUMENTO,
     TAMANHO_MAXIMO_DOCUMENTO + 1,
-    30 * MB,
+    36 * MB,
   ];
 
   it.each(BORDAS.map((b) => [b] as const))("%d bytes: as duas portas dizem o mesmo", async (bytes) => {

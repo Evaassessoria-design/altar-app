@@ -5,6 +5,7 @@
 // E o alias NÃO é escrito aqui nem dentro de comentário: a barra-asterisco da
 // forma curta abre um bloco de comentário para as travas que leem a fonte, e
 // foi assim que este teste quebrou antes de o caminho estar certo.
+import { ConvexError } from "convex/values";
 import {
   cabeNoTeto,
   formatoPermitido,
@@ -48,6 +49,18 @@ export {
   dicaDeTamanho,
   type TipoDeEnvio,
 } from "../../convex/lib/arquivos.ts";
+
+/**
+ * O servidor recusou o CONTEÚDO (tamanho, arquivo vazio)? Então repetir o
+ * mesmo arquivo dá o mesmo não, e oferecer "tentar de novo" seria promessa
+ * falsa. `VALOR_INVALIDO` é o código de `lib/arquivoGuardado.ts`.
+ */
+export function eRecusaDeConteudo(e: unknown): boolean {
+  return (
+    e instanceof ConvexError &&
+    (e.data as { code?: string } | undefined)?.code === "VALOR_INVALIDO"
+  );
+}
 
 export type ArquivoAceito = { ok: true };
 export type ArquivoRecusado = { ok: false; motivo: string };

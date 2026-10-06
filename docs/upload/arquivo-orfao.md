@@ -136,7 +136,10 @@ baseado em suposição apaga papelada de cliente real.
 
 ## PENDÊNCIA DE PRODUTO — o limite de 20 MB e os orçamentos de 30–36 MB
 
-Registrada em 03/10/2026. **Não alterada.**
+Registrada em 03/10/2026. **Decidida em 06/10/2026: o limite subiu para
+100 MB** — ver `docs/upload/documentos-100mb.md`. O texto abaixo fica como
+registro do que estava em jogo; a parte sobre órfãos continua valendo, e com
+peso maior: um órfão agora pode ter 100 MB.
 
 O limite de documento é **20 MB**, numa fonte única (`convex/lib/arquivos.ts`),
 e foi assim que a correção de `a1b54db` fechou o defeito dos 1.000.000 bytes.

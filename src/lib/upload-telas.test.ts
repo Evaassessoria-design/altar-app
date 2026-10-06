@@ -125,3 +125,43 @@ describe("sucesso não é anunciado quando nada subiu", () => {
     expect(c).toContain("enviadas++");
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOCUMENTO DE 100 MB — O ENVIO TEM DE SER VISÍVEL E REPETÍVEL
+//
+// Com o teto em 100 MB, um envio leva até dois minutos. Botão girando sem
+// dizer quanto falta faz a pessoa clicar de novo ou fechar a janela; e o
+// toast de erro sumia levando o arquivo escolhido.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("as telas de documento mostram o envio e deixam repetir", () => {
+  const DOCUMENTOS = [
+    "src/pages/app/funil/_components/lead-documents.tsx",
+    "src/pages/app/events/[id]/_components/event-documents.tsx",
+  ];
+
+  it("o hook mede a SUBIDA — fetch não informa progresso de envio", () => {
+    const hook = codigoDe("src/hooks/use-upload.ts");
+    expect(hook).toContain("xhr.upload.onprogress");
+    expect(hook).toContain("progresso");
+  });
+
+  it.each(DOCUMENTOS)("%s mostra progresso e a falha com o arquivo guardado", (f) => {
+    const c = codigoDe(f);
+    expect(c).toContain("<EstadoDoEnvio");
+    expect(c).toMatch(/progresso=\{progresso\}/);
+    expect(c).toContain("handleUpload(falha.arquivo)");
+  });
+
+  it.each(DOCUMENTOS)("%s não deixa o repetir disparar um segundo envio", (f) => {
+    // Entre o fim do POST e o fim do save, o hook já liberou a própria trava.
+    // E é REF: com estado, dois toques no mesmo instante leem o valor antigo.
+    expect(codigoDe(f)).toContain("if (enviandoAgora.current) return;");
+    expect(codigoDe(f)).toMatch(/finally \{\s*enviandoAgora\.current = false;/);
+  });
+
+  it.each(DOCUMENTOS)("%s não oferece repetir quando o servidor recusou o conteúdo", (f) => {
+    // Arquivo grande demais dá o mesmo não na segunda vez.
+    expect(codigoDe(f)).toContain("eRecusaDeConteudo(e)");
+  });
+});

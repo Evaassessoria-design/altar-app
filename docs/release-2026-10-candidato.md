@@ -16,9 +16,10 @@ O commit exato do código está no fim deste documento (seção 9).
 
 ## 2. O candidato — escopo completo
 
-Branch `release/2026-10-candidato`. Em relação à produção são **43 commits**:
-os 41 de `feature/pagamentos-evento@b6e64bd` (que inclui a pre-live inteira)
-e os 2 desta preparação final (cron desligado + este documento).
+Branch `release/2026-10-candidato`. Em relação à produção são **44 commits**:
+os 41 de `feature/pagamentos-evento@b6e64bd` (que inclui a pre-live inteira),
+o primeiro documento do release (`bcb29e3`), o cron desligado com a reversão
+refeita (`7e6b54b`) e o registro final deste documento.
 
 | Área | O que muda para quem usa |
 |---|---|
@@ -200,5 +201,14 @@ exatamente o que o candidato já implementa.
 
 ## 9. O candidato exato
 
-Ver o commit seguinte a este documento: ele registra o SHA do código, o
-resultado da bateria e o CSS esperado.
+| | |
+|---|---|
+| Código | **`7e6b54bb689abe9c33afd242e5f476cd69c91bd7`** — último commit que muda código |
+| Branch | `release/2026-10-candidato` — o commit de topo só acrescenta esta seção (documentação) |
+| Bateria em `7e6b54b` | **5879/5879** testes (258 arquivos); typechecks app e convex, lint (0 erros, 8 avisos de sempre) e build verdes |
+| CSS esperado no ar | **`index-A5biLRQl.css`** (build com `VITE_CONVEX_URL` de PROD) — hoje `index-BjmNlhb2.css` |
+| DEV `healthy-pika-907` | rodando o backend de `7e6b54b` (sem o cron do Escritório) |
+| Reversão (não publicar) | `release/reversao-2026-10` @ `8c2f8b4`, marcada `NAO-PUBLICAR-ESTA-BRANCH.md` |
+
+Publicar o topo da branch ou `7e6b54b` dá o mesmo código: a diferença entre
+os dois é só este documento.

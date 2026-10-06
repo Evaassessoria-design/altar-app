@@ -20,6 +20,7 @@
 import { effectivePurchaseStatus, isPendingStatus } from "./purchaseStatus";
 import { resultadoDoProjeto } from "./financeScope";
 import { custoDoEvento, motivoDaMargemAusente } from "./custoDoEvento";
+import { deCentavos, recebidoEmCentavos, type Recebimento } from "./pagamentosDoEvento";
 
 export type ContagemFeita = { total: number; feitos: number; pendentes: number };
 
@@ -39,7 +40,14 @@ type FornecedorLike = {
 };
 type EscalaLike = { scheduledTime?: string };
 type CarregamentoLike = { checkOnAssembly: boolean; quantity?: number };
-type TransacaoLike = { _id?: string; type: string; amount: number; isPaid: boolean };
+type TransacaoLike = {
+  _id?: string;
+  type: string;
+  amount: number;
+  isPaid: boolean;
+  /** Recebimentos parciais. Ausente = vale `isPaid`. */
+  recebimentos?: readonly Recebimento[];
+};
 
 function contar(itens: readonly { feito: boolean }[]): ContagemFeita {
   const total = itens.length;
@@ -159,9 +167,16 @@ export function resumirFinanceiro(
     })),
   );
 
+  // Receita recebida pelo que ENTROU — com recebimento parcial, uma parcela
+  // de R$ 5.000 com R$ 2.000 pagos contava zero. Sem recebimentos, é igual a
+  // antes (ver lib/pagamentosDoEvento.ts).
+  const receitaRecebida = deCentavos(
+    txs.filter((t) => t.type === "income").reduce((s, t) => s + recebidoEmCentavos(t), 0),
+  );
+
   return {
     receitaPrevista: soma("income", false),
-    receitaRecebida: soma("income", true),
+    receitaRecebida,
     despesaPrevista: soma("expense", false),
     despesaPaga: soma("expense", true),
     lancamentos: txs.length,

@@ -31,7 +31,12 @@
 // lançamento podre não pode transformar o aviso em "R$ NaN".
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { somaEmDinheiro } from "./dinheiro";
+import {
+  deCentavos,
+  saldoEmCentavos,
+  usaRecebimentos,
+  type Recebimento,
+} from "./pagamentosDoEvento";
 
 export type LancamentoParaVencimento = {
   type: string;
@@ -39,6 +44,8 @@ export type LancamentoParaVencimento = {
   isPaid: boolean;
   /** Dia civil "AAAA-MM-DD". Ausente ou vazio = não entra na conta. */
   date?: string;
+  /** Recebimentos parciais. Ausente = vale `isPaid` (ver lib/pagamentosDoEvento.ts). */
+  recebimentos?: readonly Recebimento[];
 };
 
 export type DinheiroVencido = {
@@ -72,14 +79,21 @@ export function dinheiroVencido(
     lancamentos.filter(
       (t) =>
         t.type === tipo &&
-        !t.isPaid &&
+        // Com recebimentos, vale o SALDO: a parcela que recebeu parte segue
+        // com `isPaid: false`, e o que venceu nela é só o que falta. Sem
+        // eles, a regra de sempre — inclusive para a linha com `NaN`, que
+        // continua CONTADA (o aviso existe) sem estragar o total.
+        (usaRecebimentos(t) ? saldoEmCentavos(t) > 0 : !t.isPaid) &&
         diaValido(t.date) &&
         t.date.slice(0, 10) < hoje,
     );
 
   const resumir = (tipo: string) => {
     const lista = vencidos(tipo);
-    return { quantidade: lista.length, total: somaEmDinheiro(lista.map((t) => t.amount)) };
+    return {
+      quantidade: lista.length,
+      total: deCentavos(lista.reduce((s, t) => s + saldoEmCentavos(t), 0)),
+    };
   };
 
   const aReceber = resumir("income");

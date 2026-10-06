@@ -183,6 +183,34 @@ const comprovanteFinanceiro = v.object({
   uploadedAt: v.string(),
 });
 
+/**
+ * Um recebimento de parcela do cliente. Regra em `lib/pagamentosDoEvento.ts`.
+ *
+ * Mora DENTRO da parcela, como o comprovante: não há tabela de recebimentos,
+ * e a parcela continua sendo a linha de `transactions` que sempre foi.
+ */
+const recebimentoDeParcela = v.object({
+  /** Gerado no servidor. É por ele que a anulação encontra o recebimento. */
+  id: v.string(),
+  /** Em reais, arredondado ao centavo — mesma unidade de `amount`. */
+  valor: v.number(),
+  /** Dia civil em que o dinheiro entrou, "AAAA-MM-DD". */
+  data: v.string(),
+  /** Texto livre, como `paymentMethod`. Ausente = não informada. */
+  forma: v.optional(v.string()),
+  /** Um dos `comprovantes` desta parcela. Ausente = sem comprovante. */
+  comprovanteStorageId: v.optional(v.id("_storage")),
+  registradoEm: v.string(),
+  /** Chave do envio, gerada pela tela: o mesmo envio repetido não duplica. */
+  chave: v.string(),
+  /**
+   * Correção. AUSENTE = vale. Presente = anulado: continua no histórico e
+   * deixa de contar. Não é estorno bancário — é o registro dizendo que
+   * aquele lançamento estava errado.
+   */
+  anulacao: v.optional(v.object({ em: v.string(), motivo: v.string() })),
+});
+
 const checklistPhase = v.union(v.literal("pre"), v.literal("post"));
 
 const photoCategory = v.union(
@@ -410,6 +438,15 @@ export default defineSchema({
     clientName: v.string(),
     clientPhone: v.optional(v.string()),
     budget: v.optional(v.number()),
+    /**
+     * O VALOR CONTRATADO com o cliente. AUSENTE = não definido — e a tela
+     * diz "não definido", nunca troca por `budget`.
+     *
+     * `budget` é o orçamento ESTIMADO (o que se imaginava gastar ou cobrar);
+     * isto é o que foi fechado. A leitura do contrato por IA já extraía o
+     * "Valor total" e o jogava fora — não havia onde guardar.
+     */
+    contractedValue: v.optional(v.number()),
     status: eventStatus,
     notes: v.optional(v.string()),
     // ── QUEM RESPONDE POR ESTE EVENTO ───────────────────────────────────────
@@ -1001,6 +1038,21 @@ export default defineSchema({
      * proposito.
      */
     comprovantes: v.optional(v.array(comprovanteFinanceiro)),
+    /**
+     * Os recebimentos desta parcela — pagamento parcial, vários pagamentos.
+     *
+     * AUSENTE = a parcela nunca recebeu por este fluxo, e quem diz se entrou
+     * é `isPaid` (baixa antiga, valor inteiro). PRESENTE = quem diz são os
+     * recebimentos, e `isPaid`/`paidAt` passam a ser DERIVADOS deles por
+     * `baixaDerivada` — não se marca à mão. Sem backfill.
+     */
+    recebimentos: v.optional(v.array(recebimentoDeParcela)),
+    /**
+     * Chave do planejamento que criou esta parcela. AUSENTE = criada de outra
+     * forma (à mão, pela leitura do contrato). Serve só para o mesmo
+     * planejamento enviado duas vezes não criar as parcelas em dobro.
+     */
+    chaveDoPlanejamento: v.optional(v.string()),
     /**
      * De qual COMPRA esta despesa nasceu. Só PROCEDÊNCIA HISTÓRICA.
      *

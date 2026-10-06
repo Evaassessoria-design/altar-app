@@ -51,6 +51,12 @@ import { ConvexError } from "convex/values";
 import { cn } from "@/lib/utils.ts";
 import { RecebimentoDialog } from "@/components/financeiro/recebimento-dialog.tsx";
 import {
+  deCentavos,
+  estadoDaParcela,
+  saldoEmCentavos,
+  usaRecebimentos,
+} from "@/convex/lib/pagamentosDoEvento.ts";
+import {
   contagemDeComprovantes,
   pagoSemComprovante,
   temComprovante,
@@ -549,7 +555,17 @@ export default function FinanceiroPage() {
               >
                 <button
                   onClick={() => togglePaid({ id: tx._id })}
+                  // Parcela com recebimentos registrados: a baixa é derivada
+                  // deles e o servidor recusa marcá-la à mão. O botão diz isso
+                  // em vez de falhar no clique.
+                  disabled={usaRecebimentos(tx)}
+                  title={
+                    usaRecebimentos(tx)
+                      ? "Controlada pelos recebimentos — registre ou corrija em Pagamentos da cliente, no evento"
+                      : undefined
+                  }
                   className={cn(
+                    "disabled:cursor-default",
                     "size-8 rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer transition-colors",
                     tx.type === "income"
                       ? tx.isPaid ? "bg-green-100 dark:bg-green-900/30 text-green-600" : "bg-muted text-muted-foreground"
@@ -565,10 +581,20 @@ export default function FinanceiroPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium truncate">{tx.description}</p>
-                    {!tx.isPaid && (
-                      <span className="text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 px-1.5 py-0.5 rounded-full">
-                        Pendente
+                    {/* Parcial: entrou parte, e a linha diz quanto falta — "Pendente"
+                        para uma parcela com R$ 1.200 de R$ 3.000 já recebidos
+                        contradiz a aba Pagamentos da cliente, que lê a mesma linha. */}
+                    {tx.type === "income" && estadoDaParcela(tx) === "parcial" ? (
+                      <span className="flex-shrink-0 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 px-1.5 py-0.5 rounded-full">
+                        Parcial · falta{" "}
+                        {deCentavos(saldoEmCentavos(tx)).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                       </span>
+                    ) : (
+                      !tx.isPaid && (
+                        <span className="text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 px-1.5 py-0.5 rounded-full">
+                          Pendente
+                        </span>
+                      )
                     )}
                     {/* Discreto de propósito: quem tem o documento não precisa
                         de alarde, e quem não tem precisa de um lembrete, não

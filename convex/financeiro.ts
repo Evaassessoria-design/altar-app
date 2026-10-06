@@ -2,7 +2,7 @@ import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
-import { requireEventOwner, requireUser } from "./lib/identity";
+import { getOwnedEvent, requireEventOwner, requireUser } from "./lib/identity";
 import { emCentavos, motivoDoValorInvalido, somaEmDinheiro } from "./lib/dinheiro";
 import { dinheiroVencido } from "./lib/dinheiroVencido";
 import { dataDoDia } from "./lib/dataDoDia";
@@ -10,6 +10,14 @@ import { requireActiveAccess } from "./lib/accessGuard";
 import { safeDeleteFile } from "./lib/cascade";
 import { limparCampos } from "./lib/limparCampos";
 import { exigirArquivoGuardadoNoTeto } from "./lib/arquivoGuardado";
+import {
+  baixaDerivada,
+  dataValida,
+  deCentavos,
+  paraCentavos,
+  recebidoEmCentavos,
+  saldoEmCentavos,
+} from "./lib/pagamentosDoEvento";
 
 const txType = v.union(v.literal("income"), v.literal("expense"));
 
@@ -91,9 +99,14 @@ export const getSummary = query({
     const soma = (filtro: (t: (typeof txs)[number]) => boolean) =>
       somaEmDinheiro(txs.filter(filtro).map((t) => t.amount));
 
-    const totalIncome = soma((t) => t.type === "income" && t.isPaid);
+    // Receita pelo que ENTROU e pelo que FALTA de cada parcela. Com
+    // recebimento parcial, "isPaid ? valor : 0" contava R$ 2.000 recebidos de
+    // uma parcela de R$ 5.000 como nada recebido e R$ 5.000 a receber. Para a
+    // parcela sem recebimentos, o resultado é exatamente o de antes.
+    const receitas = txs.filter((t) => t.type === "income");
+    const totalIncome = deCentavos(receitas.reduce((s, t) => s + recebidoEmCentavos(t), 0));
     const totalExpense = soma((t) => t.type === "expense" && t.isPaid);
-    const pendingIncome = soma((t) => t.type === "income" && !t.isPaid);
+    const pendingIncome = deCentavos(receitas.reduce((s, t) => s + saldoEmCentavos(t), 0));
 
     // Last 6 months breakdown (paid only)
     const now = new Date();
@@ -218,7 +231,23 @@ export const updateTransaction = mutation({
       exigirValor(fields.amount);
       fields.amount = emCentavos(fields.amount);
     }
-    await ctx.db.patch(id, fields);
+    // Com recebimentos, `isPaid` é derivado deles — não se marca à mão. E o
+    // valor não desce abaixo do que já entrou: a parcela ficaria "recebida a
+    // mais", um número que o histórico não explica.
+    const comRecebimentos = (tx.recebimentos?.length ?? 0) > 0;
+    if (comRecebimentos) {
+      if (fields.isPaid !== undefined) exigirSemRecebimentos(tx, "marcar como pago");
+      if (fields.amount !== undefined && paraCentavos(fields.amount) < recebidoEmCentavos(tx)) {
+        recusar("ABAIXO_DO_RECEBIDO", "O valor não pode ficar menor do que já foi recebido nesta parcela.");
+      }
+    }
+    // Mudou o valor de uma parcela com recebimentos: a baixa acompanha (subiu
+    // e deixou de estar quitada, ou desceu até o que já entrou).
+    const baixa =
+      comRecebimentos && fields.amount !== undefined
+        ? baixaDerivada({ ...tx, amount: fields.amount })
+        : null;
+    await ctx.db.patch(id, baixa ? { ...fields, isPaid: baixa.isPaid, paidAt: baixa.paidAt } : fields);
   },
 });
 
@@ -229,6 +258,7 @@ export const togglePaid = mutation({
     const tx = await ctx.db.get(args.id);
     if (!tx || tx.userId !== user._id)
       throw new ConvexError({ message: "Lançamento não encontrado", code: "NOT_FOUND" });
+    exigirSemRecebimentos(tx, "marcar ou desmarcar como pago");
     await ctx.db.patch(args.id, { isPaid: !tx.isPaid });
   },
 });
@@ -312,7 +342,10 @@ export const registrarPagamento = mutation({
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
-    await meuLancamento(ctx, user, args.id);
+    const tx = await meuLancamento(ctx, user, args.id);
+    if (args.isPaid !== undefined || args.paidAt !== undefined) {
+      exigirSemRecebimentos(tx, "mudar a baixa");
+    }
     const { id, ...campos } = args;
     const limpo = limparCampos({
       ...campos,
@@ -438,6 +471,15 @@ export const deleteTransaction = mutation({
     const tx = await ctx.db.get(args.id);
     if (!tx || tx.userId !== user._id)
       throw new ConvexError({ message: "Lançamento não encontrado", code: "NOT_FOUND" });
+    // Parcela com recebimentos é histórico financeiro: excluí-la apagaria em
+    // silêncio o registro do dinheiro que entrou — inclusive o anulado, que é
+    // a trilha da correção.
+    if ((tx.recebimentos?.length ?? 0) > 0) {
+      recusar(
+        "TEM_RECEBIMENTOS",
+        "Esta parcela tem recebimentos registrados e não pode ser excluída. Anule o recebimento errado e ajuste o valor.",
+      );
+    }
 
     // ── O VÍNCULO NÃO PODE APONTAR PARA O VAZIO ─────────────────────────────
     // Uma compra pode ter gerado este lançamento (`purchaseItems.transactionId`).
@@ -517,5 +559,274 @@ export const createReceivablesFromContract = mutation({
       created++;
     }
     return { created, alreadyExists: false };
+  },
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PAGAMENTOS DO CLIENTE, NA PÁGINA DO EVENTO
+//
+// Tudo aqui opera nas MESMAS parcelas de sempre (receitas do evento em
+// `transactions`). A regra — centavos, estados, atraso, baixa derivada — mora
+// em `lib/pagamentosDoEvento.ts`, que a tela também usa.
+//
+// ── O QUE NUNCA ACONTECE AQUI ───────────────────────────────────────────────
+// · Nenhum dinheiro se move: registrar recebimento é anotar o que entrou.
+// · Nada se apaga do histórico: corrigir é ANULAR com motivo.
+// · Planejar não recria nem altera parcela existente — só acrescenta.
+// · Comprovante sozinho não dá baixa (mesma regra de `anexarComprovante`).
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** Motivo de anulação: obrigatório e curto o bastante para caber na linha. */
+const MOTIVO_MAXIMO = 500;
+
+/** A recusa com o recado da tela. */
+function recusar(code: string, message: string): never {
+  throw new ConvexError({ code, message });
+}
+
+/**
+ * A parcela tem recebimentos registrados? Então `isPaid` é derivado, e as
+ * mutations de antes (baixa manual, edição de valor) não podem mexer nele
+ * por fora — o número da tela deixaria de bater com o histórico.
+ */
+function exigirSemRecebimentos(tx: { recebimentos?: readonly unknown[] }, acao: string) {
+  if ((tx.recebimentos?.length ?? 0) > 0) {
+    recusar(
+      "TEM_RECEBIMENTOS",
+      `Esta parcela tem recebimentos registrados, então não dá para ${acao} por aqui. ` +
+        `Use "Registrar recebimento" ou anule o recebimento errado na página do evento.`,
+    );
+  }
+}
+
+/**
+ * Os pagamentos do cliente de UM evento: o valor contratado e as parcelas.
+ *
+ * Degrada para `null` — evento de outra conta não existe (padrão de
+ * `getOwnedEvent`). Os números (recebido, saldo, atraso) a tela calcula com
+ * `lib/pagamentosDoEvento.ts` e o "hoje" do aparelho dela.
+ */
+export const pagamentosDoEvento = query({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    const event = await getOwnedEvent(ctx, args.eventId);
+    if (!event) return null;
+    const txs = await ctx.db
+      .query("transactions")
+      .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+      .collect();
+    const parcelas = txs
+      // O dono é conferido de novo na linha: o índice é por evento, e o
+      // evento já é dela — mas é a linha que vai para a tela.
+      .filter((t) => t.type === "income" && t.userId === event.userId)
+      .sort((a, b) => a.date.localeCompare(b.date) || a._creationTime - b._creationTime)
+      .map((t) => ({
+        _id: t._id,
+        description: t.description,
+        category: t.category,
+        amount: t.amount,
+        date: t.date,
+        isPaid: t.isPaid,
+        paidAt: t.paidAt,
+        paymentMethod: t.paymentMethod,
+        recebimentos: t.recebimentos ?? [],
+        comprovantes: (t.comprovantes ?? []).length,
+      }));
+    return {
+      valorContratado: event.contractedValue ?? null,
+      orcamentoEstimado: event.budget ?? null,
+      parcelas,
+    };
+  },
+});
+
+/** Define ou limpa (`null`) o valor contratado do evento. */
+export const definirValorContratado = mutation({
+  args: { eventId: v.id("events"), valor: v.union(v.number(), v.null()) },
+  handler: async (ctx, args) => {
+    await requireEventOwner(ctx, args.eventId);
+    if (args.valor === null) {
+      await ctx.db.patch(args.eventId, { contractedValue: undefined });
+      return;
+    }
+    exigirValor(args.valor);
+    if (args.valor <= 0) recusar("VALOR_INVALIDO", "O valor contratado precisa ser maior que zero.");
+    await ctx.db.patch(args.eventId, { contractedValue: emCentavos(args.valor) });
+  },
+});
+
+/**
+ * Acrescenta as parcelas da prévia. NÃO toca nas que já existem.
+ *
+ * `chave` é gerada pela tela ao abrir o planejamento: o mesmo envio repetido
+ * (clique duplo, rede que reenvia) encontra as parcelas que já criou e não
+ * cria de novo.
+ */
+export const adicionarParcelas = mutation({
+  args: {
+    eventId: v.id("events"),
+    chave: v.string(),
+    parcelas: v.array(v.object({ descricao: v.string(), valor: v.number(), vencimento: v.string() })),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requireEventOwner(ctx, args.eventId);
+    const chave = args.chave.trim();
+    if (!chave) recusar("INVALIDO", "Planejamento sem identificação. Recarregue a página.");
+    if (args.parcelas.length === 0) recusar("INVALIDO", "Nenhuma parcela para criar.");
+    if (args.parcelas.length > 60) recusar("INVALIDO", "No máximo 60 parcelas de uma vez.");
+
+    const existentes = await ctx.db
+      .query("transactions")
+      .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
+      .collect();
+    if (existentes.some((t) => t.chaveDoPlanejamento === chave)) return { criadas: 0, repetido: true };
+
+    // Confere TODAS antes de gravar a primeira: metade criada e metade
+    // recusada deixaria um parcelamento que ninguém pediu.
+    for (const p of args.parcelas) {
+      exigirValor(p.valor);
+      if (p.valor <= 0) recusar("VALOR_INVALIDO", "Toda parcela precisa ter valor maior que zero.");
+      if (!dataValida(p.vencimento)) recusar("DATA_INVALIDA", `Vencimento inválido: "${p.vencimento}".`);
+    }
+    for (const p of args.parcelas) {
+      await ctx.db.insert("transactions", {
+        userId: user._id,
+        eventId: args.eventId,
+        type: "income",
+        category: "Contrato",
+        description: p.descricao.trim() || "Parcela",
+        amount: emCentavos(p.valor),
+        date: p.vencimento.slice(0, 10),
+        isPaid: false,
+        chaveDoPlanejamento: chave,
+      });
+    }
+    return { criadas: args.parcelas.length, repetido: false };
+  },
+});
+
+/**
+ * Registra dinheiro que ENTROU numa parcela — parcial ou total.
+ *
+ * Recusa valor inválido, data inválida, parcela de despesa e valor acima do
+ * saldo. Acima do saldo não vira "crédito" nem "troco": se o cliente pagou
+ * mais, o valor da parcela estava errado, e é ele que se corrige.
+ *
+ * O comprovante é opcional e entra na MESMA lista de `anexarComprovante`.
+ */
+export const registrarRecebimento = mutation({
+  args: {
+    id: v.id("transactions"),
+    chave: v.string(),
+    valor: v.number(),
+    data: v.string(),
+    forma: v.optional(v.string()),
+    comprovante: v.optional(
+      v.object({
+        storageId: v.id("_storage"),
+        filename: v.string(),
+        contentType: v.optional(v.string()),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const tx = await meuLancamento(ctx, user, args.id);
+    if (tx.type !== "income") recusar("INVALIDO", "Recebimento só se registra em receita.");
+
+    const chave = args.chave.trim();
+    if (!chave) recusar("INVALIDO", "Envio sem identificação. Recarregue a página.");
+    const recebimentos = tx.recebimentos ?? [];
+    // O MESMO envio de novo: devolve o que já foi gravado, sem duplicar.
+    const repetido = recebimentos.find((r) => r.chave === chave);
+    if (repetido) return { id: repetido.id, repetido: true };
+
+    exigirValor(args.valor);
+    if (args.valor <= 0) recusar("VALOR_INVALIDO", "O valor recebido precisa ser maior que zero.");
+    if (!dataValida(args.data)) recusar("DATA_INVALIDA", "Informe a data em que o dinheiro entrou.");
+
+    const valorCentavos = paraCentavos(emCentavos(args.valor));
+    const saldo = saldoEmCentavos(tx);
+    if (saldo === 0) recusar("SEM_SALDO", "Esta parcela já está toda recebida.");
+    if (valorCentavos > saldo) {
+      recusar(
+        "ACIMA_DO_SALDO",
+        `O valor passa do saldo desta parcela (${deCentavos(saldo).toLocaleString("pt-BR", {
+          style: "currency",
+          currency: "BRL",
+        })}). Se o cliente pagou mais, corrija primeiro o valor da parcela.`,
+      );
+    }
+
+    let comprovantes = tx.comprovantes ?? [];
+    if (args.comprovante) {
+      const c = args.comprovante;
+      if (!comprovantes.some((x) => x.storageId === c.storageId)) {
+        if (comprovantes.length >= LIMITE_DE_COMPROVANTES) {
+          recusar("LIMITE", `Um lançamento aceita até ${LIMITE_DE_COMPROVANTES} comprovantes.`);
+        }
+        await exigirArquivoGuardadoNoTeto(ctx, c.storageId);
+        comprovantes = [
+          ...comprovantes,
+          {
+            storageId: c.storageId,
+            filename: c.filename.trim() || "comprovante",
+            contentType: c.contentType?.trim() || undefined,
+            uploadedAt: new Date().toISOString(),
+          },
+        ];
+      }
+    }
+
+    const novo = {
+      id: crypto.randomUUID(),
+      valor: emCentavos(args.valor),
+      data: args.data.slice(0, 10),
+      forma: args.forma?.trim() || undefined,
+      comprovanteStorageId: args.comprovante?.storageId,
+      registradoEm: new Date().toISOString(),
+      chave,
+    };
+    const lista = [...recebimentos, novo];
+    const baixa = baixaDerivada({ ...tx, recebimentos: lista });
+    await ctx.db.patch(args.id, {
+      recebimentos: lista,
+      comprovantes,
+      isPaid: baixa.isPaid,
+      paidAt: baixa.paidAt,
+      // A forma da parcela acompanha o recebimento quando não havia nenhuma —
+      // é o campo que o Financeiro já mostra.
+      paymentMethod: tx.paymentMethod ?? novo.forma,
+    });
+    return { id: novo.id, repetido: false };
+  },
+});
+
+/**
+ * Corrige um recebimento: ANULA, com motivo. Não apaga e não estorna nada.
+ *
+ * Idempotente: anular de novo o que já está anulado não é erro e não troca o
+ * motivo original.
+ */
+export const anularRecebimento = mutation({
+  args: { id: v.id("transactions"), recebimentoId: v.string(), motivo: v.string() },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const tx = await meuLancamento(ctx, user, args.id);
+    const recebimentos = tx.recebimentos ?? [];
+    const alvo = recebimentos.find((r) => r.id === args.recebimentoId);
+    if (!alvo) recusar("NOT_FOUND", "Recebimento não encontrado");
+    if (alvo.anulacao) return { anulado: false };
+
+    const motivo = args.motivo.trim();
+    if (!motivo) recusar("INVALIDO", "Diga por que este recebimento está sendo anulado.");
+    if (motivo.length > MOTIVO_MAXIMO) recusar("INVALIDO", `Motivo com até ${MOTIVO_MAXIMO} caracteres.`);
+
+    const lista = recebimentos.map((r) =>
+      r.id === alvo.id ? { ...r, anulacao: { em: new Date().toISOString(), motivo } } : r,
+    );
+    const baixa = baixaDerivada({ ...tx, recebimentos: lista });
+    await ctx.db.patch(args.id, { recebimentos: lista, isPaid: baixa.isPaid, paidAt: baixa.paidAt });
+    return { anulado: true };
   },
 });

@@ -125,6 +125,7 @@ import type * as lib_materiaisDoProjeto from "../lib/materiaisDoProjeto.js";
 import type * as lib_mensagensDaCampanha from "../lib/mensagensDaCampanha.js";
 import type * as lib_numeroGravavel from "../lib/numeroGravavel.js";
 import type * as lib_officeBridgeAuth from "../lib/officeBridgeAuth.js";
+import type * as lib_pagamentosDoEvento from "../lib/pagamentosDoEvento.js";
 import type * as lib_panoramaDeCompras from "../lib/panoramaDeCompras.js";
 import type * as lib_plantaPrompt from "../lib/plantaPrompt.js";
 import type * as lib_platformGuard from "../lib/platformGuard.js";
@@ -283,6 +284,7 @@ declare const fullApi: ApiFromModules<{
   "lib/mensagensDaCampanha": typeof lib_mensagensDaCampanha;
   "lib/numeroGravavel": typeof lib_numeroGravavel;
   "lib/officeBridgeAuth": typeof lib_officeBridgeAuth;
+  "lib/pagamentosDoEvento": typeof lib_pagamentosDoEvento;
   "lib/panoramaDeCompras": typeof lib_panoramaDeCompras;
   "lib/plantaPrompt": typeof lib_plantaPrompt;
   "lib/platformGuard": typeof lib_platformGuard;

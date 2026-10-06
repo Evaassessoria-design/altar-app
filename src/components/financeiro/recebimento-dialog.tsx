@@ -68,6 +68,11 @@ export function RecebimentoDialog({
   const despesa = lancamento.type === "expense";
   const VERBO = despesa ? "Pago" : "Recebido";
 
+  // Parcela com recebimentos registrados (página do evento): a baixa é
+  // DERIVADA deles, e o servidor recusa marcá-la à mão. Aqui ficam só forma,
+  // observação e comprovantes.
+  const controladoPorRecebimentos = (lancamento.recebimentos?.length ?? 0) > 0;
+
   const [pago, setPago] = useState(lancamento.isPaid);
   const [pagoEm, setPagoEm] = useState(lancamento.paidAt ?? "");
   const [forma, setForma] = useState(lancamento.paymentMethod ?? "");
@@ -82,8 +87,7 @@ export function RecebimentoDialog({
       // falharia em silêncio, com a tela dizendo "salvo".
       await registrarPagamento({
         id: lancamento._id,
-        isPaid: pago,
-        paidAt: pagoEm.trim() || null,
+        ...(controladoPorRecebimentos ? {} : { isPaid: pago, paidAt: pagoEm.trim() || null }),
         paymentMethod: forma.trim() || null,
         notes: observacao.trim() || null,
       });
@@ -151,6 +155,12 @@ export function RecebimentoDialog({
 
         {/* ── O PAGAMENTO ─────────────────────────────────────────────── */}
         <div className="space-y-3">
+          {controladoPorRecebimentos ? (
+            <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Esta parcela tem recebimentos registrados na página do evento. É lá que se registra
+              ou corrige o que entrou — a baixa acompanha os recebimentos.
+            </p>
+          ) : (
           <label className="flex cursor-pointer items-center gap-2.5">
             <input
               type="checkbox"
@@ -160,8 +170,10 @@ export function RecebimentoDialog({
             />
             <span className="text-sm font-medium">{VERBO}</span>
           </label>
+          )}
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {!controladoPorRecebimentos && (
             <div className="space-y-1.5">
               <label htmlFor="pago-em" className="text-xs font-medium">
                 {VERBO} em
@@ -174,6 +186,7 @@ export function RecebimentoDialog({
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
+            )}
             <div className="space-y-1.5">
               <label htmlFor="forma" className="text-xs font-medium">
                 Forma

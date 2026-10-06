@@ -132,8 +132,26 @@ describe("a rodada do sistema no banco", () => {
     // é um Proxy que responde a qualquer nome — por isso a prova é a fonte.)
     const fonte = readFileSync("convex/escritorioCiclo.ts", "utf-8");
     expect(fonte).toMatch(/export const rodarPeloSistema = internalMutation\(/);
-    expect(readFileSync("convex/crons.ts", "utf-8")).toContain(
-      "internal.escritorioCiclo.rodarPeloSistema",
+  });
+
+  it("o agendamento existe, mas DESLIGADO neste release (decisão de 06/10/2026)", async () => {
+    // A rodada automática gravaria rascunhos em PROD todo dia, com a política
+    // ainda não configurada. O ciclo manual continua.
+    const { RODADA_AUTOMATICA_LIGADA } = await import("./lib/escritorio/rodadaAutomatica");
+    expect(RODADA_AUTOMATICA_LIGADA).toBe(false);
+    const crons = (await import("./crons")).default as unknown as { crons: Record<string, unknown> };
+    expect(Object.keys(crons.crons)).not.toContain("escritorio roda sozinho");
+    // os outros agendamentos continuam — desligar este não pode levar junto o resto
+    expect(Object.keys(crons.crons)).toContain("varredura da central de comunicacoes");
+    // e só por essa chave — não apagado nem esquecido
+    expect(readFileSync("convex/crons.ts", "utf-8")).toMatch(
+      /if \(RODADA_AUTOMATICA_LIGADA\) \{\s*crons\.daily\(\s*"escritorio roda sozinho"/,
     );
+  });
+
+  it("o botão manual continua exigindo dono da plataforma", () => {
+    const ciclo = readFileSync("convex/escritorioCiclo.ts", "utf-8");
+    const i = ciclo.indexOf("export const rodarAgora");
+    expect(ciclo.slice(i, ciclo.indexOf("\n});", i))).toContain("requirePlatformOwner");
   });
 });

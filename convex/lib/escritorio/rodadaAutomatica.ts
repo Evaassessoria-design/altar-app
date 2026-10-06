@@ -23,6 +23,21 @@ import { DIAS_PARA_DESISTIR_DO_FOLLOW_UP } from "../proximaAcao";
 // campanha encerrada só gravaria "tudo em dia" para sempre no histórico.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * A rodada automática está LIGADA nesta versão?
+ *
+ * DESLIGADA no release de outubro/2026 (decisão de 06/10): o cron gravaria
+ * rascunhos em PROD todo dia, a partir dos interessados reais da campanha,
+ * com as capacidades verdes ligadas por padrão — antes de alguém ter
+ * configurado a política. O ciclo MANUAL ("Rodar agora", só `platformOwner`)
+ * continua igual.
+ *
+ * Uma chave só: o agendamento (`convex/crons.ts`), a frase da tela do
+ * Escritório e o aviso do relatório leem daqui — ligar de novo é trocar este
+ * valor, e nenhuma tela fica prometendo o que não acontece.
+ */
+export const RODADA_AUTOMATICA_LIGADA = false;
+
 /** Dias depois do evento em que a rodada automática ainda faz sentido. */
 export const DIAS_DE_ROTINA_APOS_A_CAMPANHA = DIAS_PARA_DESISTIR_DO_FOLLOW_UP;
 

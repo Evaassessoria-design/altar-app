@@ -5,6 +5,7 @@ import { api } from "@/convex/_generated/api.js";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { Building2, Users, TrendingUp, DollarSign, CalendarDays, Radio } from "lucide-react";
 import { CentroDeComando } from "./_components/centro-de-comando.tsx";
+import { RODADA_AUTOMATICA_LIGADA } from "@/convex/lib/escritorio/rodadaAutomatica.ts";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // ESCRITÓRIO ALTAR — a mesa de quem administra o NEGÓCIO.
@@ -171,8 +172,10 @@ export default function EscritorioPage() {
 
           {/* O que o Escritório faz HOJE, sem prometer o que não faz. */}
           <p className="text-xs text-muted-foreground">
-            Hoje o Escritório acompanha a campanha sozinho (todo dia às 07:30), prepara
-            mensagens e classifica respostas registradas. Ele não envia nada: nenhum canal
+            {RODADA_AUTOMATICA_LIGADA
+              ? "Hoje o Escritório acompanha a campanha sozinho (todo dia às 07:30), prepara mensagens e classifica respostas registradas."
+              : "Hoje o Escritório roda quando alguém clica em \u201cRodar agora\u201d — a rodada automática está desligada nesta versão. Ele prepara mensagens e classifica respostas registradas."}{" "}
+            Ele não envia nada: nenhum canal
             está conectado, e toda mensagem sai pelas suas mãos. Marketing, CS e
             assinaturas ainda não têm agentes.
           </p>

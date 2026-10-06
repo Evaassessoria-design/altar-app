@@ -1,4 +1,5 @@
 import { INTENCOES_DE_INTERESSE, ROTULO_DA_INTENCAO } from "../respostaDoInteressado";
+import { RODADA_AUTOMATICA_LIGADA } from "./rodadaAutomatica";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // O RELATÓRIO DO ESCRITÓRIO — "o que aconteceu desde a última vez que entrei?"
@@ -139,9 +140,11 @@ export function montarRelatorio(f: FatosDoRelatorio): Relatorio {
     atencao.push({ texto: "O Escritório ainda não rodou nenhuma vez.", link: "/campanha" });
   } else if (f.agora - f.ultimaRodada.criadoEm > SILENCIO_DO_ESCRITORIO_MS) {
     atencao.push({
-      texto:
-        "O Escritório não roda há mais de um dia. A rodada automática é diária — " +
-        "se ela parou, a fila de rascunhos também parou.",
+      texto: RODADA_AUTOMATICA_LIGADA
+        ? "O Escritório não roda há mais de um dia. A rodada automática é diária — " +
+          "se ela parou, a fila de rascunhos também parou."
+        : "O Escritório não roda há mais de um dia. A rodada automática está desligada " +
+          "nesta versão — a fila de rascunhos só anda com \"Rodar agora\".",
       link: "/campanha",
     });
   }

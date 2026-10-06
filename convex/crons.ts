@@ -1,5 +1,6 @@
 import { cronJobs } from "convex/server";
 import { internal } from "./_generated/api";
+import { RODADA_AUTOMATICA_LIGADA } from "./lib/escritorio/rodadaAutomatica";
 
 const crons = cronJobs();
 
@@ -51,11 +52,17 @@ crons.daily(
 // NÃO envia nada, NÃO chama modelo e NÃO muda estágio de ninguém: escreve
 // rascunho para revisão e registra a rodada. Capacidade desligada na
 // política continua desligada. No dia da live (19:00 BRT) roda 11h30 antes.
-crons.daily(
-  "escritorio roda sozinho",
-  { hourUTC: 10, minuteUTC: 30 },
-  internal.escritorioCiclo.rodarPeloSistema,
-  {},
-);
+//
+// DESLIGADO no release de outubro/2026 — ver `RODADA_AUTOMATICA_LIGADA`. Sem
+// o agendamento, `rodarPeloSistema` continua existindo como função interna
+// (inalcançável pelo navegador) e o ciclo segue disponível pelo botão manual.
+if (RODADA_AUTOMATICA_LIGADA) {
+  crons.daily(
+    "escritorio roda sozinho",
+    { hourUTC: 10, minuteUTC: 30 },
+    internal.escritorioCiclo.rodarPeloSistema,
+    {},
+  );
+}
 
 export default crons;

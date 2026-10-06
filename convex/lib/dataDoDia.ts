@@ -62,3 +62,56 @@ export function faixaDoMes(
     rotulo: alvo.toLocaleString("pt-BR", { month: "short", timeZone: "UTC" }),
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// "HOJE" NO FUSO DO NEGÓCIO
+//
+// A NOTA acima esperava uma decisão de produto, e ela veio (06/10/2026): para
+// dinheiro — vencimento, atraso, data de recebimento — "hoje" é o dia no fuso
+// da EMPRESA, não do servidor (UTC) nem do aparelho de quem abre a tela.
+//
+// O fuso é o que a decoradora escolheu em Configurações (`users.timezone`);
+// ausente ou inválido = America/Sao_Paulo, o mesmo padrão daquela tela.
+//
+// `dataDoDia` (UTC) continua existindo para quem já a usa — agenda e eventos
+// do Dashboard. Trocar tudo de uma vez seria mexer em telas que não fazem
+// parte desta decisão.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** O fuso de negócio quando a conta não escolheu nenhum. */
+export const FUSO_PADRAO_DO_NEGOCIO = "America/Sao_Paulo";
+
+/** O fuso da conta, validado. Fuso que o runtime não conhece cai no padrão. */
+export function fusoDoNegocio(escolhido: string | undefined | null): string {
+  if (!escolhido) return FUSO_PADRAO_DO_NEGOCIO;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: escolhido });
+    return escolhido;
+  } catch {
+    return FUSO_PADRAO_DO_NEGOCIO;
+  }
+}
+
+/**
+ * "AAAA-MM-DD" do instante no fuso dado.
+ *
+ * Se o runtime não tiver os dados de fuso, cai em UTC−3 fixo — que é
+ * Brasília desde o fim do horário de verão (2019). Nunca cai em UTC, que é
+ * exatamente o erro que esta função existe para não cometer.
+ */
+export function dataDoDiaNoFuso(agora: Date = new Date(), fuso: string = FUSO_PADRAO_DO_NEGOCIO): string {
+  try {
+    const partes = new Intl.DateTimeFormat("en-CA", {
+      timeZone: fusoDoNegocio(fuso),
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(agora);
+    const p = (t: string) => partes.find((x) => x.type === t)?.value ?? "";
+    const dia = `${p("year")}-${p("month")}-${p("day")}`;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dia)) return dia;
+  } catch {
+    // segue para o fixo
+  }
+  return new Date(agora.getTime() - 3 * 3_600_000).toISOString().slice(0, 10);
+}

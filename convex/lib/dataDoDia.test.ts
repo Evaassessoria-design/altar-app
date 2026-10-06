@@ -2,6 +2,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   dataDoDia,
+  dataDoDiaNoFuso,
+  fusoDoNegocio,
+  FUSO_PADRAO_DO_NEGOCIO,
   dataEmDias,
   faixaDoMes,
   primeiroDiaDoMes,
@@ -121,5 +124,44 @@ describe("nenhuma consulta volta a comparar dia com instante", () => {
       expect(fonte).toContain("hojeDateKey");
       expect(fonte, `${arquivo} redeclara hojeISO`).not.toMatch(/function hojeISO/);
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// "HOJE" NO FUSO DO NEGÓCIO — PERTO DA MEIA-NOITE
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("dataDoDiaNoFuso — a virada do dia é a de Brasília, não a do UTC", () => {
+  it.each([
+    // instante UTC              dia em Brasília (UTC−3)
+    ["2026-10-06T02:59:59Z", "2026-10-05"], // 23:59:59 do dia 5 em Brasília
+    ["2026-10-06T03:00:00Z", "2026-10-06"], // 00:00:00 do dia 6 em Brasília
+    ["2026-10-06T23:59:59Z", "2026-10-06"], // 20:59 em Brasília — UTC já "virou"? não
+    ["2026-10-07T00:30:00Z", "2026-10-06"], // 21:30 em Brasília: UTC já é dia 7
+    ["2026-10-07T02:59:00Z", "2026-10-06"], // 23:59 em Brasília
+    ["2027-01-01T02:59:59Z", "2026-12-31"], // virada de ano
+    ["2028-03-01T02:30:00Z", "2028-02-29"], // bissexto
+  ])("%s → %s", (instante, dia) => {
+    expect(dataDoDiaNoFuso(new Date(instante), "America/Sao_Paulo")).toBe(dia);
+  });
+
+  it("às 21h30 de Brasília, o UTC já diz amanhã — e o negócio não", () => {
+    const agora = new Date("2026-10-07T00:30:00Z");
+    expect(agora.toISOString().slice(0, 10)).toBe("2026-10-07");
+    expect(dataDoDiaNoFuso(agora)).toBe("2026-10-06");
+  });
+
+  it("respeita o fuso escolhido pela conta", () => {
+    // 01:30 UTC = 21:30 em Manaus (UTC−4) do dia anterior; 22:30 em Brasília.
+    expect(dataDoDiaNoFuso(new Date("2026-10-07T01:30:00Z"), "America/Manaus")).toBe("2026-10-06");
+    expect(dataDoDiaNoFuso(new Date("2026-10-07T03:30:00Z"), "America/Manaus")).toBe("2026-10-06");
+    expect(dataDoDiaNoFuso(new Date("2026-10-07T04:00:00Z"), "America/Manaus")).toBe("2026-10-07");
+  });
+
+  it("fuso ausente ou inválido cai em America/Sao_Paulo", () => {
+    expect(fusoDoNegocio(undefined)).toBe(FUSO_PADRAO_DO_NEGOCIO);
+    expect(fusoDoNegocio("")).toBe(FUSO_PADRAO_DO_NEGOCIO);
+    expect(fusoDoNegocio("Marte/Base")).toBe(FUSO_PADRAO_DO_NEGOCIO);
+    expect(dataDoDiaNoFuso(new Date("2026-10-07T00:30:00Z"), "Marte/Base")).toBe("2026-10-06");
   });
 });

@@ -96,6 +96,19 @@ describe("recebimento parcial e quitação", () => {
     expect((await c.linha(c.ids.p1)).recebimentos).toHaveLength(1);
   });
 
+  it("a recusa NÃO manda aumentar a parcela para caber o pagamento", async () => {
+    const c = await cenario();
+    let recado = "";
+    try {
+      await c.registrar(c.ids.p1, 6000, "a");
+    } catch (e) {
+      recado = (e as { data?: { message?: string } }).data?.message ?? "";
+    }
+    expect(recado).toMatch(/Registre no máximo o saldo/);
+    expect(recado).toMatch(/acordo com a cliente mudar de fato/);
+    expect(recado).not.toMatch(/corrija|ajuste o valor|aumente/i);
+  });
+
   it("parcela já quitada (inclusive a baixa antiga) não recebe mais", async () => {
     const c = await cenario();
     await expect(c.registrar(c.ids.antigaPaga, 1, "a")).rejects.toThrow(/já está toda recebida/);
@@ -154,10 +167,68 @@ describe("clique repetido e reenvio", () => {
         { descricao: "Parcela 2/2", valor: 3333.33, vencimento: "2027-02-10" },
       ],
     };
-    expect(await c.dona.mutation(api.financeiro.adicionarParcelas, plano)).toEqual({ criadas: 2, repetido: false });
+    expect(await c.dona.mutation(api.financeiro.adicionarParcelas, plano)).toEqual({
+      criadas: 2,
+      repetido: false,
+      ignoradas: 0,
+    });
     expect(await c.dona.mutation(api.financeiro.adicionarParcelas, plano)).toEqual({ criadas: 0, repetido: true });
     const r = await c.dona.query(api.financeiro.pagamentosDoEvento, { eventId: c.ids.evento });
     expect(r!.parcelas).toHaveLength(5);
+  });
+});
+
+describe("o mesmo planejamento salvo de novo", () => {
+  const plano = (chave: string, eventId: Id<"events">) => ({
+    eventId,
+    chave,
+    parcelas: [
+      { descricao: "Parcela 1/2", valor: 3333.34, vencimento: "2027-01-10" },
+      { descricao: "Parcela 2/2", valor: 3333.33, vencimento: "2027-02-10" },
+    ],
+  });
+
+  it("por OUTRO formulário (outra chave) não duplica", async () => {
+    const c = await cenario();
+    await c.dona.mutation(api.financeiro.adicionarParcelas, plano("form-1", c.ids.evento));
+    const r = await c.dona.mutation(api.financeiro.adicionarParcelas, plano("form-2", c.ids.evento));
+    expect(r).toEqual({ criadas: 0, repetido: true });
+    const d = await c.dona.query(api.financeiro.pagamentosDoEvento, { eventId: c.ids.evento });
+    expect(d!.parcelas).toHaveLength(5);
+  });
+
+  it("reenvio depois de resposta perdida: mesma chave, nada novo", async () => {
+    // A primeira chamada gravou, mas a resposta não chegou à tela; o
+    // formulário continua aberto e reenvia com a MESMA chave.
+    const c = await cenario();
+    await c.dona.mutation(api.financeiro.adicionarParcelas, plano("perdida", c.ids.evento));
+    const r = await c.dona.mutation(api.financeiro.adicionarParcelas, plano("perdida", c.ids.evento));
+    expect(r).toEqual({ criadas: 0, repetido: true });
+  });
+
+  it("prévia que mistura parcela já existente e nova cria só a nova", async () => {
+    const c = await cenario();
+    await c.dona.mutation(api.financeiro.adicionarParcelas, plano("a", c.ids.evento));
+    const r = await c.dona.mutation(api.financeiro.adicionarParcelas, {
+      eventId: c.ids.evento,
+      chave: "b",
+      parcelas: [
+        { descricao: "Parcela 2/2", valor: 3333.33, vencimento: "2027-02-10" },
+        { descricao: "Parcela extra", valor: 500, vencimento: "2027-03-10" },
+      ],
+    });
+    expect(r).toEqual({ criadas: 1, repetido: false, ignoradas: 1 });
+  });
+
+  it("mesmo valor em OUTRO vencimento é parcela nova, não repetição", async () => {
+    const c = await cenario();
+    await c.dona.mutation(api.financeiro.adicionarParcelas, plano("a", c.ids.evento));
+    const r = await c.dona.mutation(api.financeiro.adicionarParcelas, {
+      eventId: c.ids.evento,
+      chave: "b",
+      parcelas: [{ descricao: "Parcela 1/2", valor: 3333.34, vencimento: "2027-04-10" }],
+    });
+    expect(r.criadas).toBe(1);
   });
 });
 
@@ -304,6 +375,58 @@ describe("os totais do Financeiro e do Dashboard enxergam o parcial", () => {
     const s = await c.dona.query(api.financeiro.getSummary, {});
     expect(s.totalIncome).toBe(3000 + 2000);
     expect(s.pendingIncome).toBe(3000 + 5000);
+  });
+
+  it("perto da meia-noite, o Dashboard usa o dia do NEGÓCIO, não o do UTC", async () => {
+    const c = await cenario();
+    // p1 vence em 2026-10-01; uma nova vence em 2026-10-06.
+    const hoje6 = await c.t.run((ctx) =>
+      ctx.db.insert("transactions", {
+        userId: c.ids.donaId, eventId: c.ids.evento, type: "income", category: "Contrato",
+        description: "Vence dia 6", amount: 1000, date: "2026-10-06", isPaid: false,
+      }),
+    );
+    expect(hoje6).toBeTruthy();
+    const vencidosAs = async (instante: string) => {
+      vi.useFakeTimers({ toFake: ["Date"], now: new Date(instante) });
+      try {
+        return await c.dona.query(api.financeiro.getVencidos, {});
+      } finally {
+        vi.useRealTimers();
+      }
+    };
+    // 21:30 do dia 6 em Brasília = 00:30 UTC do dia 7. Em UTC, "Vence dia 6"
+    // já estaria vencida; no negócio, ainda é hoje.
+    expect((await vencidosAs("2026-10-07T00:30:00Z")).aReceber.quantidade).toBe(1);
+    // 23:59:59 do dia 6 em Brasília: ainda hoje.
+    expect((await vencidosAs("2026-10-07T02:59:59Z")).aReceber.quantidade).toBe(1);
+    // 00:00 do dia 7 em Brasília: agora sim, venceu.
+    expect((await vencidosAs("2026-10-07T03:00:00Z")).aReceber.quantidade).toBe(2);
+  });
+
+  it("o fuso escolhido pela conta vale (Manaus, UTC−4)", async () => {
+    const c = await cenario();
+    await c.t.run(async (ctx) => {
+      await ctx.db.patch(c.ids.donaId, { timezone: "America/Manaus" });
+      await ctx.db.insert("transactions", {
+        userId: c.ids.donaId, eventId: c.ids.evento, type: "income", category: "Contrato",
+        description: "Vence dia 6", amount: 1000, date: "2026-10-06", isPaid: false,
+      });
+    });
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-07T03:30:00Z") }); // 23:30 em Manaus
+    try {
+      expect((await c.dona.query(api.financeiro.getVencidos, {})).aReceber.quantidade).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+    const d = await c.dona.query(api.financeiro.pagamentosDoEvento, { eventId: c.ids.evento });
+    expect(d!.fuso).toBe("America/Manaus");
+  });
+
+  it("sem fuso escolhido, a aba recebe America/Sao_Paulo", async () => {
+    const c = await cenario();
+    const d = await c.dona.query(api.financeiro.pagamentosDoEvento, { eventId: c.ids.evento });
+    expect(d!.fuso).toBe("America/Sao_Paulo");
   });
 
   it("vencido do Dashboard é o SALDO da parcial vencida", async () => {

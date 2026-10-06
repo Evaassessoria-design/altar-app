@@ -5,7 +5,7 @@ import { ConvexError } from "convex/values";
 import { getOwnedEvent, requireEventOwner, requireUser } from "./lib/identity";
 import { emCentavos, motivoDoValorInvalido, somaEmDinheiro } from "./lib/dinheiro";
 import { dinheiroVencido } from "./lib/dinheiroVencido";
-import { dataDoDia } from "./lib/dataDoDia";
+import { dataDoDiaNoFuso, fusoDoNegocio } from "./lib/dataDoDia";
 import { requireActiveAccess } from "./lib/accessGuard";
 import { safeDeleteFile } from "./lib/cascade";
 import { limparCampos } from "./lib/limparCampos";
@@ -163,7 +163,10 @@ export const getVencidos = query({
   args: {},
   handler: async (ctx) => {
     const user = await requireUser(ctx);
-    const hoje = dataDoDia();
+    // "Hoje" no fuso do NEGÓCIO (Configurações; padrão America/Sao_Paulo).
+    // Em UTC, a parcela que vence hoje aparecia vencida a partir das 21h de
+    // Brasília — e a aba Pagamentos da cliente dizia outra coisa.
+    const hoje = dataDoDiaNoFuso(new Date(), user.timezone);
     // O filtro é do BANCO, não da memória: varrer todo o histórico financeiro
     // — que cresce para sempre — a cada abertura do Dashboard, para achar um
     // punhado de linhas em aberto, é o tipo de consulta que só dói quando a
@@ -632,9 +635,14 @@ export const pagamentosDoEvento = query({
         recebimentos: t.recebimentos ?? [],
         comprovantes: (t.comprovantes ?? []).length,
       }));
+    // O fuso vai para a tela, e não o "hoje" pronto: uma query do Convex não
+    // é reavaliada quando o relógio vira a meia-noite, só quando o dado muda.
+    // A tela calcula o dia com este fuso a cada desenho.
+    const dona = await ctx.db.get(event.userId);
     return {
       valorContratado: event.contractedValue ?? null,
       orcamentoEstimado: event.budget ?? null,
+      fuso: fusoDoNegocio(dona?.timezone),
       parcelas,
     };
   },
@@ -680,6 +688,19 @@ export const adicionarParcelas = mutation({
       .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
       .collect();
     if (existentes.some((t) => t.chaveDoPlanejamento === chave)) return { criadas: 0, repetido: true };
+    // O MESMO planejamento salvo de novo por outro formulário (abriu de novo
+    // e confirmou a mesma prévia): a parcela pedida que já existe neste
+    // evento — mesma descrição, valor e vencimento — não é criada outra vez.
+    // Se TODAS já existem, nada é criado e a resposta diz que foi repetição.
+    const assinatura = (d: string, valor: number, venc: string) =>
+      `${d.trim() || "Parcela"}|${paraCentavos(emCentavos(valor))}|${venc.slice(0, 10)}`;
+    const jaExistem = new Set(
+      existentes
+        .filter((t) => t.type === "income")
+        .map((t) => assinatura(t.description, t.amount, t.date)),
+    );
+    const novas = args.parcelas.filter((p) => !jaExistem.has(assinatura(p.descricao, p.valor, p.vencimento)));
+    if (novas.length === 0) return { criadas: 0, repetido: true };
 
     // Confere TODAS antes de gravar a primeira: metade criada e metade
     // recusada deixaria um parcelamento que ninguém pediu.
@@ -688,7 +709,7 @@ export const adicionarParcelas = mutation({
       if (p.valor <= 0) recusar("VALOR_INVALIDO", "Toda parcela precisa ter valor maior que zero.");
       if (!dataValida(p.vencimento)) recusar("DATA_INVALIDA", `Vencimento inválido: "${p.vencimento}".`);
     }
-    for (const p of args.parcelas) {
+    for (const p of novas) {
       await ctx.db.insert("transactions", {
         userId: user._id,
         eventId: args.eventId,
@@ -701,7 +722,7 @@ export const adicionarParcelas = mutation({
         chaveDoPlanejamento: chave,
       });
     }
-    return { criadas: args.parcelas.length, repetido: false };
+    return { criadas: novas.length, repetido: false, ignoradas: args.parcelas.length - novas.length };
   },
 });
 
@@ -709,8 +730,8 @@ export const adicionarParcelas = mutation({
  * Registra dinheiro que ENTROU numa parcela — parcial ou total.
  *
  * Recusa valor inválido, data inválida, parcela de despesa e valor acima do
- * saldo. Acima do saldo não vira "crédito" nem "troco": se o cliente pagou
- * mais, o valor da parcela estava errado, e é ele que se corrige.
+ * saldo. Acima do saldo não vira "crédito" nem "troco" — e também não é
+ * motivo para aumentar a parcela: ela só muda quando o acordo muda.
  *
  * O comprovante é opcional e entra na MESMA lista de `anexarComprovante`.
  */
@@ -748,14 +769,13 @@ export const registrarRecebimento = mutation({
     const valorCentavos = paraCentavos(emCentavos(args.valor));
     const saldo = saldoEmCentavos(tx);
     if (saldo === 0) recusar("SEM_SALDO", "Esta parcela já está toda recebida.");
+    // Acima do saldo é recusado — e a mensagem NÃO manda mexer na parcela:
+    // aumentar a parcela só para caber um pagamento maior faria o sistema
+    // afirmar um acordo que não existiu. Parcela e contratado mudam quando o
+    // acordo muda.
     if (valorCentavos > saldo) {
-      recusar(
-        "ACIMA_DO_SALDO",
-        `O valor passa do saldo desta parcela (${deCentavos(saldo).toLocaleString("pt-BR", {
-          style: "currency",
-          currency: "BRL",
-        })}). Se o cliente pagou mais, corrija primeiro o valor da parcela.`,
-      );
+      const saldoEmReais = deCentavos(saldo).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+      recusar("ACIMA_DO_SALDO", `O valor passa do saldo desta parcela (${saldoEmReais}). Registre no máximo o saldo. Pagamento acima do combinado não é registrado aqui; o valor da parcela e o contratado só mudam quando o acordo com a cliente mudar de fato.`);
     }
 
     let comprovantes = tx.comprovantes ?? [];

@@ -57,10 +57,31 @@ describe("os três números não se confundem", () => {
   });
 });
 
-describe("atraso no fuso de quem usa", () => {
-  it("o 'hoje' é o do aparelho, não o UTC do servidor", () => {
-    expect(fonte).toContain("const hoje = hojeDateKey();");
+describe("atraso no fuso do negócio", () => {
+  it("o 'hoje' é o do fuso do negócio que o servidor informa — nem aparelho, nem UTC", () => {
+    expect(fonte.match(/const hoje = dataDoDiaNoFuso\(new Date\(\), dados\.fuso\);/g)).toHaveLength(2);
+    expect(fonte).not.toContain("hojeDateKey");
     expect(fonte).toContain("parcelaAtrasada(p, hoje)");
+  });
+
+  it("o Dashboard usa a mesma regra", () => {
+    const financeiro = readFileSync("convex/financeiro.ts", "utf-8");
+    expect(financeiro).toContain("const hoje = dataDoDiaNoFuso(new Date(), user.timezone);");
+  });
+});
+
+describe("acima do saldo", () => {
+  it("a tela não manda aumentar a parcela", () => {
+    expect(fonte).toContain("Registre no máximo o saldo.");
+    expect(fonte).not.toMatch(/corrija primeiro o valor da parcela/);
+  });
+});
+
+describe("o diálogo do Financeiro leva aos pagamentos do evento", () => {
+  it("diz que a parcela é controlada pelos recebimentos e tem o atalho", () => {
+    const dialogo = readFileSync("src/components/financeiro/recebimento-dialog.tsx", "utf-8");
+    expect(dialogo).toContain("Controlada pelos recebimentos.");
+    expect(dialogo).toContain("to={`/eventos/${lancamento.eventId}/pagamentos`}");
   });
 });
 

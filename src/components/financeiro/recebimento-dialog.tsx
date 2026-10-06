@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import { ConvexError } from "convex/values";
-import { Paperclip, Download, Trash2, Check, Loader2, ExternalLink } from "lucide-react";
+import { Paperclip, Download, Trash2, Check, Loader2, ExternalLink, ArrowRight } from "lucide-react";
+import { Link } from "react-router-dom";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { Button } from "@/components/ui/button.tsx";
@@ -156,10 +157,25 @@ export function RecebimentoDialog({
         {/* ── O PAGAMENTO ─────────────────────────────────────────────── */}
         <div className="space-y-3">
           {controladoPorRecebimentos ? (
-            <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-              Esta parcela tem recebimentos registrados na página do evento. É lá que se registra
-              ou corrige o que entrou — a baixa acompanha os recebimentos.
-            </p>
+            <div
+              role="note"
+              className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200 space-y-1.5"
+            >
+              <p>
+                <strong>Controlada pelos recebimentos.</strong> Esta parcela tem recebimentos
+                registrados em Pagamentos da cliente — é lá que se registra ou corrige o que
+                entrou, e a baixa acompanha os recebimentos.
+              </p>
+              {lancamento.eventId && (
+                <Link
+                  to={`/eventos/${lancamento.eventId}/pagamentos`}
+                  onClick={onClose}
+                  className="inline-flex items-center gap-1 font-medium underline underline-offset-2 min-h-9"
+                >
+                  Abrir pagamentos do evento <ArrowRight className="size-3.5" />
+                </Link>
+              )}
+            </div>
           ) : (
           <label className="flex cursor-pointer items-center gap-2.5">
             <input

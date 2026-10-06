@@ -36,20 +36,24 @@ Dashboard passaram a contar o recebimento parcial.
   Por isso `togglePaid`, a baixa de `registrarPagamento` e `isPaid` em
   `updateTransaction` recusam essas parcelas; forma e observação continuam
   editáveis. O valor da parcela não desce abaixo do já recebido.
-- **Acima do saldo é recusado.** Se a cliente pagou mais, corrige-se o valor
-  da parcela.
+- **Acima do saldo é recusado.** Registra-se no máximo o saldo. A parcela e o
+  contratado não são aumentados para acomodar um pagamento maior: eles só
+  mudam quando o acordo com a cliente muda de fato.
 - **Anexar comprovante não dá baixa.**
 - **Correção = anular com motivo.** O recebimento anulado fica no histórico,
   riscado, e deixa de contar. Parcela com recebimentos não pode ser excluída.
 - **Envio repetido não duplica.** Recebimento e planejamento levam uma chave
-  gerada ao abrir o formulário; o servidor devolve o que já gravou.
+  gerada ao abrir o formulário; reenviar depois de uma resposta perdida usa a
+  mesma chave, e o servidor devolve o que já gravou. Salvar de novo a MESMA
+  prévia por outro formulário também não duplica: se toda parcela pedida já
+  existe (descrição, valor e vencimento), nada é criado.
 - **Planejar só acrescenta** parcelas novas; não recria nem altera as que
   existem.
 - **Atraso** = saldo > 0 e vencimento antes de hoje, inclusive na parcela
-  parcialmente recebida. Na aba, "hoje" é o do **aparelho** (`hojeDateKey`);
-  o Dashboard usa o do servidor (UTC). Entre 21h e meia-noite de Brasília os
-  dois podem discordar sobre uma parcela que vence no dia — ver
-  `convex/lib/dataDoDia.ts`.
+  parcialmente recebida. "Hoje" é o dia no **fuso do negócio**
+  (`dataDoDiaNoFuso`): o escolhido em Configurações (`users.timezone`),
+  padrão America/Sao_Paulo. A aba, o cartão do evento e o vencido do
+  Dashboard usam o mesmo dia — nem o do aparelho, nem a virada do UTC às 21h.
 
 ## Limites conhecidos
 

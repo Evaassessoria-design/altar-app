@@ -33,7 +33,8 @@ import {
 } from "@/components/ui/dialog.tsx";
 import { useEnvioDeArquivo } from "@/hooks/use-upload.ts";
 import { FORMAS_DE_PAGAMENTO, MIMES_DE_COMPROVANTE, TIPOS_DE_COMPROVANTE } from "@/lib/comprovante-financeiro.ts";
-import { formatDateInput, hojeDateKey } from "@/lib/event-date.ts";
+import { formatDateInput } from "@/lib/event-date.ts";
+import { dataDoDiaNoFuso } from "@/convex/lib/dataDoDia.ts";
 import { valorDigitado } from "@/lib/valor-digitado.ts";
 import { cn } from "@/lib/utils.ts";
 import {
@@ -102,9 +103,6 @@ export function PagamentosDaCliente({ eventId }: { eventId: Id<"events"> }) {
   const dados = useQuery(api.financeiro.pagamentosDoEvento, { eventId });
   const [aberto, setAberto] = useState<Aberto>(null);
   const [historico, setHistorico] = useState<string | null>(null);
-  // "Hoje" no fuso do APARELHO. O servidor usa UTC, e às 21h de Brasília o
-  // dia dele já virou: uma parcela de hoje apareceria atrasada à noite.
-  const hoje = hojeDateKey();
 
   if (dados === undefined) {
     return (
@@ -116,6 +114,10 @@ export function PagamentosDaCliente({ eventId }: { eventId: Id<"events"> }) {
   }
   if (dados === null) return null;
 
+  // "Hoje" no fuso do NEGÓCIO, que o servidor informa — nem o do aparelho
+  // (quem viaja veria outro dia) nem o UTC (que vira às 21h de Brasília). É
+  // o mesmo dia que o Dashboard usa para dizer o que venceu.
+  const hoje = dataDoDiaNoFuso(new Date(), dados.fuso);
   const resumo = resumirPagamentos(dados.valorContratado, dados.parcelas, hoje);
   const proxima = resumo.proxima ? dados.parcelas[resumo.proxima.indice] : null;
 
@@ -399,9 +401,9 @@ function ComprovantesDaParcela({ id }: { id: Id<"transactions"> }) {
  */
 export function CartaoPagamentosDaCliente({ eventId }: { eventId: Id<"events"> }) {
   const dados = useQuery(api.financeiro.pagamentosDoEvento, { eventId });
-  const hoje = hojeDateKey();
   if (dados === undefined) return <Skeleton className="h-28 w-full rounded-xl" />;
   if (dados === null) return null;
+  const hoje = dataDoDiaNoFuso(new Date(), dados.fuso);
   const r = resumirPagamentos(dados.valorContratado, dados.parcelas, hoje);
   return (
     <section className="bg-card rounded-xl border border-border overflow-hidden" aria-label="Pagamentos da cliente">
@@ -513,7 +515,7 @@ function RegistrarRecebimento({ parcela, hoje, onClose }: { parcela: Parcela; ho
     centavos === null || centavos <= 0
       ? "Informe um valor maior que zero."
       : centavos > saldo
-        ? `O saldo desta parcela é ${reais(saldo)}. Se o cliente pagou mais, corrija primeiro o valor da parcela.`
+        ? `O saldo desta parcela é ${reais(saldo)}. Registre no máximo o saldo. Pagamento acima do combinado não é registrado aqui; a parcela e o contratado só mudam quando o acordo com a cliente mudar de fato.`
         : !dataValida(data)
           ? "Informe a data em que o dinheiro entrou."
           : null;
@@ -811,7 +813,12 @@ function PlanejarParcelas({
         chave,
         parcelas: previa.map((p) => ({ descricao: p.descricao, valor: deCentavos(p.valorCentavos), vencimento: p.vencimento })),
       });
-      toast.success(r.repetido ? "Estas parcelas já tinham sido criadas." : `${r.criadas} parcela(s) criada(s).`);
+      toast.success(
+        r.repetido
+          ? "Estas parcelas já existiam — nada foi criado de novo."
+          : `${r.criadas} parcela(s) criada(s).` +
+              (r.ignoradas ? ` ${r.ignoradas} já existia(m) e não foi(ram) repetida(s).` : ""),
+      );
       onClose();
     } catch (e) {
       toast.error(mensagem(e, "Não foi possível criar as parcelas."));

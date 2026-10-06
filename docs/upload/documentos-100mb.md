@@ -110,59 +110,169 @@ download.
 ou limitador de banda) — a frase está coberta só por teste de unidade; celular
 (o login pelo celular no DEV não funciona: `SITE_URL` é `localhost:5173`).
 
-Restos no DEV: a conta de teste, o lead/evento "TESTE Upload Grande" e um
-arquivo órfão de ~100 MB do teste adulterado.
+Restos no DEV: a conta de teste, os leads/eventos "TESTE Upload Grande" e
+"TESTE Hotfix", e dois arquivos órfãos de ~100 MB dos testes adulterados.
 
-## 6. Armazenamento e custo (Convex, preços públicos de 06/10/2026)
+### 5.3 O artefato do hotfix (`release/hotfix-upload-100mb`), no DEV, 06/10
 
-| Plano | Storage incluso | Excedente | Saída (download) inclusa | Excedente |
+O hotfix foi publicado temporariamente no DEV (245 funções = exatamente as do
+código do hotfix e as da PROD) e servido em `localhost:5173`. Mesma bateria
+da 5.2, com resultado igual: DOCX 3,9 MB, 100 MB exatos (~18 s), 100 MB + 1
+recusado sem POST, 50 KB, downloads com SHA-256 igual, persistência após
+recarregar, queda de rede + "Tentar de novo" (2 cliques = 1 envio), conversão
+em evento com os 4 documentos visíveis, PPTX de 60 MB na pasta do evento
+disparado 2× (1 POST), e cliente adulterado recusado pelo servidor sem apagar
+o orçamento anterior.
+
+Diferença observada em relação à versão da pre-live: **nenhuma no
+comportamento de upload** (o código de upload é idêntico ao de `808e3c2`). O
+resto da tela é o de produção — sem Acervo novo, Jornada ou Escritório.
+
+Ruído registrado: um download de 100 MB pelo `curl` deste PC caiu com
+`SEC_E_DECRYPT_FAILURE` (erro de TLS do Windows) e veio truncado com HTTP 200;
+repetido, veio íntegro. O servidor anunciava o `Content-Length` correto.
+
+Depois da validação, o DEV voltou ao código da pre-live com a correção
+(`808e3c2`), que é onde estava.
+
+## 6. Armazenamento e custo
+
+### 6.1 Uso atual da PROD (consulta inline somente leitura, 06/10/2026)
+
+| | |
+|---|---|
+| Arquivos no storage | 302 |
+| Total | **0,408 GB** (417,5 MB) |
+| Maior arquivo | 97,7 MB (origem não investigada) |
+| Acima de 1.000.000 bytes | 92 (galeria, pasta do evento e outros fluxos sem a trava antiga) |
+| Acima de 20 MB | 1 |
+
+**Plano e tráfego de saída: não consultados.** O CLI do Convex não mostra
+cobrança, e o painel pede login — que é humano. Onde ver:
+`dashboard.convex.dev` → time `evadelbiancoassessoria` → Settings → Usage /
+Billing.
+
+### 6.2 Preços públicos (06/10/2026)
+
+| Plano | Storage incluso | Excedente | Saída inclusa | Excedente |
 |---|---|---|---|---|
 | Free / Starter | 1 GB | US$ 0,033/GB·mês | 1 GB/mês | US$ 0,132/GB |
 | Professional | 100 GB | US$ 0,03/GB·mês | 50 GB/mês | US$ 0,12/GB |
 
-Ordens de grandeza:
+### 6.3 A margem
 
-- **Guardar** é barato: 100 decoradoras × 20 documentos de 30 MB = ~60 GB.
-  Cabe no Professional; no excedente, 100 GB a mais custam ~US$ 3/mês.
-- **Baixar** pesa mais: cada abertura de um documento de 100 MB gasta 0,1 GB de
-  saída. 500 aberturas/mês desses arquivos = 50 GB = a cota inteira do
-  Professional; depois, ~US$ 6 a cada 50 GB.
-- **Se a PROD estiver em Free/Starter**, 1 GB some com dez propostas de
-  100 MB. **Confirmar o plano da PROD antes do release** — não foi consultado
-  nem alterado nesta rodada.
+- **Se for Free/Starter:** sobram ~0,59 GB de storage — **cinco ou seis
+  documentos de 100 MB** —, e cada abertura de um deles gasta 0,1 GB do 1 GB
+  de saída do mês. No Free não há excedente pago (o que acontece ao passar do limite não foi
+  verificado); no Starter, o excedente é cobrado.
+  **Neste cenário o limite de 100 MB é arriscado e o release deve esperar a
+  decisão de plano.**
+- **Se for Professional:** 0,4 de 100 GB usados; a saída (50 GB/mês) é o que
+  aperta primeiro — 500 aberturas de arquivos de 100 MB por mês.
 - Órfãos (envio recusado ou interrompido depois do POST) ocupam storage pago
-  sem aparecer em lugar nenhum. O inventário é o backlog `UPLOAD-ORFAO-02`.
+  sem aparecer na tela — backlog `UPLOAD-ORFAO-02`.
 
-## 7. Release para produção — pronto para aprovação, NÃO executado
+## 7. Release para produção — PRONTO PARA APROVAÇÃO, NÃO EXECUTADO
 
-O procedimento geral está em `docs/release-producao.md`. O que é específico
-desta correção:
+### 7.1 O que está no ar (identificado em 06/10/2026)
 
-### 7.1 Decisão de escopo (humana)
-A PROD roda código anterior a `a1b54db`. Esta branch nasceu da pre-live, que
-está à frente da `main`. Há dois caminhos:
+**`4292056`** (`fix(demo): a auditoria do cron achou um órfão no reset`), no
+frontend E no backend:
 
-- **A. Release da pre-live + esta correção.** Leva junto tudo o que a pre-live
-  acumulou (acervo, saúde, trava de autonomia da IA, roteiro da live). É o
-  release que já estava previsto antes da live de 08/10.
-- **B. Hotfix só de upload sobre a `main`.** Cherry-pick de `a1b54db` e do
-  commit desta rodada. Menor, mas precisa ser montado e validado à parte.
+- **Registro de deployment:** o último `Production – altar-app-sg8v` na API de
+  deployments do GitHub é `4292056` (28/09, 03:06 UTC).
+- **Frontend:** `www.appaltar.com.br` serve `index-qCI8R7Tz.css`; o build local
+  de `4292056` com as variáveis de PROD gera o mesmo nome; o de `86dc253`
+  gera `index-CmnAXRUH.css`. (O cabeçalho `Last-Modified` diz 30/09 — o
+  conteúdo é o de `4292056`.)
+- **Backend:** as 245 funções públicas de `mellow-goose-539` são exatamente as
+  do código de `4292056`. `86dc253` teria `escritorio.comando`; a pre-live,
+  mais 8.
 
-### 7.2 Compatibilidade frontend antigo × backend novo (ordem da seção 2)
-Nenhum argumento de função mudou nesta correção, nem o schema. O frontend que
-está no ar (teto de 10 MB no hook) continua funcionando contra o backend novo,
-que aceita até 100 MB. O inverso não vale: **o backend sobe ANTES** do
-frontend, como manda o procedimento.
+A `main` (`86dc253`) **não** é o que está no ar.
 
-### 7.3 Passos
-1. Aprovação do escopo (A ou B) e confirmação do plano Convex da PROD.
-2. `npx convex function-spec --prod` × `--deployment mellow-goose-539` — prova de alvo.
-3. `npx convex deploy --env-file <prod.env fora do repo> --dry-run -v` — tem de
-   dizer "No indexes are deleted" e "Schema validation complete".
-4. `npx convex deploy` com o SHA aprovado.
-5. Fast-forward da `main` → CI verde → **promoção manual** no Vercel
-   `altar-app-sg8v` (clique humano).
-6. Provar o que está no ar (hash do CSS, seção 5 do procedimento).
-7. Smoke test em `www.appaltar.com.br/funil` com **conta de teste**: anexar um
-   DOCX de ~4 MB e um PDF de ~30 MB; conferir que a dica diz "Máximo de 100 MB".
+### 7.2 O candidato
+
+Branch `release/hotfix-upload-100mb`, sobre `4292056`:
+
+1. `a1b54db` reaplicado — o teto de 0,95 MiB vira a fonte única.
+2. `808e3c2` reaplicado — 100 MB, servidor medindo o arquivo guardado,
+   progresso e repetição. Sem o roteiro da live (pre-live).
+3. Teste da demo com relógio fixo (`demo.telas.test.ts`) — só teste.
+4. Este documento.
+
+Nada de schema, rotas HTTP, crons ou autenticação muda em relação a `4292056`.
+
+### 7.3 Compatibilidade, e por isso a ordem
+
+| Combinação | Resultado |
+|---|---|
+| frontend antigo × **backend novo** | **funciona.** Nenhum argumento mudou. O hook antigo limita a 10 MB e o backend novo aceita até 100 MB — a cliente já é destravada para arquivos até 10 MB. |
+| frontend novo × backend antigo | **quebra.** A tela aceita 100 MB e o backend antigo recusa acima de 1.000.000 bytes, depois do upload. |
+
+**Backend primeiro, frontend depois.** Nunca o contrário.
+
+### 7.4 Passos exatos
+
+Pré-requisitos humanos: (a) aprovar este candidato; (b) confirmar o plano
+Convex da PROD (6.3).
+
+```bash
+# 0. Checkout limpo do candidato, fora da pasta de trabalho
+git fetch origin
+git worktree add ../altar-release origin/release/hotfix-upload-100mb
+cd ../altar-release && npx pnpm install --frozen-lockfile   # cópia própria, sem junção
+printf 'CONVEX_DEPLOYMENT=prod:mellow-goose-539\n' > ../prod.env
+
+# 1. Prova de alvo (só leitura)
+npx convex function-spec --prod > ../a.json
+npx convex function-spec --deployment mellow-goose-539 > ../b.json
+cmp ../a.json ../b.json
+
+# 2. Dry-run: tem de dizer "No indexes are deleted" e "Schema validation complete"
+npx convex deploy --env-file ../prod.env --dry-run -v
+
+# 3. Backend
+npx convex deploy --env-file ../prod.env \
+  --message "hotfix upload 100MB <SHA do candidato> (release/hotfix-upload-100mb)"
+#    a saída tem de mostrar [Production] ... mellow-goose-539
+
+# 4. Prova: as funções publicadas = as do candidato (245, as mesmas de hoje)
+npx convex function-spec --deployment mellow-goose-539 > ../c.json
+```
+
+5. **Vercel (clique humano)** — `https://vercel.com/casando-assessoria/altar-app-sg8v/deployments`:
+   1. Copiar a URL do deployment **Production / Current** atual (é o de
+      `4292056`) — é o caminho de volta.
+   2. Abrir o deployment **Preview** da branch `release/hotfix-upload-100mb`
+      com o SHA do candidato, Status **Ready**.
+   3. **⋯ → Promote**. O diálogo tem de listar `www.appaltar.com.br`. O aviso
+      de reconstrução com variáveis de Production é esperado.
+   4. Esperar **Ready**.
+6. **Prova do frontend:**
+   `curl -s https://www.appaltar.com.br/ | grep -oE '/assets/index-[A-Za-z0-9_-]+\.css'`
+   tem de devolver **`index-BjmNlhb2.css`**.
+7. **Smoke test** em `www.appaltar.com.br/funil` com conta de **teste**: DOCX
+   de ~4 MB e PDF de ~30 MB num lead; a dica diz "Máximo de 100 MB"; abrir os
+   dois. Excluir os dois depois.
 8. Avisar a cliente.
+
+### 7.5 A `main` depois do release
+
+O hotfix não descende da `main`: a `main` (`86dc253`) já tem o Escritório,
+que não está no ar. Para a `main` não ficar atrás da produção, **depois** do
+release: merge de `release/hotfix-upload-100mb` na `main`, com aprovação. A
+pre-live já contém `a1b54db`; levar `808e3c2` e o teste da demo para lá é
+um merge de `fix/documentos-100mb` — outra decisão.
+
+### 7.6 Reversão
+
+- **Frontend:** no Vercel, promover de volta o deployment copiado no passo
+  5.1. Prova: o CSS volta a `index-qCI8R7Tz.css`.
+- **Backend:** de um checkout de `4292056`, `npx convex deploy --env-file
+  ../prod.env --message "rollback para 4292056"`. Seguro: o schema não mudou.
+  Documentos de até 100 MB gravados nesse meio-tempo continuam abríveis — o
+  backend antigo não confere tamanho na leitura —, mas novos envios acima de
+  1.000.000 bytes no funil voltam a ser recusados.
+- **Ordem da reversão:** frontend primeiro, backend depois — o inverso da
+  publicação, pela mesma tabela 7.3.

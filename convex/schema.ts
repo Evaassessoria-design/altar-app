@@ -145,6 +145,23 @@ const tipoDeAjusteDeAcervo = v.union(
   v.literal("avaria"),
   v.literal("descarte"),
   v.literal("acerto_inventario"),
+  // Manutencao (lib/ajusteDeAcervo.ts, OPERACOES_DE_MANUTENCAO). Mesmo
+  // historico: a linha explica o numero de `emManutencao`.
+  v.literal("manutencao_envio"),
+  v.literal("manutencao_retorno"),
+  v.literal("manutencao_descarte"),
+  // Mudança de condição (lib/condicaoDoAcervo.ts): a linha guarda a condição
+  // anterior e a nova em `condicaoDe`/`condicaoPara`.
+  v.literal("condicao"),
+);
+
+/** Condição de uma peça do acervo — `lib/condicaoDoAcervo.ts`. */
+const condicaoDoAcervo = v.union(
+  v.literal("pronto"),
+  v.literal("limpeza"),
+  v.literal("reparo"),
+  v.literal("indisponivel"),
+  v.literal("conferencia"),
 );
 
 const txType = v.union(v.literal("income"), v.literal("expense"));
@@ -164,6 +181,34 @@ const comprovanteFinanceiro = v.object({
   /** MIME declarado pelo navegador. Ausente = tipo desconhecido, nao invente. */
   contentType: v.optional(v.string()),
   uploadedAt: v.string(),
+});
+
+/**
+ * Um recebimento de parcela do cliente. Regra em `lib/pagamentosDoEvento.ts`.
+ *
+ * Mora DENTRO da parcela, como o comprovante: não há tabela de recebimentos,
+ * e a parcela continua sendo a linha de `transactions` que sempre foi.
+ */
+const recebimentoDeParcela = v.object({
+  /** Gerado no servidor. É por ele que a anulação encontra o recebimento. */
+  id: v.string(),
+  /** Em reais, arredondado ao centavo — mesma unidade de `amount`. */
+  valor: v.number(),
+  /** Dia civil em que o dinheiro entrou, "AAAA-MM-DD". */
+  data: v.string(),
+  /** Texto livre, como `paymentMethod`. Ausente = não informada. */
+  forma: v.optional(v.string()),
+  /** Um dos `comprovantes` desta parcela. Ausente = sem comprovante. */
+  comprovanteStorageId: v.optional(v.id("_storage")),
+  registradoEm: v.string(),
+  /** Chave do envio, gerada pela tela: o mesmo envio repetido não duplica. */
+  chave: v.string(),
+  /**
+   * Correção. AUSENTE = vale. Presente = anulado: continua no histórico e
+   * deixa de contar. Não é estorno bancário — é o registro dizendo que
+   * aquele lançamento estava errado.
+   */
+  anulacao: v.optional(v.object({ em: v.string(), motivo: v.string() })),
 });
 
 const checklistPhase = v.union(v.literal("pre"), v.literal("post"));
@@ -393,6 +438,15 @@ export default defineSchema({
     clientName: v.string(),
     clientPhone: v.optional(v.string()),
     budget: v.optional(v.number()),
+    /**
+     * O VALOR CONTRATADO com o cliente. AUSENTE = não definido — e a tela
+     * diz "não definido", nunca troca por `budget`.
+     *
+     * `budget` é o orçamento ESTIMADO (o que se imaginava gastar ou cobrar);
+     * isto é o que foi fechado. A leitura do contrato por IA já extraía o
+     * "Valor total" e o jogava fora — não havia onde guardar.
+     */
+    contractedValue: v.optional(v.number()),
     status: eventStatus,
     notes: v.optional(v.string()),
     // ── QUEM RESPONDE POR ESTE EVENTO ───────────────────────────────────────
@@ -985,6 +1039,21 @@ export default defineSchema({
      */
     comprovantes: v.optional(v.array(comprovanteFinanceiro)),
     /**
+     * Os recebimentos desta parcela — pagamento parcial, vários pagamentos.
+     *
+     * AUSENTE = a parcela nunca recebeu por este fluxo, e quem diz se entrou
+     * é `isPaid` (baixa antiga, valor inteiro). PRESENTE = quem diz são os
+     * recebimentos, e `isPaid`/`paidAt` passam a ser DERIVADOS deles por
+     * `baixaDerivada` — não se marca à mão. Sem backfill.
+     */
+    recebimentos: v.optional(v.array(recebimentoDeParcela)),
+    /**
+     * Chave do planejamento que criou esta parcela. AUSENTE = criada de outra
+     * forma (à mão, pela leitura do contrato). Serve só para o mesmo
+     * planejamento enviado duas vezes não criar as parcelas em dobro.
+     */
+    chaveDoPlanejamento: v.optional(v.string()),
+    /**
      * De qual COMPRA esta despesa nasceu. Só PROCEDÊNCIA HISTÓRICA.
      *
      * ── O BURACO QUE ISTO FECHA ─────────────────────────────────────────────
@@ -1177,6 +1246,16 @@ export default defineSchema({
     /** Quem, da ALTAR, está cuidando deste interessado. */
     responsavelUserId: v.optional(v.id("users")),
     /** "AAAA-MM-DD" do próximo retorno combinado. Dia civil, nunca instante. */
+    /**
+     * Quando pediu para NÃO RECEBER mensagens. AUSENTE = não pediu.
+     *
+     * Consentimento, não etapa: vale em qualquer estágio, inclusive para
+     * cliente. Gravado quando uma resposta registrada traz o pedido
+     * (`escritorioCiclo.registrarResposta`) ou à mão
+     * (`admin.definirDescadastro`). Com ele, nenhuma mensagem é preparada nem
+     * aprovada para a pessoa (`lib/proximaAcao.ts`, `campanhaRascunhos.ts`).
+     */
+    descadastradoEm: v.optional(v.number()),
     proximoContato: v.optional(v.string()),
     /** "AAAA-MM-DD" da última conversa. Sem ela não se afirma abandono. */
     ultimaInteracao: v.optional(v.string()),
@@ -1599,6 +1678,23 @@ export default defineSchema({
      * continua 40 ate alguem decidir o que aconteceu com a peca.
      */
     quantidadeTotal: v.number(),
+    /**
+     * Quantas pecas do total estao no conserto. AUSENTE = nenhuma.
+     *
+     * Continuam no total (sao da empresa) e saem da disponibilidade. So muda
+     * por `acervo.registrarManutencao`, que grava a linha no historico — como
+     * o total so muda por ajuste. Nunca maior que o total.
+     */
+    emManutencao: v.optional(v.number()),
+    /**
+     * As outras condições fora de uso (lib/condicaoDoAcervo.ts). AUSENTE = 0.
+     * `emManutencao` acima É o "precisa de reparo" — não há um segundo campo
+     * de reparo. "Pronto" nunca é gravado: é o total menos estas quatro.
+     * Só mudam por `acervo.moverCondicao`/`conferirRetorno`, com histórico.
+     */
+    emLimpeza: v.optional(v.number()),
+    indisponivel: v.optional(v.number()),
+    emConferencia: v.optional(v.number()),
     categoria: v.optional(v.string()),
     /**
      * Material tecnico correspondente. OPCIONAL e EXPLICITO: nao vinculamos
@@ -1642,6 +1738,26 @@ export default defineSchema({
     /** Antes e depois ficam gravados: o historico se le sem recalcular nada. */
     quantidadeAntes: v.number(),
     quantidadeDepois: v.number(),
+    /**
+     * A manutencao antes e depois — so nas linhas de manutencao. AUSENTE =
+     * ajuste comum, que nao mexe no conserto.
+     */
+    manutencaoAntes: v.optional(v.number()),
+    manutencaoDepois: v.optional(v.number()),
+    /**
+     * Só nas linhas de tipo "condicao". AUSENTE = ajuste comum. `condicaoPara`
+     * "baixa" quer dizer que a peça saiu do acervo (o `delta` diz quantas).
+     */
+    condicaoDe: v.optional(condicaoDoAcervo),
+    condicaoPara: v.optional(v.union(condicaoDoAcervo, v.literal("baixa"))),
+    /**
+     * Quantas peças mudaram de condição. Só nas linhas "condicao": o `delta`
+     * explica o TOTAL e é zero numa mudança de condição — sem este campo o
+     * histórico diria "pronto → reparo" sem dizer quantas.
+     */
+    quantidadeMovida: v.optional(v.number()),
+    /** Foto da ocorrência, quando houver — "o pé traseiro com folga". */
+    fotoStorageId: v.optional(v.id("_storage")),
     motivo: v.optional(v.string()),
     /**
      * Evento de onde a perda veio, quando veio de um. So PROCEDENCIA: o ajuste
@@ -1680,6 +1796,25 @@ export default defineSchema({
     saiu: v.optional(v.number()),
     /** Voltou fisicamente. AUSENTE = nada voltou ainda. */
     voltou: v.optional(v.number()),
+    /**
+     * Quando a conferência de retorno deste evento classificou as peças que
+     * voltaram (`acervo.conferirRetorno`). AUSENTE = voltou, mas ninguém
+     * conferiu — a jornada mostra "retorno não conferido". As condições em si
+     * ficam no item e no histórico; aqui só o fato de a conferência existir.
+     */
+    conferidoEm: v.optional(v.number()),
+    /**
+     * Quantas peças que voltaram POR ESTA RESERVA estão no contador
+     * `emConferencia` do item, esperando a conferência dela (30/09 em
+     * diante: `acervo.registrarRetorno` põe o que volta em "em conferência",
+     * e `acervo.conferirRetorno` tira de lá). É o que permite à conferência
+     * classificar as peças certas sem contá-las duas vezes.
+     *
+     * AUSENTE = 0: retorno antigo, de antes desta regra, cujas peças voltaram
+     * contando como prontas — e a conferência delas sai de "pronto", como
+     * sempre saiu. Sem backfill: ninguém vai conferir as peças de agosto.
+     */
+    retornoAConferir: v.optional(v.number()),
     notes: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
   })

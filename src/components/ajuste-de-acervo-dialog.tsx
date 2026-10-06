@@ -142,7 +142,9 @@ export function AjusteDeAcervoDialog({
                     <span className={h.delta > 0 ? "text-green-600 dark:text-green-400" : "text-destructive"}>
                       {h.delta > 0 ? "+" : ""}{h.delta}
                     </span>
-                    <span>{ROTULO_DO_AJUSTE[h.tipo]}</span>
+                    {/* Reversão: o schema conhece os tipos de movimento da versão
+                        nova (manutenção, condição), que esta tela não rotula. */}
+                    <span>{ROTULO_DO_AJUSTE[h.tipo as keyof typeof ROTULO_DO_AJUSTE] ?? "ajuste"}</span>
                     <span className="opacity-60">({h.quantidadeAntes} → {h.quantidadeDepois})</span>
                     {h.eventName && <span className="opacity-60 truncate">· {h.eventName}</span>}
                     <span className="ml-auto opacity-60 flex-shrink-0">{formatTimestamp(h._creationTime)}</span>

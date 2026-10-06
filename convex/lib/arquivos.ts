@@ -48,13 +48,33 @@ export const MB = 1024 * 1024;
 export const TAMANHO_MAXIMO_IMAGEM = 15 * MB;
 
 /**
- * Teto dos DOCUMENTOS: 20 MB = 20.971.520 bytes.
+ * Teto dos DOCUMENTOS: 100 MB = 104.857.600 bytes.
  *
- * Era 10 MB no hook e 20 MB na tela do funil. Virou 20 MB nos dois: proposta
- * comercial em DOCX ou PPTX com fotos de ambiente passa de 10 MB sem esforço,
- * e era justamente o caso real que falhou.
+ * Era 10 MB no hook e 20 MB na tela do funil; virou 20 MB nos dois em 01/10.
+ * Em 06/10 subiu para 100 MB por decisão de produto: orçamento de fornecedor
+ * em PPTX ou PDF com fotos de ambiente chega a 30–36 MB, e com 20 MB essa
+ * papelada continuava fora do sistema (ver docs/upload/arquivo-orfao.md).
+ *
+ * ── POR QUE 100 MB CABE NO TRANSPORTE ──────────────────────────────────────
+ * O envio usa a URL de upload do Convex (`generateUploadUrl` + POST), que NÃO
+ * tem limite de tamanho. O limite de 20 MB do Convex é o das HTTP actions,
+ * caminho que o ALTAR não usa para arquivo. O que existe no transporte é um
+ * PRAZO: o POST tem 2 minutos (`PRAZO_DO_ENVIO_MS`). Por isso o número aqui
+ * não é "o que o storage aguenta", e sim o que termina dentro do prazo numa
+ * conexão razoável.
  */
-export const TAMANHO_MAXIMO_DOCUMENTO = 20 * MB;
+export const TAMANHO_MAXIMO_DOCUMENTO = 100 * MB;
+
+/**
+ * Quanto tempo o Convex dá ao POST de upload antes de cortá-lo: 2 minutos.
+ *
+ * Não é configurável do nosso lado. Está aqui para a tela saber distinguir
+ * "a rede caiu" de "o envio passou do prazo" e dizer a coisa certa: 100 MB em
+ * 2 minutos pede cerca de 7 Mbit/s de SUBIDA sustentada. Um 4G fraco de galpão
+ * não entrega isso, e a pessoa precisa saber que o problema é a conexão, não
+ * o arquivo.
+ */
+export const PRAZO_DO_ENVIO_MS = 2 * 60 * 1000;
 
 export type TipoDeEnvio = "imagem" | "documento";
 
@@ -101,6 +121,40 @@ export function cabeNoTeto(bytes: number, teto: number): boolean {
 export function recadoDeTamanho(teto: number, nome?: string): string {
   const sujeito = nome ? `“${nome}”` : "Este arquivo";
   return `${sujeito} ultrapassa o limite de ${tetoEmMB(teto)}. Escolha um arquivo menor e tente novamente.`;
+}
+
+/**
+ * Por que o envio falhou, em frase de gente.
+ *
+ * O navegador não diz "timeout" quando o servidor corta o POST: devolve uma
+ * falha de rede igual à de um Wi-Fi que caiu. O tempo decorrido é o que
+ * separa os dois casos. Perto do prazo, a causa é a velocidade de subida — e
+ * mandar "verifique a conexão" para quem está conectado não ajuda ninguém.
+ *
+ * Função pura para poder ser testada sem navegador.
+ */
+export function motivoDaFalhaDoEnvio(falha: {
+  nome: string;
+  /** Status HTTP da resposta; 0 quando não houve resposta. */
+  status: number;
+  decorridoMs: number;
+}): string {
+  // 90% do prazo: o corte do servidor chega um pouco antes ou depois dos 120 s
+  // exatos, e o relógio do navegador não é o dele.
+  if (falha.decorridoMs >= PRAZO_DO_ENVIO_MS * 0.9) {
+    return (
+      `O envio de “${falha.nome}” passou de 2 minutos e foi interrompido. ` +
+      `Arquivos grandes precisam de uma internet mais rápida: tente de novo no Wi-Fi ` +
+      `ou reduza o arquivo.`
+    );
+  }
+  if (falha.status === 413) {
+    return recadoDeTamanho(TAMANHO_MAXIMO_DOCUMENTO, falha.nome);
+  }
+  if (falha.status === 0) {
+    return `Não foi possível enviar “${falha.nome}”. Verifique a conexão e tente de novo.`;
+  }
+  return `Não foi possível enviar “${falha.nome}” (erro ${falha.status}). Tente de novo.`;
 }
 
 /** A dica ao lado do seletor. Mesma fonte do teto — não se escreve à mão. */

@@ -6,6 +6,7 @@ import { getOwnedEvent, getOwnedLead, requireIdentity, requireLeadOwner, require
 import { requireActiveAccess } from "./lib/accessGuard";
 import { safeDeleteFile } from "./lib/cascade";
 import { exigirTamanhoDeArquivoGravavel } from "./lib/numeroGravavel";
+import { exigirArquivoGuardadoNoTeto } from "./lib/arquivoGuardado";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DOCUMENTOS DO LEAD
@@ -100,6 +101,10 @@ export const save = mutation({
       throw new ConvexError({ code: "INVALID", message: "Documento sem nome" });
     }
 
+    // O teto vale sobre o arquivo GUARDADO. `args.fileSize` é o que o
+    // navegador declara, e quem chama a mutation direto declara o que quiser.
+    const tamanhoReal = await exigirArquivoGuardadoNoTeto(ctx, args.storageId);
+
     return ctx.db.insert("leadDocuments", {
       userId: user._id,
       leadId: args.leadId,
@@ -107,7 +112,9 @@ export const save = mutation({
       fileName,
       documentType: args.documentType,
       mimeType: args.mimeType,
-      fileSize: args.fileSize,
+      // Grava o tamanho do storage, não o declarado: é o que a lista exibe, e
+      // exibir um número que o navegador inventou é a tela afirmando o que não sabe.
+      fileSize: tamanhoReal,
       uploadedAt: new Date().toISOString(),
     });
   },

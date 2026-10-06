@@ -12,6 +12,8 @@ import { api } from "@/convex/_generated/api.js";
 import type { Id } from "@/convex/_generated/dataModel.d.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { EstadoDoEnvio, type FalhaDoEnvio } from "@/components/estado-do-envio.tsx";
+import { eRecusaDeConteudo } from "@/lib/upload.ts";
 import { toast } from "sonner";
 import { ConvexError } from "convex/values";
 import { FolderOpen, Upload, ExternalLink, Loader2, Handshake, FileWarning } from "lucide-react";
@@ -51,7 +53,7 @@ export function EventDocuments({ eventId }: { eventId: Id<"events"> }) {
   // o que fornecedor manda como orçamento. E conferia só o MIME: DOCX chega
   // como `application/octet-stream` em máquina sem Office, então papelada
   // legítima era recusada por palpite do sistema. Agora vale extensão OU MIME.
-  const { enviar } = useEnvioDeArquivo(generateUploadUrl, {
+  const { enviar, progresso } = useEnvioDeArquivo(generateUploadUrl, {
     tipo: "documento",
     aceitos: MIMES_DE_DOCUMENTO,
     extensoes: EXTENSOES_DE_DOCUMENTO,
@@ -68,6 +70,12 @@ export function EventDocuments({ eventId }: { eventId: Id<"events"> }) {
   const [tipo, setTipo] = useState<DocumentKind>("contract");
   const [de, setDe] = useState<Id<"eventSuppliers"> | "">("");
   const [enviando, setEnviando] = useState(false);
+  // REF, não o estado acima: dois toques no mesmo instante leem o `enviando`
+  // antigo, e o segundo chegava ao hook — que barrava, mas mostrava "Já há um
+  // envio em andamento" para quem só tocou duas vezes.
+  const enviandoAgora = useRef(false);
+  // A falha que fica na tela com o arquivo guardado — ver EstadoDoEnvio.
+  const [falha, setFalha] = useState<FalhaDoEnvio | null>(null);
 
   // O aviso de substituição segue a MESMA regra do servidor: por tipo E por
   // dono. Dizer "já existe um orçamento" quando o que existe é o da outra
@@ -79,11 +87,17 @@ export function EventDocuments({ eventId }: { eventId: Id<"events"> }) {
 
   const handleUpload = async (file: File | undefined) => {
     if (!file) return;
+    // Trava aqui também: entre o fim do POST e o fim do `save` o hook já
+    // liberou, e "Tentar de novo" poderia disparar um segundo envio.
+    if (enviandoAgora.current) return;
+    enviandoAgora.current = true;
     setEnviando(true);
+    setFalha(null);
     try {
       const envio = await enviar(file);
       if (!envio.ok) {
-        toast.error(envio.motivo);
+        if (envio.recuperavel) setFalha({ arquivo: file, motivo: envio.motivo });
+        else toast.error(envio.motivo);
         return;
       }
       const storageId = envio.storageId;
@@ -96,12 +110,14 @@ export function EventDocuments({ eventId }: { eventId: Id<"events"> }) {
       });
       toast.success(`${labelDoTipo(tipo)} anexado à pasta do evento.`);
     } catch (e) {
-      toast.error(
+      const motivo =
         e instanceof ConvexError
           ? (e.data as { message: string }).message
-          : "Não foi possível anexar o arquivo.",
-      );
+          : "Não foi possível anexar o arquivo.";
+      if (eRecusaDeConteudo(e)) toast.error(motivo);
+      else setFalha({ arquivo: file, motivo });
     } finally {
+      enviandoAgora.current = false;
       setEnviando(false);
       if (inputRef.current) inputRef.current.value = "";
     }
@@ -284,6 +300,18 @@ export function EventDocuments({ eventId }: { eventId: Id<"events"> }) {
           </p>
         )}
       </div>
+
+      {(progresso !== null || falha) && (
+        <div className="px-5 pb-4">
+          <EstadoDoEnvio
+            progresso={progresso}
+            falha={falha}
+            ocupado={enviando}
+            onTentarDeNovo={() => falha && void handleUpload(falha.arquivo)}
+            onDescartar={() => setFalha(null)}
+          />
+        </div>
+      )}
     </div>
   );
 }

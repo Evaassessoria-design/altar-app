@@ -5,6 +5,7 @@ import {
   type ArquivoParaValidar,
   type TipoDeEnvio,
 } from "@/lib/upload.ts";
+import { motivoDaFalhaDoEnvio } from "@/convex/lib/arquivos.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ENVIO DE ARQUIVO — os três passos, num lugar só
@@ -45,56 +46,123 @@ export type EnvioOpcoes = {
 
 export type ResultadoDoEnvio =
   | { ok: true; storageId: Id<"_storage"> }
-  | { ok: false; motivo: string };
+  // `recuperavel`: vale oferecer "tentar de novo" com o MESMO arquivo? Rede e
+  // prazo, sim. Arquivo grande demais ou de formato recusado, não — repetir
+  // daria o mesmo não, e o botão seria uma promessa falsa.
+  | { ok: false; motivo: string; recuperavel: boolean };
+
+type RespostaDoPost = { ok: boolean; status: number; corpo: string; decorridoMs: number };
+
+/**
+ * O POST do arquivo, por XMLHttpRequest.
+ *
+ * ── POR QUE NÃO `fetch` ─────────────────────────────────────────────────────
+ * `fetch` não informa progresso de SUBIDA. Com o teto de 20 MB isso passava;
+ * com 100 MB, o envio pode levar um minuto inteiro, e um botão girando sem
+ * dizer quanto falta é o que faz a pessoa clicar de novo, fechar a janela ou
+ * achar que travou.
+ *
+ * Nunca rejeita: falha de rede vira `status: 0`, para quem chama decidir a
+ * frase com o tempo decorrido em mãos (ver `motivoDaFalhaDoEnvio`).
+ */
+function postarArquivo(
+  url: string,
+  arquivo: File,
+  aoProgredir: (fracao: number) => void,
+): Promise<RespostaDoPost> {
+  return new Promise((resolve) => {
+    const inicio = Date.now();
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.setRequestHeader("Content-Type", arquivo.type || "application/octet-stream");
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && e.total > 0) aoProgredir(e.loaded / e.total);
+    };
+    const terminar = () =>
+      resolve({
+        ok: xhr.status >= 200 && xhr.status < 300,
+        status: xhr.status,
+        corpo: xhr.responseText,
+        decorridoMs: Date.now() - inicio,
+      });
+    xhr.onload = terminar;
+    xhr.onerror = terminar;
+    xhr.onabort = terminar;
+    xhr.ontimeout = terminar;
+    xhr.send(arquivo);
+  });
+}
 
 export function useEnvioDeArquivo(
   gerarUrlDeUpload: () => Promise<string>,
   opcoes: EnvioOpcoes,
 ) {
   const [enviando, setEnviando] = useState(false);
+  // Fração enviada, de 0 a 1. `null` fora de um envio — a tela não mostra
+  // "0%" para quem nem escolheu arquivo.
+  const [progresso, setProgresso] = useState<number | null>(null);
   const emCurso = useRef(false);
 
   const enviar = useCallback(
     async (arquivo: File): Promise<ResultadoDoEnvio> => {
       if (emCurso.current) {
-        return { ok: false, motivo: "Já há um envio em andamento." };
+        return { ok: false, motivo: "Já há um envio em andamento.", recuperavel: false };
       }
 
       const check = validarArquivo(arquivo as ArquivoParaValidar, opcoes);
-      if (!check.ok) return check;
+      if (!check.ok) return { ...check, recuperavel: false };
 
       emCurso.current = true;
       setEnviando(true);
+      setProgresso(0);
       try {
+        // A URL é pedida AGORA, imediatamente antes do POST: ela expira em uma
+        // hora, e reaproveitar a de uma tentativa anterior falharia no retry.
         const url = await gerarUrlDeUpload();
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": arquivo.type || "application/octet-stream" },
-          body: arquivo,
-        });
+        const res = await postarArquivo(url, arquivo, setProgresso);
         // Conferir aqui é o que impede o `storageId` indefinido de viajar para
         // a mutation e explodir longe da causa.
         if (!res.ok) {
-          return { ok: false, motivo: `Não foi possível enviar "${arquivo.name}".` };
+          return {
+            ok: false,
+            motivo: motivoDaFalhaDoEnvio({
+              nome: arquivo.name,
+              status: res.status,
+              decorridoMs: res.decorridoMs,
+            }),
+            recuperavel: true,
+          };
         }
-        const { storageId } = (await res.json()) as { storageId?: Id<"_storage"> };
+        let storageId: Id<"_storage"> | undefined;
+        try {
+          storageId = (JSON.parse(res.corpo) as { storageId?: Id<"_storage"> }).storageId;
+        } catch {
+          storageId = undefined;
+        }
         if (!storageId) {
-          return { ok: false, motivo: `O envio de "${arquivo.name}" não foi concluído.` };
+          return {
+            ok: false,
+            motivo: `O envio de "${arquivo.name}" não foi concluído.`,
+            recuperavel: true,
+          };
         }
         return { ok: true, storageId };
       } catch {
-        // Rede caiu no meio. Mensagem de gente, e o botão volta no `finally`.
+        // `gerarUrlDeUpload` falhou (sessão caiu, paywall). Mensagem de gente,
+        // e o botão volta no `finally`.
         return {
           ok: false,
           motivo: `Não foi possível enviar "${arquivo.name}". Verifique a conexão e tente de novo.`,
+          recuperavel: true,
         };
       } finally {
         emCurso.current = false;
         setEnviando(false);
+        setProgresso(null);
       }
     },
     [gerarUrlDeUpload, opcoes],
   );
 
-  return { enviar, enviando };
+  return { enviar, enviando, progresso };
 }

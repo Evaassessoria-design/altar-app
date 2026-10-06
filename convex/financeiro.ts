@@ -9,6 +9,7 @@ import { dataDoDia } from "./lib/dataDoDia";
 import { requireActiveAccess } from "./lib/accessGuard";
 import { safeDeleteFile } from "./lib/cascade";
 import { limparCampos } from "./lib/limparCampos";
+import { exigirArquivoGuardadoNoTeto } from "./lib/arquivoGuardado";
 
 const txType = v.union(v.literal("income"), v.literal("expense"));
 
@@ -358,6 +359,9 @@ export const anexarComprovante = mutation({
         message: `Um lançamento aceita até ${LIMITE_DE_COMPROVANTES} comprovantes.`,
       });
     }
+    // A tela usa o teto de documento; sem esta linha, o servidor aceitava
+    // qualquer tamanho e o teto existia só para quem passasse pela tela.
+    await exigirArquivoGuardadoNoTeto(ctx, args.storageId);
 
     await ctx.db.patch(args.id, {
       comprovantes: [

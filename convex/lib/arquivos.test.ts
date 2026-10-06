@@ -9,6 +9,8 @@ import {
   formatoPermitido,
   MB,
   MIMES_DE_DOCUMENTO,
+  motivoDaFalhaDoEnvio,
+  PRAZO_DO_ENVIO_MS,
   recadoDeTamanho,
   TAMANHO_MAXIMO_DOCUMENTO,
   TAMANHO_MAXIMO_IMAGEM,
@@ -30,13 +32,19 @@ import {
 // Três fontes para a mesma regra, e a mais apertada era a invisível.
 // ═════════════════════════════════════════════════════════════════════════════
 
-/** 20 MB, escrito à mão de propósito: se a constante mudar, este teste cobra. */
-const VINTE_MB = 20 * 1024 * 1024;
+/** 100 MB, escrito à mão de propósito: se a constante mudar, este teste cobra. */
+const CEM_MB = 100 * 1024 * 1024;
 
-describe("20 MB é um número só, e é este", () => {
-  it("o teto de documento é exatamente 20.971.520 bytes", () => {
-    expect(TAMANHO_MAXIMO_DOCUMENTO).toBe(VINTE_MB);
-    expect(TAMANHO_MAXIMO_DOCUMENTO).toBe(20_971_520);
+describe("100 MB é um número só, e é este", () => {
+  it("o teto de documento é exatamente 104.857.600 bytes", () => {
+    // Era 20 MB até 06/10. Subiu por decisão de produto: orçamento de
+    // fornecedor chega a 30–36 MB (docs/upload/arquivo-orfao.md).
+    expect(TAMANHO_MAXIMO_DOCUMENTO).toBe(CEM_MB);
+    expect(TAMANHO_MAXIMO_DOCUMENTO).toBe(104_857_600);
+  });
+
+  it("o prazo do POST é o do Convex: 2 minutos", () => {
+    expect(PRAZO_DO_ENVIO_MS).toBe(120_000);
   });
 
   it("MB é mebibyte — o que o sistema operacional chama de MB na tela", () => {
@@ -63,10 +71,12 @@ const BORDAS: ReadonlyArray<readonly [string, number, boolean]> = [
   // O caso do relato. 3,9 MB é 4.089.446 bytes — quatro vezes o teto antigo.
   ["3,9 MB (o arquivo do relato)", Math.round(3.9 * MB), true],
   ["10 MB (o teto antigo do hook)", 10 * MB, true],
-  ["19,9 MB", Math.round(19.9 * MB), true],
-  ["20 MB exatos", VINTE_MB, true],
-  ["20 MB + 1 byte", VINTE_MB + 1, false],
-  ["30 MB", 30 * MB, false],
+  ["20 MB + 1 byte (recusado até 06/10)", 20 * MB + 1, true],
+  ["36 MB (o orçamento de fornecedor)", 36 * MB, true],
+  ["99,9 MB", Math.round(99.9 * MB), true],
+  ["100 MB exatos", CEM_MB, true],
+  ["100 MB + 1 byte", CEM_MB + 1, false],
+  ["150 MB", 150 * MB, false],
 ];
 
 describe("o teto de documento, byte a byte", () => {
@@ -74,9 +84,9 @@ describe("o teto de documento, byte a byte", () => {
     expect(cabeNoTeto(bytes, TAMANHO_MAXIMO_DOCUMENTO)).toBe(deveCaber);
   });
 
-  it("o limite é inclusivo: o último byte que cabe é o 20.971.520", () => {
-    expect(cabeNoTeto(VINTE_MB, TAMANHO_MAXIMO_DOCUMENTO)).toBe(true);
-    expect(cabeNoTeto(VINTE_MB + 1, TAMANHO_MAXIMO_DOCUMENTO)).toBe(false);
+  it("o limite é inclusivo: o último byte que cabe é o 104.857.600", () => {
+    expect(cabeNoTeto(CEM_MB, TAMANHO_MAXIMO_DOCUMENTO)).toBe(true);
+    expect(cabeNoTeto(CEM_MB + 1, TAMANHO_MAXIMO_DOCUMENTO)).toBe(false);
   });
 });
 
@@ -106,7 +116,7 @@ describe("o recado é de gente, não de máquina", () => {
   it("diz o limite em MB e o que fazer", () => {
     const recado = recadoDeTamanho(TAMANHO_MAXIMO_DOCUMENTO);
     expect(recado).toBe(
-      "Este arquivo ultrapassa o limite de 20 MB. Escolha um arquivo menor e tente novamente.",
+      "Este arquivo ultrapassa o limite de 100 MB. Escolha um arquivo menor e tente novamente.",
     );
   });
 
@@ -119,8 +129,40 @@ describe("o recado é de gente, não de máquina", () => {
   });
 
   it("a dica ao lado do seletor sai da mesma constante", () => {
-    expect(dicaDeTamanho("documento")).toBe("Máximo de 20 MB por arquivo.");
+    expect(dicaDeTamanho("documento")).toBe("Máximo de 100 MB por arquivo.");
     expect(dicaDeTamanho("imagem")).toBe("Máximo de 15 MB por arquivo.");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// QUANDO O ENVIO FALHA, A FRASE DIZ O MOTIVO CERTO
+//
+// O navegador devolve "falha de rede" tanto para o Wi-Fi que caiu quanto para
+// o POST que o Convex cortou aos 2 minutos. Mandar "verifique a conexão" para
+// quem está conectado, mas com subida lenta, não ajuda ninguém.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("motivoDaFalhaDoEnvio", () => {
+  it("perto do prazo, culpa a velocidade — não a conexão", () => {
+    const m = motivoDaFalhaDoEnvio({ nome: "Orçamento.pptx", status: 0, decorridoMs: 119_000 });
+    expect(m).toMatch(/passou de 2 minutos/);
+    expect(m).toContain("Orçamento.pptx");
+    expect(m).not.toMatch(/Verifique a conexão/);
+  });
+
+  it("queda rápida é conexão", () => {
+    const m = motivoDaFalhaDoEnvio({ nome: "a.pdf", status: 0, decorridoMs: 3_000 });
+    expect(m).toMatch(/Verifique a conexão/);
+  });
+
+  it("413 vira o recado de tamanho, sem número cru", () => {
+    const m = motivoDaFalhaDoEnvio({ nome: "a.pdf", status: 413, decorridoMs: 1_000 });
+    expect(m).toMatch(/ultrapassa o limite de 100 MB/);
+  });
+
+  it("outro status diz o código, para o suporte ter por onde começar", () => {
+    const m = motivoDaFalhaDoEnvio({ nome: "a.pdf", status: 502, decorridoMs: 1_000 });
+    expect(m).toMatch(/erro 502/);
   });
 });
 

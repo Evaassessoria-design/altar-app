@@ -15,6 +15,8 @@ import {
 } from "@/convex/lib/tiposDeDocumento.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { EstadoDoEnvio, type FalhaDoEnvio } from "@/components/estado-do-envio.tsx";
+import { eRecusaDeConteudo } from "@/lib/upload.ts";
 import {
   Dialog,
   DialogContent,
@@ -53,13 +55,20 @@ export function LeadDocumentsDialog({
 }) {
   const documentos = useQuery(api.leadDocuments.list, open ? { leadId } : "skip");
   const generateUploadUrl = useMutation(api.leadDocuments.generateUploadUrl);
-  const { enviar } = useEnvioDeArquivo(generateUploadUrl, { tipo: "documento" });
+  const { enviar, progresso } = useEnvioDeArquivo(generateUploadUrl, { tipo: "documento" });
   const save = useMutation(api.leadDocuments.save);
   const remove = useMutation(api.leadDocuments.remove);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const [tipo, setTipo] = useState<TipoDeDocumentoDoLead>("proposta");
   const [enviando, setEnviando] = useState(false);
+  // REF, não o estado acima: dois toques no mesmo instante leem o `enviando`
+  // antigo, e o segundo chegava ao hook — que barrava, mas mostrava "Já há um
+  // envio em andamento" para quem só tocou duas vezes.
+  const enviandoAgora = useRef(false);
+  // A falha que FICA na tela, com o arquivo guardado para repetir — o toast
+  // sumia em segundos e levava junto a escolha da pessoa.
+  const [falha, setFalha] = useState<FalhaDoEnvio | null>(null);
   const [removendo, setRemovendo] = useState<string | null>(null);
 
   const handleUpload = async (arquivo: File | undefined) => {
@@ -72,12 +81,19 @@ export function LeadDocumentsDialog({
       return;
     }
     const file = arquivo!;
+    // Trava de clique repetido também AQUI, e não só no hook: entre o fim do
+    // POST e o fim do `save` o hook já liberou, e o "Tentar de novo" ficaria
+    // disponível para um segundo envio do mesmo arquivo.
+    if (enviandoAgora.current) return;
+    enviandoAgora.current = true;
 
     setEnviando(true);
+    setFalha(null);
     try {
       const envio = await enviar(file);
       if (!envio.ok) {
-        toast.error(envio.motivo);
+        if (envio.recuperavel) setFalha({ arquivo: file, motivo: envio.motivo });
+        else toast.error(envio.motivo);
         return;
       }
       const storageId = envio.storageId;
@@ -91,12 +107,16 @@ export function LeadDocumentsDialog({
       });
       toast.success(`${rotuloDoTipo(tipo)} anexado à negociação.`);
     } catch (e) {
-      toast.error(
+      const motivo =
         e instanceof ConvexError
           ? (e.data as { message: string }).message
-          : "Não foi possível anexar o arquivo.",
-      );
+          : "Não foi possível anexar o arquivo.";
+      // Recusa de conteúdo (tamanho, arquivo vazio) dá o mesmo não na segunda
+      // vez: vira aviso, sem botão de repetir.
+      if (eRecusaDeConteudo(e)) toast.error(motivo);
+      else setFalha({ arquivo: file, motivo });
     } finally {
+      enviandoAgora.current = false;
       setEnviando(false);
       if (inputRef.current) inputRef.current.value = "";
     }
@@ -242,6 +262,14 @@ export function LeadDocumentsDialog({
             {enviando ? "Enviando..." : "Anexar arquivo"}
           </Button>
         </div>
+
+        <EstadoDoEnvio
+          progresso={progresso}
+          falha={falha}
+          ocupado={enviando}
+          onTentarDeNovo={() => falha && void handleUpload(falha.arquivo)}
+          onDescartar={() => setFalha(null)}
+        />
 
         {/* O limite dito ANTES de ser esbarrado. A decoradora que teve o DOCX
             de 3,9 MB recusado não tinha como saber que havia limite nenhum —

@@ -131,3 +131,10 @@ referência, com data e tamanho, e revisar à mão antes de qualquer `delete`.
 **Nenhuma limpeza retroativa foi feita nesta rodada**, e nenhuma deve ser feita
 sem esse inventário: não sabemos quais arquivos são órfãos, e um `delete`
 baseado em suposição apaga papelada de cliente real.
+
+---
+
+## O limite subiu para 100 MB (06/10/2026)
+
+Ver `docs/upload/documentos-100mb.md`. A parte sobre órfãos deste documento
+continua valendo, e com peso maior: um órfão agora pode ter 100 MB.

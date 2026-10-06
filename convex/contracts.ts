@@ -9,6 +9,7 @@ import {
 } from "./lib/identity";
 import { safeDeleteFile } from "./lib/cascade";
 import { requireActiveAccess } from "./lib/accessGuard";
+import { exigirArquivoGuardadoNoTeto } from "./lib/arquivoGuardado";
 
 const documentKind = v.union(
   v.literal("contract"),
@@ -64,6 +65,11 @@ export const saveContract = mutation({
     // sem ela, um id do navegador etiquetaria o documento com o fornecedor de
     // outro casamento — ou de outra conta.
     await requireEventSupplier(ctx, user._id, args.eventId, args.supplierId);
+
+    // A pasta do evento não conferia tamanho nenhum: o teto existia só na
+    // tela. E a conferência vem ANTES da substituição abaixo — recusar o
+    // arquivo novo depois de apagar o contrato antigo deixaria a pasta sem os dois.
+    await exigirArquivoGuardadoNoTeto(ctx, args.storageId);
 
     const kind = args.kind ?? "contract";
     const existing = await ctx.db

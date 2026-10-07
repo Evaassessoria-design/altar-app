@@ -34,7 +34,25 @@ depois → anular). Até 07/10 de manhã nenhuma chamada tinha chegado aos logs.
 4. **Celular**: 9 diálogos limitavam a altura em `vh` (o Salvar podia ficar
    atrás da barra do navegador); agora `dvh`. Teste: `src/lib/dialogo-altura.test.ts`.
 
-## Propostas que dependem de decisão (não implementadas)
+## Continuação — `feature/pendencias-pre-live` (07/10, tarde)
+
+Autorizadas e feitas no DEV (commit `5a40e82`, a partir de `1669295`):
+
+- **Excluir evento** é recusado com recebimento (inclusive anulado) ou com peça
+  não reconciliada (saiu e não voltou, ou voltou sem conferência). A
+  confirmação mostra o motivo, o atalho para resolver e a alternativa de
+  cancelar. `convex/lib/exclusaoDeEvento.ts`.
+- **Receita do Mês** = dinheiro que entrou no mês (recebimentos ativos pela
+  data; baixa antiga sem histórico pela data do pagamento ou, sem ela, pelo
+  vencimento). O destino (`financeiro.recebidoNoMes`) lista as mesmas entradas;
+  o gráfico do Financeiro usa a mesma regra. `convex/lib/receitaDoMes.ts`.
+- **Assistente**: `executar` exige acesso ativo, como `delegar`.
+
+Teste: `convex/pendencias-pre-live.test.ts` (10 dos 11 falham no código
+anterior). **Continua pendente: o teste completo de pagamentos e comprovantes
+em PROD**, que é da usuária.
+
+## Propostas que dependiam de decisão (as duas primeiras foram feitas acima)
 
 - **A — Excluir evento apaga reservas com peças na rua.** `events.remove`
   (cascata em `convex/lib/cascade.ts`) apaga as reservas mesmo com `saiu > 0`;

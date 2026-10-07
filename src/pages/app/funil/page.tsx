@@ -139,7 +139,8 @@ function LeadDialog({
   defaultResponsibleId?: string;
   anotacaoDoResponsavel?: string;
   title: string;
-  onSubmit: (values: LeadFormValues, responsibleId?: string) => Promise<void>;
+  /** `true` = gravou e pode fechar. `false` = falhou: o formulário fica preenchido. */
+  onSubmit: (values: LeadFormValues, responsibleId?: string) => Promise<boolean>;
 }) {
   const {
     register,
@@ -154,7 +155,10 @@ function LeadDialog({
   const [responsibleId, setResponsibleId] = useState<string | undefined>(defaultResponsibleId);
 
   const submit = async (values: LeadFormValues) => {
-    await onSubmit(values, responsibleId);
+    // Só limpa e fecha quando gravou. Antes fechava sempre: um erro do
+    // servidor (ou um orçamento não reconhecido) apagava o lead que a
+    // decoradora acabou de digitar, com a cliente ainda no telefone.
+    if (!(await onSubmit(values, responsibleId))) return;
     reset();
     setResponsibleId(undefined);
     onClose();
@@ -971,11 +975,11 @@ export default function FunilPage() {
     return valor;
   };
 
-  const handleCreate = async (values: LeadFormValues, responsibleId?: string) => {
+  const handleCreate = async (values: LeadFormValues, responsibleId?: string): Promise<boolean> => {
     const budget = orcamentoDoLead(values.budget);
     if (budget === "erro") {
       toast.error("Orçamento não reconhecido. Ex.: 1.500,00");
-      return;
+      return false;
     }
     try {
       await createLead({
@@ -989,17 +993,19 @@ export default function FunilPage() {
         notes: values.notes || undefined,
       });
       toast.success("Lead adicionado!");
+      return true;
     } catch (e) {
-      toast.error("Erro ao criar lead");
+      toast.error(e instanceof ConvexError ? (e.data as { message: string }).message : "Erro ao criar lead");
+      return false;
     }
   };
 
-  const handleEdit = async (values: LeadFormValues, responsibleId?: string) => {
-    if (!editing) return;
+  const handleEdit = async (values: LeadFormValues, responsibleId?: string): Promise<boolean> => {
+    if (!editing) return false;
     const budget = orcamentoDoLead(values.budget);
     if (budget === "erro") {
       toast.error("Orçamento não reconhecido. Ex.: 1.500,00");
-      return;
+      return false;
     }
     try {
       // Edição é substituição: `null` limpa o campo. Com `undefined`, o pedido
@@ -1018,8 +1024,10 @@ export default function FunilPage() {
       });
       toast.success("Lead atualizado!");
       setEditing(null);
+      return true;
     } catch (e) {
-      toast.error("Erro ao atualizar lead");
+      toast.error(e instanceof ConvexError ? (e.data as { message: string }).message : "Erro ao atualizar lead");
+      return false;
     }
   };
 

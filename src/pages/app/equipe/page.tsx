@@ -61,7 +61,7 @@ function MemberDialog({
   onClose: () => void;
   defaultValues?: Partial<MemberFormValues>;
   title: string;
-  onSubmit: (values: MemberFormValues) => Promise<void>;
+  onSubmit: (values: MemberFormValues) => Promise<boolean | void>;
 }) {
   const {
     register,
@@ -74,7 +74,10 @@ function MemberDialog({
   });
 
   const submit = async (values: MemberFormValues) => {
-    await onSubmit(values);
+    // Só limpa e fecha quando gravou. Antes fechava sempre: o handler da
+    // página capturava o erro (toast) e terminava "bem", e o que foi
+    // digitado sumia junto com o diálogo. `false` ou erro = fica aberto.
+    if ((await onSubmit(values)) === false) return;
     reset();
     onClose();
   };
@@ -152,9 +155,11 @@ export default function EquipePage() {
     try {
       await createMember({ ...values, email: values.email || undefined });
       toast.success("Membro adicionado!");
+      return true;
     } catch (e) {
       if (e instanceof ConvexError) toast.error((e.data as { message: string }).message);
       else toast.error("Erro ao adicionar membro");
+      return false;
     }
   };
 
@@ -164,9 +169,11 @@ export default function EquipePage() {
       await updateMember({ id: editing._id, ...values, email: values.email || undefined });
       toast.success("Membro atualizado!");
       setEditing(null);
+      return true;
     } catch (e) {
       if (e instanceof ConvexError) toast.error((e.data as { message: string }).message);
       else toast.error("Erro ao atualizar membro");
+      return false;
     }
   };
 

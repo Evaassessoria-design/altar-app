@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select.tsx";
 import type { Doc } from "@/convex/_generated/dataModel.d.ts";
 import { toast } from "sonner";
+import { ConvexError } from "convex/values";
 import { valorDigitado } from "@/lib/valor-digitado.ts";
 import {
   ERRO_TIPO_OBRIGATORIO,
@@ -49,7 +50,8 @@ type EventSubmitValues = Omit<EventFormValues, "budget"> & { budget?: number };
 type Props = {
   open: boolean;
   onClose: () => void;
-  onSubmit: (values: EventSubmitValues) => Promise<void>;
+  /** `false` (ou erro) = não gravou: o diálogo fica aberto e preenchido. */
+  onSubmit: (values: EventSubmitValues) => Promise<boolean | void>;
   defaultValues?: Partial<Doc<"events">>;
   title: string;
 };
@@ -103,10 +105,20 @@ export default function EventFormDialog({ open, onClose, onSubmit, defaultValues
       toast.error("Orçamento não reconhecido. Ex.: 1.500,00");
       return;
     }
-    await onSubmit({
-      ...rest,
-      ...(budget !== undefined ? { budget } : {}),
-    });
+    // Só limpa e fecha quando gravou. Antes fechava sempre: o handler da
+    // página capturava o erro (toast) e terminava "bem", e o que foi
+    // digitado sumia junto com o diálogo. `false` ou erro = fica aberto.
+    try {
+      const ok = await onSubmit({
+        ...rest,
+        ...(budget !== undefined ? { budget } : {}),
+      });
+      if (ok === false) return;
+    } catch (e) {
+      // Telas que não tratam o erro (Dashboard, pasta do evento) caem aqui.
+      toast.error(e instanceof ConvexError ? (e.data as { message: string }).message : "Não foi possível salvar o evento.");
+      return;
+    }
     handleClose();
   };
 

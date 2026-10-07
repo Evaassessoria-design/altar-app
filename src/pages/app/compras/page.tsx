@@ -129,7 +129,7 @@ function PurchaseDialog({
     values: PurchaseFormValues,
     supplierId?: string,
     responsibleId?: string,
-  ) => Promise<void>;
+  ) => Promise<boolean | void>;
 }) {
   const {
     register,
@@ -149,7 +149,10 @@ function PurchaseDialog({
   const [responsibleId, setResponsibleId] = useState<string | undefined>(defaultResponsibleId);
 
   const submit = async (values: PurchaseFormValues) => {
-    await onSubmit(values, supplierId, responsibleId);
+    // Só limpa e fecha quando gravou. Antes fechava sempre: o handler da
+    // página capturava o erro (toast) e terminava "bem", e o que foi
+    // digitado sumia junto com o diálogo. `false` ou erro = fica aberto.
+    if ((await onSubmit(values, supplierId, responsibleId)) === false) return;
     reset();
     setSupplierId(undefined);
     setResponsibleId(undefined);
@@ -632,7 +635,7 @@ function ComprasContent({ recortePendentes, onLimparRecorte }: { recortePendente
   ) => {
     if (!addingToEvent) return;
     const numeros = numerosDaCompra(values);
-    if (!numeros) return;
+    if (!numeros) return false;
     try {
       await addPurchase({
         eventId: addingToEvent,
@@ -649,9 +652,11 @@ function ComprasContent({ recortePendentes, onLimparRecorte }: { recortePendente
         dueDate: values.dueDate || undefined,
       });
       toast.success("Item adicionado!");
+      return true;
     } catch (e) {
       if (e instanceof ConvexError) toast.error((e.data as { message: string }).message);
       else toast.error("Erro ao adicionar item");
+      return false;
     }
   };
 
@@ -660,9 +665,9 @@ function ComprasContent({ recortePendentes, onLimparRecorte }: { recortePendente
     supplierId?: string,
     responsibleId?: string,
   ) => {
-    if (!editing) return;
+    if (!editing) return false;
     const numeros = numerosDaCompra(values);
-    if (!numeros) return;
+    if (!numeros) return false;
     try {
       // Edição é substituição: campo esvaziado no formulário precisa sumir do
       // item. `null` é o pedido de limpar — `undefined` não chegaria ao servidor.
@@ -684,9 +689,11 @@ function ComprasContent({ recortePendentes, onLimparRecorte }: { recortePendente
       });
       toast.success("Item atualizado!");
       setEditing(null);
+      return true;
     } catch (e) {
       if (e instanceof ConvexError) toast.error((e.data as { message: string }).message);
       else toast.error("Erro ao atualizar item");
+      return false;
     }
   };
 

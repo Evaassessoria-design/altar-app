@@ -139,12 +139,14 @@ export default function EventsPage() {
     try {
       await createEvent(values);
       toast.success("Evento criado com sucesso!");
+      return true;
     } catch (err) {
       if (err instanceof ConvexError) {
         toast.error((err.data as { message: string }).message);
       } else {
         toast.error("Erro ao criar evento");
       }
+      return false;
     }
   };
 
@@ -153,12 +155,14 @@ export default function EventsPage() {
     try {
       await updateEvent({ id: editingEvent._id, ...values });
       toast.success("Evento atualizado!");
+      return true;
     } catch (err) {
       if (err instanceof ConvexError) {
         toast.error((err.data as { message: string }).message);
       } else {
         toast.error("Erro ao atualizar evento");
       }
+      return false;
     }
   };
 

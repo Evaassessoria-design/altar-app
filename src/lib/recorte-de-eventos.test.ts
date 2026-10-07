@@ -56,3 +56,13 @@ describe("cores do gráfico", () => {
     expect(achados).toBe("");
   });
 });
+
+describe("o destino da Receita do Mês mostra o mesmo critério do card", () => {
+  it("lê as MESMAS entradas do Dashboard e explica a regra", () => {
+    const fin = readFileSync("src/pages/app/financeiro/page.tsx", "utf-8");
+    expect(fin).toContain("api.financeiro.recebidoNoMes");
+    expect(fin).toContain("É a Receita do Mês do Dashboard");
+    const painel = readFileSync("convex/dashboard.ts", "utf-8");
+    expect(painel).toContain("lerEntradasDoMes(ctx, user._id, mesDaReceita)");
+  });
+});

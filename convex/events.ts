@@ -1,4 +1,7 @@
 import { mutation, query } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { ALTERNATIVA_A_EXCLUSAO, explicarImpedimentos, impedimentosDaExclusao, temImpedimento } from "./lib/exclusaoDeEvento";
 import { normalizarDataDeEvento } from "./lib/dataDeEvento";
 import { emCentavos, motivoDoValorInvalido } from "./lib/dinheiro";
 import { v } from "convex/values";
@@ -201,6 +204,42 @@ export const remove = mutation({
     const event = await ctx.db.get(args.id);
     if (!event || event.userId !== user._id)
       throw new ConvexError({ message: "Evento não encontrado", code: "NOT_FOUND" });
+    // Histórico de dinheiro e peças não reconciliadas não somem na cascata
+    // (ver lib/exclusaoDeEvento.ts). A recusa vem ANTES de qualquer delete.
+    const impedimentos = await lerImpedimentos(ctx, args.id);
+    if (temImpedimento(impedimentos)) {
+      throw new ConvexError({
+        code: "EXCLUSAO_IMPEDIDA",
+        message: `Este evento não pode ser excluído. ${explicarImpedimentos(impedimentos).join(" ")} ${ALTERNATIVA_A_EXCLUSAO}`,
+      });
+    }
     return deleteEventCascade(ctx, args.id);
+  },
+});
+
+/** O que impede a exclusão — lido do banco, com o nome de cada peça. */
+async function lerImpedimentos(ctx: QueryCtx, eventId: Id<"events">) {
+  const [parcelas, reservas] = await Promise.all([
+    ctx.db.query("transactions").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+    ctx.db.query("collectionReservations").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+  ]);
+  const comNome = await Promise.all(
+    reservas.map(async (r) => ({ ...r, nomeDaPeca: (await ctx.db.get(r.collectionItemId))?.nome ?? "peça" })),
+  );
+  return impedimentosDaExclusao(parcelas, comNome);
+}
+
+/**
+ * Para a tela: o que impede excluir ESTE evento, já em frases. A confirmação
+ * de exclusão mostra o impedimento e o caminho ANTES do clique — em vez de
+ * oferecer o botão e recusar depois. Evento de outra conta: `null`.
+ */
+export const impedimentosDeExclusao = query({
+  args: { id: v.id("events") },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const event = await ctx.db.get(args.id);
+    if (!event || event.userId !== user._id) return null;
+    return explicarImpedimentos(await lerImpedimentos(ctx, args.id));
   },
 });

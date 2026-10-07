@@ -463,6 +463,7 @@ export default function FinanceiroPage() {
   const mesPedido = params.get("mes") ?? undefined;
   const livro = useQuery(api.financeiro.listTransactions, mesPedido ? { mes: mesPedido } : {});
   const mesDoLivro = livro?.mes ?? null;
+  const recebido = useQuery(api.financeiro.recebidoNoMes, mesDoLivro ? { mes: mesDoLivro } : "skip");
   // A tela continua trabalhando com a lista; o que mudou é que ela agora SABE
   // quando o livro não coube inteiro, e diz. Ver `LIMITE_DO_LIVRO`.
   const transactions = livro?.itens;
@@ -657,26 +658,53 @@ export default function FinanceiroPage() {
 
       {/* Transaction list */}
       <div>
-        {/* O RECORTE DO MÊS, com a soma que fecha com o card do Dashboard:
-            receitas PAGAS com data no mês (o mesmo critério de lá). Os cards
-            do topo continuam sendo da conta inteira — por isso o aviso diz
-            de qual número ele é. */}
+        {/* O RECORTE DO MÊS. Em cima, o dinheiro que ENTROU no mês — as
+            mesmas entradas que fazem a "Receita do Mês" do Dashboard
+            (`financeiro.recebidoNoMes`, lib/receitaDoMes.ts), uma a uma, para
+            a soma ser conferível. Embaixo, os lançamentos com VENCIMENTO no
+            mês: outra pergunta, e o aviso diz qual é qual. */}
         {mesDoLivro && transactions && (
-          <div className="mb-3 flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
-            <p className="flex-1">
-              Lançamentos com data em {nomeDoMes(mesDoLivro)}.{" "}
-              <span className="text-muted-foreground">
-                Receitas pagas: {fmt(transactions.filter((t) => t.type === "income" && t.isPaid).reduce((a, t) => a + t.amount, 0))}
-                {" "}· Despesas pagas: {fmt(transactions.filter((t) => t.type === "expense" && t.isPaid).reduce((a, t) => a + t.amount, 0))}
-                {livroCortado && " (há mais lançamentos neste mês além dos carregados)"}
-              </span>
+          <div className="mb-3 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm space-y-2">
+            {/* No celular o botão desce: ao lado, espremia a explicação numa
+                coluna de três palavras por linha. */}
+            <div className="flex flex-col sm:flex-row items-start gap-1 sm:gap-2">
+              <p className="flex-1">
+                <strong>Recebido em {nomeDoMes(mesDoLivro)}:</strong>{" "}
+                {recebido ? reais(recebido.totalCentavos) : "…"}
+                <span className="block text-xs text-muted-foreground">
+                  É a Receita do Mês do Dashboard: cada recebimento na data em que entrou (parciais
+                  inclusive, anulados fora) e, nos lançamentos antigos sem histórico, a data do
+                  pagamento — ou o vencimento, quando ela não foi registrada.
+                </span>
+              </p>
+              <button
+                onClick={() => setParams({})}
+                className="text-xs text-primary hover:underline cursor-pointer min-h-9 px-1"
+              >
+                Ver todos os meses
+              </button>
+            </div>
+            {recebido && recebido.entradas.length > 0 && (
+              <ul className="space-y-1 border-t border-primary/20 pt-2">
+                {recebido.entradas.map((e, i) => (
+                  <li key={`${e.transacaoId}-${e.data}-${i}`} className="flex flex-wrap items-baseline gap-x-2 text-xs">
+                    <span className="font-medium text-foreground">{reais(e.valorCentavos)}</span>
+                    <span>{formatDateInput(e.data)}</span>
+                    <span className="truncate">{e.descricao}</span>
+                    {nomeDoEvento(e.eventId) && <span className="text-muted-foreground truncate">· {nomeDoEvento(e.eventId)}</span>}
+                    {e.forma && <span className="text-muted-foreground">· {e.forma}</span>}
+                    {e.origem === "baixa_sem_historico" && (
+                      <span className="text-muted-foreground">· baixa antiga, sem histórico</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="text-xs text-muted-foreground border-t border-primary/20 pt-2">
+              Abaixo: lançamentos com <strong>vencimento</strong> em {nomeDoMes(mesDoLivro)}. Despesas
+              pagas: {fmt(transactions.filter((t) => t.type === "expense" && t.isPaid).reduce((a, t) => a + t.amount, 0))}
+              {livroCortado && " (há mais lançamentos neste mês além dos carregados)"}
             </p>
-            <button
-              onClick={() => setParams({})}
-              className="text-xs text-primary hover:underline cursor-pointer min-h-9 px-1"
-            >
-              Ver todos os meses
-            </button>
           </div>
         )}
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">

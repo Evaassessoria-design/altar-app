@@ -2,6 +2,8 @@ import { query } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireUser } from "./lib/identity";
+import { lerEntradasDoMes, totalDoMesEmCentavos } from "./lib/receitaDoMes";
+import { deCentavos } from "./lib/pagamentosDoEvento";
 import { diasEntre, montarAtencao, JANELA_RETORNO_DIAS } from "./lib/attention";
 import { deficitDaReserva, disponibilidadeNaJanela, faltaVoltar } from "./lib/acervo";
 import { pecasForaDeUso } from "./lib/condicaoDoAcervo";
@@ -56,9 +58,14 @@ export const getDashboardStats = query({
         q.eq("userId", user._id).gte("date", monthStart).lte("date", monthEnd),
       )
       .collect();
-    const revenueThisMonth = monthTransactions
-      .filter((t) => t.type === "income" && t.isPaid)
-      .reduce((s, t) => s + t.amount, 0);
+    // RECEITA = o dinheiro que ENTROU no mês (lib/receitaDoMes.ts):
+    // recebimentos ativos pela data em que entraram, parciais inclusive, e a
+    // baixa antiga sem histórico pela data do pagamento. O atalho do card abre
+    // o Financeiro com estas mesmas entradas (`financeiro.recebidoNoMes`).
+    const revenueThisMonth = deCentavos(
+      totalDoMesEmCentavos(await lerEntradasDoMes(ctx, user._id, mesDaReceita)),
+    );
+    // Despesa continua como era: paga, pela data, dentro do mês.
     const expensesThisMonth = monthTransactions
       .filter((t) => t.type === "expense" && t.isPaid)
       .reduce((s, t) => s + t.amount, 0);

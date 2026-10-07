@@ -6,6 +6,7 @@ import { action } from "./_generated/server";
 import type { ActionCtx } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { requireIdentity } from "./lib/identity";
+import { requireActiveAccessAction } from "./lib/accessGuard";
 import { getAiConfig } from "./lib/aiConfig";
 import { agentePorId, ROTULO_DA_FONTE, type Agente, type Fonte } from "./lib/assistente/agentes";
 import { planoDeConsulta } from "./lib/assistente/plano";
@@ -147,6 +148,14 @@ export const executar = action({
     if (!tarefa) {
       throw new ConvexError({ code: "NOT_FOUND", message: "Trabalho não encontrado" });
     }
+
+    // A MESMA EXIGÊNCIA DE `delegar`: acesso ativo. Sem ela, uma conta
+    // bloqueada depois de deixar um pedido na fila ainda o executava — e a
+    // execução é a parte que consulta os dados e chama o modelo. Vem DEPOIS
+    // da posse: tarefa de outra conta continua sendo "não encontrado", sem
+    // revelar nada sobre o acesso de ninguém. O pedido fica na fila, intacto,
+    // e roda quando o acesso voltar.
+    await requireActiveAccessAction(ctx);
 
     // Idempotente: duplo clique, reenvio ou recarregar a página não refazem um
     // trabalho que já está correndo nem ressuscitam um concluído.

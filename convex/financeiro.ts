@@ -6,6 +6,7 @@ import { getOwnedEvent, requireEventOwner, requireUser } from "./lib/identity";
 import { emCentavos, motivoDoValorInvalido, somaEmDinheiro } from "./lib/dinheiro";
 import { dinheiroVencido } from "./lib/dinheiroVencido";
 import { dataDoDiaNoFuso, faixaDoMes, fusoDoNegocio, ultimoDiaDoMes } from "./lib/dataDoDia";
+import { entradasDoMes, lerEntradasDoMes, totalDoMesEmCentavos } from "./lib/receitaDoMes";
 import { requireActiveAccess } from "./lib/accessGuard";
 import { safeDeleteFile } from "./lib/cascade";
 import { limparCampos } from "./lib/limparCampos";
@@ -57,6 +58,22 @@ function exigirValor(valor: number) {
  * `supplierCatalog.panorama`, que já diz quando não consegue somar.
  */
 export const LIMITE_DO_LIVRO = 500;
+
+/**
+ * O dinheiro que entrou num mês — o destino da "Receita do Mês" do Dashboard,
+ * com as MESMAS entradas que fizeram o número (lib/receitaDoMes.ts): cada
+ * recebimento ativo na data em que entrou, e a baixa antiga sem histórico.
+ * Mês inválido: `null` — a tela não mostra um recorte que não aplicou.
+ */
+export const recebidoNoMes = query({
+  args: { mes: v.string() },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(args.mes)) return null;
+    const entradas = await lerEntradasDoMes(ctx, user._id, args.mes);
+    return { mes: args.mes, totalCentavos: totalDoMesEmCentavos(entradas), entradas };
+  },
+});
 
 export const listTransactions = query({
   args: {
@@ -144,9 +161,10 @@ export const getSummary = query({
       const inMonth = txs.filter((t) => t.isPaid && t.date >= start && t.date <= end);
       months.push({
         label,
-        income: somaEmDinheiro(
-          inMonth.filter((t) => t.type === "income").map((t) => t.amount),
-        ),
+        // Receita = o que ENTROU no mês, a mesma regra da "Receita do Mês"
+        // do Dashboard (lib/receitaDoMes.ts). Pela baixa e pelo vencimento,
+        // o gráfico e o card diziam números diferentes para o mesmo mês.
+        income: deCentavos(totalDoMesEmCentavos(entradasDoMes(txs, start.slice(0, 7)))),
         expense: somaEmDinheiro(
           inMonth.filter((t) => t.type === "expense").map((t) => t.amount),
         ),

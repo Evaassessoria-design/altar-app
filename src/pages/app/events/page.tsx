@@ -27,16 +27,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils.ts";
 import EventFormDialog from "./_components/event-form-dialog.tsx";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog.tsx";
+import { ConfirmarExclusaoDeEvento } from "./_components/confirmar-exclusao.tsx";
 import {
   Empty,
   EmptyHeader,
@@ -166,16 +157,12 @@ export default function EventsPage() {
     }
   };
 
+  // Erro (inclusive a recusa por recebimentos ou peças na rua) é mostrado
+  // pela própria confirmação, que continua aberta — ver ConfirmarExclusaoDeEvento.
   const handleDelete = async () => {
     if (!deletingId) return;
-    try {
-      await removeEvent({ id: deletingId });
-      toast.success("Evento excluído.");
-    } catch {
-      toast.error("Erro ao excluir evento");
-    } finally {
-      setDeletingId(null);
-    }
+    await removeEvent({ id: deletingId });
+    toast.success("Evento excluído.");
   };
 
   return (
@@ -435,25 +422,9 @@ export default function EventsPage() {
       )}
 
       {/* Delete Confirmation */}
-      <AlertDialog open={!!deletingId} onOpenChange={() => setDeletingId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir evento?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta ação não pode ser desfeita. O evento será excluído permanentemente.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-white hover:bg-destructive/90 cursor-pointer"
-            >
-              Excluir
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {deletingId && (
+        <ConfirmarExclusaoDeEvento eventId={deletingId} onClose={() => setDeletingId(null)} onExcluir={handleDelete} />
+      )}
     </div>
   );
 }

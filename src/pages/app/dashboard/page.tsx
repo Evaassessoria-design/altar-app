@@ -235,7 +235,7 @@ export default function Dashboard() {
             sub={`Despesas: ${stats.expensesThisMonth.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`}
             delay={0.05}
             to={`/financeiro?mes=${stats.mesDaReceita}`}
-            dica="ver os lançamentos deste mês no Financeiro"
+            dica="ver o que entrou este mês, recebimento a recebimento"
           />
           <StatCard
             icon={<CheckSquare className="size-4 text-orange-500" />}

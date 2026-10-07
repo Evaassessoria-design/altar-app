@@ -55,8 +55,18 @@ const APAGAM_DE_VERDADE: readonly (readonly [string, string])[] = [
 describe("nenhuma exclusão acontece sem pergunta", () => {
   it.each(APAGAM_DE_VERDADE)("%s confirma antes de %s", (arquivo) => {
     const fonte = ler(arquivo);
-    const pergunta = /window\.confirm|<AlertDialog/.test(fonte);
+    // A exclusão de EVENTO pergunta pelo componente compartilhado, que também
+    // diz o que impede a exclusão — e ele mesmo tem de ser um AlertDialog.
+    const pergunta = /window\.confirm|<AlertDialog|<ConfirmarExclusaoDeEvento/.test(fonte);
     expect(pergunta, `${arquivo}: apaga sem perguntar`).toBe(true);
+  });
+
+  it("a confirmação compartilhada da exclusão de evento é mesmo uma pergunta", () => {
+    const comp = ler("src/pages/app/events/_components/confirmar-exclusao.tsx");
+    expect(comp).toContain("<AlertDialog");
+    expect(comp).toContain("api.events.impedimentosDeExclusao");
+    // Com impedimento não há botão de excluir — só o motivo e o caminho.
+    expect(comp).toContain("{!impedido && (");
   });
 });
 

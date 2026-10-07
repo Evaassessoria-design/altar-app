@@ -46,6 +46,7 @@ import { sortEventTeam } from "@/lib/event-team.ts";
 import { labelDoTipoDeEvento } from "@/lib/event-types.ts";
 import { useRef, useState } from "react";
 import EventFormDialog from "../_components/event-form-dialog.tsx";
+import { ConfirmarExclusaoDeEvento } from "../_components/confirmar-exclusao.tsx";
 import { ContractImportDialog } from "./_components/contract-import-dialog.tsx";
 import { ProntoParaMostrar } from "./_components/pronto-para-mostrar.tsx";
 import { SaudeDoEvento } from "./_components/saude-do-evento.tsx";
@@ -181,6 +182,8 @@ export default function EventDetailsPage() {
     setEditing(false);
   };
 
+  // Sem `try`: o erro (recusa por recebimentos ou peças na rua) é mostrado
+  // pela confirmação, que continua aberta — ver ConfirmarExclusaoDeEvento.
   const handleDelete = async () => {
     await removeEvent({ id: event._id });
     toast.success("Evento excluído.");
@@ -985,25 +988,9 @@ export default function EventDetailsPage() {
       )}
 
       {/* Delete confirmation */}
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir evento?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Todos os dados deste evento (briefing, checklists) serão excluídos permanentemente.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="cursor-pointer">Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-white hover:bg-destructive/90 cursor-pointer"
-            >
-              Excluir
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {confirmDelete && (
+        <ConfirmarExclusaoDeEvento eventId={event._id} onClose={() => setConfirmDelete(false)} onExcluir={handleDelete} />
+      )}
     </div>
   );
 }

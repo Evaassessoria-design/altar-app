@@ -108,6 +108,7 @@ import type * as lib_escritorio_redacaoDaCampanha from "../lib/escritorio/redaca
 import type * as lib_escritorio_relatorio from "../lib/escritorio/relatorio.js";
 import type * as lib_escritorio_rodadaAutomatica from "../lib/escritorio/rodadaAutomatica.js";
 import type * as lib_eventSummary from "../lib/eventSummary.js";
+import type * as lib_exclusaoDeEvento from "../lib/exclusaoDeEvento.js";
 import type * as lib_fichaTecnica from "../lib/fichaTecnica.js";
 import type * as lib_financeScope from "../lib/financeScope.js";
 import type * as lib_fornecedorDoEvento from "../lib/fornecedorDoEvento.js";
@@ -137,6 +138,7 @@ import type * as lib_prontidaoDoEvento from "../lib/prontidaoDoEvento.js";
 import type * as lib_propostaComercial from "../lib/propostaComercial.js";
 import type * as lib_proximaAcao from "../lib/proximaAcao.js";
 import type * as lib_purchaseStatus from "../lib/purchaseStatus.js";
+import type * as lib_receitaDoMes from "../lib/receitaDoMes.js";
 import type * as lib_reservasDoAcervo from "../lib/reservasDoAcervo.js";
 import type * as lib_responsavel from "../lib/responsavel.js";
 import type * as lib_respostaDoInteressado from "../lib/respostaDoInteressado.js";
@@ -267,6 +269,7 @@ declare const fullApi: ApiFromModules<{
   "lib/escritorio/relatorio": typeof lib_escritorio_relatorio;
   "lib/escritorio/rodadaAutomatica": typeof lib_escritorio_rodadaAutomatica;
   "lib/eventSummary": typeof lib_eventSummary;
+  "lib/exclusaoDeEvento": typeof lib_exclusaoDeEvento;
   "lib/fichaTecnica": typeof lib_fichaTecnica;
   "lib/financeScope": typeof lib_financeScope;
   "lib/fornecedorDoEvento": typeof lib_fornecedorDoEvento;
@@ -296,6 +299,7 @@ declare const fullApi: ApiFromModules<{
   "lib/propostaComercial": typeof lib_propostaComercial;
   "lib/proximaAcao": typeof lib_proximaAcao;
   "lib/purchaseStatus": typeof lib_purchaseStatus;
+  "lib/receitaDoMes": typeof lib_receitaDoMes;
   "lib/reservasDoAcervo": typeof lib_reservasDoAcervo;
   "lib/responsavel": typeof lib_responsavel;
   "lib/respostaDoInteressado": typeof lib_respostaDoInteressado;

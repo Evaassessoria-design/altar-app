@@ -46,7 +46,7 @@ import {
   type PurchaseStatus,
 } from "@/convex/lib/purchaseStatus.ts";
 import { motivoDaListaVazia } from "@/lib/lista-vazia.ts";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 const CATEGORIES = [
   "Flores",
@@ -502,8 +502,14 @@ function EventSection({
   );
 }
 
-function ComprasContent() {
+function ComprasContent({ recortePendentes, onLimparRecorte }: { recortePendentes?: boolean; onLimparRecorte?: () => void }) {
   const events = useQuery(api.events.list, {});
+  // O recorte do card "Compras Pendentes" do Dashboard: os eventos dos
+  // próximos 30 dias com compra pendente, da MESMA leitura que fez o número.
+  const painel = useQuery(api.dashboard.getDashboardStats, recortePendentes ? {} : "skip");
+  const doRecorte = recortePendentes
+    ? new Set((painel?.comprasPorEvento ?? []).map((c) => c.eventId as string))
+    : null;
   const togglePurchase = useMutation(api.purchases.togglePurchase);
   const deletePurchase = useMutation(api.purchases.deletePurchase);
   const addPurchase = useMutation(api.purchases.addPurchase);
@@ -531,6 +537,7 @@ function ComprasContent() {
   const [eventFilter, setEventFilter] = useState<"all" | "upcoming" | "completed">("all");
 
   const filteredEvents = (events ?? []).filter((e) => {
+    if (doRecorte) return doRecorte.has(e._id);
     if (eventFilter === "upcoming") return e.status !== "completed" && e.status !== "cancelled";
     if (eventFilter === "completed") return e.status === "completed";
     return e.status !== "cancelled";
@@ -804,7 +811,20 @@ function ComprasContent() {
 
   return (
     <>
+      {recortePendentes && painel && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+          <p className="flex-1">
+            {painel.pendingPurchasesCount === 0
+              ? "Nenhuma compra pendente nos eventos dos próximos 30 dias."
+              : `${painel.pendingPurchasesCount} compra${painel.pendingPurchasesCount === 1 ? "" : "s"} pendente${painel.pendingPurchasesCount === 1 ? "" : "s"} nos eventos dos próximos 30 dias.`}
+          </p>
+          <button onClick={onLimparRecorte} className="text-xs text-primary hover:underline cursor-pointer min-h-9 px-1">
+            Ver todos os eventos
+          </button>
+        </div>
+      )}
       {/* Filter tabs */}
+      {!recortePendentes && (
       <div className="flex gap-2 mb-5 flex-wrap">
         {(["all", "upcoming", "completed"] as const).map((f) => (
           <button
@@ -821,6 +841,7 @@ function ComprasContent() {
           </button>
         ))}
       </div>
+      )}
 
       {vazio === "filtro" ? (
         <Empty>
@@ -828,12 +849,14 @@ function ComprasContent() {
             <EmptyMedia variant="icon"><ShoppingCart /></EmptyMedia>
             <EmptyTitle>Nenhum evento neste filtro</EmptyTitle>
             <EmptyDescription>
-              {eventFilter === "all"
+              {recortePendentes
+                ? "Os eventos dos próximos 30 dias estão com as compras em dia."
+                : eventFilter === "all"
                 ? "Os eventos cancelados não entram em Compras."
                 : `Você tem ${(events ?? []).length} evento${(events ?? []).length === 1 ? "" : "s"} — nenhum deles neste recorte.`}
             </EmptyDescription>
           </EmptyHeader>
-          {eventFilter !== "all" && (
+          {eventFilter !== "all" && !recortePendentes && (
             <EmptyContent>
               <Button
                 size="sm"
@@ -986,7 +1009,14 @@ function EventSectionWithData({
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function ComprasPage() {
-  const [aba, setAba] = useState<"painel" | "eventos">("painel");
+  // ?aba=eventos&recorte=pendentes — o atalho do card do Dashboard.
+  const [params, setParams] = useSearchParams();
+  const [aba, setAbaLocal] = useState<"painel" | "eventos">(params.get("aba") === "eventos" ? "eventos" : "painel");
+  const recortePendentes = aba === "eventos" && params.get("recorte") === "pendentes";
+  const setAba = (a: "painel" | "eventos") => {
+    setAbaLocal(a);
+    setParams(a === "eventos" ? { aba: "eventos" } : {});
+  };
 
   return (
     <div className="p-4 md:p-6 max-w-2xl mx-auto">
@@ -1016,7 +1046,11 @@ export default function ComprasPage() {
         ))}
       </div>
 
-      {aba === "painel" ? <PainelDeCompras /> : <ComprasContent />}
+      {aba === "painel" ? (
+        <PainelDeCompras />
+      ) : (
+        <ComprasContent recortePendentes={recortePendentes} onLimparRecorte={() => setParams({ aba: "eventos" })} />
+      )}
     </div>
   );
 }

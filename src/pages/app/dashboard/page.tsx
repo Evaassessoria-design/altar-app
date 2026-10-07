@@ -73,32 +73,57 @@ function useCountdown(isoDate: string) {
 
 // ─── Stat card ────────────────────────────────────────────────────────────────
 
+/** A classe de foco e toque dos atalhos do painel — discreta, mas visível. */
+const ATALHO =
+  "block rounded-xl transition-colors hover:bg-accent/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+
 function StatCard({
   icon,
   label,
   value,
   sub,
   delay = 0,
+  to,
+  dica,
 }: {
   icon: React.ReactNode;
   label: string;
   value: React.ReactNode;
   sub?: string;
   delay?: number;
+  /**
+   * O RECORTE que compõe o número. Um card que promete "3 compras pendentes"
+   * e leva à lista inteira de compras obriga a decoradora a refazer a conta.
+   */
+  to?: string;
+  /** O que o atalho abre, para leitor de tela e para o `title`. */
+  dica?: string;
 }) {
+  const conteudo = (
+    <>
+      <div className="flex items-center gap-2">
+        {icon}
+        <p className="text-xs text-muted-foreground font-medium">{label}</p>
+        {to && <ArrowRight className="size-3 ml-auto text-muted-foreground" aria-hidden />}
+      </div>
+      <p className="text-2xl font-bold">{value}</p>
+      {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
+    </>
+  );
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay, ease: "easeOut" }}
-      className="bg-card rounded-xl border border-border p-4 space-y-2"
+      className="bg-card rounded-xl border border-border"
     >
-      <div className="flex items-center gap-2">
-        {icon}
-        <p className="text-xs text-muted-foreground font-medium">{label}</p>
-      </div>
-      <p className="text-2xl font-bold">{value}</p>
-      {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
+      {to ? (
+        <Link to={to} title={dica} aria-label={dica ? `${label}: ${dica}` : undefined} className={`${ATALHO} p-4 space-y-2 h-full`}>
+          {conteudo}
+        </Link>
+      ) : (
+        <div className="p-4 space-y-2">{conteudo}</div>
+      )}
     </motion.div>
   );
 }
@@ -200,6 +225,8 @@ export default function Dashboard() {
             value={stats.upcomingCount}
             sub={`${stats.totalEvents} no total`}
             delay={0}
+            to="/eventos?filtro=upcoming"
+            dica="ver os eventos que ainda vão acontecer"
           />
           <StatCard
             icon={<DollarSign className="size-4 text-green-500" />}
@@ -207,6 +234,8 @@ export default function Dashboard() {
             value={stats.revenueThisMonth.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
             sub={`Despesas: ${stats.expensesThisMonth.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`}
             delay={0.05}
+            to={`/financeiro?mes=${stats.mesDaReceita}`}
+            dica="ver os lançamentos deste mês no Financeiro"
           />
           <StatCard
             icon={<CheckSquare className="size-4 text-orange-500" />}
@@ -214,13 +243,17 @@ export default function Dashboard() {
             value={stats.pendingChecklistCount}
             sub="checklists próx. 30 dias"
             delay={0.1}
+            to="/eventos?recorte=checklist"
+            dica="ver o checklist pendente de cada evento dos próximos 30 dias"
           />
           <StatCard
             icon={<ShoppingCart className="size-4 text-blue-500" />}
             label="Compras Pendentes"
             value={stats.pendingPurchasesCount}
-            sub="nos próximos eventos"
+            sub="nos próximos 30 dias"
             delay={0.15}
+            to="/compras?aba=eventos&recorte=pendentes"
+            dica="ver as compras pendentes dos eventos dos próximos 30 dias"
           />
         </div>
       )}
@@ -244,7 +277,11 @@ export default function Dashboard() {
               <Skeleton className="h-10 w-full" />
             </div>
           ) : stats.nextEvent ? (
-            <Link to={`/eventos/${stats.nextEvent._id}`} className="block p-5 hover:bg-accent/30 transition-colors cursor-pointer">
+            <Link
+              to={`/eventos/${stats.nextEvent._id}`}
+              aria-label={`Abrir a pasta do evento ${stats.nextEvent.name}`}
+              className={`${ATALHO} rounded-none p-5 cursor-pointer`}
+            >
               <p className="font-semibold text-base mb-1">{stats.nextEvent.name}</p>
               <p className="text-sm text-muted-foreground mb-4">
                 {formatEventDateShort(stats.nextEvent.date)} · {stats.nextEvent.location}
@@ -293,17 +330,24 @@ export default function Dashboard() {
               {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}
             </div>
           ) : (
-            <div className="p-5 space-y-3">
+            <div className="p-5 space-y-1.5">
               {Object.entries(stats.byStatus)
                 .filter(([, v]) => v > 0)
                 .sort(([, a], [, b]) => b - a)
                 .map(([status, count]) => {
                   const pct = stats.totalEvents > 0 ? Math.round((count / stats.totalEvents) * 100) : 0;
                   return (
-                    <div key={status} className="space-y-1">
+                    <Link
+                      key={status}
+                      to={`/eventos?status=${status}`}
+                      aria-label={`${STATUS_LABELS[status]}: ${count} evento${count === 1 ? "" : "s"} — ver lista`}
+                      className={`${ATALHO} rounded-lg -mx-2 px-2 py-1.5 space-y-1`}
+                    >
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-muted-foreground">{STATUS_LABELS[status]}</span>
-                        <span className="font-semibold">{count}</span>
+                        <span className="font-semibold inline-flex items-center gap-1">
+                          {count} <ArrowRight className="size-3 text-muted-foreground" aria-hidden />
+                        </span>
                       </div>
                       <div className="h-2 rounded-full bg-muted overflow-hidden">
                         <div
@@ -311,7 +355,7 @@ export default function Dashboard() {
                           style={{ width: `${pct}%` }}
                         />
                       </div>
-                    </div>
+                    </Link>
                   );
                 })}
               {stats.totalEvents === 0 && (
@@ -342,24 +386,51 @@ export default function Dashboard() {
           ) : (
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={stats.monthlyData} barSize={28}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                 <XAxis
                   dataKey="label"
-                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                  tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
                   axisLine={false}
                   tickLine={false}
                 />
                 <YAxis
-                  tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                  tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
                   axisLine={false}
                   tickLine={false}
                   allowDecimals={false}
                   width={24}
                 />
-                <Tooltip content={<ChartTooltip />} cursor={{ fill: "hsl(var(--accent))" }} />
-                <Bar dataKey="count" name="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                <Tooltip content={<ChartTooltip />} cursor={{ fill: "var(--accent)" }} />
+                <Bar
+                  dataKey="count"
+                  name="count"
+                  fill="var(--primary)"
+                  radius={[4, 4, 0, 0]}
+                  cursor="pointer"
+                  onClick={(d: { payload?: { mes?: string } }) => {
+                    if (d?.payload?.mes) navigate(`/eventos?mes=${d.payload.mes}`);
+                  }}
+                />
               </BarChart>
             </ResponsiveContainer>
+          )}
+          {/* A barra do gráfico não recebe foco de teclado nem tem alvo de
+              toque decente num mês com 1 evento. Os mesmos destinos, aqui,
+              como links de verdade. */}
+          {stats && (
+            <nav aria-label="Eventos por mês" className="mt-3 grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+              {stats.monthlyData.map((m) => (
+                <Link
+                  key={m.mes}
+                  to={`/eventos?mes=${m.mes}`}
+                  aria-label={`${m.count} evento${m.count === 1 ? "" : "s"} em ${m.label} — ver lista`}
+                  className={`${ATALHO} rounded-lg border border-border px-2 py-1.5 text-center text-xs min-h-9`}
+                >
+                  <span className="text-muted-foreground">{m.label}</span>{" "}
+                  <span className="font-semibold">{m.count}</span>
+                </Link>
+              ))}
+            </nav>
           )}
         </div>
       </motion.div>

@@ -18,8 +18,11 @@ import {
   Trash2,
   ChevronRight,
   Search,
+  X,
+  CheckSquare,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { lerRecorteDeEventos, descreverRecorte } from "@/lib/recorte-de-eventos.ts";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils.ts";
@@ -83,7 +86,17 @@ function HealthBadge({ health }: { health?: { percent: number; status: string } 
 }
 
 export default function EventsPage() {
-  const [filter, setFilter] = useState<FilterType>("all");
+  // ── O FILTRO MORA NA URL ───────────────────────────────────────────────
+  // Os atalhos do Dashboard abrem esta tela já no recorte do card ("Próximos",
+  // um status, um mês, o checklist pendente). Na URL, o voltar do navegador e
+  // o link compartilhado levam ao mesmo recorte.
+  const [params, setParams] = useSearchParams();
+  const recorte = lerRecorteDeEventos(params);
+  const filter: FilterType = recorte.filtro;
+  const setFilter = (f: FilterType) => setParams(f === "all" ? {} : { filtro: f });
+  const limparRecorte = () => setParams({});
+  // O checklist pendente vem da MESMA leitura que fez o número do card.
+  const painel = useQuery(api.dashboard.getDashboardStats, recorte.tipo === "checklist" ? {} : "skip");
   const [showCreate, setShowCreate] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Doc<"events"> | null>(null);
   const [deletingId, setDeletingId] = useState<Id<"events"> | null>(null);
@@ -104,6 +117,11 @@ export default function EventsPage() {
   // tem que descer junto para o backend, ou a tela passa a mentir.
   const termo = busca.trim().toLowerCase();
   const visiveis = (events ?? []).filter((e) => {
+    // Os recortes do Dashboard: os mesmos critérios dos números de lá —
+    // `byStatus` conta todos os eventos daquele status; o gráfico de meses
+    // conta todo evento com data no mês, de qualquer status.
+    if (recorte.tipo === "status" && e.status !== recorte.status) return false;
+    if (recorte.tipo === "mes" && e.date.slice(0, 7) !== recorte.mes) return false;
     if (!termo) return true;
     // Ela procura pelo nome do cliente, pelo local ou pela data — é assim que
     // se lembra de um evento, não pelo título que cadastrou meses atrás. E
@@ -174,6 +192,26 @@ export default function EventsPage() {
         </Button>
       </div>
 
+      {/* O recorte que veio do Dashboard, dito com palavras, e a saída dele. */}
+      {recorte.tipo !== "nenhum" && (
+        <div className="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+          <p className="flex-1">
+            {descreverRecorte(recorte)}
+            {recorte.tipo !== "checklist" && events !== undefined && (
+              <span className="text-muted-foreground">
+                {" "}· {visiveis.length} evento{visiveis.length === 1 ? "" : "s"}
+              </span>
+            )}
+          </p>
+          <button
+            onClick={limparRecorte}
+            className="inline-flex items-center gap-1 text-xs text-primary hover:underline cursor-pointer min-h-9 px-1"
+          >
+            <X className="size-3.5" /> Ver todos
+          </button>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex gap-2 overflow-x-auto pb-1">
         {FILTERS.map((f) => (
@@ -182,7 +220,7 @@ export default function EventsPage() {
             onClick={() => setFilter(f.value)}
             className={cn(
               "px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors cursor-pointer",
-              filter === f.value
+              filter === f.value && recorte.tipo !== "status" && recorte.tipo !== "mes" && recorte.tipo !== "checklist"
                 ? "bg-primary text-primary-foreground"
                 : "bg-card border border-border text-muted-foreground hover:text-foreground",
             )}
@@ -212,8 +250,51 @@ export default function EventsPage() {
         </div>
       )}
 
-      {/* List */}
-      {events === undefined ? (
+      {recorte.tipo === "checklist" ? (
+        painel === undefined ? (
+          <Skeleton className="h-28 w-full rounded-xl" />
+        ) : painel.checklistPorEvento.length === 0 ? (
+          <Empty>
+            <EmptyHeader>
+              <EmptyMedia variant="icon"><CheckSquare /></EmptyMedia>
+              <EmptyTitle>Nenhum item de checklist pendente</EmptyTitle>
+              <EmptyDescription>
+                Os eventos dos próximos 30 dias estão com o checklist em dia — ou ainda não têm
+                checklist. O checklist de cada evento fica na pasta dele.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <ul className="space-y-2">
+            {painel.checklistPorEvento.map((ev) => (
+              <li key={ev.eventId} className="bg-card rounded-xl border border-border p-4">
+                <Link to={`/eventos/${ev.eventId}`} className="font-semibold text-sm hover:text-primary">
+                  {ev.nome}
+                </Link>
+                <p className="text-xs text-muted-foreground">{formatEventDayOnly(ev.data)}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {ev.pre > 0 && (
+                    <Link
+                      to={`/eventos/${ev.eventId}/checklist/pre`}
+                      className="inline-flex items-center gap-1 rounded-lg border border-border px-3 min-h-9 text-xs hover:bg-accent"
+                    >
+                      Carregamento: {ev.pre} pendente{ev.pre === 1 ? "" : "s"} <ChevronRight className="size-3" />
+                    </Link>
+                  )}
+                  {ev.post > 0 && (
+                    <Link
+                      to={`/eventos/${ev.eventId}/checklist/post`}
+                      className="inline-flex items-center gap-1 rounded-lg border border-border px-3 min-h-9 text-xs hover:bg-accent"
+                    >
+                      Conferência: {ev.post} pendente{ev.post === 1 ? "" : "s"} <ChevronRight className="size-3" />
+                    </Link>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )
+      ) : events === undefined ? (
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-28 w-full rounded-xl" />
@@ -232,12 +313,14 @@ export default function EventsPage() {
                   escrita é o produto ignorando o que a pessoa acabou de fazer. */}
               {termo
                 ? `Nenhum evento com “${busca.trim()}”. Tente o nome do cliente ou o local.`
-                : filter === "all"
+                : recorte.tipo === "status" || recorte.tipo === "mes"
+                  ? "Nenhum evento neste recorte. Use “Ver todos” para voltar à lista completa."
+                  : filter === "all"
                   ? "Crie seu primeiro evento para começar"
                   : "Nenhum evento nessa categoria ainda"}
             </EmptyDescription>
           </EmptyHeader>
-          {filter === "all" && !termo && (
+          {filter === "all" && !termo && recorte.tipo === "nenhum" && (
             <EmptyContent>
               <Button size="sm" onClick={() => setShowCreate(true)} className="cursor-pointer">
                 <Plus className="size-4 mr-2" /> Criar Evento

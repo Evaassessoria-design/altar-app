@@ -8,7 +8,7 @@ import { pecasForaDeUso } from "./lib/condicaoDoAcervo";
 import { canceladosDoUsuario, paraCalculo } from "./lib/reservasDoAcervo";
 import { effectivePurchaseStatus, isOverdue, isPendingStatus } from "./lib/purchaseStatus";
 import { aguardandoEntrega } from "./lib/panoramaDeCompras";
-import { dataDoDia, dataDoDiaNoFuso, dataEmDias, faixaDoMes } from "./lib/dataDoDia";
+import { dataDoDia, dataDoDiaNoFuso, dataEmDias, faixaDoMes, ultimoDiaDoMes } from "./lib/dataDoDia";
 import { resumirFornecedores } from "./lib/eventSummary";
 import { fornecedoresDaDecoradora } from "./lib/escopoDecoradora";
 
@@ -44,11 +44,16 @@ export const getDashboardStats = query({
     // E o mês é o do NEGÓCIO (fuso de Configurações, padrão São Paulo): é
     // dinheiro, e pelo relógio UTC o dia 1º começava às 21h do último dia do
     // mês anterior em Brasília — o mesmo critério do Financeiro e do vencido.
-    const monthStart = `${dataDoDiaNoFuso(now, user.timezone).slice(0, 7)}-01`;
+    const mesDaReceita = dataDoDiaNoFuso(now, user.timezone).slice(0, 7);
+    const monthStart = `${mesDaReceita}-01`;
+    // O mês TERMINA. Sem o teto, uma parcela de novembro já paga entrava na
+    // "Receita do Mês" de outubro — e no Financeiro do mesmo mês ela não
+    // aparecia: o atalho do card levaria a uma lista que não fecha a soma.
+    const monthEnd = ultimoDiaDoMes(new Date(`${monthStart}T12:00:00Z`));
     const monthTransactions = await ctx.db
       .query("transactions")
       .withIndex("by_user_date", (q) =>
-        q.eq("userId", user._id).gte("date", monthStart),
+        q.eq("userId", user._id).gte("date", monthStart).lte("date", monthEnd),
       )
       .collect();
     const revenueThisMonth = monthTransactions
@@ -68,14 +73,15 @@ export const getDashboardStats = query({
     };
 
     // Events per month (last 6 months)
-    const months: { label: string; count: number; revenue: number }[] = [];
+    const months: { label: string; count: number; revenue: number; mes: string }[] = [];
     for (let i = 5; i >= 0; i--) {
       const { inicio: start, fim: end, rotulo: label } = faixaDoMes(-i, now);
       const count = allEvents.filter((e) => e.date >= start && e.date <= end).length;
       const revenue = allEvents
         .filter((e) => e.date >= start && e.date <= end)
         .reduce((s, e) => s + (e.budget ?? 0), 0);
-      months.push({ label, count, revenue });
+      // "AAAA-MM": o destino da barra é a lista de eventos DESTE mês.
+      months.push({ label, count, revenue, mes: start.slice(0, 7) });
     }
 
     // Pending checklist items across all upcoming events (next 30 days)
@@ -83,14 +89,34 @@ export const getDashboardStats = query({
     const urgentEvents = upcoming.filter((e) => e.date <= in30Days);
     let pendingChecklistCount = 0;
     const urgentTasks: { eventName: string; eventDate: string; itemName: string; phase: string }[] = [];
+    // O RECORTE de cada número, evento a evento: é o destino do atalho do
+    // card. Antes a contagem olhava só os 5 primeiros eventos (e as compras,
+    // os 10 primeiros) — em semana cheia o card dizia menos do que havia, e
+    // nenhuma lista conseguiria fechar com ele.
+    const checklistPorEvento: {
+      eventId: Id<"events">;
+      nome: string;
+      data: string;
+      pre: number;
+      post: number;
+    }[] = [];
 
-    for (const ev of urgentEvents.slice(0, 5)) {
+    for (const ev of urgentEvents) {
       const items = await ctx.db
         .query("checklistItems")
         .withIndex("by_event", (q) => q.eq("eventId", ev._id))
         .collect();
       const unchecked = items.filter((i) => !i.isChecked);
       pendingChecklistCount += unchecked.length;
+      if (unchecked.length > 0) {
+        checklistPorEvento.push({
+          eventId: ev._id,
+          nome: ev.name,
+          data: ev.date,
+          pre: unchecked.filter((i) => i.phase !== "post").length,
+          post: unchecked.filter((i) => i.phase === "post").length,
+        });
+      }
       for (const item of unchecked.slice(0, 3)) {
         urgentTasks.push({
           eventName: ev.name,
@@ -103,7 +129,8 @@ export const getDashboardStats = query({
 
     // Pending purchases (not yet purchased) across upcoming events
     let pendingPurchasesCount = 0;
-    for (const ev of urgentEvents.slice(0, 10)) {
+    const comprasPorEvento: { eventId: Id<"events">; nome: string; data: string; pendentes: number }[] = [];
+    for (const ev of urgentEvents) {
       const items = await ctx.db
         .query("purchaseItems")
         .withIndex("by_event", (q) => q.eq("eventId", ev._id))
@@ -112,9 +139,11 @@ export const getDashboardStats = query({
       // decoradora tirou da lista continuava inflando o número do painel, e o
       // Quadro de Atenção (que já usava esta regra) mostrava outro valor para
       // o mesmo evento. A verdade é a situação efetiva do item.
-      pendingPurchasesCount += items.filter((i) =>
-        isPendingStatus(effectivePurchaseStatus(i)),
-      ).length;
+      const pendentes = items.filter((i) => isPendingStatus(effectivePurchaseStatus(i))).length;
+      pendingPurchasesCount += pendentes;
+      if (pendentes > 0) {
+        comprasPorEvento.push({ eventId: ev._id, nome: ev.name, data: ev.date, pendentes });
+      }
     }
 
     return {
@@ -129,6 +158,11 @@ export const getDashboardStats = query({
       pendingChecklistCount,
       pendingPurchasesCount,
       urgentTasks: urgentTasks.slice(0, 8),
+      // Os recortes, para os atalhos dos cards (ver a tela).
+      mesDaReceita,
+      ate30Dias: in30Days,
+      checklistPorEvento,
+      comprasPorEvento,
     };
   },
 });

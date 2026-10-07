@@ -5,7 +5,7 @@ import { ConvexError } from "convex/values";
 import { getOwnedEvent, requireEventOwner, requireUser } from "./lib/identity";
 import { emCentavos, motivoDoValorInvalido, somaEmDinheiro } from "./lib/dinheiro";
 import { dinheiroVencido } from "./lib/dinheiroVencido";
-import { dataDoDiaNoFuso, faixaDoMes, fusoDoNegocio } from "./lib/dataDoDia";
+import { dataDoDiaNoFuso, faixaDoMes, fusoDoNegocio, ultimoDiaDoMes } from "./lib/dataDoDia";
 import { requireActiveAccess } from "./lib/accessGuard";
 import { safeDeleteFile } from "./lib/cascade";
 import { limparCampos } from "./lib/limparCampos";
@@ -59,16 +59,30 @@ function exigirValor(valor: number) {
 export const LIMITE_DO_LIVRO = 500;
 
 export const listTransactions = query({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    /**
+     * "AAAA-MM": só os lançamentos com data (vencimento) neste mês — o atalho
+     * da "Receita do Mês" do Dashboard. Na CONSULTA, e não na tela: filtrar os
+     * 500 já carregados esconderia o mês que caiu fora do corte.
+     */
+    mes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
     const user = await requireUser(ctx);
+    const mes = args.mes && /^\d{4}-(0[1-9]|1[0-2])$/.test(args.mes) ? args.mes : undefined;
+    const inicio = mes ? `${mes}-01` : undefined;
+    const fim = inicio ? ultimoDiaDoMes(new Date(`${inicio}T12:00:00Z`)) : undefined;
     // Pelo índice de DATA e em ordem decrescente: os mais recentes são os que
     // a tela mostra primeiro, e assim o corte cai no passado distante em vez
     // de cair onde ela está olhando. Ordenar depois de `collect()` exigia ler
     // tudo para jogar fora quase tudo.
     const itens = await ctx.db
       .query("transactions")
-      .withIndex("by_user_date", (q) => q.eq("userId", user._id))
+      .withIndex("by_user_date", (q) =>
+        inicio && fim
+          ? q.eq("userId", user._id).gte("date", inicio).lte("date", fim)
+          : q.eq("userId", user._id),
+      )
       .order("desc")
       .take(LIMITE_DO_LIVRO + 1);
 
@@ -79,6 +93,7 @@ export const listTransactions = query({
       // O Financeiro registra recebimento com a data de "hoje" — a do NEGÓCIO,
       // a mesma da aba Pagamentos da cliente (ver lib/dataDoDia.ts).
       fuso: fusoDoNegocio(user.timezone),
+      mes: mes ?? null,
     };
   },
 });

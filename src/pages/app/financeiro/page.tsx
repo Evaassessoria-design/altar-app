@@ -70,7 +70,8 @@ import {
 import { useEnvioDeArquivo } from "@/hooks/use-upload.ts";
 import { dataDoDiaNoFuso } from "@/convex/lib/dataDoDia.ts";
 import { dicaDeTamanho } from "@/convex/lib/arquivos.ts";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { nomeDoMes } from "@/lib/recorte-de-eventos.ts";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -456,7 +457,12 @@ export default function FinanceiroPage() {
   const eventos = useQuery(api.events.list, {});
   const nomeDoEvento = (id?: string) =>
     id ? (eventos ?? []).find((e) => e._id === id)?.name : undefined;
-  const livro = useQuery(api.financeiro.listTransactions, {});
+  // ?mes=AAAA-MM — o atalho da "Receita do Mês" do Dashboard. O servidor
+  // valida e devolve o mês que de fato aplicou (`livro.mes`).
+  const [params, setParams] = useSearchParams();
+  const mesPedido = params.get("mes") ?? undefined;
+  const livro = useQuery(api.financeiro.listTransactions, mesPedido ? { mes: mesPedido } : {});
+  const mesDoLivro = livro?.mes ?? null;
   // A tela continua trabalhando com a lista; o que mudou é que ela agora SABE
   // quando o livro não coube inteiro, e diz. Ver `LIMITE_DO_LIVRO`.
   const transactions = livro?.itens;
@@ -651,6 +657,28 @@ export default function FinanceiroPage() {
 
       {/* Transaction list */}
       <div>
+        {/* O RECORTE DO MÊS, com a soma que fecha com o card do Dashboard:
+            receitas PAGAS com data no mês (o mesmo critério de lá). Os cards
+            do topo continuam sendo da conta inteira — por isso o aviso diz
+            de qual número ele é. */}
+        {mesDoLivro && transactions && (
+          <div className="mb-3 flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+            <p className="flex-1">
+              Lançamentos com data em {nomeDoMes(mesDoLivro)}.{" "}
+              <span className="text-muted-foreground">
+                Receitas pagas: {fmt(transactions.filter((t) => t.type === "income" && t.isPaid).reduce((a, t) => a + t.amount, 0))}
+                {" "}· Despesas pagas: {fmt(transactions.filter((t) => t.type === "expense" && t.isPaid).reduce((a, t) => a + t.amount, 0))}
+                {livroCortado && " (há mais lançamentos neste mês além dos carregados)"}
+              </span>
+            </p>
+            <button
+              onClick={() => setParams({})}
+              className="text-xs text-primary hover:underline cursor-pointer min-h-9 px-1"
+            >
+              Ver todos os meses
+            </button>
+          </div>
+        )}
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h2 className="font-semibold">
             Lançamentos

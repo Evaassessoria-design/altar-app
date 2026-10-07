@@ -74,8 +74,16 @@ async function cenario() {
         description: desc, amount: 250000, date: "2026-10-10", isPaid: false,
       });
 
+    // Receita AVULSA (sem evento): a baixa manual vale para ela. Parcela de
+    // evento só se baixa por recebimento — ver `exigirBaixaPorRecebimento` e
+    // `pagamentos.evento.test.ts`.
+    const avulsa = await ctx.db.insert("transactions", {
+      userId: donaId, type: "income" as const, category: "Outros",
+      description: "Consultoria avulsa", amount: 1500, date: "2026-10-10", isPaid: false,
+    });
+
     return {
-      donaId, marina, eventoAlheio,
+      donaId, marina, eventoAlheio, avulsa,
       parcela: await parcela(donaId, marina, "Parcela 3/10"),
       outraParcela: await parcela(donaId, marina, "Parcela 4/10"),
       parcelaAlheia: await parcela(rivalId, eventoAlheio, "Parcela da rival"),
@@ -198,19 +206,19 @@ describe("comprovante NÃO mexe no status, e vice-versa", () => {
     const { dona, ids, guardar, linha } = await cenario();
     const arquivo = await guardar("pix");
     await dona.mutation(api.financeiro.anexarComprovante, {
-      id: ids.parcela, storageId: arquivo, filename: "pix.pdf",
+      id: ids.avulsa, storageId: arquivo, filename: "pix.pdf",
     });
-    await dona.mutation(api.financeiro.registrarPagamento, { id: ids.parcela, isPaid: true });
-    await dona.mutation(api.financeiro.removerComprovante, { id: ids.parcela, storageId: arquivo });
-    expect((await linha(ids.parcela))!.isPaid).toBe(true);
+    await dona.mutation(api.financeiro.registrarPagamento, { id: ids.avulsa, isPaid: true });
+    await dona.mutation(api.financeiro.removerComprovante, { id: ids.avulsa, storageId: arquivo });
+    expect((await linha(ids.avulsa))!.isPaid).toBe(true);
   });
 
   it("marcar como pago NÃO exige comprovante", async () => {
     const { dona, ids, linha } = await cenario();
     await dona.mutation(api.financeiro.registrarPagamento, {
-      id: ids.parcela, isPaid: true, paidAt: "2026-10-08", paymentMethod: "PIX",
+      id: ids.avulsa, isPaid: true, paidAt: "2026-10-08", paymentMethod: "PIX",
     });
-    const tx = (await linha(ids.parcela))!;
+    const tx = (await linha(ids.avulsa))!;
     expect(tx.isPaid).toBe(true);
     expect(tx.comprovantes ?? []).toHaveLength(0);
   });
@@ -220,10 +228,10 @@ describe("o fechamento do recebimento", () => {
   it("guarda quando entrou, como entrou e a observação", async () => {
     const { dona, ids, linha } = await cenario();
     await dona.mutation(api.financeiro.registrarPagamento, {
-      id: ids.parcela, isPaid: true, paidAt: "2026-10-08",
+      id: ids.avulsa, isPaid: true, paidAt: "2026-10-08",
       paymentMethod: "PIX", notes: "Pago pela mãe da noiva",
     });
-    const tx = (await linha(ids.parcela))!;
+    const tx = (await linha(ids.avulsa))!;
     expect(tx.paidAt).toBe("2026-10-08");
     expect(tx.paymentMethod).toBe("PIX");
     expect(tx.notes).toBe("Pago pela mãe da noiva");
@@ -266,8 +274,8 @@ describe("o fechamento do recebimento", () => {
     // Dar baixa hoje num PIX que caiu semana passada gravaria data errada, e
     // data errada em financeiro é pior que data ausente.
     const { dona, ids, linha } = await cenario();
-    await dona.mutation(api.financeiro.togglePaid, { id: ids.parcela });
-    const tx = (await linha(ids.parcela))!;
+    await dona.mutation(api.financeiro.togglePaid, { id: ids.avulsa });
+    const tx = (await linha(ids.avulsa))!;
     expect(tx.isPaid).toBe(true);
     expect(tx.paidAt).toBeUndefined();
   });

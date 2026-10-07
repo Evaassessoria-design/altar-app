@@ -273,7 +273,7 @@ describe("correção: anular, nunca apagar", () => {
     ).rejects.toThrow(/recebimentos registrados/);
     await expect(
       c.dona.mutation(api.financeiro.updateTransaction, { id: c.ids.p1, isPaid: true }),
-    ).rejects.toThrow(/recebimentos registrados/);
+    ).rejects.toThrow(/recebimentos registrados|Registrar recebimento/);
     // Forma e observação continuam editáveis: não são a baixa.
     await c.dona.mutation(api.financeiro.registrarPagamento, { id: c.ids.p1, paymentMethod: "PIX", notes: "ok" });
   });

@@ -1048,9 +1048,10 @@ export default defineSchema({
      */
     recebimentos: v.optional(v.array(recebimentoDeParcela)),
     /**
-     * Chave do planejamento que criou esta parcela. AUSENTE = criada de outra
-     * forma (à mão, pela leitura do contrato). Serve só para o mesmo
-     * planejamento enviado duas vezes não criar as parcelas em dobro.
+     * Chave do FORMULÁRIO que criou esta linha — o planejamento de parcelas ou
+     * o Novo lançamento do Financeiro. AUSENTE = criada sem chave (leitura do
+     * contrato, compra, lançamento antigo). Serve só para o mesmo envio
+     * repetido não criar a linha em dobro; ninguém lê isto para calcular.
      */
     chaveDoPlanejamento: v.optional(v.string()),
     /**

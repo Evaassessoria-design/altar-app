@@ -10,7 +10,14 @@ import { describe, expect, it } from "vitest";
 // como o envio não se repete.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const fonte = readFileSync("src/pages/app/events/[id]/_components/pagamentos-da-cliente.tsx", "utf-8")
+// A aba e os diálogos de recebimento que ela divide com o Financeiro geral
+// (src/components/financeiro/recebimentos.tsx): as travas valem para os dois.
+const fonte = [
+  "src/pages/app/events/[id]/_components/pagamentos-da-cliente.tsx",
+  "src/components/financeiro/recebimentos.tsx",
+]
+  .map((f) => readFileSync(f, "utf-8"))
+  .join("\n")
   .split("\n")
   .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
   .join("\n");
@@ -118,7 +125,7 @@ describe("o envio não se repete", () => {
 describe("celular", () => {
   it("um diálogo por vez — nada empilhado", () => {
     expect(fonte).toContain("const [aberto, setAberto] = useState<Aberto>(null);");
-    for (const tipo of ["receber", "anular", "contratado", "planejar"]) {
+    for (const tipo of ["receber", "anular", "anexar", "contratado", "planejar"]) {
       expect(fonte).toContain(`aberto?.tipo === "${tipo}"`);
     }
   });

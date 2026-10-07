@@ -73,7 +73,13 @@ export const listTransactions = query({
       .take(LIMITE_DO_LIVRO + 1);
 
     const temMais = itens.length > LIMITE_DO_LIVRO;
-    return { itens: temMais ? itens.slice(0, LIMITE_DO_LIVRO) : itens, temMais };
+    return {
+      itens: temMais ? itens.slice(0, LIMITE_DO_LIVRO) : itens,
+      temMais,
+      // O Financeiro registra recebimento com a data de "hoje" — a do NEGÓCIO,
+      // a mesma da aba Pagamentos da cliente (ver lib/dataDoDia.ts).
+      fuso: fusoDoNegocio(user.timezone),
+    };
   },
 });
 
@@ -196,6 +202,22 @@ export const addTransaction = mutation({
     isPaid: v.boolean(),
     notes: v.optional(v.string()),
     eventId: v.optional(v.id("events")),
+    /** Quando o dinheiro entrou/saiu — só faz sentido com `isPaid`. */
+    paidAt: v.optional(v.string()),
+    paymentMethod: v.optional(v.string()),
+    /**
+     * Arquivo já enviado ao storage. Com `isPaid` é o comprovante; sem, é um
+     * documento do lançamento — e em nenhum caso dá baixa.
+     */
+    anexo: v.optional(
+      v.object({
+        storageId: v.id("_storage"),
+        filename: v.string(),
+        contentType: v.optional(v.string()),
+      }),
+    ),
+    /** Chave do formulário: o mesmo envio repetido não cria dois lançamentos. */
+    chave: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // `eventId` é opcional (lançamento avulso). Quando vier, tem que ser de um
@@ -207,10 +229,73 @@ export const addTransaction = mutation({
     // qualquer coisa que não comece com número. Um `NaN` gravado aqui não
     // estraga a própria linha: estraga toda soma do Financeiro, para sempre.
     exigirValor(args.amount);
+
+    // ── O MESMO ENVIO DE NOVO ─────────────────────────────────────────────
+    // Resposta perdida, toque duplo: o formulário reenvia com a MESMA chave e
+    // recebe o lançamento que já foi criado. Os recentes bastam — a repetição
+    // acontece em segundos, não meses depois.
+    const chave = args.chave?.trim() || undefined;
+    if (chave) {
+      const recentes = await ctx.db
+        .query("transactions")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .order("desc")
+        .take(50);
+      const ja = recentes.find((t) => t.chaveDoPlanejamento === chave);
+      if (ja) return ja._id;
+    }
+
+    if (args.paidAt !== undefined && !dataValida(args.paidAt)) {
+      recusar("DATA_INVALIDA", "Informe a data em que o pagamento aconteceu.");
+    }
+    const comprovantes = args.anexo
+      ? [await comprovanteValidado(ctx, args.anexo)]
+      : undefined;
+    const { anexo: _anexo, chave: _chave, paidAt, paymentMethod, ...campos } = args;
+    const forma = paymentMethod?.trim() || undefined;
+
+    // ── RECEITA DE EVENTO "JÁ RECEBIDA" VIRA UM RECEBIMENTO ───────────────
+    // Receita de evento só se baixa por recebimento (ver `exigirBaixaPorRecebimento`).
+    // Marcar "já recebido" no cadastro não pode ser a porta lateral: o valor
+    // entra como um recebimento de verdade, com data, forma e o comprovante
+    // ligado a ele — e o histórico da aba Pagamentos da cliente o mostra.
+    if (args.type === "income" && args.eventId && args.isPaid) {
+      const valor = emCentavos(args.amount);
+      if (valor <= 0) recusar("VALOR_INVALIDO", "O valor recebido precisa ser maior que zero.");
+      const recebimento = {
+        id: crypto.randomUUID(),
+        valor,
+        data: (paidAt ?? args.date).slice(0, 10),
+        forma,
+        comprovanteStorageId: args.anexo?.storageId,
+        registradoEm: new Date().toISOString(),
+        chave: chave ?? crypto.randomUUID(),
+      };
+      if (!dataValida(recebimento.data)) recusar("DATA_INVALIDA", "Informe a data em que o dinheiro entrou.");
+      const baixa = baixaDerivada({ amount: valor, isPaid: false, recebimentos: [recebimento] });
+      return ctx.db.insert("transactions", {
+        userId: user._id,
+        ...campos,
+        amount: valor,
+        isPaid: baixa.isPaid,
+        paidAt: baixa.paidAt,
+        paymentMethod: forma,
+        recebimentos: [recebimento],
+        comprovantes,
+        chaveDoPlanejamento: chave,
+      });
+    }
+
     return ctx.db.insert("transactions", {
       userId: user._id,
-      ...args,
+      ...campos,
       amount: emCentavos(args.amount),
+      // Data e forma só valem para o que JÁ foi pago: num pendente seriam a
+      // tela afirmando um pagamento que não aconteceu.
+      paidAt: args.isPaid ? paidAt?.slice(0, 10) : undefined,
+      paymentMethod: args.isPaid ? forma : undefined,
+      comprovantes,
+      chaveDoPlanejamento: chave,
     });
   },
 });
@@ -240,8 +325,11 @@ export const updateTransaction = mutation({
     // valor não desce abaixo do que já entrou: a parcela ficaria "recebida a
     // mais", um número que o histórico não explica.
     const comRecebimentos = (tx.recebimentos?.length ?? 0) > 0;
+    if (fields.isPaid === true && !tx.isPaid) exigirBaixaPorRecebimento(tx);
     if (comRecebimentos) {
-      if (fields.isPaid !== undefined) exigirSemRecebimentos(tx, "marcar como pago");
+      if (fields.isPaid !== undefined && fields.isPaid !== tx.isPaid) {
+        exigirSemRecebimentos(tx, "marcar como pago");
+      }
       if (fields.amount !== undefined && paraCentavos(fields.amount) < recebidoEmCentavos(tx)) {
         recusar("ABAIXO_DO_RECEBIDO", "O valor não pode ficar menor do que já foi recebido nesta parcela.");
       }
@@ -264,6 +352,7 @@ export const togglePaid = mutation({
     if (!tx || tx.userId !== user._id)
       throw new ConvexError({ message: "Lançamento não encontrado", code: "NOT_FOUND" });
     exigirSemRecebimentos(tx, "marcar ou desmarcar como pago");
+    if (!tx.isPaid) exigirBaixaPorRecebimento(tx);
     await ctx.db.patch(args.id, { isPaid: !tx.isPaid });
   },
 });
@@ -351,6 +440,7 @@ export const registrarPagamento = mutation({
     if (args.isPaid !== undefined || args.paidAt !== undefined) {
       exigirSemRecebimentos(tx, "mudar a baixa");
     }
+    if (args.isPaid === true && !tx.isPaid) exigirBaixaPorRecebimento(tx);
     const { id, ...campos } = args;
     const limpo = limparCampos({
       ...campos,
@@ -603,6 +693,83 @@ function exigirSemRecebimentos(tx: { recebimentos?: readonly unknown[] }, acao: 
     );
   }
 }
+
+/**
+ * Receita de EVENTO só se dá baixa por recebimento.
+ *
+ * Sem isto, "Já recebido", a baixa rápida e a edição marcavam a parcela como
+ * paga sem nenhum recebimento: o dinheiro aparecia como entrado, a aba
+ * Pagamentos da cliente não tinha histórico para mostrar, e não havia o que
+ * anular se estivesse errado. Desmarcar uma baixa ANTIGA (sem recebimentos)
+ * continua livre — é a correção de um dado legado, não um atalho.
+ *
+ * Despesa e receita avulsa (sem evento) seguem como sempre.
+ */
+function exigirBaixaPorRecebimento(tx: { type: string; eventId?: unknown }) {
+  if (tx.type === "income" && tx.eventId) {
+    recusar(
+      "USE_RECEBIMENTO",
+      'Receita de evento é baixada por "Registrar recebimento", que guarda data, forma e ' +
+        "comprovante no histórico. Use essa opção no Financeiro ou na aba Pagamentos da cliente.",
+    );
+  }
+}
+
+/** Confere o arquivo no storage (existe, cabe no teto) e monta o comprovante. */
+async function comprovanteValidado(
+  ctx: MutationCtx,
+  c: { storageId: Id<"_storage">; filename: string; contentType?: string },
+) {
+  await exigirArquivoGuardadoNoTeto(ctx, c.storageId);
+  return {
+    storageId: c.storageId,
+    filename: c.filename.trim() || "comprovante",
+    contentType: c.contentType?.trim() || undefined,
+    uploadedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Comprovante para um recebimento JÁ registrado — sem registrar o dinheiro
+ * de novo.
+ *
+ * Valor, data, saldo e baixa não mudam: só o arquivo entra na lista da
+ * parcela e, se o recebimento ainda não tinha comprovante, passa a apontar
+ * para este. Recebimento anulado não recebe comprovante — ele não conta mais.
+ */
+export const anexarComprovanteAoRecebimento = mutation({
+  args: {
+    id: v.id("transactions"),
+    recebimentoId: v.string(),
+    storageId: v.id("_storage"),
+    filename: v.string(),
+    contentType: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const tx = await meuLancamento(ctx, user, args.id);
+    const recebimentos = tx.recebimentos ?? [];
+    const alvo = recebimentos.find((r) => r.id === args.recebimentoId);
+    if (!alvo) recusar("NOT_FOUND", "Recebimento não encontrado");
+    if (alvo.anulacao) recusar("ANULADO", "Este recebimento foi anulado e não recebe comprovante.");
+
+    const atuais = tx.comprovantes ?? [];
+    const jaNaLista = atuais.some((c) => c.storageId === args.storageId);
+    if (!jaNaLista && atuais.length >= LIMITE_DE_COMPROVANTES) {
+      recusar("LIMITE", `Um lançamento aceita até ${LIMITE_DE_COMPROVANTES} comprovantes.`);
+    }
+    const comprovantes = jaNaLista
+      ? atuais
+      : [...atuais, await comprovanteValidado(ctx, args)];
+    await ctx.db.patch(args.id, {
+      comprovantes,
+      recebimentos: recebimentos.map((r) =>
+        r.id === alvo.id && !r.comprovanteStorageId ? { ...r, comprovanteStorageId: args.storageId } : r,
+      ),
+    });
+    return { total: comprovantes.length };
+  },
+});
 
 /**
  * Os pagamentos do cliente de UM evento: o valor contratado e as parcelas.

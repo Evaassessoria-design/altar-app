@@ -31,7 +31,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.tsx";
-import { useEnvioDeArquivo } from "@/hooks/use-upload.ts";
+import {
+  AnexarComprovanteAoRecebimento,
+  AnularRecebimento,
+  RegistrarRecebimento,
+} from "@/components/financeiro/recebimentos.tsx";
+import { campo, mensagem, novaChave, reais } from "@/lib/recebimentos.ts";
 import { FORMAS_DE_PAGAMENTO, MIMES_DE_COMPROVANTE, TIPOS_DE_COMPROVANTE } from "@/lib/comprovante-financeiro.ts";
 import { formatDateInput } from "@/lib/event-date.ts";
 import { dataDoDiaNoFuso } from "@/convex/lib/dataDoDia.ts";
@@ -73,14 +78,8 @@ import {
 // um atrás do outro e prendem o foco no de baixo.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const reais = (centavos: number) =>
-  deCentavos(centavos).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-/** Chave do envio. Uma por abertura de formulário — o reenvio repete a mesma. */
-const novaChave = () => crypto.randomUUID();
 
-const mensagem = (e: unknown, padrao: string) =>
-  e instanceof ConvexError ? (e.data as { message: string }).message : padrao;
 
 type Dados = NonNullable<ReturnType<typeof useQuery<typeof api.financeiro.pagamentosDoEvento>>>;
 type Parcela = Dados["parcelas"][number];
@@ -88,6 +87,7 @@ type Parcela = Dados["parcelas"][number];
 type Aberto =
   | { tipo: "receber"; parcela: Parcela }
   | { tipo: "anular"; parcela: Parcela; recebimento: Recebimento }
+  | { tipo: "anexar"; parcela: Parcela; recebimento: Recebimento }
   | { tipo: "contratado" }
   | { tipo: "planejar" }
   | null;
@@ -320,12 +320,24 @@ export function PagamentosDaCliente({ eventId }: { eventId: Id<"events"> }) {
                           {r.anulacao ? (
                             <span className="text-muted-foreground break-words">Anulado: {r.anulacao.motivo}</span>
                           ) : (
-                            <button
-                              onClick={() => setAberto({ tipo: "anular", parcela: p, recebimento: r })}
-                              className="h-8 px-2 text-muted-foreground hover:text-destructive cursor-pointer"
-                            >
-                              Anular
-                            </button>
+                            <span className="flex flex-wrap gap-1">
+                              {/* Comprovante depois: o recebimento já está
+                                  registrado, e só o arquivo entra. */}
+                              {!r.comprovanteStorageId && (
+                                <button
+                                  onClick={() => setAberto({ tipo: "anexar", parcela: p, recebimento: r })}
+                                  className="h-9 px-2 text-primary hover:underline cursor-pointer inline-flex items-center gap-1"
+                                >
+                                  <Paperclip className="size-3" /> Anexar comprovante
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setAberto({ tipo: "anular", parcela: p, recebimento: r })}
+                                className="h-9 px-2 text-muted-foreground hover:text-destructive cursor-pointer"
+                              >
+                                Anular
+                              </button>
+                            </span>
                           )}
                         </li>
                       ))}
@@ -340,6 +352,13 @@ export function PagamentosDaCliente({ eventId }: { eventId: Id<"events"> }) {
 
       {aberto?.tipo === "receber" && (
         <RegistrarRecebimento parcela={aberto.parcela} hoje={hoje} onClose={() => setAberto(null)} />
+      )}
+      {aberto?.tipo === "anexar" && (
+        <AnexarComprovanteAoRecebimento
+          parcela={aberto.parcela}
+          recebimento={aberto.recebimento}
+          onClose={() => setAberto(null)}
+        />
       )}
       {aberto?.tipo === "anular" && (
         <AnularRecebimento parcela={aberto.parcela} recebimento={aberto.recebimento} onClose={() => setAberto(null)} />
@@ -484,216 +503,6 @@ function Numero({
       {nota && <p className="text-[11px] text-muted-foreground">{nota}</p>}
       {acao}
     </div>
-  );
-}
-
-const campo =
-  "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring";
-
-function RegistrarRecebimento({ parcela, hoje, onClose }: { parcela: Parcela; hoje: string; onClose: () => void }) {
-  const registrar = useMutation(api.financeiro.registrarRecebimento);
-  const gerarUrl = useMutation(api.financeiro.generateUploadUrl);
-  const { enviar, progresso } = useEnvioDeArquivo(gerarUrl, { tipo: "documento", aceitos: MIMES_DE_COMPROVANTE });
-  const saldo = saldoEmCentavos(parcela);
-  // UMA chave por abertura: clicar de novo, ou a rede reenviar, repete a
-  // mesma — e o servidor devolve o recebimento que já gravou.
-  const chave = useMemo(novaChave, []);
-  const [valor, setValor] = useState(deCentavos(saldo).toFixed(2).replace(".", ","));
-  const [data, setData] = useState(hoje);
-  const [forma, setForma] = useState(parcela.paymentMethod ?? "");
-  const [arquivo, setArquivo] = useState<File | null>(null);
-  const [salvando, setSalvando] = useState(false);
-  // Ref, não só estado: dois toques no mesmo instante leem o estado antigo.
-  const emCurso = useRef(false);
-  // O comprovante já subido não sobe de novo se o registro falhar e a pessoa
-  // tentar outra vez.
-  const comprovanteSubido = useRef<{ storageId: Id<"_storage">; filename: string; contentType?: string } | null>(null);
-
-  const numero = valorDigitado(valor);
-  const centavos = numero === null ? null : paraCentavos(numero);
-  const erro =
-    centavos === null || centavos <= 0
-      ? "Informe um valor maior que zero."
-      : centavos > saldo
-        ? `O saldo desta parcela é ${reais(saldo)}. Registre no máximo o saldo. Pagamento acima do combinado não é registrado aqui; a parcela e o contratado só mudam quando o acordo com a cliente mudar de fato.`
-        : !dataValida(data)
-          ? "Informe a data em que o dinheiro entrou."
-          : null;
-
-  const salvar = async () => {
-    if (emCurso.current || erro) return;
-    emCurso.current = true;
-    setSalvando(true);
-    try {
-      if (arquivo && !comprovanteSubido.current) {
-        const envio = await enviar(arquivo);
-        if (!envio.ok) {
-          toast.error(envio.motivo);
-          return;
-        }
-        comprovanteSubido.current = {
-          storageId: envio.storageId,
-          filename: arquivo.name,
-          contentType: arquivo.type || undefined,
-        };
-      }
-      const r = await registrar({
-        id: parcela._id,
-        chave,
-        valor: deCentavos(centavos!),
-        data,
-        forma: forma.trim() || undefined,
-        comprovante: comprovanteSubido.current ?? undefined,
-      });
-      toast.success(r.repetido ? "Este recebimento já estava registrado." : "Recebimento registrado.");
-      onClose();
-    } catch (e) {
-      toast.error(mensagem(e, "Não foi possível registrar o recebimento."));
-    } finally {
-      emCurso.current = false;
-      setSalvando(false);
-    }
-  };
-
-  return (
-    <Dialog open onOpenChange={(o) => !o && !salvando && onClose()}>
-      <DialogContent className="max-w-md max-h-[90dvh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="break-words">Registrar recebimento</DialogTitle>
-          <DialogDescription className="break-words">
-            {parcela.description} · saldo {reais(saldo)} · vence {formatDateInput(parcela.date)}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="rec-valor">Valor recebido (R$)</Label>
-              <Input id="rec-valor" inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="rec-data">Data</Label>
-              <input id="rec-data" type="date" value={data} onChange={(e) => setData(e.target.value)} className={campo} />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="rec-forma">Forma de pagamento</Label>
-            <input
-              id="rec-forma"
-              list="rec-formas"
-              value={forma}
-              onChange={(e) => setForma(e.target.value)}
-              placeholder="PIX, transferência..."
-              className={campo}
-            />
-            <datalist id="rec-formas">
-              {FORMAS_DE_PAGAMENTO.map((f) => (
-                <option key={f} value={f} />
-              ))}
-            </datalist>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="rec-comprovante">Comprovante (opcional)</Label>
-            <input
-              id="rec-comprovante"
-              type="file"
-              accept={TIPOS_DE_COMPROVANTE}
-              onChange={(e) => {
-                setArquivo(e.target.files?.[0] ?? null);
-                comprovanteSubido.current = null;
-              }}
-              className="block w-full text-sm file:mr-3 file:h-9 file:rounded-md file:border file:border-input file:bg-background file:px-3 file:text-sm cursor-pointer"
-            />
-            {progresso !== null && (
-              <p className="text-[11px] text-muted-foreground">Enviando comprovante… {Math.round(progresso * 100)}%</p>
-            )}
-          </div>
-          {erro && valor.trim() !== "" && <p className="text-xs text-destructive">{erro}</p>}
-          <p className="text-[11px] text-muted-foreground">
-            Isto registra o que entrou. Nenhuma cobrança é enviada e nenhum dinheiro é movimentado.
-          </p>
-        </div>
-        <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={onClose} disabled={salvando} className="cursor-pointer h-10 sm:h-9">
-            Cancelar
-          </Button>
-          <Button onClick={() => void salvar()} disabled={salvando || !!erro} className="cursor-pointer h-10 sm:h-9">
-            {salvando ? "Registrando..." : "Registrar"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function AnularRecebimento({
-  parcela,
-  recebimento,
-  onClose,
-}: {
-  parcela: Parcela;
-  recebimento: Recebimento;
-  onClose: () => void;
-}) {
-  const anular = useMutation(api.financeiro.anularRecebimento);
-  const [motivo, setMotivo] = useState("");
-  const [salvando, setSalvando] = useState(false);
-  const emCurso = useRef(false);
-
-  const salvar = async () => {
-    if (emCurso.current || !motivo.trim()) return;
-    emCurso.current = true;
-    setSalvando(true);
-    try {
-      await anular({ id: parcela._id, recebimentoId: recebimento.id, motivo });
-      toast.success("Recebimento anulado. Ele continua no histórico.");
-      onClose();
-    } catch (e) {
-      toast.error(mensagem(e, "Não foi possível anular."));
-    } finally {
-      emCurso.current = false;
-      setSalvando(false);
-    }
-  };
-
-  return (
-    <Dialog open onOpenChange={(o) => !o && !salvando && onClose()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Anular recebimento</DialogTitle>
-          <DialogDescription className="break-words">
-            {reais(paraCentavos(recebimento.valor))} em {formatDateInput(recebimento.data)} · {parcela.description}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-2">
-          <Label htmlFor="anular-motivo">Por que este registro está errado?</Label>
-          <Textarea
-            id="anular-motivo"
-            value={motivo}
-            onChange={(e) => setMotivo(e.target.value)}
-            placeholder="Valor digitado errado, recebimento lançado na parcela errada..."
-            rows={3}
-            maxLength={500}
-          />
-          <p className="text-[11px] text-muted-foreground">
-            O registro não é apagado: fica no histórico, riscado, e deixa de contar no saldo. Não é
-            estorno bancário. Para corrigir, registre depois o valor certo.
-          </p>
-        </div>
-        <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={onClose} disabled={salvando} className="cursor-pointer h-10 sm:h-9">
-            Cancelar
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => void salvar()}
-            disabled={salvando || !motivo.trim()}
-            className="cursor-pointer h-10 sm:h-9"
-          >
-            {salvando ? "Anulando..." : "Anular"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 

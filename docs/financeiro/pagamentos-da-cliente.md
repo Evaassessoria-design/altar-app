@@ -57,6 +57,27 @@ Dashboard passaram a contar o recebimento parcial.
   nem o do aparelho, nem a virada do UTC às 21h. Agenda e contagem de eventos
   continuam em `dataDoDia` (UTC): não são dinheiro e não entraram na decisão.
 
+## No Financeiro geral
+
+A receita de evento tem no Financeiro geral as MESMAS operações da aba, com os
+mesmos componentes (`src/components/financeiro/recebimentos.tsx`):
+Registrar recebimento, Histórico, Anular e Anexar comprovante a um recebimento
+já registrado. Um recebimento feito numa tela é a mesma linha na outra.
+
+- Receita de evento só se baixa por recebimento. "Já recebido", a baixa rápida,
+  a edição e `registrarPagamento` não marcam paga à mão
+  (`exigirBaixaPorRecebimento`); no Novo lançamento, uma receita de evento
+  "já recebida" vira um recebimento de verdade. Desmarcar uma baixa antiga, sem
+  recebimentos, continua possível.
+- Despesa e receita avulsa seguem com a baixa de sempre.
+- Anexo no Novo lançamento, para receita e despesa: com "Já pago/recebido" o
+  rótulo é "Comprovante (opcional)"; pendente, é "Documento/anexo (opcional)",
+  e anexar não muda a situação.
+- Comprovante depois (`anexarComprovanteAoRecebimento`) não mexe em valor,
+  saldo, baixa nem histórico. Recebimento anulado não recebe comprovante.
+- O Novo lançamento tem chave por abertura: o reenvio não cria duas linhas, e a
+  falha deixa o formulário preenchido.
+
 ## Limites conhecidos
 
 - A leitura do contrato por IA extrai o "Valor total", mas ainda não preenche

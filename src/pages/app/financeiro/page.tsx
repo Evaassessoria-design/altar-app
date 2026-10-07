@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { AutoTextarea } from "@/components/ui/auto-textarea.tsx";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
-import type { Doc } from "@/convex/_generated/dataModel.d.ts";
+import type { Doc, Id } from "@/convex/_generated/dataModel.d.ts";
 import { Button } from "@/components/ui/button.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
@@ -43,7 +43,33 @@ import {
   Check,
   Paperclip,
   ArrowRight,
+  HandCoins,
+  History,
+  MoreVertical,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu.tsx";
+import {
+  AnexarComprovanteAoRecebimento,
+  AnularRecebimento,
+  HistoricoDeRecebimentos,
+  RegistrarRecebimento,
+} from "@/components/financeiro/recebimentos.tsx";
+import { reais } from "@/lib/recebimentos.ts";
+import {
+  COR_DA_SITUACAO,
+  receitaDeEvento,
+  rotuloDaSituacao,
+  situacaoDoLancamento,
+} from "@/lib/situacao-do-lancamento.ts";
+import { useEnvioDeArquivo } from "@/hooks/use-upload.ts";
+import { dataDoDiaNoFuso } from "@/convex/lib/dataDoDia.ts";
+import { dicaDeTamanho } from "@/convex/lib/arquivos.ts";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
@@ -53,12 +79,15 @@ import { ConvexError } from "convex/values";
 import { cn } from "@/lib/utils.ts";
 import { RecebimentoDialog } from "@/components/financeiro/recebimento-dialog.tsx";
 import {
-  deCentavos,
-  estadoDaParcela,
+  recebidoEmCentavos,
   saldoEmCentavos,
   usaRecebimentos,
+  type Recebimento,
 } from "@/convex/lib/pagamentosDoEvento.ts";
 import {
+  FORMAS_DE_PAGAMENTO,
+  MIMES_DE_COMPROVANTE,
+  TIPOS_DE_COMPROVANTE,
   contagemDeComprovantes,
   pagoSemComprovante,
   temComprovante,
@@ -120,18 +149,36 @@ const txSchema = z.object({
 
 type TxFormValues = z.infer<typeof txSchema>;
 
+/** O que o Novo lançamento manda além do formulário. */
+type ExtrasDoLancamento = {
+  chave: string;
+  anexo?: { storageId: Id<"_storage">; filename: string; contentType?: string };
+  paidAt?: string;
+  paymentMethod?: string;
+};
+
 function TxDialog({
-  open,
   onClose,
   defaultValues,
   title,
   onSubmit,
+  novo,
+  receitaDeEvento,
+  hoje,
 }: {
-  open: boolean;
   onClose: () => void;
   defaultValues?: Partial<TxFormValues>;
   title: string;
-  onSubmit: (values: TxFormValues) => Promise<void>;
+  /** `true` = gravou e pode fechar. `false` = falhou: o formulário fica. */
+  onSubmit: (values: TxFormValues, extras: ExtrasDoLancamento) => Promise<boolean>;
+  /** Novo lançamento: anexo, data e forma do pagamento. Edição: não. */
+  novo?: boolean;
+  /**
+   * Receita de evento em edição: "Já recebido" não aparece — a baixa dela é
+   * por recebimento, e o servidor recusa marcar à mão.
+   */
+  receitaDeEvento?: boolean;
+  hoje: string;
 }) {
   const {
     register,
@@ -139,23 +186,59 @@ function TxDialog({
     watch,
     setValue,
     formState: { errors, isSubmitting },
-    reset,
   } = useForm<TxFormValues>({
     resolver: zodResolver(txSchema),
     defaultValues: { type: "income", isPaid: true, ...defaultValues },
   });
 
   const txType = watch("type");
+  const pago = watch("isPaid");
+  // UMA chave por abertura: o diálogo monta a cada "Lançamento" (ver o pai), e
+  // o reenvio depois de uma resposta perdida repete a mesma.
+  const chave = useMemo(() => crypto.randomUUID(), []);
+  const [arquivo, setArquivo] = useState<File | null>(null);
+  const [pagoEm, setPagoEm] = useState(hoje);
+  const [forma, setForma] = useState("");
+  const gerarUrl = useMutation(api.financeiro.generateUploadUrl);
+  // Os mesmos tipos do diálogo de comprovantes: PDF e imagem.
+  const { enviar, progresso } = useEnvioDeArquivo(gerarUrl, { tipo: "documento", aceitos: MIMES_DE_COMPROVANTE });
+  // O arquivo subido não sobe de novo se a gravação falhar e ela tentar outra vez.
+  const subido = useRef<{ nome: string; storageId: Id<"_storage">; contentType?: string } | null>(null);
+  const emCurso = useRef(false);
 
   const submit = async (values: TxFormValues) => {
-    await onSubmit(values);
-    reset();
-    onClose();
+    if (emCurso.current) return;
+    emCurso.current = true;
+    try {
+      let anexo: ExtrasDoLancamento["anexo"];
+      if (novo && arquivo) {
+        if (!subido.current || subido.current.nome !== arquivo.name) {
+          const envio = await enviar(arquivo);
+          if (!envio.ok) {
+            toast.error(envio.motivo);
+            return;
+          }
+          subido.current = { nome: arquivo.name, storageId: envio.storageId, contentType: arquivo.type || undefined };
+        }
+        anexo = { storageId: subido.current.storageId, filename: arquivo.name, contentType: subido.current.contentType };
+      }
+      const ok = await onSubmit(values, {
+        chave,
+        anexo,
+        paidAt: novo && values.isPaid ? pagoEm : undefined,
+        paymentMethod: novo && values.isPaid ? forma.trim() || undefined : undefined,
+      });
+      if (ok) onClose();
+    } finally {
+      emCurso.current = false;
+    }
   };
 
+  const enviandoArquivo = progresso !== null;
+
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md">
+    <Dialog open onOpenChange={(o) => !o && !isSubmitting && onClose()}>
+      <DialogContent className="max-w-md max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
@@ -197,7 +280,7 @@ function TxDialog({
               {errors.category && <p className="text-xs text-destructive">{errors.category.message}</p>}
             </div>
             <div className="space-y-1.5">
-              <Label>Data *</Label>
+              <Label>Vencimento *</Label>
               <Input type="date" {...register("date")} />
               {errors.date && <p className="text-xs text-destructive">{errors.date.message}</p>}
             </div>
@@ -218,21 +301,91 @@ function TxDialog({
             {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
           </div>
 
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setValue("isPaid", !watch("isPaid"))}
-              className={cn(
-                "size-5 rounded border-2 flex items-center justify-center transition-colors cursor-pointer",
-                watch("isPaid") ? "bg-primary border-primary" : "border-border",
+          {receitaDeEvento ? (
+            <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Receita de evento: o que entrou se registra por <strong>Registrar recebimento</strong>,
+              no menu do lançamento — com data, forma e comprovante no histórico.
+            </p>
+          ) : (
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setValue("isPaid", !pago)}
+                aria-pressed={pago}
+                aria-label={txType === "income" ? "Já recebido" : "Já pago"}
+                className={cn(
+                  "size-5 rounded border-2 flex items-center justify-center transition-colors cursor-pointer",
+                  pago ? "bg-primary border-primary" : "border-border",
+                )}
+              >
+                {pago && <Check className="size-3 text-primary-foreground" />}
+              </button>
+              <Label className="cursor-pointer" onClick={() => setValue("isPaid", !pago)}>
+                {txType === "income" ? "Já recebido" : "Já pago"}
+              </Label>
+            </div>
+          )}
+
+          {novo && pago && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="tx-pago-em">{txType === "income" ? "Recebido em" : "Pago em"}</Label>
+                <input
+                  id="tx-pago-em"
+                  type="date"
+                  value={pagoEm}
+                  onChange={(e) => setPagoEm(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="tx-forma">Forma</Label>
+                <input
+                  id="tx-forma"
+                  list="tx-formas"
+                  value={forma}
+                  onChange={(e) => setForma(e.target.value)}
+                  placeholder="PIX, boleto..."
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <datalist id="tx-formas">
+                  {FORMAS_DE_PAGAMENTO.map((f) => (
+                    <option key={f} value={f} />
+                  ))}
+                </datalist>
+              </div>
+            </div>
+          )}
+
+          {novo && (
+            <div className="space-y-1.5">
+              {/* O rótulo diz o que o arquivo É. Pago: o comprovante. Pendente:
+                  um documento (orçamento, boleto, nota) — e anexar NÃO confirma
+                  pagamento nenhum (ver lib/comprovante-financeiro.ts). */}
+              <Label htmlFor="tx-anexo">{pago ? "Comprovante (opcional)" : "Documento/anexo (opcional)"}</Label>
+              <input
+                id="tx-anexo"
+                type="file"
+                accept={TIPOS_DE_COMPROVANTE}
+                onChange={(e) => {
+                  setArquivo(e.target.files?.[0] ?? null);
+                  subido.current = null;
+                }}
+                className="block w-full text-sm file:mr-3 file:h-9 file:rounded-md file:border file:border-input file:bg-background file:px-3 file:text-sm cursor-pointer"
+              />
+              {!pago && (
+                <p className="text-[11px] text-muted-foreground">
+                  Anexar não confirma pagamento: o lançamento continua pendente.
+                </p>
               )}
-            >
-              {watch("isPaid") && <Check className="size-3 text-primary-foreground" />}
-            </button>
-            <Label className="cursor-pointer" onClick={() => setValue("isPaid", !watch("isPaid"))}>
-              {txType === "income" ? "Já recebido" : "Já pago"}
-            </Label>
-          </div>
+              {enviandoArquivo && (
+                <p className="text-[11px] text-muted-foreground" role="status">
+                  Enviando arquivo… {Math.round((progresso ?? 0) * 100)}% — não feche esta janela.
+                </p>
+              )}
+              <p className="text-[11px] text-muted-foreground">{dicaDeTamanho("documento")}</p>
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label>Observações</Label>
@@ -240,9 +393,11 @@ function TxDialog({
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={onClose} className="cursor-pointer">Cancelar</Button>
+            <Button type="button" variant="ghost" onClick={onClose} disabled={isSubmitting} className="cursor-pointer">
+              Cancelar
+            </Button>
             <Button type="submit" disabled={isSubmitting} className="cursor-pointer">
-              {isSubmitting ? "Salvando..." : "Salvar"}
+              {isSubmitting ? (enviandoArquivo ? "Enviando arquivo..." : "Salvando...") : "Salvar"}
             </Button>
           </DialogFooter>
         </form>
@@ -306,6 +461,9 @@ export default function FinanceiroPage() {
   // quando o livro não coube inteiro, e diz. Ver `LIMITE_DO_LIVRO`.
   const transactions = livro?.itens;
   const livroCortado = livro?.temMais ?? false;
+  // "Hoje" no fuso do NEGÓCIO, para a data padrão de recebimento e pagamento
+  // (a mesma da aba Pagamentos da cliente).
+  const hoje = dataDoDiaNoFuso(new Date(), livro?.fuso);
   const addTransaction = useMutation(api.financeiro.addTransaction);
   const updateTransaction = useMutation(api.financeiro.updateTransaction);
   const deleteTransaction = useMutation(api.financeiro.deleteTransaction);
@@ -316,35 +474,49 @@ export default function FinanceiroPage() {
   const [deleting, setDeleting] = useState<Doc<"transactions"> | null>(null);
   const [filter, setFilter] = useState<Filtro>("all");
   const [recebimento, setRecebimento] = useState<Doc<"transactions"> | null>(null);
+  // As operações de recebimento da receita de evento — os MESMOS diálogos da
+  // aba Pagamentos da cliente. Um aberto por vez.
+  const [acao, setAcao] = useState<
+    | { tipo: "receber" | "historico"; id: Id<"transactions"> }
+    | { tipo: "anular" | "anexar"; id: Id<"transactions">; recebimento: Recebimento }
+    | null
+  >(null);
+  // Sempre a linha ATUAL do livro: depois de registrar, o histórico reabre com
+  // o recebimento novo, sem precisar recarregar.
+  const linhaDe = (id: Id<"transactions">) => (transactions ?? []).find((t) => t._id === id);
 
-  const handleCreate = async (values: TxFormValues) => {
+  const handleCreate = async (values: TxFormValues, extras: ExtrasDoLancamento): Promise<boolean> => {
     try {
       const amount = valorDigitado(values.amount);
       // O zod já barrou acima; esta é a rede que impede um `NaN` de sair daqui
       // se alguém mexer no schema. Um `NaN` gravado estraga TODAS as somas.
       if (amount === null) {
         toast.error("Valor não reconhecido. Ex.: 1.500,00");
-        return;
+        return false;
       }
       await addTransaction({
         ...values,
         amount,
         notes: values.notes || undefined,
+        ...extras,
       });
-      toast.success("Lançamento adicionado!");
+      toast.success(extras.anexo ? "Lançamento adicionado com o anexo." : "Lançamento adicionado!");
+      return true;
     } catch (e) {
-      if (e instanceof ConvexError) toast.error((e.data as { message: string }).message);
-      else toast.error("Erro ao salvar lançamento");
+      // Falhou: o diálogo continua aberto com tudo preenchido (e o arquivo já
+      // subido não sobe de novo).
+      toast.error(e instanceof ConvexError ? (e.data as { message: string }).message : "Erro ao salvar lançamento");
+      return false;
     }
   };
 
-  const handleEdit = async (values: TxFormValues) => {
-    if (!editing) return;
+  const handleEdit = async (values: TxFormValues): Promise<boolean> => {
+    if (!editing) return false;
     try {
       const amount = valorDigitado(values.amount);
       if (amount === null) {
         toast.error("Valor não reconhecido. Ex.: 1.500,00");
-        return;
+        return false;
       }
       await updateTransaction({
         id: editing._id,
@@ -354,8 +526,18 @@ export default function FinanceiroPage() {
       });
       toast.success("Lançamento atualizado!");
       setEditing(null);
+      return true;
     } catch (e) {
-      toast.error("Erro ao atualizar lançamento");
+      toast.error(e instanceof ConvexError ? (e.data as { message: string }).message : "Erro ao atualizar lançamento");
+      return false;
+    }
+  };
+
+  const alternarPago = async (tx: Doc<"transactions">) => {
+    try {
+      await togglePaid({ id: tx._id });
+    } catch (e) {
+      toast.error(e instanceof ConvexError ? (e.data as { message: string }).message : "Não foi possível mudar o status.");
     }
   };
 
@@ -366,7 +548,7 @@ export default function FinanceiroPage() {
       toast.success("Lançamento excluído.");
       setDeleting(null);
     } catch (e) {
-      toast.error("Erro ao excluir lançamento");
+      toast.error(e instanceof ConvexError ? (e.data as { message: string }).message : "Erro ao excluir lançamento");
     }
   };
 
@@ -547,30 +729,39 @@ export default function FinanceiroPage() {
           </Empty>
         ) : (
           <div className="space-y-2">
-            {filtered.map((tx) => (
+            {filtered.map((tx) => {
+              const deEvento = receitaDeEvento(tx);
+              const situacao = situacaoDoLancamento(tx);
+              const saldo = tx.type === "income" ? saldoEmCentavos(tx) : 0;
+              const nComprovantes = tx.comprovantes?.length ?? 0;
+              const protegida = usaRecebimentos(tx);
+              return (
               <div
                 key={tx._id}
                 className={cn(
-                  "bg-card border border-border rounded-xl px-4 py-3 flex items-center gap-3",
-                  !tx.isPaid && "opacity-70",
+                  "bg-card border border-border rounded-xl px-3 sm:px-4 py-3 flex items-center gap-2 sm:gap-3",
+                  situacao === "pendente" && "opacity-80",
                 )}
               >
+                {/* AÇÃO PRINCIPAL. Receita de evento: registrar recebimento (ou
+                    ver o histórico, se quitada) — nunca a baixa direta, que o
+                    servidor recusa. Despesa e receita avulsa: a baixa de sempre. */}
                 <button
-                  onClick={() => togglePaid({ id: tx._id })}
-                  // Parcela com recebimentos registrados: a baixa é derivada
-                  // deles e o servidor recusa marcá-la à mão. O botão diz isso
-                  // em vez de falhar no clique.
-                  disabled={usaRecebimentos(tx)}
-                  title={
-                    usaRecebimentos(tx)
-                      ? "Controlada pelos recebimentos — registre ou corrija em Pagamentos da cliente, no evento"
-                      : undefined
+                  onClick={() =>
+                    deEvento
+                      ? setAcao({ tipo: saldo > 0 ? "receber" : "historico", id: tx._id })
+                      : void alternarPago(tx)
                   }
+                  title={
+                    deEvento
+                      ? saldo > 0 ? "Registrar recebimento" : "Ver histórico de recebimentos"
+                      : tx.isPaid ? (tx.type === "income" ? "Desmarcar recebido" : "Desmarcar pago") : (tx.type === "income" ? "Marcar como recebido" : "Marcar como pago")
+                  }
+                  aria-label={`${deEvento ? (saldo > 0 ? "Registrar recebimento" : "Histórico") : "Alternar pago"} — ${tx.description}`}
                   className={cn(
-                    "disabled:cursor-default",
-                    "size-8 rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer transition-colors",
+                    "size-9 rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer transition-colors",
                     tx.type === "income"
-                      ? tx.isPaid ? "bg-green-100 dark:bg-green-900/30 text-green-600" : "bg-muted text-muted-foreground"
+                      ? situacao === "recebido" ? "bg-green-100 dark:bg-green-900/30 text-green-600" : situacao === "parcial" ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700" : "bg-muted text-muted-foreground"
                       : tx.isPaid ? "bg-red-100 dark:bg-red-900/30 text-red-500" : "bg-muted text-muted-foreground",
                   )}
                 >
@@ -581,33 +772,31 @@ export default function FinanceiroPage() {
                   )}
                 </button>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium truncate">{tx.description}</p>
-                    {/* Parcial: entrou parte, e a linha diz quanto falta — "Pendente"
-                        para uma parcela com R$ 1.200 de R$ 3.000 já recebidos
-                        contradiz a aba Pagamentos da cliente, que lê a mesma linha. */}
-                    {tx.type === "income" && estadoDaParcela(tx) === "parcial" ? (
-                      <span className="flex-shrink-0 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 px-1.5 py-0.5 rounded-full">
-                        Parcial · falta{" "}
-                        {deCentavos(saldoEmCentavos(tx)).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-                      </span>
-                    ) : (
-                      !tx.isPaid && (
-                        <span className="text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 px-1.5 py-0.5 rounded-full">
-                          Pendente
-                        </span>
-                      )
-                    )}
-                    {/* Discreto de propósito: quem tem o documento não precisa
-                        de alarde, e quem não tem precisa de um lembrete, não
-                        de uma acusação. Só em RECEITA — despesa ainda não
-                        aceita comprovante, e o selo prometeria o que não há. */}
-                    {temComprovante(tx) && (
-                      <span className="flex-shrink-0 text-[10px] text-muted-foreground">
-                        <Paperclip className="inline size-3" aria-hidden />
-                      </span>
-                    )}
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <p className="text-sm font-medium truncate max-w-full">{tx.description}</p>
+                    {/* A SITUAÇÃO, sempre dita: Recebido/Pago, Pendente ou
+                        Parcial. "Pendente" para uma parcela com R$ 1.200 de
+                        R$ 3.000 já recebidos contradiria a aba do evento. */}
+                    <span className={cn("flex-shrink-0 text-xs px-1.5 py-0.5 rounded-full", COR_DA_SITUACAO[situacao])}>
+                      {rotuloDaSituacao(tx.type, situacao)}
+                    </span>
                   </div>
+                  {/* No celular o valor vem aqui, sob a descrição: ao lado, ele e
+                      as ações espremiam o texto até "Parcela …". */}
+                  <p
+                    className={cn(
+                      "sm:hidden font-bold text-sm",
+                      tx.type === "income" ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400",
+                    )}
+                  >
+                    {tx.type === "expense" ? "- " : "+ "}
+                    {fmt(tx.amount)}
+                  </p>
+                  {situacao === "parcial" && (
+                    <p className="text-xs text-amber-800 dark:text-amber-300">
+                      Recebido {reais(recebidoEmCentavos(tx))} · falta {reais(saldo)}
+                    </p>
+                  )}
                   <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                     <span>{tx.category}</span>
                     <span>·</span>
@@ -616,8 +805,8 @@ export default function FinanceiroPage() {
                         mostra a que importa naquele estado. */}
                     <span>
                       {tx.isPaid && tx.paidAt
-                        ? `recebido em ${formatDateInput(tx.paidAt)}`
-                        : formatDateInput(tx.date)}
+                        ? `${tx.type === "income" ? "recebido" : "pago"} em ${formatDateInput(tx.paidAt)}`
+                        : `vence ${formatDateInput(tx.date)}`}
                     </span>
                     {tx.isPaid && tx.paymentMethod && (
                       <>
@@ -658,11 +847,11 @@ export default function FinanceiroPage() {
                     )}
                   </div>
                   {/* Parcela com recebimentos é histórico financeiro: o servidor
-                      recusa excluí-la (`deleteTransaction`), e o botão abaixo
+                      recusa excluí-la (`deleteTransaction`), e o item do menu
                       fica desativado. A linha diz POR QUÊ e aponta onde os
-                      registros são consultados e corrigidos — botão apagado
+                      registros são consultados e corrigidos — opção apagada
                       sem explicação parece defeito. */}
-                  {usaRecebimentos(tx) && (
+                  {protegida && (
                     <p
                       id={`protegida-${tx._id}`}
                       className="mt-0.5 text-[11px] text-muted-foreground flex flex-wrap items-center gap-x-1"
@@ -679,7 +868,7 @@ export default function FinanceiroPage() {
                     </p>
                   )}
                 </div>
-                <div className="text-right flex-shrink-0">
+                <div className="hidden sm:block text-right flex-shrink-0">
                   <p
                     className={cn(
                       "font-bold text-sm",
@@ -690,43 +879,82 @@ export default function FinanceiroPage() {
                     {fmt(tx.amount)}
                   </p>
                 </div>
-                <div className="flex gap-1 flex-shrink-0">
-                  {/* Progressive disclosure: pagamento e comprovantes moram no
-                      diálogo, não no card. Cinquenta lançamentos com seis
-                      campos cada seriam uma tela impossível de ler. */}
+                <div className="flex items-center gap-0.5 flex-shrink-0">
+                  {/* O COMPROVANTE À VISTA: o clipe com a contagem abre a lista
+                      para ver, baixar ou anexar — sem coluna nova na linha. */}
                   <button
                     onClick={() => setRecebimento(tx)}
-                    aria-label={`Pagamento e comprovantes de ${tx.description}`}
-                    title={contagemDeComprovantes(tx.comprovantes?.length ?? 0) ?? "Pagamento e comprovantes"}
-                    className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer text-muted-foreground"
+                    aria-label={`Comprovantes e anexos de ${tx.description}`}
+                    title={contagemDeComprovantes(nComprovantes) ?? "Anexar comprovante ou documento"}
+                    className={cn(
+                      "h-9 min-w-9 px-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer inline-flex items-center justify-center gap-0.5 text-xs",
+                      nComprovantes > 0 ? "text-primary" : "text-muted-foreground",
+                    )}
                   >
                     <Paperclip className="size-3.5" />
+                    {nComprovantes > 0 && <span>{nComprovantes}</span>}
                   </button>
-                  <button
-                    onClick={() => setEditing(tx)}
-                    aria-label={`Editar ${tx.description}`}
-                    className="p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer text-muted-foreground"
-                  >
-                    <Pencil className="size-3.5" />
-                  </button>
-                  <button
-                    onClick={() => setDeleting(tx)}
-                    aria-label={`Excluir ${tx.description}`}
-                    // Mesma regra do servidor: com recebimentos, não se exclui.
-                    disabled={usaRecebimentos(tx)}
-                    aria-describedby={usaRecebimentos(tx) ? `protegida-${tx._id}` : undefined}
-                    title={
-                      usaRecebimentos(tx)
-                        ? "Não pode ser excluída: tem recebimentos registrados. Consulte e corrija em Pagamentos da cliente."
-                        : undefined
-                    }
-                    className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer text-muted-foreground hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
+                  {/* AÇÕES SECUNDÁRIAS num menu: no celular, quatro ícones
+                      lado a lado não cabem com o valor e a descrição. */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        aria-label={`Ações de ${tx.description}`}
+                        className="size-9 rounded-lg hover:bg-accent transition-colors cursor-pointer inline-flex items-center justify-center text-muted-foreground"
+                      >
+                        <MoreVertical className="size-4" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-60">
+                      {deEvento && saldo > 0 && (
+                        <DropdownMenuItem onSelect={() => setAcao({ tipo: "receber", id: tx._id })}>
+                          <HandCoins className="size-4" /> Registrar recebimento
+                        </DropdownMenuItem>
+                      )}
+                      {deEvento && (
+                        <DropdownMenuItem onSelect={() => setAcao({ tipo: "historico", id: tx._id })}>
+                          <History className="size-4" /> Histórico
+                        </DropdownMenuItem>
+                      )}
+                      {!deEvento && !protegida && (
+                        <DropdownMenuItem onSelect={() => void alternarPago(tx)}>
+                          <Check className="size-4" />
+                          {tx.isPaid
+                            ? tx.type === "income" ? "Desmarcar recebido" : "Desmarcar pago"
+                            : tx.type === "income" ? "Marcar como recebido" : "Marcar como pago"}
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem onSelect={() => setRecebimento(tx)}>
+                        <Paperclip className="size-4" /> Comprovantes e anexos
+                      </DropdownMenuItem>
+                      {tx.eventId && (
+                        <DropdownMenuItem asChild>
+                          <Link to={`/eventos/${tx.eventId}/pagamentos`}>
+                            <ArrowRight className="size-4" /> Abrir no evento
+                          </Link>
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onSelect={() => setEditing(tx)}>
+                        <Pencil className="size-4" /> Editar
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => setDeleting(tx)}
+                        aria-label={`Excluir ${tx.description}`}
+                        // Mesma regra do servidor: com recebimentos, não se exclui.
+                        disabled={usaRecebimentos(tx)}
+                        aria-describedby={usaRecebimentos(tx) ? `protegida-${tx._id}` : undefined}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="size-4" />
+                        {protegida ? "Excluir (tem recebimentos)" : "Excluir"}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -741,13 +969,45 @@ export default function FinanceiroPage() {
         />
       )}
 
-      <TxDialog open={creating} onClose={() => setCreating(false)} title="Novo Lançamento" onSubmit={handleCreate} />
+      {/* Monta a cada abertura: a chave do formulário é nova a cada lançamento. */}
+      {creating && (
+        <TxDialog onClose={() => setCreating(false)} title="Novo Lançamento" onSubmit={handleCreate} novo hoje={hoje} />
+      )}
+
+      {acao && linhaDe(acao.id) && (() => {
+        const tx = linhaDe(acao.id)!;
+        if (acao.tipo === "receber") {
+          return <RegistrarRecebimento parcela={tx} hoje={hoje} onClose={() => setAcao(null)} />;
+        }
+        if (acao.tipo === "anular") {
+          return <AnularRecebimento parcela={tx} recebimento={acao.recebimento} onClose={() => setAcao({ tipo: "historico", id: tx._id })} />;
+        }
+        if (acao.tipo === "anexar") {
+          return (
+            <AnexarComprovanteAoRecebimento
+              parcela={tx}
+              recebimento={acao.recebimento}
+              onClose={() => setAcao({ tipo: "historico", id: tx._id })}
+            />
+          );
+        }
+        return (
+          <HistoricoDeRecebimentos
+            parcela={tx}
+            onClose={() => setAcao(null)}
+            onAcao={(a) =>
+              setAcao(a.tipo === "receber" ? { tipo: "receber", id: tx._id } : { tipo: a.tipo, id: tx._id, recebimento: a.recebimento })
+            }
+          />
+        );
+      })()}
 
       {editing && (
         <TxDialog
-          open={!!editing}
           onClose={() => setEditing(null)}
           title="Editar Lançamento"
+          hoje={hoje}
+          receitaDeEvento={editing.type === "income" && !!editing.eventId}
           defaultValues={{
             type: editing.type,
             category: editing.category,

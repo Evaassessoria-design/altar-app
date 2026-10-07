@@ -80,7 +80,7 @@ export function SupplierCatalogPicker({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
+      <DialogContent className="max-w-lg max-h-[85dvh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Adicionar fornecedor</DialogTitle>
           <DialogDescription>

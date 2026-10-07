@@ -125,8 +125,12 @@ describe("o envio não se repete", () => {
 describe("celular", () => {
   it("um diálogo por vez — nada empilhado", () => {
     expect(fonte).toContain("const [aberto, setAberto] = useState<Aberto>(null);");
-    for (const tipo of ["receber", "anular", "anexar", "contratado", "planejar"]) {
+    for (const tipo of ["parcela", "contratado", "planejar"]) {
       expect(fonte).toContain(`aberto?.tipo === "${tipo}"`);
+    }
+    // Cada etapa da parcela é UM diálogo do fluxo compartilhado.
+    for (const etapa of ["receber", "registrarCorrecao", "editar", "anexarDocumento", "anexar", "anular", "corrigir"]) {
+      expect(fonte).toContain(`case "${etapa}":`);
     }
   });
 
@@ -137,5 +141,44 @@ describe("celular", () => {
 
   it("'Registrar recebimento' está na parcela e no resumo", () => {
     expect(fonte.match(/Registrar recebimento/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("toda parcela se abre", () => {
+  const aba = readFileSync("src/pages/app/events/[id]/_components/pagamentos-da-cliente.tsx", "utf-8");
+  const fluxo = readFileSync("src/components/financeiro/recebimentos.tsx", "utf-8");
+
+  it("em qualquer estado, pelo clique e pelo teclado", () => {
+    expect(aba).toContain('aria-label={`Abrir detalhes de ${p.description}`}');
+    expect(aba).toContain('if (e.key === "Enter" || e.key === " ")');
+    expect(aba).toContain("focus-visible:ring-2");
+    // "Detalhes e histórico" não depende de haver recebimento — some só o
+    // "Registrar recebimento", quando não há saldo.
+    const i = aba.indexOf("Detalhes e histórico");
+    expect(aba.slice(aba.lastIndexOf("<Button", i), i)).not.toMatch(/saldo|recebimentos\.length > 0 \|\|/);
+  });
+
+  it("a parcela aberta é sempre a ATUAL, procurada pelo id", () => {
+    expect(aba).toContain("dados.parcelas.find((p) => p._id === aberto.id)");
+  });
+
+  it("os detalhes têm valor, vencimento, recebido, saldo, histórico, comprovantes e ações com nome claro", () => {
+    for (const t of ["Vencimento", "Recebido", "Saldo", "Recebimentos", "Comprovantes e documentos",
+      "Editar valor e vencimento", "Corrigir (anular e registrar de novo)", "Anexar comprovante", "Registrar recebimento"]) {
+      expect(fluxo).toContain(t);
+    }
+    // quitada: sem receber acima do saldo
+    expect(fluxo).toContain("{saldo > 0 && (");
+    expect(fluxo).toContain("Parcela quitada: não recebe valor acima do saldo.");
+  });
+
+  it("corrigir = anular com motivo e registrar de novo, já preenchido", () => {
+    expect(fluxo).toContain('onEtapa(anulou ? { tipo: "registrarCorrecao", inicial: { valor: r.valor, data: r.data, forma: r.forma } } : { tipo: "detalhes" })');
+    expect(fluxo).toContain("disabled={salvando || !motivo.trim()}");
+  });
+
+  it("editar não deixa o valor abaixo do recebido", () => {
+    expect(fluxo).toContain("centavos < recebido");
+    expect(fluxo).toContain("api.financeiro.updateTransaction");
   });
 });

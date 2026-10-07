@@ -54,12 +54,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
-import {
-  AnexarComprovanteAoRecebimento,
-  AnularRecebimento,
-  HistoricoDeRecebimentos,
-  RegistrarRecebimento,
-} from "@/components/financeiro/recebimentos.tsx";
+import { FluxoDaParcela, type EtapaDaParcela } from "@/components/financeiro/recebimentos.tsx";
 import { reais } from "@/lib/recebimentos.ts";
 import {
   COR_DA_SITUACAO,
@@ -483,11 +478,9 @@ export default function FinanceiroPage() {
   const [recebimento, setRecebimento] = useState<Doc<"transactions"> | null>(null);
   // As operações de recebimento da receita de evento — os MESMOS diálogos da
   // aba Pagamentos da cliente. Um aberto por vez.
-  const [acao, setAcao] = useState<
-    | { tipo: "receber" | "historico"; id: Id<"transactions"> }
-    | { tipo: "anular" | "anexar"; id: Id<"transactions">; recebimento: Recebimento }
-    | null
-  >(null);
+  const [acao, setAcaoRaw] = useState<{ id: Id<"transactions">; etapa: EtapaDaParcela } | null>(null);
+  const setAcao = (a: ({ id: Id<"transactions"> } & EtapaDaParcela) | null) =>
+    setAcaoRaw(a ? { id: a.id, etapa: a } : null);
   // Sempre a linha ATUAL do livro: depois de registrar, o histórico reabre com
   // o recebimento novo, sem precisar recarregar.
   const linhaDe = (id: Id<"transactions">) => (transactions ?? []).find((t) => t._id === id);
@@ -805,15 +798,15 @@ export default function FinanceiroPage() {
                 <button
                   onClick={() =>
                     deEvento
-                      ? setAcao({ tipo: saldo > 0 ? "receber" : "historico", id: tx._id })
+                      ? setAcao({ tipo: saldo > 0 ? "receber" : "detalhes", id: tx._id })
                       : void alternarPago(tx)
                   }
                   title={
                     deEvento
-                      ? saldo > 0 ? "Registrar recebimento" : "Ver histórico de recebimentos"
+                      ? saldo > 0 ? "Registrar recebimento" : "Ver detalhes da parcela"
                       : tx.isPaid ? (tx.type === "income" ? "Desmarcar recebido" : "Desmarcar pago") : (tx.type === "income" ? "Marcar como recebido" : "Marcar como pago")
                   }
-                  aria-label={`${deEvento ? (saldo > 0 ? "Registrar recebimento" : "Histórico") : "Alternar pago"} — ${tx.description}`}
+                  aria-label={`${deEvento ? (saldo > 0 ? "Registrar recebimento" : "Detalhes da parcela") : "Alternar pago"} — ${tx.description}`}
                   className={cn(
                     "size-9 rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer transition-colors",
                     tx.type === "income"
@@ -828,79 +821,101 @@ export default function FinanceiroPage() {
                   )}
                 </button>
                 <div className="flex-1 min-w-0">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <p className="text-sm font-medium truncate max-w-full">{tx.description}</p>
-                    {/* A SITUAÇÃO, sempre dita: Recebido/Pago, Pendente ou
-                        Parcial. "Pendente" para uma parcela com R$ 1.200 de
-                        R$ 3.000 já recebidos contradiria a aba do evento. */}
-                    <span className={cn("flex-shrink-0 text-xs px-1.5 py-0.5 rounded-full", COR_DA_SITUACAO[situacao])}>
-                      {rotuloDaSituacao(tx.type, situacao)}
-                    </span>
-                  </div>
-                  {/* No celular o valor vem aqui, sob a descrição: ao lado, ele e
-                      as ações espremiam o texto até "Parcela …". */}
-                  <p
-                    className={cn(
-                      "sm:hidden font-bold text-sm",
-                      tx.type === "income" ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400",
-                    )}
+                  {/* A PARCELA SE ABRE PELO TEXTO, em qualquer situação — pendente,
+                      parcial, recebida ou atrasada. Receita de evento: os
+                      detalhes (valor, vencimento, histórico, comprovantes,
+                      ações). Os demais: pagamento e comprovantes. `div` com
+                      role de botão porque o bloco tem parágrafos; o atalho
+                      "Ver em Pagamentos da cliente" fica FORA, sem link dentro
+                      de botão. */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Abrir ${tx.description}`}
+                    onClick={() => (deEvento ? setAcao({ tipo: "detalhes", id: tx._id }) : setRecebimento(tx))}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        if (deEvento) setAcao({ tipo: "detalhes", id: tx._id });
+                        else setRecebimento(tx);
+                      }
+                    }}
+                    className="-mx-1 px-1 rounded-md cursor-pointer hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    {tx.type === "expense" ? "- " : "+ "}
-                    {fmt(tx.amount)}
-                  </p>
-                  {situacao === "parcial" && (
-                    <p className="text-xs text-amber-800 dark:text-amber-300">
-                      Recebido {reais(recebidoEmCentavos(tx))} · falta {reais(saldo)}
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <p className="text-sm font-medium truncate max-w-full">{tx.description}</p>
+                      {/* A SITUAÇÃO, sempre dita: Recebido/Pago, Pendente ou
+                          Parcial. "Pendente" para uma parcela com R$ 1.200 de
+                          R$ 3.000 já recebidos contradiria a aba do evento. */}
+                      <span className={cn("flex-shrink-0 text-xs px-1.5 py-0.5 rounded-full", COR_DA_SITUACAO[situacao])}>
+                        {rotuloDaSituacao(tx.type, situacao)}
+                      </span>
+                    </div>
+                    {/* No celular o valor vem aqui, sob a descrição: ao lado, ele e
+                        as ações espremiam o texto até "Parcela …". */}
+                    <p
+                      className={cn(
+                        "sm:hidden font-bold text-sm",
+                        tx.type === "income" ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400",
+                      )}
+                    >
+                      {tx.type === "expense" ? "- " : "+ "}
+                      {fmt(tx.amount)}
                     </p>
-                  )}
-                  <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                    <span>{tx.category}</span>
-                    <span>·</span>
-                    {/* Pago tem DUAS datas, e elas são perguntas diferentes:
-                        `date` é o vencimento, `paidAt` é quando entrou. A linha
-                        mostra a que importa naquele estado. */}
-                    <span>
-                      {tx.isPaid && tx.paidAt
-                        ? `${tx.type === "income" ? "recebido" : "pago"} em ${formatDateInput(tx.paidAt)}`
-                        : `vence ${formatDateInput(tx.date)}`}
-                    </span>
-                    {tx.isPaid && tx.paymentMethod && (
-                      <>
-                        <span>·</span>
-                        <span className="truncate">{tx.paymentMethod}</span>
-                      </>
+                    {situacao === "parcial" && (
+                      <p className="text-xs text-amber-800 dark:text-amber-300">
+                        Recebido {reais(recebidoEmCentavos(tx))} · falta {reais(saldo)}
+                      </p>
                     )}
-                    {pagoSemComprovante(tx) && (
-                      <>
-                        <span>·</span>
-                        <span className="text-amber-700 dark:text-amber-500">sem comprovante</span>
-                      </>
-                    )}
-                    {/* ── DE QUAL EVENTO É ESTE DINHEIRO ──────────────────
-                        `transactions.eventId` é gravado desde sempre — pelo
-                        import do contrato e pelo lançamento de uma compra — e
-                        esta tela nunca o mostrava. O livro-caixa de uma
-                        decoradora com quatro casamentos no mês era uma lista
-                        plana em que "Sinal" aparecia quatro vezes, idêntico. */}
-                    {nomeDoEvento(tx.eventId) && (
-                      <>
-                        <span>·</span>
-                        <span className="truncate">{nomeDoEvento(tx.eventId)}</span>
-                      </>
-                    )}
-                    {/* ── E DE QUAL COMPRA ────────────────────────────────
-                        Procedência histórica, gravada no lançamento. Sobrevive
-                        ao cancelamento da compra e à exclusão dela — que é
-                        justamente quando ninguém mais conseguia dizer de onde
-                        os R$ 12.400 tinham vindo. */}
-                    {tx.origemDaCompra && (
-                      <>
-                        <span>·</span>
-                        <span className="truncate">
-                          da compra &ldquo;{tx.origemDaCompra.nome}&rdquo;
-                        </span>
-                      </>
-                    )}
+                    <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                      <span>{tx.category}</span>
+                      <span>·</span>
+                      {/* Pago tem DUAS datas, e elas são perguntas diferentes:
+                          `date` é o vencimento, `paidAt` é quando entrou. A linha
+                          mostra a que importa naquele estado. */}
+                      <span>
+                        {tx.isPaid && tx.paidAt
+                          ? `${tx.type === "income" ? "recebido" : "pago"} em ${formatDateInput(tx.paidAt)}`
+                          : `vence ${formatDateInput(tx.date)}`}
+                      </span>
+                      {tx.isPaid && tx.paymentMethod && (
+                        <>
+                          <span>·</span>
+                          <span className="truncate">{tx.paymentMethod}</span>
+                        </>
+                      )}
+                      {pagoSemComprovante(tx) && (
+                        <>
+                          <span>·</span>
+                          <span className="text-amber-700 dark:text-amber-500">sem comprovante</span>
+                        </>
+                      )}
+                      {/* ── DE QUAL EVENTO É ESTE DINHEIRO ──────────────────
+                          `transactions.eventId` é gravado desde sempre — pelo
+                          import do contrato e pelo lançamento de uma compra — e
+                          esta tela nunca o mostrava. O livro-caixa de uma
+                          decoradora com quatro casamentos no mês era uma lista
+                          plana em que "Sinal" aparecia quatro vezes, idêntico. */}
+                      {nomeDoEvento(tx.eventId) && (
+                        <>
+                          <span>·</span>
+                          <span className="truncate">{nomeDoEvento(tx.eventId)}</span>
+                        </>
+                      )}
+                      {/* ── E DE QUAL COMPRA ────────────────────────────────
+                          Procedência histórica, gravada no lançamento. Sobrevive
+                          ao cancelamento da compra e à exclusão dela — que é
+                          justamente quando ninguém mais conseguia dizer de onde
+                          os R$ 12.400 tinham vindo. */}
+                      {tx.origemDaCompra && (
+                        <>
+                          <span>·</span>
+                          <span className="truncate">
+                            da compra &ldquo;{tx.origemDaCompra.nome}&rdquo;
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </div>
                   {/* Parcela com recebimentos é histórico financeiro: o servidor
                       recusa excluí-la (`deleteTransaction`), e o item do menu
@@ -968,8 +983,8 @@ export default function FinanceiroPage() {
                         </DropdownMenuItem>
                       )}
                       {deEvento && (
-                        <DropdownMenuItem onSelect={() => setAcao({ tipo: "historico", id: tx._id })}>
-                          <History className="size-4" /> Histórico
+                        <DropdownMenuItem onSelect={() => setAcao({ tipo: "detalhes", id: tx._id })}>
+                          <History className="size-4" /> Detalhes e histórico
                         </DropdownMenuItem>
                       )}
                       {!deEvento && !protegida && (
@@ -1030,33 +1045,17 @@ export default function FinanceiroPage() {
         <TxDialog onClose={() => setCreating(false)} title="Novo Lançamento" onSubmit={handleCreate} novo hoje={hoje} />
       )}
 
-      {acao && linhaDe(acao.id) && (() => {
-        const tx = linhaDe(acao.id)!;
-        if (acao.tipo === "receber") {
-          return <RegistrarRecebimento parcela={tx} hoje={hoje} onClose={() => setAcao(null)} />;
-        }
-        if (acao.tipo === "anular") {
-          return <AnularRecebimento parcela={tx} recebimento={acao.recebimento} onClose={() => setAcao({ tipo: "historico", id: tx._id })} />;
-        }
-        if (acao.tipo === "anexar") {
-          return (
-            <AnexarComprovanteAoRecebimento
-              parcela={tx}
-              recebimento={acao.recebimento}
-              onClose={() => setAcao({ tipo: "historico", id: tx._id })}
-            />
-          );
-        }
-        return (
-          <HistoricoDeRecebimentos
-            parcela={tx}
-            onClose={() => setAcao(null)}
-            onAcao={(a) =>
-              setAcao(a.tipo === "receber" ? { tipo: "receber", id: tx._id } : { tipo: a.tipo, id: tx._id, recebimento: a.recebimento })
-            }
-          />
-        );
-      })()}
+      {/* Os detalhes e as ações da parcela — o MESMO fluxo da aba do evento
+          (FluxoDaParcela). A linha é procurada a cada render: depois de
+          receber ou anular, os detalhes mostram o resultado. */}
+      {acao && linhaDe(acao.id) && (
+        <FluxoDaParcela
+          parcela={linhaDe(acao.id)!}
+          etapa={acao.etapa}
+          hoje={hoje}
+          onEtapa={(e) => setAcaoRaw(e ? { id: acao.id, etapa: e } : null)}
+        />
+      )}
 
       {editing && (
         <TxDialog

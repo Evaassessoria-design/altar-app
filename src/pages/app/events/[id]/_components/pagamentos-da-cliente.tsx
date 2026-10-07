@@ -7,9 +7,7 @@ import {
   AlertTriangle,
   ArrowRight,
   CalendarClock,
-  ChevronDown,
   ChevronRight,
-  ExternalLink,
   HandCoins,
   ListPlus,
   Paperclip,
@@ -31,11 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.tsx";
-import {
-  AnexarComprovanteAoRecebimento,
-  AnularRecebimento,
-  RegistrarRecebimento,
-} from "@/components/financeiro/recebimentos.tsx";
+import { FluxoDaParcela, type EtapaDaParcela } from "@/components/financeiro/recebimentos.tsx";
 import { campo, mensagem, novaChave, reais } from "@/lib/recebimentos.ts";
 import { FORMAS_DE_PAGAMENTO, MIMES_DE_COMPROVANTE, TIPOS_DE_COMPROVANTE } from "@/lib/comprovante-financeiro.ts";
 import { formatDateInput } from "@/lib/event-date.ts";
@@ -54,7 +48,6 @@ import {
   saldoEmCentavos,
   usaRecebimentos,
   type ParcelaPlanejada,
-  type Recebimento,
 } from "@/convex/lib/pagamentosDoEvento.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,10 +77,11 @@ import {
 type Dados = NonNullable<ReturnType<typeof useQuery<typeof api.financeiro.pagamentosDoEvento>>>;
 type Parcela = Dados["parcelas"][number];
 
+// A parcela aberta guarda só o ID: a cada render ela é procurada de novo em
+// `dados.parcelas`, então depois de anular ou receber os detalhes — e o
+// saldo da correção — já são os atuais.
 type Aberto =
-  | { tipo: "receber"; parcela: Parcela }
-  | { tipo: "anular"; parcela: Parcela; recebimento: Recebimento }
-  | { tipo: "anexar"; parcela: Parcela; recebimento: Recebimento }
+  | { tipo: "parcela"; id: Parcela["_id"]; etapa: EtapaDaParcela }
   | { tipo: "contratado" }
   | { tipo: "planejar" }
   | null;
@@ -102,7 +96,6 @@ const COR_DO_ESTADO = {
 export function PagamentosDaCliente({ eventId }: { eventId: Id<"events"> }) {
   const dados = useQuery(api.financeiro.pagamentosDoEvento, { eventId });
   const [aberto, setAberto] = useState<Aberto>(null);
-  const [historico, setHistorico] = useState<string | null>(null);
 
   if (dados === undefined) {
     return (
@@ -120,6 +113,9 @@ export function PagamentosDaCliente({ eventId }: { eventId: Id<"events"> }) {
   const hoje = dataDoDiaNoFuso(new Date(), dados.fuso);
   const resumo = resumirPagamentos(dados.valorContratado, dados.parcelas, hoje);
   const proxima = resumo.proxima ? dados.parcelas[resumo.proxima.indice] : null;
+  const abrir = (p: Parcela) => setAberto({ tipo: "parcela", id: p._id, etapa: { tipo: "detalhes" } });
+  const parcelaAberta =
+    aberto?.tipo === "parcela" ? (dados.parcelas.find((p) => p._id === aberto.id) ?? null) : null;
 
   return (
     <section className="bg-card rounded-xl border border-border overflow-hidden" aria-labelledby="pagamentos-titulo">
@@ -179,7 +175,7 @@ export function PagamentosDaCliente({ eventId }: { eventId: Id<"events"> }) {
           acao={
             proxima ? (
               <button
-                onClick={() => setAberto({ tipo: "receber", parcela: proxima })}
+                onClick={() => setAberto({ tipo: "parcela", id: proxima._id, etapa: { tipo: "receber" } })}
                 className="text-xs text-primary hover:underline cursor-pointer min-h-9"
               >
                 Registrar recebimento
@@ -230,7 +226,6 @@ export function PagamentosDaCliente({ eventId }: { eventId: Id<"events"> }) {
               const estado = estadoDaParcela(p);
               const atrasada = parcelaAtrasada(p, hoje);
               const saldo = saldoEmCentavos(p);
-              const verHistorico = historico === p._id;
               return (
                 <li
                   key={p._id}
@@ -239,39 +234,60 @@ export function PagamentosDaCliente({ eventId }: { eventId: Id<"events"> }) {
                     atrasada ? "border-red-300 dark:border-red-900/60 bg-red-50/40 dark:bg-red-950/10" : "border-border",
                   )}
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium break-words">{p.description}</p>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <CalendarClock className="size-3" /> vence {formatDateInput(p.date)}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", COR_DO_ESTADO[estado])}>
-                        {ROTULO_DO_ESTADO[estado]}
-                      </span>
-                      {atrasada && (
-                        <span className="rounded-full px-2 py-0.5 text-[11px] font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300">
-                          Em atraso
+                  {/* A PARCELA SE ABRE, em qualquer estado — pendente, parcial,
+                      recebida ou atrasada. Antes, quitada, ela perdia o botão
+                      de receber e ficava só com um texto cinza "Histórico (2)":
+                      parecia trancada. O bloco inteiro abre os detalhes
+                      (valor, vencimento, histórico, comprovantes, ações);
+                      `div` com role de botão porque tem parágrafos dentro. */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Abrir detalhes de ${p.description}`}
+                    onClick={() => abrir(p)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        abrir(p);
+                      }
+                    }}
+                    className="-m-1 p-1 space-y-2 rounded-lg cursor-pointer hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium break-words">{p.description}</p>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <CalendarClock className="size-3" /> vence {formatDateInput(p.date)}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", COR_DO_ESTADO[estado])}>
+                          {ROTULO_DO_ESTADO[estado]}
                         </span>
-                      )}
+                        {atrasada && (
+                          <span className="rounded-full px-2 py-0.5 text-[11px] font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                            Em atraso
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
 
-                  <dl className="grid grid-cols-3 gap-2 text-xs">
-                    <div>
-                      <dt className="text-muted-foreground">Valor</dt>
-                      <dd className="font-medium">{reais(paraCentavos(p.amount))}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground">Recebido</dt>
-                      <dd className="font-medium">{reais(recebidoEmCentavos(p))}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground">Saldo</dt>
-                      <dd className={cn("font-medium", atrasada && "text-red-700 dark:text-red-400")}>{reais(saldo)}</dd>
-                    </div>
-                  </dl>
+                    <dl className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <dt className="text-muted-foreground">Valor</dt>
+                        <dd className="font-medium">{reais(paraCentavos(p.amount))}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground">Recebido</dt>
+                        <dd className="font-medium">{reais(recebidoEmCentavos(p))}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-muted-foreground">Saldo</dt>
+                        <dd className={cn("font-medium", atrasada && "text-red-700 dark:text-red-400")}>{reais(saldo)}</dd>
+                      </div>
+                    </dl>
+
+                  </div>
 
                   {!usaRecebimentos(p) && p.isPaid && (
                     <p className="text-[11px] text-muted-foreground">
@@ -283,66 +299,28 @@ export function PagamentosDaCliente({ eventId }: { eventId: Id<"events"> }) {
                     {saldo > 0 && (
                       <Button
                         size="sm"
-                        onClick={() => setAberto({ tipo: "receber", parcela: p })}
+                        onClick={() => setAberto({ tipo: "parcela", id: p._id, etapa: { tipo: "receber" } })}
                         className="cursor-pointer gap-1.5 h-9"
                       >
                         <HandCoins className="size-4" /> Registrar recebimento
                       </Button>
                     )}
-                    {(p.recebimentos.length > 0 || p.comprovantes > 0) && (
-                      <button
-                        onClick={() => setHistorico(verHistorico ? null : p._id)}
-                        aria-expanded={verHistorico}
-                        className="h-9 px-2 text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 cursor-pointer"
-                      >
-                        {verHistorico ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-                        Histórico ({p.recebimentos.length})
-                        {p.comprovantes > 0 && (
-                          <span className="inline-flex items-center gap-0.5 ml-1">
-                            <Paperclip className="size-3" /> {p.comprovantes}
-                          </span>
-                        )}
-                      </button>
-                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => abrir(p)}
+                      className="cursor-pointer gap-1 h-9"
+                    >
+                      Detalhes e histórico
+                      {p.recebimentos.length > 0 && ` (${p.recebimentos.length})`}
+                      {p.comprovantes > 0 && (
+                        <span className="inline-flex items-center gap-0.5 ml-1 text-muted-foreground">
+                          <Paperclip className="size-3" /> {p.comprovantes}
+                        </span>
+                      )}
+                      <ChevronRight className="size-3.5" />
+                    </Button>
                   </div>
-
-                  {verHistorico && p.comprovantes > 0 && <ComprovantesDaParcela id={p._id} />}
-
-                  {verHistorico && p.recebimentos.length > 0 && (
-                    <ul className="border-t border-border pt-2 space-y-1.5">
-                      {[...p.recebimentos].reverse().map((r) => (
-                        <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                          <span className={cn("min-w-0", r.anulacao && "line-through text-muted-foreground")}>
-                            {reais(paraCentavos(r.valor))} · {formatDateInput(r.data)}
-                            {r.forma && ` · ${r.forma}`}
-                            {r.comprovanteStorageId && " · com comprovante"}
-                          </span>
-                          {r.anulacao ? (
-                            <span className="text-muted-foreground break-words">Anulado: {r.anulacao.motivo}</span>
-                          ) : (
-                            <span className="flex flex-wrap gap-1">
-                              {/* Comprovante depois: o recebimento já está
-                                  registrado, e só o arquivo entra. */}
-                              {!r.comprovanteStorageId && (
-                                <button
-                                  onClick={() => setAberto({ tipo: "anexar", parcela: p, recebimento: r })}
-                                  className="h-9 px-2 text-primary hover:underline cursor-pointer inline-flex items-center gap-1"
-                                >
-                                  <Paperclip className="size-3" /> Anexar comprovante
-                                </button>
-                              )}
-                              <button
-                                onClick={() => setAberto({ tipo: "anular", parcela: p, recebimento: r })}
-                                className="h-9 px-2 text-muted-foreground hover:text-destructive cursor-pointer"
-                              >
-                                Anular
-                              </button>
-                            </span>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
                 </li>
               );
             })}
@@ -350,18 +328,16 @@ export function PagamentosDaCliente({ eventId }: { eventId: Id<"events"> }) {
         )}
       </div>
 
-      {aberto?.tipo === "receber" && (
-        <RegistrarRecebimento parcela={aberto.parcela} hoje={hoje} onClose={() => setAberto(null)} />
-      )}
-      {aberto?.tipo === "anexar" && (
-        <AnexarComprovanteAoRecebimento
-          parcela={aberto.parcela}
-          recebimento={aberto.recebimento}
-          onClose={() => setAberto(null)}
+      {/* Os detalhes e as ações da parcela — o MESMO fluxo do Financeiro
+          geral (FluxoDaParcela), com a parcela atual. */}
+      {aberto?.tipo === "parcela" && parcelaAberta && (
+        <FluxoDaParcela
+          parcela={parcelaAberta}
+          etapa={aberto.etapa}
+          hoje={hoje}
+          atrasada={parcelaAtrasada(parcelaAberta, hoje)}
+          onEtapa={(e) => setAberto(e ? { tipo: "parcela", id: parcelaAberta._id, etapa: e } : null)}
         />
-      )}
-      {aberto?.tipo === "anular" && (
-        <AnularRecebimento parcela={aberto.parcela} recebimento={aberto.recebimento} onClose={() => setAberto(null)} />
       )}
       {aberto?.tipo === "contratado" && (
         <ValorContratado eventId={eventId} atual={dados.valorContratado} onClose={() => setAberto(null)} />
@@ -376,39 +352,6 @@ export function PagamentosDaCliente({ eventId }: { eventId: Id<"events"> }) {
         />
       )}
     </section>
-  );
-}
-
-/**
- * Os comprovantes da parcela, com link para abrir. Consulta só quando o
- * histórico abre — resolver URL de todo anexo de toda parcela a cada
- * abertura da aba seria uma chamada de storage por arquivo (mesma razão de
- * `comprovantesDoLancamento` ser separada da listagem).
- */
-function ComprovantesDaParcela({ id }: { id: Id<"transactions"> }) {
-  const lista = useQuery(api.financeiro.comprovantesDoLancamento, { id });
-  if (lista === undefined) return <Skeleton className="h-6 w-40" />;
-  return (
-    <ul className="border-t border-border pt-2 space-y-1">
-      {lista.map((c) => (
-        <li key={c.storageId} className="flex items-center gap-1.5 text-xs min-w-0">
-          <Paperclip className="size-3 flex-shrink-0 text-muted-foreground" />
-          {c.url ? (
-            <a
-              href={c.url}
-              target="_blank"
-              rel="noreferrer"
-              className="truncate hover:underline inline-flex items-center gap-1 min-h-9"
-            >
-              <span className="truncate">{c.filename}</span>
-              <ExternalLink className="size-3 flex-shrink-0" />
-            </a>
-          ) : (
-            <span className="truncate text-muted-foreground">{c.filename} (arquivo indisponível)</span>
-          )}
-        </li>
-      ))}
-    </ul>
   );
 }
 

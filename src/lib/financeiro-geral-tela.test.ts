@@ -46,7 +46,7 @@ describe("a situação da linha", () => {
 
 describe("receita de evento não tem porta lateral na tela", () => {
   it("o botão redondo registra recebimento, não alterna o pago", () => {
-    expect(tela).toContain('setAcao({ tipo: saldo > 0 ? "receber" : "historico", id: tx._id })');
+    expect(tela).toContain('setAcao({ tipo: saldo > 0 ? "receber" : "detalhes", id: tx._id })');
   });
 
   it("'Marcar como pago' do menu só existe fora da receita de evento", () => {
@@ -59,10 +59,11 @@ describe("receita de evento não tem porta lateral na tela", () => {
   });
 
   it("usa os MESMOS diálogos da aba do evento", () => {
-    for (const c of ["<RegistrarRecebimento", "<AnularRecebimento", "<AnexarComprovanteAoRecebimento", "<HistoricoDeRecebimentos"]) {
-      expect(tela).toContain(c);
-    }
+    // O MESMO fluxo da aba do evento, e a linha também se abre pelo texto.
+    expect(tela).toContain("<FluxoDaParcela");
+    expect(readFileSync("src/pages/app/events/[id]/_components/pagamentos-da-cliente.tsx", "utf-8")).toContain("<FluxoDaParcela");
     expect(tela).toContain('from "@/components/financeiro/recebimentos.tsx"');
+    expect(tela).toContain('aria-label={`Abrir ${tx.description}`}');
   });
 });
 

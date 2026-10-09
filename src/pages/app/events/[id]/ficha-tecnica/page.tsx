@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/empty.tsx";
 import { toast } from "sonner";
 import { ConvexError } from "convex/values";
-import { ArrowLeft, ClipboardList, FileDown, Layers, Package, ShoppingCart, ArrowRight } from "lucide-react";
+import { ArrowLeft, ClipboardList, FileDown, Flower2, Layers, Package, ShoppingCart, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
 import { formatEventDateLong } from "@/lib/event-date.ts";
 import { agruparPorAmbiente, resolverAmbiente } from "@/lib/decoration-project.ts";
@@ -616,6 +616,20 @@ export default function FichaTecnicaPage() {
                 className="cursor-pointer gap-1.5"
               >
                 <FileDown className="size-3.5" /> PDF
+              </Button>
+              {/* A Ficha Técnica responde "do que é feito"; a Produção Floral
+                  acrescenta o que só o florista precisa (cor, altura, montagem,
+                  horário) e gera o papel dele. Mesma receita, nenhum segundo
+                  cadastro — por isso o caminho é daqui. */}
+              <Button
+                asChild
+                size="sm"
+                variant="ghost"
+                className="cursor-pointer gap-1.5"
+              >
+                <Link to={`/eventos/${id}/producao-floral`}>
+                  <Flower2 className="size-3.5" /> Produção floral
+                </Link>
               </Button>
               {/* As duas providências, lado a lado e na mesma ordem em que a
                   decoradora decide: primeiro o que já é dela, depois o que

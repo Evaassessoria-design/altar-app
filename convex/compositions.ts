@@ -42,6 +42,14 @@ const componente = v.object({
   custoReferencia: v.optional(v.number()),
   margemPercentual: v.optional(v.number()),
   notes: v.optional(v.string()),
+  // Produção floral. Ver os comentários em `schema.ts`: tudo aditivo, tudo
+  // opcional, e `distribuicao` ausente significa "por arranjo" — o
+  // significado de toda receita que já existe.
+  cor: v.optional(v.string()),
+  variedade: v.optional(v.string()),
+  origem: v.optional(v.union(v.literal("natural"), v.literal("permanente"))),
+  distribuicao: v.optional(v.union(v.literal("por_arranjo"), v.literal("total"))),
+  apenasOrientacao: v.optional(v.boolean()),
 });
 
 type ComponenteEntrada = {
@@ -54,6 +62,11 @@ type ComponenteEntrada = {
   custoReferencia?: number;
   margemPercentual?: number;
   notes?: string;
+  cor?: string;
+  variedade?: string;
+  origem?: "natural" | "permanente";
+  distribuicao?: "por_arranjo" | "total";
+  apenasOrientacao?: boolean;
 };
 
 /**
@@ -100,6 +113,16 @@ async function resolverReceita(
       // impede um evento executado de mudar de sugestão sozinho depois.
       margemPercentual: material?.margemPercentual ?? linha.margemPercentual,
       notes: linha.notes?.trim() || undefined,
+      // Floral: a COR e a ORIGEM são decisão deste projeto e vêm da linha; a
+      // VARIEDADE é identidade do insumo e vem do catálogo quando há vínculo,
+      // copiada junto com o nome pelo mesmo motivo que ele.
+      cor: linha.cor?.trim() || undefined,
+      variedade: material?.variedade ?? (linha.variedade?.trim() || undefined),
+      origem: linha.origem,
+      // Só grava o que muda o significado: `por_arranjo` é o padrão e fica
+      // ausente, para a receita antiga e a nova lerem igual.
+      distribuicao: linha.distribuicao === "total" ? ("total" as const) : undefined,
+      apenasOrientacao: linha.apenasOrientacao === true ? true : undefined,
     });
   }
   return resolvidas;

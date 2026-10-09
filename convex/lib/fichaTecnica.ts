@@ -60,7 +60,43 @@ export type ComponenteDaReceita = {
    * receita. Ver `SUGERIDO` abaixo: é snapshot, exatamente como o resto.
    */
   margemPercentual?: number;
+  // ── PRODUÇÃO FLORAL ───────────────────────────────────────────────────────
+  /** Cor desejada nesta receita. Não entra em nenhuma conta; é instrução. */
+  cor?: string;
+  /** Variedade da flor, copiada do catálogo. Instrução, não conta. */
+  variedade?: string;
+  /** Flor natural ou permanente. Instrução, não conta. */
+  origem?: string;
+  /**
+   * O que a `quantidade` significa. Ausente ou `por_arranjo`: consumo de UMA
+   * unidade da composição. `total`: a quantidade já é o total distribuído
+   * entre todas as unidades. Ver `necessidadeDoComponente`.
+   */
+  distribuicao?: string;
+  /** Linha de orientação, sem quantidade confiável. Não entra em total nenhum. */
+  apenasOrientacao?: boolean;
+  /** Observação da linha, escrita pela decoradora. Instrução, não conta. */
+  notes?: string;
 };
+
+/** A linha é instrução sem quantidade confiável? */
+export function ehApenasOrientacao(componente: {
+  apenasOrientacao?: boolean;
+}): boolean {
+  return componente.apenasOrientacao === true;
+}
+
+/**
+ * A quantidade desta linha é o TOTAL distribuído entre as unidades da
+ * composição, em vez do consumo de cada uma?
+ *
+ * Ausente é `por_arranjo` de propósito: é o que toda receita gravada antes
+ * deste campo significa, e ler diferente mudaria, em silêncio, o total de
+ * eventos já executados.
+ */
+export function ehTotalDistribuido(componente: { distribuicao?: string }): boolean {
+  return componente.distribuicao === "total";
+}
 
 // ── MARGEM DE SEGURANÇA ─────────────────────────────────────────────────────
 //
@@ -174,9 +210,17 @@ export function unidadesDaComposicao(c: { quantidade?: number }): number {
  */
 export function necessidadeDoComponente(
   composicao: { quantidade?: number },
-  componente: { quantidade: number },
+  componente: { quantidade: number; distribuicao?: string; apenasOrientacao?: boolean },
 ): number {
+  // Orientação não tem total. Devolver 0 é mais honesto do que devolver um
+  // número derivado de uma quantidade que ninguém garantiu — e quem consolida
+  // nem chega aqui, porque pula a linha antes.
+  if (ehApenasOrientacao(componente)) return 0;
   const porUnidade = Number.isFinite(componente.quantidade) ? componente.quantidade : 0;
+  // "2 maços distribuídos entre os 20 arranjos" JÁ É o total: multiplicar por
+  // 20 daria 40 maços e uma compra absurda. É o único caso em que a
+  // quantidade da composição não entra na conta.
+  if (ehTotalDistribuido(componente)) return quantidadeLimpa(porUnidade);
   return quantidadeLimpa(unidadesDaComposicao(composicao) * porUnidade);
 }
 
@@ -194,6 +238,12 @@ export type OrigemDaNecessidade = {
   porUnidade: number;
   /** O produto dos dois. */
   necessario: number;
+  /**
+   * `true` quando `porUnidade` é, na verdade, o total distribuído entre as
+   * unidades — aí `necessario === porUnidade` e a tela não pode escrever
+   * "× 20". Sem este campo o rastro mentiria sobre a própria conta.
+   */
+  distribuido?: boolean;
 };
 
 /**
@@ -287,6 +337,10 @@ export function consolidarMateriais(
     const unidades = unidadesDaComposicao(composicao);
 
     for (const componente of composicao.receita ?? []) {
+      // Orientação é instrução, não insumo: ela não vira linha do consolidado
+      // nem total de compra. Quem precisa dela é a ficha do florista, que a lê
+      // por `orientacoesDaComposicao`.
+      if (ehApenasOrientacao(componente)) continue;
       const unidade = componente.unidade ?? "";
       // A unidade entra na chave: somar haste com maço seria inventar uma
       // conversão que ninguém informou.
@@ -301,6 +355,7 @@ export function consolidarMateriais(
         unidades,
         porUnidade: componente.quantidade,
         necessario,
+        distribuido: ehTotalDistribuido(componente) ? true : undefined,
       };
 
       const existente = porChave.get(chave);

@@ -135,6 +135,45 @@ const componenteDaReceita = v.object({
    */
   margemPercentual: v.optional(v.number()),
   notes: v.optional(v.string()),
+  // ── CAMPOS DA PRODUÇÃO FLORAL (aditivos, todos opcionais) ─────────────────
+  // Vivem na MESMA linha de receita, e não numa estrutura paralela: "5 rosas
+  // brancas naturais por arranjo" é uma informação, não duas. Uma tabela só
+  // para a parte floral obrigaria a decoradora a cadastrar a rosa na ficha
+  // técnica e de novo na ficha do florista, e as duas divergiriam na primeira
+  // semana — o mesmo argumento que já manteve a receita dentro de
+  // `assemblyItems`.
+  /** Cor DESEJADA nesta receita. A mesma rosa é branca aqui e rosê no evento seguinte. */
+  cor: v.optional(v.string()),
+  /** Variedade copiada do catálogo ("Avalanche"). Snapshot, como o nome. */
+  variedade: v.optional(v.string()),
+  /**
+   * Flor natural ou permanente (seda, desidratada). Mora na LINHA porque a
+   * mesma rosa do catálogo entra natural num evento e permanente no outro —
+   * é decisão do projeto, não identidade do insumo.
+   * AUSENTE = não informado; nenhuma tela afirma "natural" por omissão.
+   */
+  origem: v.optional(v.union(v.literal("natural"), v.literal("permanente"))),
+  /**
+   * O QUE A `quantidade` SIGNIFICA — a distinção que o florista precisa.
+   *
+   *   `por_arranjo` (ou AUSENTE) — 5 rosas em CADA arranjo. O total do evento
+   *                                é 5 × quantidade de arranjos. É o
+   *                                significado de toda receita já cadastrada,
+   *                                então o campo nasce ausente e nada muda.
+   *   `total`                     — 2 maços de eucalipto DISTRIBUÍDOS entre os
+   *                                20 arranjos. Multiplicar isso por 20 daria
+   *                                40 maços e uma compra absurda.
+   */
+  distribuicao: v.optional(
+    v.union(v.literal("por_arranjo"), v.literal("total")),
+  ),
+  /**
+   * Linha de ORIENTAÇÃO, sem quantidade confiável ("folhagem a gosto do
+   * florista"). Ela aparece na ficha como instrução e NÃO entra em nenhum
+   * total: inventar número para ela viraria compra inventada.
+   * AUSENTE/false = linha normal, com quantidade.
+   */
+  apenasOrientacao: v.optional(v.boolean()),
 });
 
 /** Tipos de ajuste de estoque — a lista vive em lib/ajusteDeAcervo.ts. */
@@ -1642,6 +1681,16 @@ export default defineSchema({
      * cadastrado. Sem backfill, e a tela mostra o nome como sempre mostrou.
      */
     fotoStorageId: v.optional(v.id("_storage")),
+    /**
+     * Variedade da flor — "Avalanche", "Vendela", "Carlito".
+     *
+     * Mora no CATÁLOGO porque é identidade do insumo: rosa Avalanche é rosa
+     * Avalanche em todo evento, igual à foto. A cor desejada NÃO mora aqui —
+     * essa muda a cada projeto e fica na linha da receita.
+     *
+     * AUSENTE = não informada, e a ficha mostra só o nome.
+     */
+    variedade: v.optional(v.string()),
     notes: v.optional(v.string()),
     /** Fora do catálogo ativo sem perder as receitas que já o citam. */
     archived: v.optional(v.boolean()),
@@ -1954,6 +2003,37 @@ export default defineSchema({
      * receita por aqui, senão o snapshot deixaria de ser snapshot.
      */
     compositionId: v.optional(v.id("compositions")),
+    /**
+     * ── A FICHA DO FLORISTA (produção floral) ────────────────────────────────
+     * O que o florista precisa saber e que a receita não diz: que forma tem o
+     * arranjo, que altura, como se monta, o que pode ser substituído se faltar
+     * flor na CEASA, que cuidado a flor exige e a que hora cada coisa chega.
+     *
+     * Mora junto do item, e não em tabela própria, pelo mesmo motivo que a
+     * receita: `assemblyItems` JÁ é "20 arranjos baixos na mesa dos
+     * convidados". Uma tabela `floralCompositions` seria o segundo cadastro da
+     * mesma coisa.
+     *
+     * Um objeto só, e não sete campos soltos: eles são lidos e impressos
+     * juntos, e `floral` ausente é a resposta limpa para "este item não tem
+     * ficha floral" — o estado de todo item já cadastrado.
+     *
+     * Texto livre de propósito. "Altura 60 cm" e "entre 55 e 65, o que a flor
+     * permitir" são as duas respostas certas, e um número obrigatório forçaria
+     * a decoradora a mentir para o campo.
+     */
+    floral: v.optional(
+      v.object({
+        formato: v.optional(v.string()),
+        altura: v.optional(v.string()),
+        montagem: v.optional(v.string()),
+        substituicoes: v.optional(v.string()),
+        cuidados: v.optional(v.string()),
+        /** Horário específico desta composição: entrega, montagem, retirada. */
+        horario: v.optional(v.string()),
+        observacoes: v.optional(v.string()),
+      }),
+    ),
     createdAt: v.string(),
     updatedAt: v.string(),
   })

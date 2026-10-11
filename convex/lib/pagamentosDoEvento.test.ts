@@ -193,3 +193,14 @@ describe("o resumo do evento", () => {
     expect(r.saldoCentavos).toBe(1_000_000);
   });
 });
+
+describe("planejar num evento que JÁ tem parcelas", () => {
+  it("o rótulo diferencia as novas das antigas, sem mudar valores nem datas", () => {
+    const base = { totalCentavos: 30000, quantidade: 3, primeiroVencimento: "2026-11-10" };
+    const padrao = planejarParcelas(base);
+    const adicional = planejarParcelas({ ...base, entrada: null, rotulo: { parcela: "Parcela adicional", entrada: "Entrada adicional" } });
+    expect(padrao.map((p) => p.descricao)).toEqual(["Parcela 1/3", "Parcela 2/3", "Parcela 3/3"]);
+    expect(adicional.map((p) => p.descricao)).toEqual(["Parcela adicional 1/3", "Parcela adicional 2/3", "Parcela adicional 3/3"]);
+    expect(adicional.map((p) => [p.valorCentavos, p.vencimento])).toEqual(padrao.map((p) => [p.valorCentavos, p.vencimento]));
+  });
+});

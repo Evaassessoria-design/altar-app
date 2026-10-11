@@ -182,3 +182,24 @@ describe("toda parcela se abre", () => {
     expect(fluxo).toContain("api.financeiro.updateTransaction");
   });
 });
+
+describe("planejar com parcelas existentes", () => {
+  const aba = readFileSync("src/pages/app/events/[id]/_components/pagamentos-da-cliente.tsx", "utf-8");
+
+  it("mostra o que já existe e chama de acrescentar — com nome próprio para as novas", () => {
+    expect(aba).toContain("existentes={dados.parcelas}");
+    expect(aba).toContain("Já lançadas:");
+    expect(aba).toContain('{ parcela: "Parcela adicional", entrada: "Entrada adicional" }');
+    expect(aba).toContain('{dados.parcelas.length > 0 ? "Acrescentar parcelas" : "Planejar parcelas"}');
+  });
+
+  it("diz quanto acrescenta e avisa — sem bloquear — quando passa do contratado", () => {
+    expect(aba).toContain("o total parcelado passa de");
+    expect(aba).toContain("passam{\" \"}");
+    expect(aba).toContain('" mesmo assim"');
+  });
+
+  it("editar fica na parcela; o planejamento não altera as existentes", () => {
+    expect(aba).toContain("Para mudar uma delas, feche e abra a parcela");
+  });
+});

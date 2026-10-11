@@ -134,7 +134,7 @@ export function PagamentosDaCliente({ eventId }: { eventId: Id<"events"> }) {
           onClick={() => setAberto({ tipo: "planejar" })}
           className="cursor-pointer gap-1.5 h-9"
         >
-          <ListPlus className="size-4" /> Planejar parcelas
+          <ListPlus className="size-4" /> {dados.parcelas.length > 0 ? "Acrescentar parcelas" : "Planejar parcelas"}
         </Button>
       </div>
 
@@ -348,6 +348,7 @@ export function PagamentosDaCliente({ eventId }: { eventId: Id<"events"> }) {
           hoje={hoje}
           contratadoCentavos={resumo.contratadoCentavos}
           parceladoCentavos={resumo.parceladoCentavos}
+          existentes={dados.parcelas}
           onClose={() => setAberto(null)}
         />
       )}
@@ -511,15 +512,23 @@ function PlanejarParcelas({
   hoje,
   contratadoCentavos,
   parceladoCentavos,
+  existentes,
   onClose,
 }: {
   eventId: Id<"events">;
   hoje: string;
   contratadoCentavos: number | null;
   parceladoCentavos: number;
+  /** As parcelas que JÁ existem — mostradas antes de criar, nunca alteradas aqui. */
+  existentes: readonly Parcela[];
   onClose: () => void;
 }) {
   const adicionar = useMutation(api.financeiro.adicionarParcelas);
+  // Com parcelas lançadas, isto ACRESCENTA — e as novas ganham nome próprio
+  // ("Parcela adicional 1/2"). Com os mesmos nomes das antigas ("Parcela
+  // 1/3"), as duas levas se misturavam na lista, ordenada por vencimento.
+  const acrescentando = existentes.length > 0;
+  const rotulo = acrescentando ? { parcela: "Parcela adicional", entrada: "Entrada adicional" } : undefined;
   const chave = useMemo(novaChave, []);
   const emCurso = useRef(false);
   const [salvando, setSalvando] = useState(false);
@@ -545,6 +554,7 @@ function PlanejarParcelas({
           entrada: entradaCentavos > 0 ? { valorCentavos: entradaCentavos, vencimento: dataEntrada } : null,
           quantidade: n,
           primeiroVencimento: primeiro,
+          rotulo,
         })
       : [];
   const previa = ajustes ?? calculado;
@@ -584,15 +594,40 @@ function PlanejarParcelas({
     <Dialog open onOpenChange={(o) => !o && !salvando && onClose()}>
       <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Planejar parcelas</DialogTitle>
+          <DialogTitle>{acrescentando ? "Acrescentar parcelas" : "Planejar parcelas"}</DialogTitle>
           <DialogDescription>
-            Cria parcelas NOVAS. As que já existem — inclusive as recebidas — não são alteradas.
+            {acrescentando
+              ? "Cria parcelas ADICIONAIS. As que já existem — inclusive as recebidas — continuam como estão."
+              : "Monte a entrada e as parcelas com prévia antes de salvar."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
+          {/* O QUE JÁ EXISTE, antes de criar. Editar uma parcela não é aqui:
+              é na própria parcela (abrir → Editar valor e vencimento). */}
+          {acrescentando && (
+            <div className="rounded-lg border border-border bg-muted/40 p-3 space-y-1.5">
+              <p className="text-xs font-semibold">
+                Já lançadas: {existentes.length} parcela{existentes.length === 1 ? "" : "s"} · {reais(parceladoCentavos)}
+                {contratadoCentavos !== null && ` de ${reais(contratadoCentavos)} contratados`}
+              </p>
+              <ul className="max-h-28 overflow-y-auto space-y-0.5 text-xs text-muted-foreground">
+                {[...existentes]
+                  .sort((a, b) => a.date.localeCompare(b.date))
+                  .map((p) => (
+                    <li key={p._id} className="flex justify-between gap-2">
+                      <span className="truncate">{p.description} · vence {formatDateInput(p.date)}</span>
+                      <span className="flex-shrink-0">{reais(paraCentavos(p.amount))}</span>
+                    </li>
+                  ))}
+              </ul>
+              <p className="text-[11px] text-muted-foreground">
+                Para mudar uma delas, feche e abra a parcela → <strong>Editar valor e vencimento</strong>.
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="plano-total">Valor a parcelar (R$)</Label>
+              <Label htmlFor="plano-total">{acrescentando ? "Valor a acrescentar (R$)" : "Valor a parcelar (R$)"}</Label>
               <Input
                 id="plano-total"
                 inputMode="decimal"
@@ -695,11 +730,26 @@ function PlanejarParcelas({
                     <span className="text-amber-700 dark:text-amber-400"> (valor a parcelar: {reais(totalCentavos)})</span>
                   )}
                 </p>
-                {depoisDoPlano !== null && depoisDoPlano !== 0 && (
+                {acrescentando && (
+                  <p>
+                    Acrescenta <span className="font-semibold">{reais(somaPrevia)}</span>: o total parcelado passa de{" "}
+                    {reais(parceladoCentavos)} para{" "}
+                    <span className="font-semibold">{reais(parceladoCentavos + somaPrevia)}</span>.
+                  </p>
+                )}
+                {depoisDoPlano !== null && depoisDoPlano > 0 && (
                   <p className="text-amber-700 dark:text-amber-400">
-                    {depoisDoPlano > 0
-                      ? `Depois disto ainda faltarão ${reais(depoisDoPlano)} para cobrir o contratado.`
-                      : `Com isto as parcelas passam ${reais(-depoisDoPlano)} do contratado.`}
+                    Depois disto ainda faltarão {reais(depoisDoPlano)} para cobrir o contratado.
+                  </p>
+                )}
+                {/* Passar do contratado pode ser legítimo (um adicional
+                    combinado) — não é bloqueado, mas é dito com todas as
+                    letras antes do clique. */}
+                {depoisDoPlano !== null && depoisDoPlano < 0 && (
+                  <p role="alert" className="rounded-md bg-amber-100 dark:bg-amber-900/30 px-2 py-1.5 text-amber-900 dark:text-amber-200">
+                    Atenção: com isto as parcelas somam {reais(parceladoCentavos + somaPrevia)} e passam{" "}
+                    <strong>{reais(-depoisDoPlano)}</strong> do contratado ({reais(contratadoCentavos!)}). Se a cliente
+                    combinou um adicional, ajuste também o valor contratado.
                   </p>
                 )}
                 {depoisDoPlano === 0 && (
@@ -719,7 +769,11 @@ function PlanejarParcelas({
             disabled={salvando || previa.length === 0 || invalida}
             className="cursor-pointer h-10 sm:h-9"
           >
-            {salvando ? "Criando..." : `Criar ${previa.length || ""} parcela${previa.length === 1 ? "" : "s"}`}
+            {salvando
+              ? "Criando..."
+              : `${acrescentando ? "Acrescentar" : "Criar"} ${previa.length || ""} parcela${previa.length === 1 ? "" : "s"}${
+                  depoisDoPlano !== null && depoisDoPlano < 0 ? " mesmo assim" : ""
+                }`}
           </Button>
         </DialogFooter>
       </DialogContent>

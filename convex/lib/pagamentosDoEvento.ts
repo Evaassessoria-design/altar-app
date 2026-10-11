@@ -158,12 +158,19 @@ export function planejarParcelas(opcoes: {
   entrada?: { valorCentavos: number; vencimento: string } | null;
   quantidade: number;
   primeiroVencimento: string;
+  /**
+   * Como chamar as parcelas. Ausente = "Parcela" / "Entrada". Num evento que
+   * JÁ tem parcelas, um segundo planejamento com os mesmos nomes ("Parcela
+   * 1/3") se misturava às antigas na lista — a tela passa "adicional".
+   */
+  rotulo?: { parcela: string; entrada: string };
 }): ParcelaPlanejada[] {
   const { totalCentavos, entrada, quantidade, primeiroVencimento } = opcoes;
+  const rotulo = opcoes.rotulo ?? { parcela: "Parcela", entrada: "Entrada" };
   const plano: ParcelaPlanejada[] = [];
   let restante = totalCentavos;
   if (entrada && entrada.valorCentavos > 0) {
-    plano.push({ descricao: "Entrada", valorCentavos: entrada.valorCentavos, vencimento: entrada.vencimento });
+    plano.push({ descricao: rotulo.entrada, valorCentavos: entrada.valorCentavos, vencimento: entrada.vencimento });
     restante -= entrada.valorCentavos;
   }
   if (quantidade <= 0 || restante <= 0) return plano;
@@ -171,7 +178,7 @@ export function planejarParcelas(opcoes: {
   const sobra = restante - base * quantidade;
   for (let i = 0; i < quantidade; i++) {
     plano.push({
-      descricao: `Parcela ${i + 1}/${quantidade}`,
+      descricao: `${rotulo.parcela} ${i + 1}/${quantidade}`,
       valorCentavos: base + (i < sobra ? 1 : 0),
       vencimento: somarMeses(primeiroVencimento, i),
     });

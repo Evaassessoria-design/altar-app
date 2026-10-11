@@ -26,6 +26,7 @@ import { api } from "./_generated/api";
 import { autenticarComo } from "./test.auth";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
+import { planejarParcelas } from "./lib/pagamentosDoEvento";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // PAGAMENTOS DO CLIENTE — NO BANCO, COM DUAS CONTAS
@@ -218,6 +219,38 @@ describe("o mesmo planejamento salvo de novo", () => {
       ],
     });
     expect(r).toEqual({ criadas: 1, repetido: false, ignoradas: 1 });
+  });
+
+  it("ACRESCENTAR uma leva igual à anterior cria — o nome \"adicional\" é o que a separa", async () => {
+    // O defeito: a decoradora acrescenta 2 parcelas com os mesmos valores e
+    // datas da leva anterior. Com o nome padrão ("Parcela 1/2"), a assinatura
+    // descrição|valor|vencimento batia e o servidor respondia "repetido" —
+    // nada era criado. A tela agora nomeia a leva nova como "adicional".
+    const c = await cenario();
+    await c.dona.mutation(api.financeiro.adicionarParcelas, plano("a", c.ids.evento));
+    const leva = (rotulo?: { parcela: string; entrada: string }) =>
+      planejarParcelas({ totalCentavos: 666_667, quantidade: 2, primeiroVencimento: "2027-01-10", rotulo }).map(
+        (p) => ({ descricao: p.descricao, valor: p.valorCentavos / 100, vencimento: p.vencimento }),
+      );
+    const semRotulo = await c.dona.mutation(api.financeiro.adicionarParcelas, {
+      eventId: c.ids.evento, chave: "b", parcelas: leva(),
+    });
+    expect(semRotulo).toEqual({ criadas: 0, repetido: true });
+    const comRotulo = await c.dona.mutation(api.financeiro.adicionarParcelas, {
+      eventId: c.ids.evento, chave: "c", parcelas: leva({ parcela: "Parcela adicional", entrada: "Entrada adicional" }),
+    });
+    expect(comRotulo).toEqual({ criadas: 2, repetido: false, ignoradas: 0 });
+    const d = await c.dona.query(api.financeiro.pagamentosDoEvento, { eventId: c.ids.evento });
+    expect(d!.parcelas.map((p) => p.description)).toEqual(
+      expect.arrayContaining(["Parcela 1/2", "Parcela 2/2", "Parcela adicional 1/2", "Parcela adicional 2/2"]),
+    );
+  });
+
+  it("a conta rival não acrescenta parcelas no evento da dona", async () => {
+    const c = await cenario();
+    await expect(
+      c.rival.mutation(api.financeiro.adicionarParcelas, plano("intrusa", c.ids.evento)),
+    ).rejects.toThrow(/NOT_FOUND|não encontrado/i);
   });
 
   it("mesmo valor em OUTRO vencimento é parcela nova, não repetição", async () => {

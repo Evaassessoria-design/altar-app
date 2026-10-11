@@ -63,7 +63,8 @@ export function RegistrarRecebimento({
 }: {
   parcela: ParcelaParaReceber;
   hoje: string;
-  onClose: () => void;
+  /** `registrado` = gravou. Fechar ou cancelar chama sem argumento. */
+  onClose: (registrado?: boolean) => void;
   /**
    * Pré-preenchimento da CORREÇÃO: os dados do recebimento recém-anulado,
    * para a decoradora mudar só o que estava errado. Um recebimento NOVO —
@@ -128,7 +129,7 @@ export function RegistrarRecebimento({
         comprovante: comprovanteSubido.current ?? undefined,
       });
       toast.success(r.repetido ? "Este recebimento já estava registrado." : "Recebimento registrado.");
-      onClose();
+      onClose(true);
     } catch (e) {
       toast.error(mensagem(e, "Não foi possível registrar o recebimento."));
     } finally {
@@ -195,7 +196,7 @@ export function RegistrarRecebimento({
           </p>
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={onClose} disabled={salvando} className="cursor-pointer h-10 sm:h-9">
+          <Button variant="ghost" onClick={() => onClose()} disabled={salvando} className="cursor-pointer h-10 sm:h-9">
             Cancelar
           </Button>
           <Button onClick={() => void salvar()} disabled={salvando || !!erro} className="cursor-pointer h-10 sm:h-9">
@@ -766,7 +767,25 @@ export function FluxoDaParcela({
     case "receber":
       return <RegistrarRecebimento parcela={parcela} hoje={hoje} onClose={voltar} />;
     case "registrarCorrecao":
-      return <RegistrarRecebimento parcela={parcela} hoje={hoje} inicial={etapa.inicial} onClose={voltar} />;
+      return (
+        <RegistrarRecebimento
+          parcela={parcela}
+          hoje={hoje}
+          inicial={etapa.inicial}
+          onClose={(registrado) => {
+            // Cancelar aqui deixa a correção PELA METADE: o recebimento já foi
+            // anulado e o valor certo não entrou. Isso é dito — os detalhes
+            // mostram o anulado e o saldo de volta, mas não "corrigido".
+            if (!registrado) {
+              toast.warning(
+                "Correção não concluída: o recebimento foi anulado e o valor certo não foi registrado. O saldo voltou a contar sem ele — registre quando puder.",
+                { duration: 8000 },
+              );
+            }
+            voltar();
+          }}
+        />
+      );
     case "editar":
       return <EditarParcela parcela={parcela} onClose={voltar} />;
     case "anexarDocumento":

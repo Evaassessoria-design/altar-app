@@ -203,3 +203,13 @@ describe("planejar com parcelas existentes", () => {
     expect(aba).toContain("Para mudar uma delas, feche e abra a parcela");
   });
 });
+
+describe("correção cancelada no meio", () => {
+  const fluxo = readFileSync("src/components/financeiro/recebimentos.tsx", "utf-8");
+  it("avisa que não foi concluída — sem dizer 'corrigido'", () => {
+    expect(fluxo).toContain("Correção não concluída: o recebimento foi anulado e o valor certo não foi registrado.");
+    expect(fluxo).toContain("if (!registrado) {");
+    // só o sucesso chama com `true`
+    expect(fluxo).toContain("onClose(true);");
+  });
+});

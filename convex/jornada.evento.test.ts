@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./auth", () => {
   const usuarioDaSessao = async (ctx: {
@@ -24,6 +24,7 @@ import schema from "./schema";
 import { modules } from "./test.setup";
 import { api, internal } from "./_generated/api";
 import { autenticarComo } from "./test.auth";
+import { DEMO_WEDDING } from "./lib/demoData";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // A JORNADA DO EVENTO NO BANCO — pela mesma query que a página chama
@@ -51,7 +52,30 @@ async function comADemo() {
   return { t, dona, outra, heroi: r.eventId, porNome };
 }
 
+// O RELÓGIO DESTES TESTES. Marina & Gabriel, o evento-herói da demo, tem data
+// FIXA (DEMO_WEDDING.event.date = 2026-10-10); o resto do portfólio é semeado
+// relativo a "agora". Com o relógio real, o teste passava até 09/10 e, de 10/10
+// em diante, o herói "já tinha acontecido" (data <= hoje) e caía em Operação.
+// A referência é derivada da fixture — 5 dias antes do herói, meio-dia UTC —
+// para continuar valendo se a data da demo mudar.
+//
+// Isto NÃO atualiza o banco já semeado: o evento da conta de demonstração
+// continua com a data com que foi criado.
+function diasAntesDoHeroi(dias: number): Date {
+  const d = new Date(`${DEMO_WEDDING.event.date}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - dias);
+  return d;
+}
+
 describe("getEventJourney", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(diasAntesDoHeroi(5));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("evento de outra conta: null — a jornada não confirma que ele existe", async () => {
     const { outra, heroi } = await comADemo();
     expect(await outra.query(api.health.getEventJourney, { eventId: heroi })).toBeNull();
@@ -85,6 +109,15 @@ describe("getEventJourney", () => {
     expect(etapa("projeto").status).not.toBe("concluido");
     expect(j.fase).toBe("projeto");
     expect(JSON.stringify(j)).not.toMatch(/assinad/i);
+  });
+
+  it("no DIA do herói ele já conta como acontecido: fase OPERAÇÃO", async () => {
+    // O outro lado da referência acima — e o que a conta de demonstração
+    // mostra se a data do evento não for movida para depois da apresentação.
+    const { dona, heroi } = await comADemo();
+    vi.setSystemTime(diasAntesDoHeroi(0));
+    const j = (await dona.query(api.health.getEventJourney, { eventId: heroi }))!;
+    expect(j.fase).toBe("operacao");
   });
 
   it("Rafaela & Ian, que foi no fim de semana: fase OPERAÇÃO e o retorno por conferir", async () => {

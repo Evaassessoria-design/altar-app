@@ -43,6 +43,7 @@ import {
   paraCentavos,
   parcelaAtrasada,
   planejarParcelas,
+  rotuloDaLeva,
   recebidoEmCentavos,
   resumirPagamentos,
   saldoEmCentavos,
@@ -525,10 +526,14 @@ function PlanejarParcelas({
 }) {
   const adicionar = useMutation(api.financeiro.adicionarParcelas);
   // Com parcelas lançadas, isto ACRESCENTA — e as novas ganham nome próprio
-  // ("Parcela adicional 1/2"). Com os mesmos nomes das antigas ("Parcela
-  // 1/3"), as duas levas se misturavam na lista, ordenada por vencimento.
+  // ("Parcela adicional 1/2", depois "(leva 2)"…). Com os mesmos nomes das
+  // antigas, as levas se misturavam na lista e, com valores e datas iguais, o
+  // servidor as tomava por repetição e não criava nada (ver rotuloDaLeva).
   const acrescentando = existentes.length > 0;
-  const rotulo = acrescentando ? { parcela: "Parcela adicional", entrada: "Entrada adicional" } : undefined;
+  // Fixado ao ABRIR: se a 1ª tentativa gravou e a resposta se perdeu, a lista
+  // ao vivo já traz as novas — e o reenvio tem de mandar a MESMA prévia, com a
+  // mesma chave, para o servidor reconhecer como repetição.
+  const [rotulo] = useState(() => rotuloDaLeva(existentes.map((p) => p.description)));
   const chave = useMemo(novaChave, []);
   const emCurso = useRef(false);
   const [salvando, setSalvando] = useState(false);
@@ -601,7 +606,11 @@ function PlanejarParcelas({
               : "Monte a entrada e as parcelas com prévia antes de salvar."}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
+        {/* min-w-0: o DialogContent é um grid, e a coluna cresce até a largura
+            mínima do filho — que conta o texto inteiro das linhas `truncate`
+            ("Parcela adicional (leva 2) 2/3 · vence…"). No celular (390 px) o
+            diálogo passava a 411 px de conteúdo, com rolagem lateral. */}
+        <div className="space-y-3 min-w-0">
           {/* O QUE JÁ EXISTE, antes de criar. Editar uma parcela não é aqui:
               é na própria parcela (abrir → Editar valor e vencimento). */}
           {acrescentando && (

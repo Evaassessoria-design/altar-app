@@ -145,6 +145,34 @@ export function somarMeses(data: string, n: number): string {
 
 export type ParcelaPlanejada = { descricao: string; valorCentavos: number; vencimento: string };
 
+// "Parcela adicional 1/3", "Entrada adicional", "Parcela adicional (leva 2) 1/3"…
+const DA_LEVA = /^(?:Parcela|Entrada) adicional(?: \(leva (\d+)\))?(?: \d+\/\d+)?$/;
+
+/**
+ * O nome da leva que vai ser criada, a partir das descrições que JÁ existem.
+ *
+ * Sem parcelas: `undefined` (o padrão "Parcela"/"Entrada"). Com parcelas: a
+ * 1ª leva acrescentada é "Parcela adicional"; as seguintes, "(leva 2)",
+ * "(leva 3)"…
+ *
+ * Por que numerar: `adicionarParcelas` trata descrição|valor|vencimento iguais
+ * como o MESMO planejamento salvo de novo. Uma 2ª leva adicional com os mesmos
+ * valores e datas da 1ª tinha a mesma assinatura e voltava "repetido" — nada
+ * era criado. O reenvio do MESMO formulário (clique duplo, rede) continua
+ * barrado pela `chave`, que o servidor confere antes da assinatura.
+ */
+export function rotuloDaLeva(descricoesExistentes: readonly string[]): { parcela: string; entrada: string } | undefined {
+  if (descricoesExistentes.length === 0) return undefined;
+  let ultima = 0;
+  for (const d of descricoesExistentes) {
+    const m = DA_LEVA.exec(d.trim());
+    if (m) ultima = Math.max(ultima, m[1] ? Number(m[1]) : 1);
+  }
+  const leva = ultima + 1;
+  const sufixo = leva === 1 ? "" : ` (leva ${leva})`;
+  return { parcela: `Parcela adicional${sufixo}`, entrada: `Entrada adicional${sufixo}` };
+}
+
 /**
  * A prévia do parcelamento: entrada opcional + N parcelas mensais.
  *

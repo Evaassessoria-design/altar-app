@@ -5,6 +5,7 @@ import {
   estadoDaParcela,
   parcelaAtrasada,
   planejarParcelas,
+  rotuloDaLeva,
   recebidoEmCentavos,
   resumirPagamentos,
   saldoEmCentavos,
@@ -202,5 +203,26 @@ describe("planejar num evento que JÁ tem parcelas", () => {
     expect(padrao.map((p) => p.descricao)).toEqual(["Parcela 1/3", "Parcela 2/3", "Parcela 3/3"]);
     expect(adicional.map((p) => p.descricao)).toEqual(["Parcela adicional 1/3", "Parcela adicional 2/3", "Parcela adicional 3/3"]);
     expect(adicional.map((p) => [p.valorCentavos, p.vencimento])).toEqual(padrao.map((p) => [p.valorCentavos, p.vencimento]));
+  });
+});
+
+describe("o nome de cada leva", () => {
+  const ad = (n?: number) => (n ? { parcela: `Parcela adicional (leva ${n})`, entrada: `Entrada adicional (leva ${n})` } : { parcela: "Parcela adicional", entrada: "Entrada adicional" });
+  it("sem parcelas: o nome padrão", () => {
+    expect(rotuloDaLeva([])).toBeUndefined();
+  });
+  it("só o planejamento original: 1ª adicional", () => {
+    expect(rotuloDaLeva(["Entrada", "Parcela 1/3", "Parcela 2/3"])).toEqual(ad());
+  });
+  it("depois da 1ª adicional vem a leva 2, depois a 3", () => {
+    expect(rotuloDaLeva(["Parcela 1/3", "Parcela adicional 1/2", "Parcela adicional 2/2"])).toEqual(ad(2));
+    expect(rotuloDaLeva(["Parcela 1/3", "Entrada adicional", "Parcela adicional (leva 2) 1/1"])).toEqual(ad(3));
+  });
+  it("conta pela MAIOR leva, mesmo com a do meio apagada", () => {
+    expect(rotuloDaLeva(["Parcela 1/3", "Parcela adicional (leva 4) 1/2"])).toEqual(ad(5));
+  });
+  it("descrição livre que só se parece não conta como leva", () => {
+    expect(rotuloDaLeva(["Parcela adicional do buffet", "Parcela 1/1"])).toEqual(ad());
+    expect(rotuloDaLeva(["  Parcela adicional 1/2  "])).toEqual(ad(2));
   });
 });

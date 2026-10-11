@@ -563,7 +563,10 @@ export function DetalhesDaParcela({
           </p>
         )}
 
-        <DialogFooter className="gap-2 flex-col-reverse sm:flex-row">
+        {/* sm:flex-wrap: com saldo, são três botões — em linha única passavam
+            da largura do diálogo (max-w-md) e criavam rolagem lateral, com o
+            "Registrar recebimento" cortado à direita (visto no DEV em 11/10). */}
+        <DialogFooter className="gap-2 flex-col-reverse sm:flex-row sm:flex-wrap">
           <Button variant="ghost" onClick={onClose} className="cursor-pointer h-10 sm:h-9">
             Fechar
           </Button>

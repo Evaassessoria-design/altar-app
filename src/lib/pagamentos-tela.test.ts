@@ -189,7 +189,8 @@ describe("planejar com parcelas existentes", () => {
   it("mostra o que já existe e chama de acrescentar — com nome próprio para as novas", () => {
     expect(aba).toContain("existentes={dados.parcelas}");
     expect(aba).toContain("Já lançadas:");
-    expect(aba).toContain('{ parcela: "Parcela adicional", entrada: "Entrada adicional" }');
+    // o nome da leva vem da regra pura, fixado quando o diálogo abre
+    expect(aba).toContain("useState(() => rotuloDaLeva(existentes.map((p) => p.description)))");
     expect(aba).toContain('{dados.parcelas.length > 0 ? "Acrescentar parcelas" : "Planejar parcelas"}');
   });
 
@@ -211,5 +212,17 @@ describe("correção cancelada no meio", () => {
     expect(fluxo).toContain("if (!registrado) {");
     // só o sucesso chama com `true`
     expect(fluxo).toContain("onClose(true);");
+  });
+});
+
+describe("detalhes da parcela sem rolagem lateral", () => {
+  const fluxo = readFileSync("src/components/financeiro/recebimentos.tsx", "utf-8");
+  it("o rodapé de três botões quebra linha em vez de alargar o diálogo", () => {
+    expect(fluxo).toContain('<DialogFooter className="gap-2 flex-col-reverse sm:flex-row sm:flex-wrap">');
+  });
+  it("o corpo do Acrescentar não alarga o grid do diálogo no celular", () => {
+    const aba = readFileSync("src/pages/app/events/[id]/_components/pagamentos-da-cliente.tsx", "utf-8");
+    const planejar = aba.slice(aba.indexOf("function PlanejarParcelas"));
+    expect(planejar).toContain('<div className="space-y-3 min-w-0">');
   });
 });

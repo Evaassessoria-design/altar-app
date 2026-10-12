@@ -45,12 +45,45 @@ Testes no banco (`convex/pagamentos.evento.test.ts`, "levas sucessivas"):
 No navegador (DEV): duplo clique criou 3 (não 6); a 2ª leva idêntica saiu
 como "(leva 2)" e foi criada; a prévia da 3ª mostra "(leva 3)".
 
-**Para sua conferência:** a proteção "o mesmo planejamento salvo de novo por
-outro formulário" do servidor deixou de valer na prática para quem acrescenta.
-Reabrir o diálogo e confirmar a mesma prévia cria uma leva nova, de propósito,
-porque o servidor não distingue repetição de nova leva intencional. O que
-protege agora é a lista "Já lançadas", visível antes do clique, e a chave
-para o mesmo formulário.
+### 3ª rodada (11/10): a numeração NÃO bastava — a chave é que protege
+
+O nome da leva sozinho deixava um furo, provado em teste no banco: o servidor
+grava, a resposta se perde, a decoradora **fecha e reabre** o diálogo. A chave
+nascia a cada abertura e o nome era recalculado da lista (que já trazia a leva
+gravada). Saía "(leva N+1)" com chave nova, e o servidor criava tudo de novo.
+
+**Correção (só tela, servidor intacto):**
+- A tentativa (chave, nome e prévia) é guardada **antes** de enviar, no
+  `sessionStorage` da aba (com reserva em memória), e só é apagada quando a
+  resposta confirma.
+- Ao abrir o diálogo, ou ela é **descartada com aviso**, se a lista mostra que
+  entrou ("A tentativa anterior foi gravada… Nada foi duplicado"), ou é
+  **retomada** com a mesma chave, o mesmo nome e a mesma prévia.
+- `situacaoDaLeva` (regra pura) compara a prévia com a lista ao vivo:
+  "gravada" (não envia), "ocupada" (outra aba usou o nome: pede para reabrir)
+  ou "livre".
+- Com a resposta perdida a promessa pode nunca voltar: se a lista já mostra a
+  leva, fechar o diálogo fica liberado.
+
+| Caso | Teste no banco | Navegador (DEV) |
+|---|---|---|
+| 1. 1ª e 2ª levas iguais | as duas criadas | "(leva 2)" criada |
+| 2. Clique duplo | cria uma vez | 3 criadas, não 6 |
+| 3. Grava e a resposta se perde | reenvio com a mesma chave → repetido | resposta do WebSocket descartada: leva gravada, aviso "já estão lançadas", Cancelar liberado |
+| 4. Fechar e reabrir depois | lista mostra a leva → "gravada"; a mesma chave → repetido | aviso "A tentativa anterior foi gravada"; a leva aparece 1 vez; a próxima é a seguinte |
+| 4b. O envio NÃO chegou e a página é recarregada | — | "Retomando…" com a mesma chave e os mesmos valores; criou 1 vez; o envio antigo, reenviado pelo Convex ao reconectar, voltou "já existiam — nada foi criado" |
+| 5. Duas abas com a mesma lista | a 2ª, igual → "gravada" e o servidor barra pela assinatura; com outros valores → "ocupada", reabrir dá a leva seguinte | aba B: "já estão lançadas" (botão desligado); com outro valor: "Outra janela acrescentou…" (botão desligado); reabrir → próxima leva |
+
+Achado do navegador: com uma mutation em voo, o próprio Convex mostra o
+aviso "Sair do site?" ao recarregar.
+
+**Limites que ficam:**
+- Uma leva feita em **outro aparelho ou aba** depois de uma resposta perdida
+  é indistinguível de uma leva nova intencional. O que protege é a lista
+  "Já lançadas", visível antes do clique.
+- Se a decoradora, ao retomar, mudar os valores, e a 1ª tentativa tiver
+  entrado sem a lista ainda mostrar, o servidor responde "repetido" pela
+  chave e nada é criado. Ela vê isso no aviso.
 
 ## 2. Correção de recebimento — validado no DEV (desktop)
 
@@ -144,9 +177,11 @@ mesma flor somam no resumo?
 
 ## Verificações (11/10, depois da última mudança de código)
 
-- `pnpm test`: **5.975/5.975**.
+- `pnpm test`: **5.987/5.987** (3ª rodada). Na 1ª execução, 3 testes de
+  `event-form-dialog.test.tsx` estouraram 5 s com a máquina carregada; o
+  arquivo sozinho passa 10/10 e a suíte repetida passou inteira.
 - `tsc` do app e do Convex: ok. Lint: 0 erros, 8 avisos antigos.
-- Build: ok, CSS `index-CrIBegFv.css`. É o CSS esperado no site se este SHA
+- Build: ok, CSS `index-BCAFzw3P.css`. É o CSS esperado no site se este SHA
   for publicado; refazer o build no SHA final para conferir.
 
 ## Próximos passos

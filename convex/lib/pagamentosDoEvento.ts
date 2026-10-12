@@ -174,6 +174,36 @@ export function rotuloDaLeva(descricoesExistentes: readonly string[]): { parcela
 }
 
 /**
+ * A prévia de um diálogo de planejamento comparada com a lista AO VIVO.
+ *
+ *   · "gravada": todas as parcelas da prévia já existem com o mesmo nome,
+ *     valor e vencimento — a tentativa entrou (resposta perdida, ou outra
+ *     aba enviou a mesma leva). Enviar de novo não cria nada; a tela diz isso.
+ *   · "ocupada": o NOME desta leva já foi usado por outras parcelas que não
+ *     são esta prévia — outra aba acrescentou uma leva enquanto este diálogo
+ *     estava aberto. Enviar criaria duas levas com o mesmo nome; a tela pede
+ *     para fechar e abrir de novo, o que calcula a leva seguinte.
+ *   · "livre": pode enviar.
+ *
+ * Os nomes de leva são únicos (ver rotuloDaLeva), e é isso que torna o nome
+ * uma prova de "já gravado". A garantia contra duplicar continua sendo a
+ * `chave` no servidor; isto é o que a tela mostra antes do clique.
+ */
+export function situacaoDaLeva(
+  previa: readonly ParcelaPlanejada[],
+  rotulo: { parcela: string; entrada: string } | undefined,
+  existentes: readonly { description: string; valorCentavos: number; date: string }[],
+): "gravada" | "ocupada" | "livre" {
+  if (previa.length === 0) return "livre";
+  const ja = new Set(existentes.map((e) => `${e.description.trim()}|${e.valorCentavos}|${e.date.slice(0, 10)}`));
+  if (previa.every((p) => ja.has(`${p.descricao}|${p.valorCentavos}|${p.vencimento}`))) return "gravada";
+  const r = rotulo ?? { parcela: "Parcela", entrada: "Entrada" };
+  const daLeva = (d: string) =>
+    d === r.entrada || (d.startsWith(`${r.parcela} `) && /^\d+\/\d+$/.test(d.slice(r.parcela.length + 1)));
+  return existentes.some((e) => daLeva(e.description.trim())) ? "ocupada" : "livre";
+}
+
+/**
  * A prévia do parcelamento: entrada opcional + N parcelas mensais.
  *
  * O arredondamento é DISTRIBUÍDO: os centavos que sobram da divisão vão um

@@ -26,7 +26,7 @@ import { api } from "./_generated/api";
 import { autenticarComo } from "./test.auth";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
-import { planejarParcelas, rotuloDaLeva } from "./lib/pagamentosDoEvento";
+import { paraCentavos, planejarParcelas, rotuloDaLeva, situacaoDaLeva } from "./lib/pagamentosDoEvento";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // PAGAMENTOS DO CLIENTE — NO BANCO, COM DUAS CONTAS
@@ -335,6 +335,78 @@ describe("levas sucessivas, como a tela manda", () => {
       repetido: true,
     });
     expect(await descricoes(c, ev)).toHaveLength(6);
+  });
+
+  it("o servidor sozinho NÃO distingue: chave nova depois de reabrir cria outra leva", async () => {
+    // O furo que existia: resposta perdida, a decoradora fecha e reabre; sem
+    // guardar a tentativa, o diálogo gerava outra chave e calculava o nome a
+    // partir da lista — que já trazia a leva gravada. Vira "(leva 2)",
+    // assinatura diferente, e o servidor cria tudo de novo. Por isso a tela
+    // RETOMA a chave guardada (caso 4, abaixo) — o servidor não muda.
+    const c = await cenario();
+    const ev = await eventoVazio(c);
+    await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "o", parcelas: await abrirDialogo(c, ev) });
+    await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "a1", parcelas: await abrirDialogo(c, ev) });
+    const r = await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "a1-reaberto", parcelas: await abrirDialogo(c, ev) });
+    expect(r.criadas).toBe(3);
+    expect(await descricoes(c, ev)).toHaveLength(9);
+  });
+
+  // A lista como a tela a recebe, e a prévia no formato da regra pura.
+  const listaDaTela = async (c: Awaited<ReturnType<typeof cenario>>, eventId: Id<"events">) =>
+    (await c.dona.query(api.financeiro.pagamentosDoEvento, { eventId }))!.parcelas.map((p) => ({
+      description: p.description,
+      valorCentavos: paraCentavos(p.amount),
+      date: p.date,
+    }));
+  const pura = (l: { descricao: string; valor: number; vencimento: string }[]) =>
+    l.map((p) => ({ descricao: p.descricao, valorCentavos: Math.round(p.valor * 100), vencimento: p.vencimento }));
+  const AD = { parcela: "Parcela adicional", entrada: "Entrada adicional" };
+
+  it("caso 4: resposta perdida, fechar e reabrir RETOMANDO a tentativa — nada duplica", async () => {
+    const c = await cenario();
+    const ev = await eventoVazio(c);
+    await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "o", parcelas: await abrirDialogo(c, ev) });
+    // 1ª adicional: o servidor grava, a resposta se perde; a tela guarda a tentativa
+    const guardada = { chave: "a1", previa: await abrirDialogo(c, ev) };
+    await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: guardada.chave, parcelas: guardada.previa });
+    // reabriu: a lista já traz a leva → "gravada": a tela descarta e diz, sem enviar
+    expect(situacaoDaLeva(pura(guardada.previa), AD, await listaDaTela(c, ev))).toBe("gravada");
+    // e mesmo que a lista ainda não mostrasse: o reenvio usa a MESMA chave
+    expect(await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: guardada.chave, parcelas: guardada.previa })).toEqual({
+      criadas: 0,
+      repetido: true,
+    });
+    expect(await descricoes(c, ev)).toHaveLength(6);
+    // uma nova leva INTENCIONAL depois disso (chave nova, leva 2) entra
+    const r = await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "a2", parcelas: await abrirDialogo(c, ev) });
+    expect(r.criadas).toBe(3);
+  });
+
+  it("caso 5: duas abas com a mesma lista — a 2ª, com a mesma leva, não duplica", async () => {
+    const c = await cenario();
+    const ev = await eventoVazio(c);
+    await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "o", parcelas: await abrirDialogo(c, ev) });
+    // as duas abas abrem com a mesma lista: mesmo nome de leva, chaves diferentes
+    const abaA = await abrirDialogo(c, ev);
+    const abaB = await abrirDialogo(c, ev);
+    expect(abaB.map((p) => p.descricao)).toEqual(abaA.map((p) => p.descricao));
+    expect((await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "aba-A", parcelas: abaA })).criadas).toBe(3);
+    // a aba B vê a lista mudar: a prévia dela já está lá → "gravada", botão desligado
+    expect(situacaoDaLeva(pura(abaB), AD, await listaDaTela(c, ev))).toBe("gravada");
+    // se enviasse mesmo assim, a assinatura do servidor barra
+    expect(await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "aba-B", parcelas: abaB })).toEqual({
+      criadas: 0,
+      repetido: true,
+    });
+    // a aba B com OUTROS valores: nome ocupado → a tela pede para reabrir,
+    // e a reabertura calcula a leva 2, que entra
+    const outra = abaB.map((p) => ({ ...p, valor: p.valor + 10 }));
+    expect(situacaoDaLeva(pura(outra), AD, await listaDaTela(c, ev))).toBe("ocupada");
+    const reaberta = await abrirDialogo(c, ev);
+    expect(reaberta[0].descricao).toBe("Parcela adicional (leva 2) 1/3");
+    expect((await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "aba-B-2", parcelas: reaberta })).criadas).toBe(3);
+    expect(await descricoes(c, ev)).toHaveLength(9);
   });
 
   it("falha ANTES de gravar (recusa): nada fica pela metade e a nova tentativa com a mesma chave cria", async () => {

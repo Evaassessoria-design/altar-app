@@ -18,28 +18,6 @@ import {
   type BriefingFields,
 } from "@/lib/briefing-areas.ts";
 
-/**
- * Converte a logo em data URL para o jsPDF.
- *
- * Falha de rede ou imagem inválida NÃO pode impedir a geração do caderno:
- * devolve null e o cabeçalho sai sem logo.
- */
-async function carregarLogo(url: string | null | undefined): Promise<string | null> {
-  if (!url) return null;
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const blob = await res.blob();
-    return await new Promise<string | null>((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(typeof reader.result === "string" ? reader.result : null);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return null;
-  }
-}
 import { AssemblyItemsSection } from "../_components/assembly-items-section.tsx";
 import { SuggestItemsDialog } from "../_components/suggest-items-dialog.tsx";
 import { suggestAssemblyItems } from "@/lib/assembly-suggestions.ts";
@@ -51,8 +29,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
-import { AUDIENCIAS, AUDIENCIA_PADRAO, opcaoDaAudiencia } from "@/lib/audiencia-do-caderno.ts";
-import type { Audience } from "@/lib/briefing-areas.ts";
+import { AUDIENCIAS, rotuloDaVersao, type VersaoDoCaderno } from "@/lib/audiencia-do-caderno.ts";
+import { CadernoDeMontagemDialog } from "../_components/caderno-de-montagem-dialog.tsx";
 
 // As áreas vêm de src/lib/briefing-areas.ts — mesma definição usada pelo PDF do
 // evento e pelo Caderno de Montagem. Não redeclarar seções aqui.
@@ -62,15 +40,12 @@ export default function EventBriefingPage() {
   const eventId = id as Id<"events">;
   const [activeArea, setActiveArea] = useState(0);
   const [suggesting, setSuggesting] = useState(false);
-  const [exporting, setExporting] = useState(false);
   const [exportandoCarga, setExportandoCarga] = useState(false);
 
   const event = useQuery(api.events.get, { id: eventId });
   const briefing = useQuery(api.briefing.getBriefing, { eventId });
   const items = useQuery(api.assemblyItems.listByEvent, { eventId });
-  const checklist = useQuery(api.briefing.getChecklist, { eventId, phase: "pre" });
   const health = useQuery(api.health.getEventHealth, { eventId });
-  const renders = useQuery(api.layoutRenders.listByEvent, { eventId });
   // As peças do acervo reservadas — o segundo bloco da Folha de Carregamento.
   // A folha perguntava "o que vai no caminhão?" e respondia só metade: o
   // número que SAIU e o que VOLTOU já estavam gravados na reserva e viviam
@@ -79,7 +54,6 @@ export default function EventBriefingPage() {
   // Identidade da empresa para o documento. Ambas degradam para null e o
   // caderno sai igualmente completo, só com o padrão do ALTAR.
   const empresa = useQuery(api.users.getCurrentUser);
-  const logoUrl = useQuery(api.users.getLogoUrl);
 
   // O telefone vem do VÍNCULO resolvido no servidor (convex/health.ts), não de
   // casar o nome com a lista de escalados. Casar por nome errava com duas
@@ -139,9 +113,6 @@ export default function EventBriefingPage() {
 
   // Planta premium mais recente concluída — vira o mapa do caderno. Se não
   // existir, a seção simplesmente não aparece no PDF.
-  const mapUrl =
-    renders?.find((r) => r.status === "done" && r.outputUrl)?.outputUrl ?? null;
-
   /**
    * Folha de carregamento — LOGÍSTICA, não projeto.
    *
@@ -181,38 +152,13 @@ export default function EventBriefingPage() {
   };
 
   /**
-   * O caderno, para quem ele for.
+   * O caderno, para quem ele for — agora com prévia.
    *
-   * O gerador já filtrava por audiência — itens de montagem por
-   * `itemVisibleTo` e campos do briefing por `resolveAreasForAudience`. Esta
-   * tela chamava com `"equipe"` fixo, então a versão da cliente, que a regra
-   * sabia produzir, nunca chegava a existir.
+   * O menu escolhe a versão; o diálogo monta o caderno (`montarCaderno`),
+   * mostra o mesmo conteúdo que vai para o PDF e só então baixa. Eram três
+   * opções; "Uso interno" saiu (ver `audiencia-do-caderno.ts`).
    */
-  const handleExport = async (audience: Audience = AUDIENCIA_PADRAO) => {
-    if (!event) return;
-    setExporting(true);
-    try {
-      await (await import("@/lib/generate-assembly-pdf.ts")).generateAssemblyPDF({
-        event,
-        briefing,
-        items: items ?? [],
-        checklist: checklist ?? [],
-        guestCount: health?.guestCount,
-        assessoria: health?.assessoria,
-        responsible: health?.responsible,
-        mapUrl,
-        audience,
-        empresa: empresa ?? null,
-        logoDataUrl: await carregarLogo(logoUrl),
-        responsiblePhone: responsavelTelefone,
-      });
-      toast.success(`Caderno gerado — ${opcaoDaAudiencia(audience).rotulo.toLowerCase()}.`);
-    } catch {
-      toast.error("Erro ao gerar o caderno de montagem.");
-    } finally {
-      setExporting(false);
-    }
-  };
+  const [cadernoAberto, setCadernoAberto] = useState<VersaoDoCaderno | null>(null);
 
   const area = BRIEFING_AREAS[activeArea];
 
@@ -249,14 +195,10 @@ export default function EventBriefingPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    disabled={exporting || !event}
+                    disabled={!event}
                     className="cursor-pointer gap-1.5"
                   >
-                    {exporting ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <FileDown className="size-3.5" />
-                    )}
+                    <FileDown className="size-3.5" />
                     <span className="hidden sm:inline">Caderno de Montagem</span>
                     <span className="sm:hidden">PDF</span>
                     <ChevronDown className="size-3.5 opacity-60" />
@@ -268,10 +210,10 @@ export default function EventBriefingPage() {
                   {AUDIENCIAS.map((a) => (
                     <DropdownMenuItem
                       key={a.valor}
-                      onSelect={() => void handleExport(a.valor)}
+                      onSelect={() => setCadernoAberto(a.valor)}
                       className="cursor-pointer flex-col items-start gap-0.5 py-2"
                     >
-                      <span className="text-sm font-medium">{a.rotulo}</span>
+                      <span className="text-sm font-medium">{rotuloDaVersao(a.valor, event?.type)}</span>
                       <span className="text-xs text-muted-foreground whitespace-normal">
                         {a.detalhe}
                       </span>
@@ -489,6 +431,13 @@ export default function EventBriefingPage() {
         </div>
       </div>
 
+      {cadernoAberto && (
+        <CadernoDeMontagemDialog
+          eventId={eventId}
+          versao={cadernoAberto}
+          onClose={() => setCadernoAberto(null)}
+        />
+      )}
       {suggesting && (
         <SuggestItemsDialog
           eventId={eventId}

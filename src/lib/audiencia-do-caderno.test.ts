@@ -26,10 +26,15 @@ import { itemVisibleTo, resolveAreasForAudience, type Audience } from "./briefin
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe("o vocabulário da audiência", () => {
-  it("cobre exatamente as audiências do domínio — nem mais, nem menos", () => {
-    // Nenhum enum inventado: a lista vem de `Audience`, em briefing-areas.ts.
+  it("oferece exatamente duas versões — equipe e cliente; o interno saiu do menu", () => {
+    // Nenhum enum inventado: os valores vêm de `Audience`, em briefing-areas.ts.
+    // "interno" continua sendo VISIBILIDADE (mantém algo fora dos dois
+    // cadernos), mas não é mais um documento que se gera.
     const doDominio: Audience[] = ["interno", "cliente", "equipe"];
-    expect(AUDIENCIAS.map((a) => a.valor).sort()).toEqual([...doDominio].sort());
+    const oferecidas = AUDIENCIAS.map((a) => a.valor);
+    expect([...oferecidas].sort()).toEqual(["cliente", "equipe"]);
+    for (const v of oferecidas) expect(doDominio).toContain(v);
+    expect(oferecidas).not.toContain("interno");
   });
 
   it("o padrão é o documento que a tela já gerava", () => {
@@ -58,7 +63,7 @@ describe("o vocabulário da audiência", () => {
     }
   });
 
-  it("cada audiência tem sufixo próprio — três PDFs não se sobrescrevem", () => {
+  it("cada versão tem sufixo próprio — os PDFs não se sobrescrevem", () => {
     const sufixos = AUDIENCIAS.map((a) => a.sufixo);
     expect(new Set(sufixos).size).toBe(AUDIENCIAS.length);
     for (const s of sufixos) expect(s).toMatch(/^[a-z]+$/);
@@ -132,14 +137,14 @@ describe("a tela pergunta em vez de decidir", () => {
     expect(tela).not.toMatch(/audience:\s*"(equipe|cliente|interno)"/);
   });
 
-  it("oferece as três audiências, vindas da lista única", () => {
+  it("oferece as versões vindas da lista única", () => {
     expect(tela).toContain("AUDIENCIAS.map");
     expect(tela).toContain("Para quem é este caderno?");
   });
 
-  it("o nome do arquivo carrega a audiência", () => {
+  it("o nome do arquivo carrega a versão", () => {
     const gerador = readFileSync("src/lib/generate-assembly-pdf.ts", "utf-8");
-    expect(gerador).toContain("opcaoDaAudiencia(audience).sufixo");
+    expect(gerador).toContain("opcaoDaAudiencia(caderno.versao).sufixo");
   });
 });
 
@@ -177,15 +182,26 @@ describe("campo a campo, por audiência", () => {
   });
 });
 
-describe("o gerador do caderno obedece", () => {
+describe("o caderno obedece", () => {
+  // A regra mora na MONTAGEM (`caderno/montar-caderno.ts`), que alimenta a
+  // prévia e o PDF; o gerador só desenha.
+  const montagem = readFileSync("src/lib/caderno/montar-caderno.ts", "utf-8");
   const fonte = readFileSync("src/lib/generate-assembly-pdf.ts", "utf-8");
 
-  it("fornecedor e observação passam pela regra antes de entrar no PDF", () => {
-    expect(fonte).toContain('campoDoItemVisivelPara("supplierName", audience)');
-    expect(fonte).toContain('campoDoItemVisivelPara("notes", audience)');
+  it("fornecedor e observação passam pela regra antes de entrar no caderno", () => {
+    expect(montagem).toContain('campoDoItemVisivelPara("supplierName", audiencia)');
+    expect(montagem).toContain('campoDoItemVisivelPara("notes", audiencia)');
   });
 
-  it("nenhum valor em dinheiro entra no caderno, em audiência nenhuma", () => {
+  it("o único dinheiro possível é o do opcional, só para o cliente e só se pedido", () => {
+    // Os testes de `caderno/caderno.test.ts` procuram no PDF gerado; este
+    // trava a porta: um segundo formatador de moeda na montagem seria uma
+    // segunda porta.
+    expect(montagem.match(/currency:\s*"BRL"/g)).toHaveLength(1);
+    expect(montagem).toContain('const incluirValores = ehCliente && opcoes.incluirValores === true;');
+  });
+
+  it("o gerador não formata dinheiro, em versão nenhuma", () => {
     // O caderno é documento de montagem. Preço na mão de quem monta é
     // vazamento comercial — a mesma regra da Folha de Carregamento e da Ficha.
     const semComentarios = fonte

@@ -47,7 +47,8 @@ describe("o Caderno de Montagem funciona sem identidade nenhuma", () => {
   it("a logo é opcional e o erro de imagem não derruba o documento", () => {
     // `addImage` lança para arquivo inválido; sem o try/catch o caderno
     // inteiro deixaria de ser gerado por causa de uma logo corrompida.
-    const trecho = PDF.slice(PDF.indexOf("if (data.logoDataUrl)"), PDF.indexOf("doc.setTextColor(...identidade.textoSobreCor)"));
+    const trecho = PDF.slice(PDF.indexOf("if (ctx.logoDataUrl)"), PDF.indexOf("doc.setTextColor(...identidade.textoSobreCor)"));
+    expect(trecho.length).toBeGreaterThan(0);
     expect(trecho).toContain("try {");
     expect(trecho).toContain("catch");
   });
@@ -60,7 +61,7 @@ describe("o Caderno de Montagem funciona sem identidade nenhuma", () => {
 
 describe("protagonismo da empresa, assinatura discreta do ALTAR", () => {
   it("o cabeçalho usa o nome da EMPRESA, não o do ALTAR", () => {
-    expect(PDF).toContain("doc.text(identidade.nome, textoX, 19)");
+    expect(PDF).toContain("doc.text(paraPdf(identidade.nome), x, 17.5)");
     // O texto fixo "ALTAR · Documento operacional" saiu do cabeçalho.
     expect(PDF).not.toContain('"ALTAR · Documento operacional da equipe"');
   });
@@ -75,14 +76,17 @@ describe("protagonismo da empresa, assinatura discreta do ALTAR", () => {
   it("a cor do texto do cabeçalho é MEDIDA, nunca fixada em branco", () => {
     // Uma marca clara com texto branco fixo produziria cabeçalho ilegível.
     expect(PDF).toContain("doc.setTextColor(...identidade.textoSobreCor)");
-    const cabecalho = PDF.slice(PDF.indexOf("// ── Cabeçalho"), PDF.indexOf("let y = HEADER_H"));
+    const cabecalho = PDF.slice(PDF.indexOf("// ── Cabeçalho"), PDF.indexOf("// ── Rodapé"));
+    expect(cabecalho.length).toBeGreaterThan(0);
     expect(cabecalho).not.toContain("setTextColor(255, 255, 255)");
   });
 
   it("a cor da empresa alimenta títulos e destaques", () => {
     expect(PDF).toContain("doc.setFillColor(...identidade.cor)");
-    expect(PDF).toContain("sectionHeader(doc,");
-    expect(PDF).toMatch(/sectionHeader\([^)]*identidade\.cor\)/);
+    // Todo título de seção, caixinha e destaque desenha com `this.cor`, que é
+    // a cor da empresa passada na criação da página.
+    expect(PDF).toContain("new Pagina(doc, ctx.identidade.cor)");
+    expect(PDF).toContain('this.fonte("bold", 7.5, this.cor);');
   });
 });
 
@@ -96,7 +100,10 @@ describe("responsável operacional", () => {
     const tela = readFileSync("src/pages/app/events/[id]/briefing/page.tsx", "utf-8");
     // Os dois vêm resolvidos do servidor, do mesmo vínculo.
     expect(tela).toContain("health?.responsiblePhone");
-    expect(PDF).toContain("data.responsiblePhone");
+    // O caderno lê os dois da MESMA resposta (`health.getEventHealth`).
+    const fontes = readFileSync("src/lib/caderno/fontes-do-caderno.ts", "utf-8");
+    expect(fontes).toContain("responsavel: c.saude?.responsible,");
+    expect(fontes).toContain("responsavelTelefone: c.saude?.responsiblePhone,");
   });
 
   it("o telefone NÃO é mais achado casando nome", () => {

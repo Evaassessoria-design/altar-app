@@ -1,3 +1,4 @@
+import { montarCaderno } from "./caderno/montar-caderno.ts";
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import {
@@ -241,10 +242,13 @@ describe("as quatro superfícies usam a MESMA função", () => {
   });
 
   it("o Caderno de Montagem agrupa pelo canônico, não por BRIEFING_AREAS", () => {
-    const pdf = codigo("src/lib/generate-assembly-pdf.ts");
-    expect(pdf).toContain("agruparPorAmbiente(reportItems)");
+    // O agrupamento mora na montagem do caderno desde 13/10.
+    const montagem = codigo("src/lib/caderno/montar-caderno.ts");
+    expect(montagem).toContain("agruparPorAmbiente(paraIncluido)");
     // O laço antigo percorria as áreas do briefing direto.
-    expect(pdf).not.toContain("for (const area of BRIEFING_AREAS)");
+    for (const p of ["src/lib/caderno/montar-caderno.ts", "src/lib/generate-assembly-pdf.ts"]) {
+      expect(codigo(p)).not.toContain("for (const area of BRIEFING_AREAS)");
+    }
   });
 
   it("a Ficha Técnica não tem mais a própria cópia da regra", () => {
@@ -281,8 +285,24 @@ describe("as quatro superfícies usam a MESMA função", () => {
 
 describe("o eco não volta aos documentos operacionais", () => {
   it("o Caderno só repete o ambiente quando ele diz algo novo", () => {
-    const pdf = readFileSync("src/lib/generate-assembly-pdf.ts", "utf-8");
-    expect(pdf).toContain("chaveDoAmbiente(ambienteDoItem) !== grupo.key");
+    // O caderno novo agrupa por ambiente e não escreve o ambiente em linha
+    // nenhuma: dentro do bloco "Jardim", o item não diz "Ambiente: Jardim".
+    const c = montarCaderno(
+      {
+        evento: { name: "E", type: "other", date: "2026-10-20" },
+        itens: [
+          {
+            _id: "a", area: "ceremony", ambiente: "Jardim das Oliveiras", name: "Arco", quantity: 1,
+            visibility: "cliente", includeInAssemblyReport: true, checkOnAssembly: false,
+          },
+        ],
+        fotos: [],
+      },
+      "equipe",
+    );
+    expect(c.carga[0].titulo).toContain("Jardim das Oliveiras");
+    expect(c.carga[0].linhas[0].detalhe).toBeUndefined();
+    expect(JSON.stringify(c.carga[0].linhas)).not.toContain("Jardim");
   });
 
   it("a Folha de Carregamento idem", () => {

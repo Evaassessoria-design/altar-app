@@ -117,7 +117,8 @@ describe("os geradores de PDF só chegam no clique", () => {
   it.each([
     ["src/pages/app/events/[id]/page.tsx", "generate-event-pdf"],
     ["src/pages/app/events/[id]/briefing/page.tsx", "generate-loading-pdf"],
-    ["src/pages/app/events/[id]/briefing/page.tsx", "generate-assembly-pdf"],
+    // O caderno saiu da tela do Briefing para o diálogo de prévia (13/10).
+    ["src/pages/app/events/[id]/_components/caderno-de-montagem-dialog.tsx", "generate-assembly-pdf"],
     ["src/pages/app/events/[id]/ficha-tecnica/page.tsx", "generate-ficha-tecnica-pdf"],
     ["src/pages/app/events/[id]/orcamento/page.tsx", "generate-orcamento-pdf"],
     ["src/pages/app/propostas/[id]/page.tsx", "generate-proposta-pdf"],

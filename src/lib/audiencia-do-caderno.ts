@@ -1,81 +1,80 @@
 import type { Audience } from "./briefing-areas.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PARA QUEM É ESTE CADERNO?
+// PARA QUEM É ESTE CADERNO? — DUAS RESPOSTAS
 //
-// O mesmo evento gera três documentos diferentes, e a diferença não é estética:
-// é o que cada um pode conter.
+//   cliente → "Para os noivos" num casamento, "Para o cliente" no resto
+//   equipe  → "Para a equipe"
 //
-//   interno  → tudo, inclusive seguro, custo e o que ficou de fora
-//   equipe   → o que precisa ser montado, sem o que é só da empresa
-//   cliente  → só o que foi contratado e aprovado por ela
+// Até 13/10 havia um terceiro, "Uso interno", que imprimia TUDO — inclusive o
+// que não é de ninguém além da empresa. Ele saiu do menu: um documento que
+// existe para não sair da empresa não precisa de botão de gerar PDF, e era o
+// único dos três em que um valor interno podia ir parar no papel.
 //
-// A regra já existia inteira: `itemVisibleTo` filtra os itens de montagem e
-// `resolveAreasForAudience` filtra os campos do briefing (`briefing-areas.ts`).
-// O PDF já a respeitava. O que faltava era o SELETOR: a tela chamava o gerador
-// com `audience: "equipe"` fixo, então a versão da cliente nunca chegava a
-// existir — e a decoradora que classificava um item como "cliente" esperando
-// um documento para a cliente nunca o recebia.
+// O valor `"interno"` CONTINUA existindo como VISIBILIDADE de item, campo e
+// foto (`Audience` em briefing-areas.ts): é ele que mantém algo fora dos dois
+// cadernos. Nenhum dado gravado muda — só o menu.
 //
 // ── POR QUE ESTE ARQUIVO EXISTE ─────────────────────────────────────────────
-// Para a tela não inventar rótulo. `interno`, `equipe` e `cliente` são valores
-// de banco; ninguém que decora evento deve ler nenhum dos três. O vocabulário
-// humano mora aqui, ao lado do valor que o gerador espera, e é conferido por
-// teste contra o tipo `Audience` — acrescentar uma audiência sem rótulo quebra.
+// Para a tela não inventar rótulo. `equipe` e `cliente` são valores de banco;
+// ninguém que decora evento deve lê-los. O vocabulário humano mora aqui, ao
+// lado do valor que o gerador espera.
 // ─────────────────────────────────────────────────────────────────────────────
 
+export type VersaoDoCaderno = Extract<Audience, "cliente" | "equipe">;
+
 export type OpcaoDeAudiencia = {
-  /** O valor que `generateAssemblyPDF` espera. Nunca aparece na tela. */
-  valor: Audience;
-  /** O que a pessoa lê no menu. */
+  /** O valor que `montarCaderno` espera. Nunca aparece na tela. */
+  valor: VersaoDoCaderno;
+  /** O que a pessoa lê no menu (o do cliente depende do tipo do evento). */
   rotulo: string;
   /** Uma linha dizendo o que entra e o que não entra. */
   detalhe: string;
-  /** Sufixo do nome do arquivo, para três PDFs não se sobrescreverem. */
+  /** Sufixo do nome do arquivo, para os dois PDFs não se sobrescreverem. */
   sufixo: string;
 };
 
 /**
- * A ordem é a do uso: a equipe é quem mais recebe caderno, e é o padrão.
- *
- * `equipe` primeiro NÃO é só estética — é o valor que a tela usava antes deste
- * seletor existir. Mantê-lo como padrão garante que quem já imprimia o caderno
- * continue recebendo exatamente o mesmo documento sem mudar nada.
+ * As duas versões, na ordem do uso: a equipe é quem mais recebe caderno, e
+ * era o documento que a tela gerava antes do seletor existir.
  */
 export const AUDIENCIAS: readonly OpcaoDeAudiencia[] = [
   {
     valor: "equipe",
-    rotulo: "Para a equipe de montagem",
-    detalhe: "O que montar, onde e em que quantidade. Sem valores.",
+    rotulo: "Para a equipe",
+    detalhe: "Carregar, montar e conferir o retorno. Nunca leva valores.",
     sufixo: "equipe",
   },
   {
     valor: "cliente",
-    rotulo: "Para a cliente",
-    detalhe: "Só o que foi contratado. Sem nota interna, sem o que ficou de fora.",
+    rotulo: "Para o cliente",
+    detalhe: "O projeto: conceito, itens, referências, decisões e opcionais. Sem custos.",
     sufixo: "cliente",
-  },
-  {
-    valor: "interno",
-    rotulo: "Uso interno",
-    detalhe: "Tudo, inclusive o que não vai para a equipe nem para a cliente.",
-    sufixo: "interno",
   },
 ] as const;
 
 /** O padrão seguro: o mesmo documento que a tela já gerava. */
-export const AUDIENCIA_PADRAO: Audience = "equipe";
+export const AUDIENCIA_PADRAO: VersaoDoCaderno = "equipe";
 
 /**
- * A opção de uma audiência. Valor desconhecido cai no padrão em vez de
- * devolver `undefined` — um caderno impresso a menos é pior do que um caderno
- * da equipe impresso por engano.
+ * A opção de uma versão. Valor desconhecido — inclusive o antigo "interno" —
+ * cai no padrão em vez de devolver `undefined`: um caderno da equipe impresso
+ * por engano não leva valor nenhum, e um botão que não faz nada não ajuda.
  */
 export function opcaoDaAudiencia(valor: string | undefined | null): OpcaoDeAudiencia {
   return (
     AUDIENCIAS.find((a) => a.valor === valor) ??
     AUDIENCIAS.find((a) => a.valor === AUDIENCIA_PADRAO)!
   );
+}
+
+/**
+ * O rótulo que a tela mostra. Num casamento, quem recebe são os noivos — e o
+ * documento diz isso no selo e no menu.
+ */
+export function rotuloDaVersao(valor: VersaoDoCaderno, tipoDoEvento?: string): string {
+  if (valor === "cliente") return tipoDoEvento === "wedding" ? "Para os noivos" : "Para o cliente";
+  return opcaoDaAudiencia(valor).rotulo;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

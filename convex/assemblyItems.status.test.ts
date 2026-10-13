@@ -68,8 +68,13 @@ describe("dados antigos", () => {
 describe("checkOnAssembly continua sendo preferencia de impressao", () => {
   it("a ficha em PDF ainda o le para desenhar a caixinha", () => {
     // Trava contra alguem "unificar" os dois conceitos por engano.
+    // Desde 13/10 quem lê é a montagem do caderno; o gerador só desenha a
+    // caixinha que ela pediu. Nenhum dos dois conhece a situação.
+    const montagem = readFileSync("src/lib/caderno/montar-caderno.ts", "utf-8");
     const pdf = readFileSync("src/lib/generate-assembly-pdf.ts", "utf-8");
-    expect(pdf).toContain("item.checkOnAssembly");
+    expect(montagem).toContain("i.checkOnAssembly");
+    expect(pdf).toContain("it.conferir");
+    expect(montagem).not.toContain("operationalStatus");
     expect(pdf).not.toContain("operationalStatus");
   });
 

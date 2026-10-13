@@ -19,7 +19,7 @@ import {
 } from "./lib/fotoDoItem";
 import { requireActiveAccess } from "./lib/accessGuard";
 import { limparCampos } from "./lib/limparCampos";
-import { exigirQuantidadeGravavel } from "./lib/numeroGravavel";
+import { exigirDinheiroGravavel, exigirQuantidadeGravavel } from "./lib/numeroGravavel";
 import { safeDeleteFile } from "./lib/cascade";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -240,11 +240,14 @@ export const update = mutation({
         v.literal("incluso"),
         v.literal("referencia"),
         v.literal("nao_incluso"),
+        v.literal("opcional"),
         // `null` = "Sem classificação". Sem isso, tirar a classificação de um
         // item era impossível: o pedido não chegava ao servidor.
         v.null(),
       ),
     ),
+    // `null` = limpar (o opcional volta a "sem valor informado").
+    valorOpcional: v.optional(v.union(v.number(), v.null())),
     operationalStatus: v.optional(
       v.union(
         v.literal("pendente"),
@@ -266,6 +269,9 @@ export const update = mutation({
     // aqui atravessa o consolidado, a geração de compras e a folha de
     // carregamento. `null` continua LIMPANDO o campo (lib/limparCampos.ts).
     exigirQuantidadeGravavel(args.quantity, "Quantidade");
+    // O valor do opcional vai impresso no Caderno da cliente quando ela pede.
+    // `NaN` ou negativo ali sairia como "R$ NaN" num documento da empresa.
+    exigirDinheiroGravavel(args.valorOpcional, "Valor do opcional");
     // O fornecedor precisa ser DESTE evento, e o evento é o do item — não o
     // que o navegador disser. Sem isto, `update` era a porta lateral que
     // escapava da guarda de `create`.

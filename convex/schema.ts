@@ -1912,8 +1912,24 @@ export default defineSchema({
         v.literal("incluso"),
         v.literal("referencia"),
         v.literal("nao_incluso"),
+        // Oferecido e ainda NÃO contratado. Sai da Folha, da Ficha Técnica e
+        // das compras (`ehObrigacaoDeMontagem`); vira obrigação quando ela
+        // troca para "incluso". Ver `ESCOPO_OPCIONAL` em lib/projectScope.ts.
+        v.literal("opcional"),
       ),
     ),
+    /**
+     * Quanto o OPCIONAL custa para a cliente, em reais.
+     *
+     * AUSENTE = sem valor informado: o Caderno lista o opcional pelo nome e
+     * não inventa preço. `0` = cortesia, e o papel diz "Cortesia".
+     *
+     * Só tem significado com `projectScope: "opcional"`. Não é apagado quando o
+     * escopo muda: depois de confirmado, é o valor que foi oferecido — e
+     * apagar dado que ela digitou é decisão dela. Nenhum documento o lê fora
+     * do escopo opcional, e nenhum documento da EQUIPE o lê nunca.
+     */
+    valorOpcional: v.optional(v.number()),
     // Ponto do trajeto fisico do item. AUSENTE = "pendente": todo item
     // cadastrado antes deste campo continua correto, sem backfill.
     // Nao ha contagem de quantidade retornada — isso seria inventario.

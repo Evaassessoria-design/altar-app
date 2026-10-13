@@ -9,7 +9,7 @@ import { ArrowLeft, ArrowRight, Layers, ImageOff, FileDown, Loader2 } from "luci
 import { Button } from "@/components/ui/button.tsx";
 import { cn } from "@/lib/utils.ts";
 import { formatEventDateLong } from "@/lib/event-date.ts";
-import { PROJECT_SCOPES, scopeMeta, AVISO_REFERENCIA, type ProjectScope } from "@/lib/photo-scope.ts";
+import { ITEM_SCOPES, scopeMetaDoItem, AVISO_REFERENCIA, type ItemScope } from "@/lib/photo-scope.ts";
 import {
   agruparPorAmbiente,
   fotoDoItem,
@@ -52,7 +52,7 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function SeloEscopo({ scope }: { scope?: string }) {
-  const meta = scopeMeta(scope);
+  const meta = scopeMetaDoItem(scope);
   // Item sem classificação não recebe selo: cadastro incompleto não vira
   // promessa ao cliente.
   if (!meta) return null;
@@ -60,6 +60,56 @@ function SeloEscopo({ scope }: { scope?: string }) {
     <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium", meta.classe)}>
       {meta.label}
     </span>
+  );
+}
+
+/**
+ * O preço do opcional, quando ela quiser informar.
+ *
+ * Fica AQUI, ao lado do escopo, e não no cadastro do item: só existe para o
+ * opcional, e um campo de dinheiro em todo item convidaria a digitar custo
+ * onde a regra é não haver custo. Vazio = sem valor; o Caderno da cliente
+ * mostra o nome e não inventa preço. Zero = cortesia.
+ *
+ * Grava ao sair do campo, como a classificação logo acima grava ao escolher.
+ */
+function ValorDoOpcional({ itemId, valor }: { itemId: Id<"assemblyItems">; valor?: number }) {
+  const atualizar = useMutation(api.assemblyItems.update);
+  const [texto, setTexto] = useState(valor === undefined ? "" : String(valor));
+
+  const salvar = async () => {
+    const limpo = texto.trim().replace(/\./g, "").replace(",", ".");
+    const novo = limpo === "" ? null : Number(limpo);
+    if (novo !== null && (!Number.isFinite(novo) || novo < 0)) {
+      toast.error("Informe um valor em reais, ou deixe em branco.");
+      return;
+    }
+    if ((novo ?? undefined) === valor) return;
+    try {
+      await atualizar({ id: itemId, valorOpcional: novo });
+      toast.success(novo === null ? "Valor do opcional removido." : "Valor do opcional salvo.");
+    } catch {
+      toast.error("Não foi possível salvar o valor do opcional.");
+    }
+  };
+
+  return (
+    <div className="mt-1.5 space-y-1">
+      <label className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        Valor para a cliente (R$)
+        <input
+          inputMode="decimal"
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          onBlur={() => void salvar()}
+          placeholder="sem valor"
+          className="h-7 w-28 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+      </label>
+      <p className="text-[11px] text-sky-700 dark:text-sky-300">
+        Não entra na montagem nem nas compras até virar "Incluso no projeto". 0 = cortesia.
+      </p>
+    </div>
   );
 }
 
@@ -204,7 +254,7 @@ export default function ProjetoDecoracaoPage() {
     }
   };
 
-  const mudarEscopo = async (itemId: Id<"assemblyItems">, scope: ProjectScope | "") => {
+  const mudarEscopo = async (itemId: Id<"assemblyItems">, scope: ItemScope | "") => {
     try {
       // `null`, e não `undefined`: `undefined` é descartado no transporte e o
       // pedido de limpar nunca chegaria ao servidor.
@@ -558,14 +608,14 @@ export default function ProjetoDecoracaoPage() {
                           onChange={(e) =>
                             void mudarEscopo(
                               item._id as Id<"assemblyItems">,
-                              e.target.value as ProjectScope | "",
+                              e.target.value as ItemScope | "",
                             )
                           }
                           aria-label={`Classificação de ${item.name}`}
                           className="mt-1.5 h-7 rounded-md border border-input bg-background px-2 text-xs cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
                           <option value="">Sem classificação</option>
-                          {PROJECT_SCOPES.map((sc) => (
+                          {ITEM_SCOPES.map((sc) => (
                             <option key={sc.value} value={sc.value}>
                               {sc.label}
                             </option>
@@ -576,6 +626,12 @@ export default function ProjetoDecoracaoPage() {
                           <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1">
                             {AVISO_REFERENCIA}. Não entra como obrigação de montagem.
                           </p>
+                        )}
+                        {item.projectScope === "opcional" && (
+                          <ValorDoOpcional
+                            itemId={item._id as Id<"assemblyItems">}
+                            valor={(item as { valorOpcional?: number }).valorOpcional}
+                          />
                         )}
                       </div>
                     </div>

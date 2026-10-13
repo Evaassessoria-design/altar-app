@@ -90,6 +90,10 @@ function detalheDe(item: ItemDoProjeto): string | undefined {
 /** O item pode ser mostrado à cliente? */
 export function itemVaiParaOsNoivos(item: ItemDoProjeto): boolean {
   if (item.projectScope === "nao_incluso") return false;
+  // O opcional ainda não foi contratado. Entre os itens do projeto ele seria
+  // lido como incluído; o Caderno da cliente o mostra na seção própria, com
+  // o nome de opcional.
+  if (item.projectScope === "opcional") return false;
   // `itemVisibleTo` é a MESMA função que decide a audiência do Caderno. Uma
   // segunda regra aqui divergiria, e a que divergisse seria a do documento
   // que sai da empresa.

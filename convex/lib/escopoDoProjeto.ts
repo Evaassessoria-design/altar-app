@@ -1,4 +1,4 @@
-import { PROJECT_SCOPES, type ProjectScope } from "./projectScope";
+import { ITEM_SCOPES, type ItemScope } from "./projectScope";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // O QUE É OBRIGAÇÃO DO PROJETO — regra única, agora alcançável pelo backend.
@@ -14,10 +14,16 @@ import { PROJECT_SCOPES, type ProjectScope } from "./projectScope";
 // mudança — e aí a tela mostraria um material que o PDF não lista.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Configuração do selo. `undefined` quando o item não foi classificado. */
+/**
+ * Configuração do selo. `undefined` quando o item não foi classificado.
+ *
+ * Procura em `ITEM_SCOPES`, não em `PROJECT_SCOPES`: com a lista das fotos, um
+ * item "opcional" resolvia para `undefined`, caía em "sem classificação" — e
+ * sem classificação ENTRA na operação. O opcional ia para o caminhão.
+ */
 export function scopeMeta(scope: string | undefined | null) {
   if (!scope) return undefined;
-  return PROJECT_SCOPES.find((s) => s.value === scope);
+  return ITEM_SCOPES.find((s) => s.value === scope);
 }
 
 /**
@@ -25,7 +31,7 @@ export function scopeMeta(scope: string | undefined | null) {
  * pode virar "contratado" por omissão — seria transformar cadastro incompleto
  * em promessa ao cliente.
  */
-export function escopoDoItem(item: { projectScope?: string }): ProjectScope | null {
+export function escopoDoItem(item: { projectScope?: string }): ItemScope | null {
   return scopeMeta(item.projectScope)?.value ?? null;
 }
 
@@ -33,9 +39,16 @@ export function escopoDoItem(item: { projectScope?: string }): ProjectScope | nu
  * Uma referência estética nunca é obrigação de montagem — nem de compra.
  *
  * Sem classificação, o item segue o comportamento antigo e ENTRA na operação.
- * Só `referencia` e `nao_incluso` saem, e ambos exigem escolha explícita.
+ * Só `referencia`, `nao_incluso` e `opcional` saem, e os três exigem escolha
+ * explícita. O opcional sai porque ainda não foi contratado: entra na Folha,
+ * na Ficha Técnica e nas compras no dia em que virar "incluso".
  */
 export function ehObrigacaoDeMontagem(item: { projectScope?: string }): boolean {
   const escopo = escopoDoItem(item);
-  return escopo !== "referencia" && escopo !== "nao_incluso";
+  return escopo !== "referencia" && escopo !== "nao_incluso" && escopo !== "opcional";
+}
+
+/** Oferecido e ainda não contratado. Ver `ESCOPO_OPCIONAL`. */
+export function ehOpcional(item: { projectScope?: string }): boolean {
+  return escopoDoItem(item) === "opcional";
 }

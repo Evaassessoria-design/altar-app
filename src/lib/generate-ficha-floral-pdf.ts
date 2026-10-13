@@ -4,7 +4,7 @@ import { ASSINATURA_ALTAR, resolveIdentidade, type EmpresaLike } from "./brand.t
 import { formatEventDayOnly } from "./event-date.ts";
 import { agruparPorAmbiente } from "./decoration-project.ts";
 import { caixaProporcional, carregarImagemParaPdf } from "./imagem-para-pdf.ts";
-import { quantidadeTexto } from "@/convex/lib/fichaTecnica.ts";
+import { quantidadeTexto, unidadesDaComposicao } from "@/convex/lib/fichaTecnica.ts";
 import {
   ROTULO_DA_INSTRUCAO,
   rotuloDaOrigem,
@@ -75,7 +75,6 @@ export type FichaFloralPdfData = {
     nome: string;
     data?: string;
     local?: string;
-    cliente?: string;
     responsavel?: string | null;
   };
   composicoes: ComposicaoFloralPdf[];
@@ -161,6 +160,36 @@ export async function generateFichaFloralPDF(data: FichaFloralPdfData): Promise<
     }
   };
 
+  /**
+   * Texto à esquerda e valor à direita na MESMA linha — o nome da flor e a
+   * quantidade, a composição e "20 arranjos". O texto quebra ANTES de chegar
+   * no valor: um nome longo ("Rosa Avalanche branca importada…") escrevia por
+   * cima da quantidade, e quantidade ilegível é compra errada.
+   */
+  const linhaComValor = (
+    esquerda: string,
+    direita: string,
+    x: number,
+    opcoes: { tamanho?: number; negritoEsquerda?: boolean; negritoDireita?: boolean; passo?: number } = {},
+  ) => {
+    const tamanho = opcoes.tamanho ?? 9.5;
+    const passo = opcoes.passo ?? 4.6;
+    doc.setFontSize(tamanho);
+    doc.setFont("helvetica", opcoes.negritoDireita ? "bold" : "normal");
+    const larguraDireita = doc.getTextWidth(direita);
+    doc.setFont("helvetica", opcoes.negritoEsquerda ? "bold" : "normal");
+    const larguraEsquerda = Math.max(30, PAGE_W - MARGIN - x - larguraDireita - 4);
+    const linhas = doc.splitTextToSize(esquerda, larguraEsquerda) as string[];
+    garantirEspaco(passo * linhas.length + 1);
+    linhas.forEach((linha, i) => {
+      doc.text(linha, x, y + i * passo);
+    });
+    doc.setFont("helvetica", opcoes.negritoDireita ? "bold" : "normal");
+    doc.text(direita, PAGE_W - MARGIN, y, { align: "right" });
+    doc.setFont("helvetica", "normal");
+    y += passo * linhas.length;
+  };
+
   const tituloDeBloco = (texto: string) => {
     garantirEspaco(14);
     doc.setFont("helvetica", "bold");
@@ -178,24 +207,23 @@ export async function generateFichaFloralPDF(data: FichaFloralPdfData): Promise<
   cabecalho("FICHA DE PRODUÇÃO FLORAL");
 
   // ── Identificação ─────────────────────────────────────────────────────────
+  // O evento se identifica pelo nome, data e local. Cliente, telefone e
+  // e-mail não entram: este é papel de fornecedor.
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.text(data.evento.nome, MARGIN, y);
-  y += 6;
+  for (const linha of doc.setFontSize(12).splitTextToSize(data.evento.nome, LARGURA) as string[]) {
+    doc.text(linha, MARGIN, y);
+    y += 5.6;
+  }
+  y += 0.4;
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
   const identificacao = [
     data.evento.data ? formatEventDayOnly(data.evento.data) : null,
     data.evento.local,
-    data.evento.cliente,
   ]
     .filter(Boolean)
     .join("  ·  ");
-  if (identificacao) {
-    doc.text(identificacao, MARGIN, y);
-    y += 5;
-  }
+  if (identificacao) paragrafo(identificacao, MARGIN, LARGURA, 9);
   // Responsável aparece SEMPRE, inclusive quando não há: "a definir" é
   // informação, e o florista precisa saber a quem ligar.
   doc.text(`Responsável: ${data.evento.responsavel?.trim() || "a definir"}`, MARGIN, y);
@@ -242,20 +270,16 @@ export async function generateFichaFloralPDF(data: FichaFloralPdfData): Promise<
     tituloDeBloco(grupo.label);
 
     for (const composicao of grupo.itens) {
-      const unidades = composicao.quantidade ?? 1;
+      // A mesma regra das contas: ausente, negativo ou inválido = 1.
+      const unidades = unidadesDaComposicao({ quantidade: composicao.quantidade });
       garantirEspaco(20);
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      doc.text(composicao.nome, MARGIN, y);
-      doc.setFont("helvetica", "normal");
-      doc.text(
+      linhaComValor(
+        composicao.nome,
         `${unidades} ${unidades === 1 ? "arranjo" : "arranjos"}`,
-        PAGE_W - MARGIN,
-        y,
-        { align: "right" },
+        MARGIN,
+        { tamanho: 10, negritoEsquerda: true, passo: 5 },
       );
-      y += 5.5;
+      y += 0.5;
 
       // Receita. As duas quantidades vêm prontas em uma frase só
       // (`textoDaQuantidade`), para a tela e o papel dizerem igual.
@@ -267,23 +291,21 @@ export async function generateFichaFloralPDF(data: FichaFloralPdfData): Promise<
         y += 4.2;
 
         for (const linha of composicao.materiais) {
-          garantirEspaco(6);
           const nome = [linha.nome, linha.variedade, linha.cor]
             .filter(Boolean)
             .join(" · ");
           const origem = rotuloDaOrigem(linha.origem);
-          doc.setFontSize(9.5);
-          doc.text(origem ? `${nome}  (${origem.toLowerCase()})` : nome, MARGIN + 2, y);
-          doc.setFont("helvetica", "bold");
-          doc.text(textoDaQuantidade(linha.quantidade), PAGE_W - MARGIN, y, {
-            align: "right",
-          });
-          doc.setFont("helvetica", "normal");
-          y += 4.6;
-          if (linha.notes) {
-            doc.setFontSize(8);
-            doc.setTextColor(110, 110, 110);
-            paragrafo(linha.notes, MARGIN + 4, LARGURA - 6, 8);
+          linhaComValor(
+            origem ? `${nome}  (${origem.toLowerCase()})` : nome,
+            textoDaQuantidade(linha.quantidade),
+            MARGIN + 2,
+            { negritoDireita: true },
+          );
+          // Só a orientação ESCRITA PARA O FLORISTA. A anotação interna da
+          // receita (`notes`) nunca chega a este arquivo.
+          if (linha.orientacaoFlorista) {
+            doc.setTextColor(90, 90, 90);
+            paragrafo(`> ${linha.orientacaoFlorista}`, MARGIN + 4, LARGURA - 6, 8.5);
             doc.setTextColor(30, 30, 30);
           }
         }
@@ -300,7 +322,7 @@ export async function generateFichaFloralPDF(data: FichaFloralPdfData): Promise<
         doc.setTextColor(30, 30, 30);
         y += 4.2;
         for (const o of composicao.orientacoes) {
-          const partes = [o.nome, o.cor, rotuloDaOrigem(o.origem)?.toLowerCase(), o.notes]
+          const partes = [o.nome, o.cor, rotuloDaOrigem(o.origem)?.toLowerCase(), o.orientacaoFlorista]
             .filter(Boolean)
             .join(" · ");
           paragrafo(`· ${partes}`, MARGIN + 2, LARGURA - 4, 9);
@@ -377,11 +399,15 @@ export async function generateFichaFloralPDF(data: FichaFloralPdfData): Promise<
     y += 4;
 
     for (const item of data.checklist) {
-      garantirEspaco(8);
+      // Nome em cima (quebrando se for longo), detalhe embaixo: lado a lado,
+      // um nome longo atropelava o detalhe.
+      doc.setFontSize(9.5);
+      const nomes = doc.splitTextToSize(item.composicao, LARGURA - 7) as string[];
+      garantirEspaco(4.6 * nomes.length + 6);
       doc.setDrawColor(120, 120, 120);
       doc.rect(MARGIN, y - 3.2, 4, 4);
-      doc.setFontSize(9.5);
-      doc.text(`${item.composicao}`, MARGIN + 7, y);
+      nomes.forEach((linha, i) => doc.text(linha, MARGIN + 7, y + i * 4.6));
+      y += 4.6 * nomes.length;
       doc.setFontSize(8);
       doc.setTextColor(110, 110, 110);
       const detalhe = [
@@ -392,9 +418,12 @@ export async function generateFichaFloralPDF(data: FichaFloralPdfData): Promise<
       ]
         .filter(Boolean)
         .join("  ·  ");
-      doc.text(detalhe, PAGE_W - MARGIN, y, { align: "right" });
+      for (const linha of doc.splitTextToSize(detalhe, LARGURA - 7) as string[]) {
+        doc.text(linha, MARGIN + 7, y);
+        y += 3.8;
+      }
       doc.setTextColor(30, 30, 30);
-      y += 6.5;
+      y += 2.5;
     }
   }
 
@@ -406,9 +435,10 @@ export async function generateFichaFloralPDF(data: FichaFloralPdfData): Promise<
     doc.setFontSize(8);
     doc.setTextColor(110, 110, 110);
     paragrafo(
-      "Soma do que esta ficha pede, por material e unidade. Unidades diferentes " +
-        "não se somam: maço e haste são linhas separadas. Conferência de compra, " +
-        "estoque e acervo continua nas telas do ALTAR — este resumo é papel.",
+      "Soma do que esta ficha pede: uma linha por flor, variedade, cor, natural ou " +
+        "permanente e unidade. Nada diferente se soma — maço e haste, rosa natural e " +
+        "rosa permanente são linhas separadas. Conferência de compra, estoque e " +
+        "acervo continua nas telas do ALTAR — este resumo é papel.",
       MARGIN,
       LARGURA,
       8,
@@ -417,18 +447,15 @@ export async function generateFichaFloralPDF(data: FichaFloralPdfData): Promise<
     y += 3;
 
     for (const linha of data.resumo) {
-      garantirEspaco(7);
-      doc.setFontSize(9.5);
-      const detalhes = [linha.cor, rotuloDaOrigem(linha.origem ?? undefined)?.toLowerCase()]
+      const detalhes = [linha.variedade, linha.cor, rotuloDaOrigem(linha.origem ?? undefined)?.toLowerCase()]
         .filter(Boolean)
         .join(" · ");
-      doc.text(detalhes ? `${linha.nome}  (${detalhes})` : linha.nome, MARGIN + 2, y);
-      doc.setFont("helvetica", "bold");
-      doc.text(quantidadeTexto(linha.total, linha.unidade), PAGE_W - MARGIN, y, {
-        align: "right",
-      });
-      doc.setFont("helvetica", "normal");
-      y += 5;
+      linhaComValor(
+        detalhes ? `${linha.nome}  (${detalhes})` : linha.nome,
+        quantidadeTexto(linha.total, linha.unidade),
+        MARGIN + 2,
+        { negritoDireita: true, passo: 4.8 },
+      );
     }
   }
 
@@ -473,8 +500,10 @@ export async function generateFichaFloralPDF(data: FichaFloralPdfData): Promise<
       let yTexto = y + (img ? caixa.h : 0) + 4;
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8.5);
-      doc.text(flor.nome, x, yTexto);
-      yTexto += 3.6;
+      for (const texto of doc.splitTextToSize(flor.nome, PASSO - 4) as string[]) {
+        doc.text(texto, x, yTexto);
+        yTexto += 3.6;
+      }
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7.5);
       doc.setTextColor(90, 90, 90);

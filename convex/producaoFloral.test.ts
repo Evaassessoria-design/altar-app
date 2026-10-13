@@ -27,7 +27,7 @@ import { api } from "./_generated/api";
 import { autenticarComo } from "./test.auth";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
-import { consolidarMateriais, necessidadeDoComponente } from "./lib/fichaTecnica";
+import { consolidarMateriais, contaDaLinha, necessidadeDoComponente, textoDaConta } from "./lib/fichaTecnica";
 import { ehObrigacaoDeMontagem } from "./lib/escopoDoProjeto";
 import {
   legendaDasFlores,
@@ -46,10 +46,14 @@ import {
 //  2. que orientação sem quantidade NÃO vira total inventado;
 //  3. que unidades diferentes não se somam, nem aqui nem no resumo;
 //  4. que a ficha do florista não carrega NENHUM valor financeiro;
-//  5. que id de outra conta não devolve nada — nem o dado, nem a existência.
+//  5. que id de outra conta não devolve nada — nem o dado, nem a existência;
+//  6. que o papel do florista não leva contato pessoal nem anotação interna;
+//  7. que editar a parte floral não mexe em custo, margem, unidade nem
+//     quantidade, e que "só orientação" não apaga o número.
 // ═════════════════════════════════════════════════════════════════════════════
 
 const NOW = "2026-10-09T12:00:00.000Z";
+const CATEGORIA = "montagem" as const;
 
 async function cenario() {
   const t = convexTest(schema, modules);
@@ -87,7 +91,8 @@ async function cenario() {
 
     const eventId = await ctx.db.insert("events", {
       userId: dona._id, name: "Marina & Gabriel", type: "wedding", date: "2026-12-12",
-      location: "Fazenda Santa Clara", clientName: "Marina", status: "confirmed",
+      location: "Fazenda Santa Clara", clientName: "Cliente Secreta Souza",
+      clientPhone: "(11) 98888-7777", status: "confirmed",
     });
     const eventoDaOutra = await ctx.db.insert("events", {
       userId: outra._id, name: "Evento alheio", type: "wedding", date: "2026-12-20",
@@ -108,6 +113,8 @@ async function cenario() {
           materialId: rosa, nome: "Rosa", unidade: "haste", quantidade: 5,
           categoria: "Flores", custoReferencia: 4.2, margemPercentual: 10,
           variedade: "Avalanche", cor: "branca", origem: "natural" as const,
+          notes: "Fornecedor Flores do Vale cobra R$ 4,20",
+          orientacaoFlorista: "Abrir os botões na véspera",
         },
         {
           materialId: eucalipto, nome: "Eucalipto", unidade: "maco", quantidade: 2,
@@ -117,7 +124,8 @@ async function cenario() {
         // Orientação: sem quantidade confiável.
         {
           nome: "Folhagem do jardim", unidade: "un", quantidade: 0,
-          apenasOrientacao: true, notes: "o que estiver bonito no dia",
+          apenasOrientacao: true, notes: "pegar no sítio do primo",
+          orientacaoFlorista: "o que estiver bonito no dia",
         },
       ],
       floral: {
@@ -228,16 +236,21 @@ describe("orientação sem quantidade", () => {
     expect(resumoDeMateriais([composicao]).map((l) => l.nome)).toEqual(["Rosa"]);
   });
 
-  it("aparece como orientação, separada dos materiais", () => {
+  it("aparece como orientação, separada dos materiais — com a orientação ESCRITA para o florista", () => {
     const { materiais, orientacoes } = linhasDaComposicao({
       _id: "c1", nome: "Arranjo", area: "tables", quantidade: 10,
       receita: [
-        { nome: "Rosa", unidade: "haste", quantidade: 3 },
-        { nome: "Folhagem a gosto", unidade: "un", quantidade: 0, apenasOrientacao: true, notes: "o que houver" },
+        { nome: "Rosa", unidade: "haste", quantidade: 3, notes: "interno: fornecedor X" },
+        {
+          nome: "Folhagem a gosto", unidade: "un", quantidade: 0, apenasOrientacao: true,
+          notes: "interno: pegar no sítio", orientacaoFlorista: "o que houver",
+        },
       ],
     });
     expect(materiais).toHaveLength(1);
-    expect(orientacoes).toEqual([{ nome: "Folhagem a gosto", notes: "o que houver" }]);
+    expect(orientacoes).toEqual([{ nome: "Folhagem a gosto", orientacaoFlorista: "o que houver" }]);
+    // A anotação interna não sai em nenhuma das duas listas.
+    expect(JSON.stringify({ materiais, orientacoes })).not.toContain("interno");
   });
 });
 
@@ -256,7 +269,7 @@ describe("unidades diferentes não se somam", () => {
     expect(linhas.map((l) => l.unidade).sort()).toEqual(["haste", "maco"]);
   });
 
-  it("cores diferentes do mesmo material não viram uma cor inventada", () => {
+  it("cores diferentes do mesmo material são DUAS linhas, cada uma com a sua cor", () => {
     const linhas = resumoDeMateriais([
       {
         _id: "c1", nome: "A", area: "tables", quantidade: 1,
@@ -267,9 +280,73 @@ describe("unidades diferentes não se somam", () => {
         receita: [{ materialId: "m1", nome: "Rosa", unidade: "haste", quantidade: 5, cor: "rosê" }],
       },
     ]);
+    expect(linhas.map((l) => [l.cor, l.total])).toEqual([["branca", 5], ["rosê", 5]]);
+  });
+});
+
+describe("o resumo não soma itens diferentes", () => {
+  const composicao = (receita: object[]) => ({ _id: "c", nome: "A", area: "tables", quantidade: 1, receita: receita as never });
+
+  it("natural e permanente da mesma rosa, na mesma cor, são compras separadas", () => {
+    const linhas = resumoDeMateriais([
+      composicao([
+        { materialId: "m1", nome: "Rosa", unidade: "haste", quantidade: 100, cor: "branca", origem: "natural" },
+        { materialId: "m1", nome: "Rosa", unidade: "haste", quantidade: 48, cor: "branca", origem: "permanente" },
+      ]),
+    ]);
+    expect(linhas.map((l) => [l.origem, l.total])).toEqual([["natural", 100], ["permanente", 48]]);
+  });
+
+  it("variedades diferentes não se somam; sem variedade é outra linha", () => {
+    const linhas = resumoDeMateriais([
+      composicao([
+        { nome: "Rosa", unidade: "haste", quantidade: 10, variedade: "Avalanche" },
+        { nome: "Rosa", unidade: "haste", quantidade: 10, variedade: "Vendela" },
+        { nome: "Rosa", unidade: "haste", quantidade: 10 },
+      ]),
+    ]);
+    expect(linhas).toHaveLength(3);
+    expect(linhas.every((l) => l.total === 10)).toBe(true);
+  });
+
+  it("o MESMO item em várias composições soma — maiúscula e espaço na cor não separam", () => {
+    const linhas = resumoDeMateriais([
+      composicao([{ materialId: "m1", nome: "Rosa", unidade: "haste", quantidade: 5, cor: "Branca", origem: "natural" }]),
+      { ...composicao([{ materialId: "m1", nome: "Rosa", unidade: "haste", quantidade: 0.5, cor: " branca ", origem: "natural" }]), _id: "c2", quantidade: 4 },
+    ]);
     expect(linhas).toHaveLength(1);
-    expect(linhas[0].total).toBe(10);
-    expect(linhas[0].cor).toBeNull();
+    expect(linhas[0].total).toBe(7);
+    expect(linhas[0].cor).toBe("Branca");
+    expect(linhas[0].origens).toHaveLength(2);
+  });
+
+  it("dois materiais do catálogo com o mesmo nome continuam separados (pelo id)", () => {
+    const linhas = resumoDeMateriais([
+      composicao([
+        { materialId: "m1", nome: "Rosa", unidade: "haste", quantidade: 1 },
+        { materialId: "m2", nome: "Rosa", unidade: "haste", quantidade: 1 },
+      ]),
+    ]);
+    expect(linhas.map((l) => l.materialId)).toEqual(["m1", "m2"]);
+  });
+});
+
+describe("a conta escrita na Ficha Técnica", () => {
+  it("por unidade × N, total distribuído e orientação — cada um com a sua frase", () => {
+    expect(textoDaConta(contaDaLinha({ quantidade: 20 }, { quantidade: 5 }), "haste")).toBe(
+      "5 haste × 20 = 100 haste",
+    );
+    const distribuido = textoDaConta(contaDaLinha({ quantidade: 20 }, { quantidade: 2, distribuicao: "total" }), "maco");
+    expect(distribuido).toContain("no total, distribuídos");
+    expect(distribuido).not.toContain("×");
+    // Orientação com a quantidade PRESERVADA continua sem número na conta.
+    const orientacao = textoDaConta(contaDaLinha({ quantidade: 20 }, { quantidade: 7, apenasOrientacao: true }), "un");
+    expect(orientacao).toBe("orientação, fora dos totais");
+    expect(orientacao).not.toMatch(/\d/);
+  });
+
+  it("meio maço por arranjo em 4 arranjos: fração com unidade, sem conversão", () => {
+    expect(textoDaConta(contaDaLinha({ quantidade: 4 }, { quantidade: 0.5 }), "maco")).toBe("0,5 maço × 4 = 2 maço".replace("maço", "maço"));
   });
 });
 
@@ -279,13 +356,17 @@ describe("a ficha do florista, sobre banco real", () => {
     const ficha = await sessao.query(api.producaoFloral.fichaDoFlorista, { eventId });
     expect(ficha).not.toBeNull();
 
-    // 20×5 nas mesas + 4×12 na cerimônia = 148 hastes.
-    const rosa = ficha!.resumo.find((l) => l.nome === "Rosa" && l.unidade === "haste")!;
-    expect(rosa.total).toBe(148);
+    // 20×5 brancas naturais nas mesas; 4×12 rosê permanentes na cerimônia.
+    // Duas compras diferentes — o resumo NÃO soma 148.
+    const rosas = ficha!.resumo.filter((l) => l.nome === "Rosa" && l.unidade === "haste");
+    expect(rosas.map((l) => [l.cor, l.origem, l.total])).toEqual([
+      ["branca", "natural", 100],
+      ["rosê", "permanente", 48],
+    ]);
 
-    // 2 maços distribuídos + 4 × meio maço = 4 maços. Não 40 + 2.
-    const euc = ficha!.resumo.find((l) => l.nome === "Eucalipto")!;
-    expect(euc.total).toBe(4);
+    // 2 maços distribuídos (verde) e 4 × meio maço (sem cor) = 2 + 2. Não 40.
+    const euc = ficha!.resumo.filter((l) => l.nome === "Eucalipto");
+    expect(euc.map((l) => [l.cor, l.total])).toEqual([[null, 2], ["verde", 2]]);
   });
 
   it("referência visual não vai para o florista, e item sem receita é contado sem ser inventado", async () => {
@@ -308,6 +389,24 @@ describe("a ficha do florista, sobre banco real", () => {
     }
   });
 
+  it("não devolve contato pessoal nem anotação interna — só o que foi escrito para o florista", async () => {
+    const { sessao, eventId } = await cenario();
+    const ficha = await sessao.query(api.producaoFloral.fichaDoFlorista, { eventId, incluirFotos: true });
+    const texto = JSON.stringify(ficha);
+    for (const proibido of [
+      "Cliente Secreta", "98888", // contatos da cliente
+      "Flores do Vale", "R$", "sítio do primo",      // notas internas da receita
+      "\"cliente\"", "\"notes\"",
+    ]) {
+      expect(texto).not.toContain(proibido);
+    }
+    // O evento continua identificado pelo nome.
+    expect(ficha!.evento.nome).toBe("Marina & Gabriel");
+    // A orientação escrita PARA o florista vai.
+    expect(texto).toContain("Abrir os botões na véspera");
+    expect(texto).toContain("o que estiver bonito no dia");
+  });
+
   it("cuidados e horários viram avisos destacados, e o checklist sai derivado", async () => {
     const { t, sessao, eventId } = await cenario();
     const ficha = await sessao.query(api.producaoFloral.fichaDoFlorista, { eventId });
@@ -321,16 +420,16 @@ describe("a ficha do florista, sobre banco real", () => {
     const flores = legendaDasFlores(
       [
         {
-          chave: "id:m1|haste", nome: "Rosa", unidade: "haste", total: 100,
+          chave: "a", materialId: "m1", nome: "Rosa", variedade: null, unidade: "haste", total: 100,
           cor: "rosê", origem: "natural", origens: [],
         },
         {
-          chave: "id:m2|maco", nome: "Eucalipto", unidade: "maco", total: 2,
+          chave: "b", materialId: "m2", nome: "Eucalipto", variedade: null, unidade: "maco", total: 2,
           cor: null, origem: null, origens: [],
         },
       ],
-      (chave) =>
-        chave.startsWith("id:m1")
+      (materialId) =>
+        materialId === "m1"
           ? { fotoUrl: "https://arquivo/rosa.jpg", variedade: "Avalanche" }
           : { fotoUrl: null, variedade: null },
     );
@@ -452,9 +551,244 @@ describe("trava do PDF do florista", () => {
     expect(CODIGO_PDF).not.toContain("doc.save(");
   });
 
+  it("não imprime contato da cliente nem anotação interna", () => {
+    expect(CODIGO_PDF).not.toMatch(/\.cliente\b/);
+    expect(CODIGO_PDF).not.toMatch(/clientPhone|clientEmail|telefone/);
+    expect(CODIGO_PDF).not.toMatch(/\.notes\b/);
+    expect(CODIGO_PDF).toContain("orientacaoFlorista");
+  });
+
   it("nomeia as duas fotos com todas as letras", () => {
     expect(FONTE_PDF).toContain("REFERÊNCIA DO ARRANJO");
     expect(FONTE_PDF).toContain("FOTOS DAS FLORES");
     expect(FONTE_PDF).toContain("pode não ser a cor pedida");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EDITAR A PARTE FLORAL NÃO MEXE NO RESTO DA LINHA
+// ─────────────────────────────────────────────────────────────────────────────
+
+const linhaDaTela = (
+  receita: readonly { nome: string; materialId?: Id<"materials">; cor?: string; origem?: "natural" | "permanente"; distribuicao?: string; apenasOrientacao?: boolean; orientacaoFlorista?: string }[],
+  indice: number,
+  mudanca: Partial<{ cor: string; origem: "natural" | "permanente"; distribuicao: "por_arranjo" | "total"; apenasOrientacao: boolean; orientacaoFlorista: string; quantidade: number }> = {},
+) => {
+  const l = receita[indice];
+  return {
+    indice,
+    nome: l.nome,
+    materialId: l.materialId,
+    cor: l.cor,
+    origem: l.origem,
+    distribuicao: (l.distribuicao === "total" ? "total" : "por_arranjo") as "por_arranjo" | "total",
+    apenasOrientacao: l.apenasOrientacao === true,
+    orientacaoFlorista: l.orientacaoFlorista,
+    ...mudanca,
+  };
+};
+
+describe("setLinhasFlorais grava só a parte floral", () => {
+  const lerItem = (t: Awaited<ReturnType<typeof cenario>>["t"], id: Id<"assemblyItems">) =>
+    t.run(async (ctx) => (await ctx.db.get(id))!);
+
+  it("mudar a cor não toca custo, margem, unidade, nome, variedade nem quantidade — mesmo com o catálogo mudado", async () => {
+    const { t, sessao, mesasId, rosa } = await cenario();
+    // O catálogo mudou DEPOIS da receita: custo, margem e unidade novos.
+    await t.run(async (ctx) => ctx.db.patch(rosa, { custoReferencia: 9.99, margemPercentual: 50, unidade: "maco", variedade: "Vendela" }));
+    const antes = await lerItem(t, mesasId);
+
+    await sessao.mutation(api.producaoFloral.setLinhasFlorais, {
+      id: mesasId,
+      linhas: [linhaDaTela(antes.receita!, 0, { cor: "rosê", origem: "permanente" })],
+    });
+
+    const depois = (await lerItem(t, mesasId)).receita![0];
+    expect(depois).toMatchObject({
+      nome: "Rosa", unidade: "haste", quantidade: 5, custoReferencia: 4.2, margemPercentual: 10,
+      variedade: "Avalanche", notes: "Fornecedor Flores do Vale cobra R$ 4,20",
+      cor: "rosê", origem: "permanente",
+    });
+    // As outras linhas não foram reescritas.
+    expect((await lerItem(t, mesasId)).receita!.slice(1)).toEqual(antes.receita!.slice(1));
+  });
+
+  it("a quantidade só muda quando vem no pedido", async () => {
+    const { t, sessao, cerimoniaId } = await cenario();
+    const antes = await lerItem(t, cerimoniaId);
+    await sessao.mutation(api.producaoFloral.setLinhasFlorais, {
+      id: cerimoniaId,
+      linhas: [linhaDaTela(antes.receita!, 1, { quantidade: 0.75 })],
+    });
+    expect((await lerItem(t, cerimoniaId)).receita![1].quantidade).toBe(0.75);
+  });
+
+  it("'só orientação' guarda a quantidade, e desmarcar devolve o número", async () => {
+    const { t, sessao, cerimoniaId, eventId } = await cenario();
+    const antes = await lerItem(t, cerimoniaId);
+    await sessao.mutation(api.producaoFloral.setLinhasFlorais, {
+      id: cerimoniaId,
+      linhas: [linhaDaTela(antes.receita!, 0, { apenasOrientacao: true })],
+    });
+    const marcada = (await lerItem(t, cerimoniaId)).receita![0];
+    expect(marcada).toMatchObject({ apenasOrientacao: true, quantidade: 12 });
+    // Fora dos totais enquanto marcada: a rosa rosê some do resumo.
+    let ficha = await sessao.query(api.producaoFloral.fichaDoFlorista, { eventId });
+    expect(ficha!.resumo.some((l) => l.cor === "rosê")).toBe(false);
+
+    await sessao.mutation(api.producaoFloral.setLinhasFlorais, {
+      id: cerimoniaId,
+      linhas: [linhaDaTela((await lerItem(t, cerimoniaId)).receita!, 0, { apenasOrientacao: false })],
+    });
+    const desmarcada = (await lerItem(t, cerimoniaId)).receita![0];
+    expect(desmarcada.apenasOrientacao).toBeUndefined();
+    expect(desmarcada.quantidade).toBe(12);
+    ficha = await sessao.query(api.producaoFloral.fichaDoFlorista, { eventId });
+    expect(ficha!.resumo.find((l) => l.cor === "rosê")!.total).toBe(48);
+  });
+
+  it("a receita mudou no meio (nome ou material diferente no índice): CONFLITO e nada gravado", async () => {
+    const { t, sessao, mesasId, eucalipto } = await cenario();
+    const antes = await lerItem(t, mesasId);
+    await expect(
+      sessao.mutation(api.producaoFloral.setLinhasFlorais, {
+        id: mesasId,
+        linhas: [
+          linhaDaTela(antes.receita!, 0, { cor: "amarela" }),
+          { ...linhaDaTela(antes.receita!, 1), nome: "Rosa" },
+        ],
+      }),
+    ).rejects.toThrow(/receita mudou/);
+    await expect(
+      sessao.mutation(api.producaoFloral.setLinhasFlorais, {
+        id: mesasId,
+        linhas: [{ ...linhaDaTela(antes.receita!, 0), materialId: eucalipto }],
+      }),
+    ).rejects.toThrow(/receita mudou/);
+    await expect(
+      sessao.mutation(api.producaoFloral.setLinhasFlorais, {
+        id: mesasId,
+        linhas: [{ ...linhaDaTela(antes.receita!, 0), indice: 9 }],
+      }),
+    ).rejects.toThrow(/receita mudou/);
+    expect((await lerItem(t, mesasId)).receita).toEqual(antes.receita);
+  });
+
+  it("quantidade negativa ou inválida é recusada", async () => {
+    const { t, sessao, mesasId } = await cenario();
+    const antes = await lerItem(t, mesasId);
+    for (const quantidade of [-1, Number.NaN]) {
+      await expect(
+        sessao.mutation(api.producaoFloral.setLinhasFlorais, {
+          id: mesasId,
+          linhas: [linhaDaTela(antes.receita!, 0, { quantidade })],
+        }),
+      ).rejects.toThrow(/inválida/);
+    }
+  });
+
+  it("item de outra conta: NOT_FOUND, e o item não muda", async () => {
+    const { t, sessaoDaOutra, mesasId } = await cenario();
+    const antes = await lerItem(t, mesasId);
+    await expect(
+      sessaoDaOutra.mutation(api.producaoFloral.setLinhasFlorais, {
+        id: mesasId,
+        linhas: [linhaDaTela(antes.receita!, 0, { cor: "preta" })],
+      }),
+    ).rejects.toThrow(/não encontrado/i);
+    expect((await lerItem(t, mesasId)).receita).toEqual(antes.receita);
+  });
+
+  it("salvar na Ficha Técnica (setReceita) mantém a parte floral que veio na linha", async () => {
+    const { t, sessao, mesasId } = await cenario();
+    const antes = (await lerItem(t, mesasId)).receita!;
+    // O que o diálogo da Ficha Técnica manda agora: a linha com o resto preservado.
+    await sessao.mutation(api.fichaTecnica.setReceita, {
+      id: mesasId,
+      receita: antes.map((l) => ({
+        materialId: l.materialId, nome: l.nome, unidade: l.unidade, quantidade: l.quantidade,
+        notes: l.notes, cor: l.cor, origem: l.origem as never, distribuicao: l.distribuicao as never,
+        apenasOrientacao: l.apenasOrientacao, orientacaoFlorista: l.orientacaoFlorista,
+      })),
+    });
+    const depois = (await lerItem(t, mesasId)).receita!;
+    expect(depois.map((l) => [l.cor, l.origem, l.distribuicao, l.apenasOrientacao, l.orientacaoFlorista])).toEqual(
+      antes.map((l) => [l.cor, l.origem, l.distribuicao, l.apenasOrientacao, l.orientacaoFlorista]),
+    );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FOTOS: material de outra conta e foto da Galeria de outro evento
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("fotos respeitam conta e evento", () => {
+  it("um materialId de OUTRA conta gravado numa receita antiga não traz foto nem variedade", async () => {
+    const { t, sessao, eventId, mesasId, outraId } = await cenario();
+    const alheio = await t.run(async (ctx) => {
+      const foto = await ctx.storage.store(new Blob(["foto alheia"], { type: "image/jpeg" }));
+      return ctx.db.insert("materials", {
+        userId: outraId, nome: "Peônia", searchName: "peonia", unidade: "haste",
+        variedade: "Sarah Bernhardt", fotoStorageId: foto, updatedAt: NOW,
+      });
+    });
+    // Dado legado: a guarda de `setReceita` hoje recusa — então entra direto.
+    await t.run(async (ctx) => {
+      const item = (await ctx.db.get(mesasId))!;
+      await ctx.db.patch(mesasId, {
+        receita: [...item.receita!, { materialId: alheio, nome: "Peônia", unidade: "haste" as const, quantidade: 1 }],
+      });
+    });
+    const ficha = await sessao.query(api.producaoFloral.fichaDoFlorista, { eventId, incluirFotos: true });
+    const peonia = ficha!.flores.find((f) => f.nome === "Peônia")!;
+    expect(peonia.fotoUrl).toBeNull();
+    expect(peonia.variedade).toBeNull();
+    expect(JSON.stringify(ficha)).not.toContain("Sarah Bernhardt");
+    // E a guarda de gravação continua: material alheio não entra pela receita.
+    await expect(
+      sessao.mutation(api.fichaTecnica.setReceita, {
+        id: mesasId,
+        receita: [{ materialId: alheio, nome: "Peônia", unidade: "haste", quantidade: 1 }],
+      }),
+    ).rejects.toThrow(/não encontrado/i);
+  });
+
+  it("a foto da flor vem pelo ID do material — o da própria conta aparece", async () => {
+    const { t, sessao, eventId, rosa } = await cenario();
+    await t.run(async (ctx) => {
+      const foto = await ctx.storage.store(new Blob(["rosa"], { type: "image/jpeg" }));
+      await ctx.db.patch(rosa, { fotoStorageId: foto });
+    });
+    const ficha = await sessao.query(api.producaoFloral.fichaDoFlorista, { eventId, incluirFotos: true });
+    const rosas = ficha!.flores.filter((f) => f.nome === "Rosa");
+    expect(rosas.length).toBe(2);
+    expect(rosas.every((f) => f.materialId === rosa && f.fotoUrl)).toBe(true);
+    // Sem pedir fotos, nenhuma URL é montada.
+    const semFotos = await sessao.query(api.producaoFloral.fichaDoFlorista, { eventId });
+    expect(semFotos!.flores.every((f) => f.fotoUrl === null)).toBe(true);
+  });
+
+  it("referência apontando para foto da Galeria de OUTRO evento da mesma conta não entra", async () => {
+    const { t, sessao, eventId, mesasId, cerimoniaId, donaId } = await cenario();
+    await t.run(async (ctx) => {
+      const outroEvento = await ctx.db.insert("events", {
+        userId: donaId, name: "Outro evento", type: "wedding", date: "2027-01-10",
+        location: "L", clientName: "C", status: "confirmed",
+      });
+      const arquivo = await ctx.storage.store(new Blob(["x"], { type: "image/jpeg" }));
+      const deOutroEvento = await ctx.db.insert("eventPhotos", {
+        userId: donaId, eventId: outroEvento, storageId: arquivo, filename: "outro.jpg", category: CATEGORIA, order: 0, uploadedAt: NOW,
+      });
+      const doEvento = await ctx.db.insert("eventPhotos", {
+        userId: donaId, eventId, storageId: arquivo, filename: "deste.jpg", category: CATEGORIA, order: 0, uploadedAt: NOW,
+      });
+      await ctx.db.patch(mesasId, { referencePhotoId: deOutroEvento });
+      await ctx.db.patch(cerimoniaId, { referencePhotoId: doEvento });
+    });
+    const ficha = await sessao.query(api.producaoFloral.fichaDoFlorista, { eventId });
+    const porNome = (n: string) => ficha!.composicoes.find((c) => c.nome === n)!;
+    expect(porNome("Arranjo baixo").referenciaUrl).toBeNull();
+    // Controle: a foto do PRÓPRIO evento aparece.
+    expect(porNome("Arranjo lateral").referenciaUrl).toBeTruthy();
   });
 });

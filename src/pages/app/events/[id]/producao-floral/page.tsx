@@ -18,7 +18,7 @@ import {
 import { MaterialDialog, type MaterialEditavel } from "@/components/catalogo/material-dialog.tsx";
 import { formatEventDateLong } from "@/lib/event-date.ts";
 import { agruparPorAmbiente } from "@/lib/decoration-project.ts";
-import { quantidadeTexto } from "@/convex/lib/fichaTecnica.ts";
+import { quantidadeTexto, unidadesDaComposicao } from "@/convex/lib/fichaTecnica.ts";
 import {
   ROTULO_DA_INSTRUCAO,
   rotuloDaOrigem,
@@ -85,7 +85,9 @@ export default function ProducaoFloralPage() {
         checklist: ficha.checklist,
         resumo: ficha.resumo,
         flores: ficha.flores,
-        geradoEm: ficha.geradoEm,
+        // Carimbado aqui, no clique: a consulta não lê relógio (uma query do
+        // Convex não reroda porque o tempo passou, e o carimbo ficaria velho).
+        geradoEm: new Date().toISOString(),
         incluirFotosDasFlores: comFotos,
         incluirReferenciasDosArranjos: comReferencias,
         empresa: empresa ?? null,
@@ -227,13 +229,14 @@ export default function ProducaoFloralPage() {
               </h2>
               <div className="space-y-3">
                 {grupo.itens.map((c) => {
-                  const unidades = c.quantidade ?? 1;
+                  // A mesma regra das contas: ausente, negativo ou inválido = 1.
+                  const unidades = unidadesDaComposicao({ quantidade: c.quantidade });
                   const instrucoes = Object.entries(c.instrucoes).filter(([, v]) => v);
                   return (
                     <div key={c._id} className="bg-card border border-border rounded-xl p-3">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="font-medium text-sm">{c.nome}</p>
+                          <p className="font-medium text-sm break-words">{c.nome}</p>
                           <p className="text-xs text-muted-foreground">
                             {unidades} {unidades === 1 ? "arranjo" : "arranjos"}
                           </p>
@@ -261,18 +264,23 @@ export default function ProducaoFloralPage() {
                       {c.materiais.length > 0 && (
                         <ul className="mt-2 space-y-1">
                           {c.materiais.map((m, i) => (
-                            <li key={`${m.nome}-${i}`} className="text-xs flex justify-between gap-3">
-                              <span className="min-w-0">
-                                {[m.nome, m.variedade, m.cor].filter(Boolean).join(" · ")}
-                                {rotuloDaOrigem(m.origem) && (
-                                  <span className="text-muted-foreground">
-                                    {" "}({rotuloDaOrigem(m.origem)?.toLowerCase()})
-                                  </span>
-                                )}
-                              </span>
-                              <span className="font-medium flex-shrink-0">
-                                {textoDaQuantidade(m.quantidade)}
-                              </span>
+                            <li key={`${m.nome}-${i}`} className="text-xs">
+                              <div className="flex justify-between gap-3">
+                                <span className="min-w-0 break-words">
+                                  {[m.nome, m.variedade, m.cor].filter(Boolean).join(" · ")}
+                                  {rotuloDaOrigem(m.origem) && (
+                                    <span className="text-muted-foreground">
+                                      {" "}({rotuloDaOrigem(m.origem)?.toLowerCase()})
+                                    </span>
+                                  )}
+                                </span>
+                                <span className="font-medium text-right">
+                                  {textoDaQuantidade(m.quantidade)}
+                                </span>
+                              </div>
+                              {m.orientacaoFlorista && (
+                                <p className="text-muted-foreground break-words">↳ {m.orientacaoFlorista}</p>
+                              )}
                             </li>
                           ))}
                         </ul>
@@ -286,7 +294,9 @@ export default function ProducaoFloralPage() {
                           <ul className="mt-0.5 space-y-0.5">
                             {c.orientacoes.map((o, i) => (
                               <li key={`${o.nome}-${i}`} className="text-xs text-muted-foreground">
-                                · {[o.nome, o.cor, o.notes].filter(Boolean).join(" · ")}
+                                · {[o.nome, o.cor, rotuloDaOrigem(o.origem)?.toLowerCase(), o.orientacaoFlorista]
+                                  .filter(Boolean)
+                                  .join(" · ")}
                               </li>
                             ))}
                           </ul>
@@ -327,12 +337,15 @@ export default function ProducaoFloralPage() {
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {ficha.flores.map((flor) => {
-                const material = materiais?.find(
-                  (m) => m.nome.trim().toLowerCase() === flor.nome.trim().toLowerCase(),
-                );
+                // Pelo ID, nunca pelo nome: "Rosa" em haste e "Rosa" em maço são
+                // dois cadastros, e uma linha digitada sem vínculo não tem foto
+                // reaproveitável — aí não há botão.
+                const material = flor.materialId
+                  ? materiais?.find((m) => m._id === flor.materialId)
+                  : undefined;
                 return (
                   <div
-                    key={flor.nome}
+                    key={flor.chave}
                     className="border border-border rounded-xl p-2 flex flex-col gap-1.5"
                   >
                     {flor.fotoUrl ? (
@@ -346,7 +359,7 @@ export default function ProducaoFloralPage() {
                         <ImageIcon className="size-5 text-muted-foreground" />
                       </div>
                     )}
-                    <p className="text-xs font-medium leading-tight">{flor.nome}</p>
+                    <p className="text-xs font-medium leading-tight break-words">{flor.nome}</p>
                     <p className="text-[11px] text-muted-foreground leading-tight">
                       {[
                         flor.variedade,
@@ -397,18 +410,20 @@ export default function ProducaoFloralPage() {
               Resumo de materiais
             </h2>
             <p className="text-xs text-muted-foreground mb-2">
-              Soma do que esta ficha pede. Unidades diferentes não se somam. Nada aqui
-              cria compra, mexe em estoque ou reserva acervo.
+              Soma do que esta ficha pede, uma linha por flor, variedade, cor, natural
+              ou permanente e unidade — nada diferente se soma. Nada aqui cria compra,
+              mexe em estoque ou reserva acervo.
             </p>
             <ul className="bg-card border border-border rounded-xl divide-y divide-border">
               {ficha.resumo.map((linha) => (
                 <li key={linha.chave} className="px-3 py-2 flex justify-between gap-3 text-sm">
-                  <span className="min-w-0">
+                  <span className="min-w-0 break-words">
                     {linha.nome}
-                    {(linha.cor || linha.origem) && (
+                    {(linha.variedade || linha.cor || linha.origem) && (
                       <span className="text-muted-foreground text-xs">
                         {" "}
-                        · {[linha.cor, rotuloDaOrigem(linha.origem ?? undefined)?.toLowerCase()]
+                        ·{" "}
+                        {[linha.variedade, linha.cor, rotuloDaOrigem(linha.origem ?? undefined)?.toLowerCase()]
                           .filter(Boolean)
                           .join(" · ")}
                       </span>

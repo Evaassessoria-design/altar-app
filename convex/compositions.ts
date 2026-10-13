@@ -50,6 +50,7 @@ const componente = v.object({
   origem: v.optional(v.union(v.literal("natural"), v.literal("permanente"))),
   distribuicao: v.optional(v.union(v.literal("por_arranjo"), v.literal("total"))),
   apenasOrientacao: v.optional(v.boolean()),
+  orientacaoFlorista: v.optional(v.string()),
 });
 
 type ComponenteEntrada = {
@@ -67,6 +68,7 @@ type ComponenteEntrada = {
   origem?: "natural" | "permanente";
   distribuicao?: "por_arranjo" | "total";
   apenasOrientacao?: boolean;
+  orientacaoFlorista?: string;
 };
 
 /**
@@ -123,6 +125,7 @@ async function resolverReceita(
       // ausente, para a receita antiga e a nova lerem igual.
       distribuicao: linha.distribuicao === "total" ? ("total" as const) : undefined,
       apenasOrientacao: linha.apenasOrientacao === true ? true : undefined,
+      orientacaoFlorista: linha.orientacaoFlorista?.trim() || undefined,
     });
   }
   return resolvidas;

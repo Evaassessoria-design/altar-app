@@ -8,7 +8,7 @@ import {
   type ComponenteDaReceita,
   type ComposicaoNoEvento,
 } from "./fichaTecnica";
-import { abreviarUnidade, normalizeName } from "./materiais";
+import { normalizeName } from "./materiais";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PRODUÇÃO FLORAL — a ficha que vai para a mão do florista.
@@ -96,14 +96,19 @@ export function textoDaQuantidade(q: QuantidadeDaLinha): string {
   return `${porArranjo} por arranjo · ${quantidadeTexto(q.total, q.unidade)} no total`;
 }
 
-/** Uma linha de receita como o florista a lê. Campo a campo: sem custo. */
+/**
+ * Uma linha de receita como o florista a lê. Campo a campo: sem custo, e sem
+ * `notes` — essa é anotação INTERNA da decoradora e pode citar fornecedor ou
+ * preço. O único texto da linha que vai para o florista é
+ * `orientacaoFlorista`, escrito para ele.
+ */
 export type LinhaFloral = {
   nome: string;
   variedade?: string;
   cor?: string;
   origem?: string;
   quantidade: QuantidadeDaLinha;
-  notes?: string;
+  orientacaoFlorista?: string;
 };
 
 /** Uma orientação sem quantidade — instrução, nunca total. */
@@ -111,7 +116,7 @@ export type OrientacaoFloral = {
   nome: string;
   cor?: string;
   origem?: string;
-  notes?: string;
+  orientacaoFlorista?: string;
 };
 
 /**
@@ -136,7 +141,7 @@ export function linhasDaComposicao(composicao: ComposicaoNoEvento): {
         nome,
         cor: componente.cor?.trim() || undefined,
         origem: componente.origem,
-        notes: componente.notes?.trim() || undefined,
+        orientacaoFlorista: componente.orientacaoFlorista?.trim() || undefined,
       });
       continue;
     }
@@ -146,7 +151,7 @@ export function linhasDaComposicao(composicao: ComposicaoNoEvento): {
       cor: componente.cor?.trim() || undefined,
       origem: componente.origem,
       quantidade: quantidadeDaLinha(composicao, componente),
-      notes: componente.notes?.trim() || undefined,
+      orientacaoFlorista: componente.orientacaoFlorista?.trim() || undefined,
     });
   }
 
@@ -283,37 +288,60 @@ export function checklistDeProducao(
 /**
  * O RESUMO DE MATERIAIS da ficha do florista.
  *
- * Mesma chave do consolidado da Ficha Técnica (identidade + unidade), porque é
- * a mesma pergunta: "estas duas linhas são o mesmo material?". Haste e maço
- * continuam separados.
+ * ── UMA LINHA POR COISA QUE SE COMPRA SEPARADO ──────────────────────────────
+ * A chave é material (ou nome, sem vínculo) + VARIEDADE + COR + ORIGEM +
+ * UNIDADE. A versão anterior juntava só por material e unidade e, quando as
+ * linhas divergiam, apagava a cor e a origem: 100 rosas brancas naturais e 48
+ * rosas rosê permanentes viravam "Rosa 148 hastes". Para o florista são duas
+ * compras — rosa de seda não sai da CEASA. Agora nada diferente se soma.
+ *
+ * Maiúsculas e espaços não separam ("Branca" e "branca " são a mesma cor);
+ * a grafia mostrada é a da primeira linha.
  *
  * ── POR QUE NÃO REAPROVEITA `consolidarMateriais` DIRETO ────────────────────
  * Aquela função devolve custo estimado, margem, tipo ambíguo, cobertura de
  * compra e sugestão de providência — tudo informação interna, e três delas
- * financeiras. Este resumo precisa de três colunas: nome, total e unidade,
- * mais a cor e a origem quando todas as origens concordam. Projetar a linha
- * grande para esconder campos seria um `delete` de campo esperando ser
- * esquecido no próximo campo novo.
- *
- * A CONTA, que é o que não pode divergir, é a mesma:
+ * financeiras. A CONTA, que é o que não pode divergir, é a mesma:
  * `necessidadeDoComponente`.
  *
  * ── RESUMO NÃO COMPRA, NÃO RESERVA, NÃO MOVIMENTA ───────────────────────────
- * Isto é papel. Nada aqui cria compra, mexe em estoque ou reserva acervo: a
- * decoradora olha o resumo e decide, pelas telas que já existem para isso.
+ * Isto é papel. Nada aqui cria compra, mexe em estoque ou reserva acervo.
  */
 export type LinhaDoResumo = {
   chave: string;
+  /** Material do catálogo, quando a linha tem vínculo. A foto vem por ele. */
+  materialId: string | null;
   nome: string;
+  variedade: string | null;
+  cor: string | null;
+  origem: string | null;
   unidade: string;
   total: number;
-  /** Cor, quando TODAS as origens pedem a mesma. Divergência vira `null`. */
-  cor: string | null;
-  /** Natural/permanente, quando todas as origens concordam. */
-  origem: string | null;
   /** Em que composições este material entra. */
   origens: { composicao: string; ambiente: string }[];
 };
+
+const paraChave = (texto: string | undefined) => normalizeName(texto?.trim() ?? "");
+
+export function chaveDoResumo(componente: {
+  materialId?: string;
+  nome: string;
+  variedade?: string;
+  cor?: string;
+  origem?: string;
+  unidade?: string;
+}): string {
+  const identidade = componente.materialId
+    ? `id:${componente.materialId}`
+    : `nome:${normalizeName(componente.nome.trim())}`;
+  return [
+    identidade,
+    `var:${paraChave(componente.variedade)}`,
+    `cor:${paraChave(componente.cor)}`,
+    `origem:${componente.origem ?? ""}`,
+    `un:${componente.unidade ?? ""}`,
+  ].join("|");
+}
 
 export function resumoDeMateriais(
   composicoes: readonly (ComposicaoNoEvento & { rotuloDoAmbiente?: string })[],
@@ -326,14 +354,8 @@ export function resumoDeMateriais(
       const nome = componente.nome?.trim();
       if (!nome) continue;
 
-      const unidade = componente.unidade ?? "";
-      const identidade = componente.materialId
-        ? `id:${componente.materialId}`
-        : `nome:${normalizeName(nome)}`;
-      const chave = `${identidade}|${unidade}`;
+      const chave = chaveDoResumo({ ...componente, nome });
       const total = necessidadeDoComponente(composicao, componente);
-      const cor = componente.cor?.trim() || null;
-      const origem = componente.origem ?? null;
       const ambiente =
         composicao.rotuloDoAmbiente ?? composicao.ambiente ?? composicao.area;
 
@@ -341,28 +363,30 @@ export function resumoDeMateriais(
       if (!existente) {
         porChave.set(chave, {
           chave,
+          materialId: componente.materialId ?? null,
           nome,
-          unidade,
+          variedade: componente.variedade?.trim() || null,
+          cor: componente.cor?.trim() || null,
+          origem: componente.origem ?? null,
+          unidade: componente.unidade ?? "",
           total,
-          cor,
-          origem,
           origens: [{ composicao: composicao.nome, ambiente }],
         });
         continue;
       }
-
-      existente.total = Number(
-        (existente.total + total).toFixed(CASAS_DECIMAIS),
-      );
-      // Duas origens pedindo cores diferentes da mesma flor não viram uma cor
-      // inventada: o resumo diz "ver composições" e o florista lê lá.
-      if (existente.cor !== cor) existente.cor = null;
-      if (existente.origem !== origem) existente.origem = null;
+      existente.total = Number((existente.total + total).toFixed(CASAS_DECIMAIS));
       existente.origens.push({ composicao: composicao.nome, ambiente });
     }
   }
 
-  return [...porChave.values()].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  return [...porChave.values()].sort(
+    (a, b) =>
+      a.nome.localeCompare(b.nome, "pt-BR") ||
+      (a.variedade ?? "").localeCompare(b.variedade ?? "", "pt-BR") ||
+      (a.cor ?? "").localeCompare(b.cor ?? "", "pt-BR") ||
+      (a.origem ?? "").localeCompare(b.origem ?? "") ||
+      a.unidade.localeCompare(b.unidade),
+  );
 }
 
 /**
@@ -390,6 +414,9 @@ export function resumoDeMateriais(
  * compra pela foto.
  */
 export type FlorDaLegenda = {
+  chave: string;
+  /** Pelo ID — nunca pelo nome: dois materiais podem se chamar "Rosa". */
+  materialId: string | null;
   nome: string;
   variedade: string | null;
   cor: string | null;
@@ -401,15 +428,23 @@ export type FlorDaLegenda = {
   fotoIlustrativa: boolean;
 };
 
+/**
+ * `dadosDoMaterial` recebe o `materialId` da linha (ou `null`, linha sem
+ * vínculo) e devolve a foto e a variedade DO CATÁLOGO. Quem chama confere o
+ * dono; aqui só se junta.
+ */
 export function legendaDasFlores(
   resumo: readonly LinhaDoResumo[],
-  dadosDoMaterial: (chave: string) => { fotoUrl: string | null; variedade: string | null },
+  dadosDoMaterial: (materialId: string | null) => { fotoUrl: string | null; variedade: string | null },
 ): FlorDaLegenda[] {
   return resumo.map((linha) => {
-    const extra = dadosDoMaterial(linha.chave);
+    const extra = dadosDoMaterial(linha.materialId);
     return {
+      chave: linha.chave,
+      materialId: linha.materialId,
       nome: linha.nome,
-      variedade: extra.variedade,
+      // A variedade gravada na linha é o snapshot; a do catálogo só completa.
+      variedade: linha.variedade ?? extra.variedade,
       cor: linha.cor,
       origem: linha.origem,
       total: linha.total,
@@ -422,14 +457,13 @@ export function legendaDasFlores(
   });
 }
 
-/** O texto curto da legenda: "Rosa Avalanche · branca · natural · 100 hastes". */
+/** O texto curto da legenda: "Rosa · Avalanche · branca · natural · 100 hastes". */
 export function textoDaLegenda(flor: FlorDaLegenda): string {
   const partes = [flor.nome];
   if (flor.variedade) partes.push(flor.variedade);
   if (flor.cor) partes.push(flor.cor);
   const origem = rotuloDaOrigem(flor.origem ?? undefined);
   if (origem) partes.push(origem.toLowerCase());
-  const un = abreviarUnidade(flor.unidade);
-  partes.push(`${quantidadeTexto(flor.total, flor.unidade)}${un ? "" : ""}`);
+  partes.push(quantidadeTexto(flor.total, flor.unidade));
   return partes.join(" · ");
 }

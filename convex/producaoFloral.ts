@@ -110,6 +110,102 @@ export const setInstrucoes = mutation({
 });
 
 /**
+ * Grava a PARTE FLORAL das linhas da receita de UMA composição — e só ela.
+ *
+ * ── POR QUE NÃO `fichaTecnica.setReceita` ───────────────────────────────────
+ * O diálogo floral gravava pela `setReceita`, que reescreve a receita inteira
+ * passando por `resolverReceita`: ela RECOPIA do catálogo atual o nome, a
+ * unidade, o tipo, o custo e a margem de cada linha. Mudar só a cor de um
+ * evento antigo atualizava em silêncio o snapshot de custo e de margem — e, se
+ * a unidade do catálogo tivesse mudado, o significado da quantidade.
+ *
+ * Aqui cada linha é PATCH dos campos florais: cor, origem, distribuição,
+ * "só orientação" e a orientação para o florista. Custo, margem, unidade,
+ * nome, tipo, variedade e material NÃO são tocados. A quantidade só muda
+ * quando vem no pedido — a tela só a manda se a decoradora a alterou.
+ *
+ * ── "SÓ ORIENTAÇÃO" NÃO APAGA A QUANTIDADE ──────────────────────────────────
+ * A versão anterior gravava `quantidade: 0` ao marcar; desmarcar depois não
+ * tinha mais o número. A quantidade fica guardada e é só ignorada pelas contas
+ * (`necessidadeDoComponente` devolve 0 para orientação).
+ *
+ * ── A RECEITA MUDOU NO MEIO ─────────────────────────────────────────────────
+ * Cada linha vem com o índice E o nome/material que a tela viu. Se a Ficha
+ * Técnica tirou ou reordenou linhas enquanto este diálogo estava aberto, o
+ * índice apontaria para outra flor: recusa com CONFLITO, sem gravar nada.
+ */
+const linhaFloral = v.object({
+  indice: v.number(),
+  /** O que a tela viu nesta posição — conferido antes de gravar. */
+  nome: v.string(),
+  materialId: v.optional(v.id("materials")),
+  cor: v.optional(v.string()),
+  origem: v.optional(v.union(v.literal("natural"), v.literal("permanente"))),
+  distribuicao: v.union(v.literal("por_arranjo"), v.literal("total")),
+  apenasOrientacao: v.boolean(),
+  orientacaoFlorista: v.optional(v.string()),
+  /** Só quando a decoradora mudou o número. Ausente = mantém o gravado. */
+  quantidade: v.optional(v.number()),
+});
+
+export const setLinhasFlorais = mutation({
+  args: {
+    id: v.id("assemblyItems"),
+    linhas: v.array(linhaFloral),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    const item = await ctx.db.get(args.id);
+    // Id de outra conta responde NOT_FOUND: não confirmamos dado alheio.
+    if (!item || item.userId !== user._id) {
+      throw new ConvexError({ code: "NOT_FOUND", message: "Item não encontrado" });
+    }
+    const receita = [...(item.receita ?? [])];
+    const vistos = new Set<number>();
+
+    // Confere TUDO antes de gravar a primeira linha.
+    for (const linha of args.linhas) {
+      const atual = Number.isInteger(linha.indice) ? receita[linha.indice] : undefined;
+      if (
+        !atual ||
+        vistos.has(linha.indice) ||
+        atual.nome.trim() !== linha.nome.trim() ||
+        (atual.materialId ?? null) !== (linha.materialId ?? null)
+      ) {
+        throw new ConvexError({
+          code: "CONFLITO",
+          message: "A receita mudou desde que você abriu. Feche e abra de novo para ver a atual.",
+        });
+      }
+      vistos.add(linha.indice);
+      if (
+        linha.quantidade !== undefined &&
+        (!Number.isFinite(linha.quantidade) || linha.quantidade < 0)
+      ) {
+        throw new ConvexError({ code: "INVALID", message: `Quantidade inválida em "${atual.nome}"` });
+      }
+    }
+
+    for (const linha of args.linhas) {
+      const atual = receita[linha.indice]!;
+      receita[linha.indice] = {
+        ...atual,
+        quantidade: linha.quantidade ?? atual.quantidade,
+        cor: textoLimpo(linha.cor, "Cor"),
+        origem: linha.origem,
+        // Só grava o que muda o significado: ausente é "por arranjo".
+        distribuicao: linha.distribuicao === "total" ? ("total" as const) : undefined,
+        apenasOrientacao: linha.apenasOrientacao ? true : undefined,
+        orientacaoFlorista: textoLimpo(linha.orientacaoFlorista, "Orientação para o florista"),
+      };
+    }
+
+    await ctx.db.patch(args.id, comCarimbo({ receita }));
+    return { linhas: args.linhas.length };
+  },
+});
+
+/**
  * A FICHA DO FLORISTA, em uma leitura.
  *
  * Devolve o cabeçalho do evento, as composições com receita e instruções, os
@@ -213,8 +309,9 @@ export const fichaDoFlorista = query({
     // ── FOTO DA FLOR (catálogo) ──────────────────────────────────────────────
     // Uma leitura por material DISTINTO da ficha — dezenas, não o catálogo
     // inteiro da empresa. Mesmo padrão de `fichaTecnica.materiaisParaOProjeto`,
-    // com a MESMA conferência de dono: foto de material de outra conta nunca
-    // entra na ficha.
+    // com a MESMA conferência de dono: um `materialId` alheio gravado numa
+    // receita antiga não traz foto nem variedade de outra conta. A foto vem
+    // SEMPRE pelo id: dois materiais podem se chamar "Rosa".
     const extras = new Map<string, { fotoUrl: string | null; variedade: string | null }>();
     if (args.incluirFotos) {
       const ids = new Set<string>();
@@ -234,15 +331,9 @@ export const fichaDoFlorista = query({
         });
       }
     }
-    // A chave do resumo é `id:<materialId>|unidade` ou `nome:<normalizado>|unidade`.
-    // A legenda junta por material, então a unidade sai da chave aqui.
-    const flores = legendaDasFlores(resumo, (chave) => {
-      const identidade = chave.split("|")[0] ?? "";
-      if (identidade.startsWith("id:")) {
-        return extras.get(identidade.slice(3)) ?? { fotoUrl: null, variedade: null };
-      }
-      return { fotoUrl: null, variedade: null };
-    });
+    const flores = legendaDasFlores(resumo, (materialId) =>
+      (materialId ? extras.get(materialId) : undefined) ?? { fotoUrl: null, variedade: null },
+    );
 
     // QUEM responde pelo evento, pela regra única de `lib/responsavel.ts`:
     // escolha explícita > anotação > única pessoa escalada. Duas pessoas sem
@@ -264,13 +355,14 @@ export const fichaDoFlorista = query({
       membros,
     );
 
+    // O evento se identifica pelo NOME, data e local. Cliente, telefone e
+    // e-mail não saem daqui: a ficha é papel de fornecedor.
     return {
       evento: {
         _id: event._id,
         nome: event.name,
         data: event.date,
         local: event.location,
-        cliente: event.clientName,
         responsavel: responsavel?.nome ?? null,
       },
       composicoes: composicoes.map((c) => ({
@@ -289,11 +381,13 @@ export const fichaDoFlorista = query({
       checklist: checklistDeProducao(paraRegras),
       resumo: resumo.map((l) => ({
         chave: l.chave,
+        materialId: l.materialId,
         nome: l.nome,
-        unidade: l.unidade,
-        total: l.total,
+        variedade: l.variedade,
         cor: l.cor,
         origem: l.origem,
+        unidade: l.unidade,
+        total: l.total,
         origens: l.origens,
       })),
       flores,
@@ -305,7 +399,6 @@ export const fichaDoFlorista = query({
       semReceita: itens.filter(
         (i) => ehObrigacaoDeMontagem(i) && (i.receita?.length ?? 0) === 0,
       ).length,
-      geradoEm: new Date().toISOString(),
     };
   },
 });

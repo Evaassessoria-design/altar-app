@@ -174,6 +174,13 @@ const componenteDaReceita = v.object({
    * AUSENTE/false = linha normal, com quantidade.
    */
   apenasOrientacao: v.optional(v.boolean()),
+  /**
+   * Orientação desta linha ESCRITA PARA O FLORISTA ("abrir os botões na
+   * véspera", "folhagem a gosto"). É o único texto da linha que vai para o
+   * papel dele: `notes` é anotação interna e pode citar fornecedor ou preço.
+   * AUSENTE = nada a dizer ao florista sobre esta linha.
+   */
+  orientacaoFlorista: v.optional(v.string()),
 });
 
 /** Tipos de ajuste de estoque — a lista vive em lib/ajusteDeAcervo.ts. */

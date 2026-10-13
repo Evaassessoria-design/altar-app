@@ -103,9 +103,9 @@ export function InstrucoesDialog({
 
   return (
     <Dialog open onOpenChange={(aberto) => !aberto && onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Instruções — {nome}</DialogTitle>
+          <DialogTitle className="break-words">Instruções — {nome}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-3">

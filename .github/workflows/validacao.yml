@@ -37,7 +37,13 @@ jobs:
     timeout-minutes: 20
 
     steps:
+      # Histórico completo: `dialogo-altura.test.ts` faz `git grep` num commit
+      # antigo (`b8a5cbe~1`) para provar que a busca acha o defeito de verdade.
+      # Com o checkout raso (padrão, 1 commit) esse commit não existe, a busca
+      # volta vazia e o teste falhava — vermelho desde 07/10 sem defeito no app.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Instalar pnpm
         uses: pnpm/action-setup@v4

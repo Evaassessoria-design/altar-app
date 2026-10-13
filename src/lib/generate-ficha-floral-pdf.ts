@@ -252,11 +252,16 @@ export async function generateFichaFloralPDF(data: FichaFloralPdfData): Promise<
   if (data.avisos.length > 0) {
     tituloDeBloco("Cuidados e horários");
     for (const aviso of data.avisos) {
-      garantirEspaco(12);
+      // O título quebra: com um nome longo de composição ele passava da
+      // margem e cortava o ambiente (visto no DEV em 13/10).
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9.5);
-      doc.text(`${aviso.composicao} — ${aviso.ambiente}`, MARGIN, y);
-      y += 4.4;
+      const titulo = doc.splitTextToSize(`${aviso.composicao} — ${aviso.ambiente}`, LARGURA) as string[];
+      garantirEspaco(4.4 * titulo.length + 8);
+      for (const linha of titulo) {
+        doc.text(linha, MARGIN, y);
+        y += 4.4;
+      }
       doc.setFont("helvetica", "normal");
       if (aviso.horario) paragrafo(`Horário: ${aviso.horario}`, MARGIN + 2, LARGURA - 2, 9);
       if (aviso.cuidados) paragrafo(`Cuidados: ${aviso.cuidados}`, MARGIN + 2, LARGURA - 2, 9);
@@ -555,6 +560,13 @@ export async function generateFichaFloralPDF(data: FichaFloralPdfData): Promise<
 
   entregarPdf(
     doc,
-    `ficha-floral-${data.evento.nome.replace(/[^\w]+/g, "-").toLowerCase()}.pdf`,
+    // Sem acento antes de trocar o resto por hífen: "Aniversário" virava
+    // "anivers-rio".
+    `ficha-floral-${data.evento.nome
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^\w]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase()}.pdf`,
   );
 }

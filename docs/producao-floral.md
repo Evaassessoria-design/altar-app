@@ -78,15 +78,52 @@ Acervo, pelas telas que já existem.
 | `convex/producaoFloral.test.ts` | contas, isolamento entre contas, trava do PDF |
 | `src/pages/app/events/[id]/producao-floral/tela.test.tsx` | a tela renderizada |
 
-## O que ainda não foi validado
+## Decisões de produto de 12/10 (branch `feature/producao-floral-ajustes`)
 
-Os testes rodam em memória (`convex-test`) e em jsdom. **Não houve validação com
-backend Convex real nem no navegador**: a rede deste ambiente recusa
-`*.convex.dev` (403 no túnel), então nenhum deployment pôde subir. O que falta
-conferir com servidor de verdade:
+| Decisão | Como ficou |
+| --- | --- |
+| Resumo não soma itens diferentes | Chave = material (ou nome) + variedade + cor + natural/permanente + unidade. Rosa branca natural e rosa rosê permanente são duas linhas |
+| Editar cor/origem não mexe em custo, margem, unidade, quantidade | `producaoFloral.setLinhasFlorais` faz patch só dos campos florais; quantidade só muda se a tela a mandar (a decoradora alterou); índice com nome/material diferente = CONFLITO, nada gravado |
+| Papel do florista sem contato nem nota interna | A consulta não devolve mais o nome da cliente; `notes` (interna) não sai; campo novo `orientacaoFlorista` ("Orientações para o florista"), opcional |
+| Fotos pelo ID | Resumo e legenda carregam `materialId`; a tela abre o material pelo `_id` |
+| "Só orientação" não apaga a quantidade | O número fica guardado; desmarcar devolve |
+| Ficha Técnica: por arranjo × total distribuído | `contaDaLinha`/`textoDaConta`: "5 haste × 20 = 100", "2 maço no total, distribuídos", "orientação, fora dos totais" — tela e PDF |
+| Diálogos no celular | `max-h-[90dvh]`, grade de uma coluna abaixo de `sm` |
 
-- gravar instruções e ver o PDF sair com as fotos reais (as imagens entram por
-  `fetch` + `createImageBitmap`, que só existem no navegador);
-- a ficha de um evento com dezenas de composições, para medir a quebra de página;
-- a tela em 390 px de largura real (a trava `mobile-controls` prova que nenhum
-  controle some abaixo de `sm`, mas não substitui olhar).
+Defeito achado no caminho e corrigido: **salvar a receita na Ficha Técnica
+apagava a parte floral** (o diálogo de lá remontava a linha só com material,
+nome, unidade e quantidade). A linha agora carrega o resto e o devolve.
+
+## Validação no DEV (13/10, `healthy-pika-907`, conta de teste)
+
+Backend da branch enviado ao DEV com autorização (PROD não tocado). No evento
+"TESTE Atalhos": dois itens criados pelo Questionário (um com nome longo, 20
+unidades; outro com 4), receitas pela Ficha Técnica (5 hastes, 2 maços, 3 un;
+12 hastes, 0,5 maço), parte floral pela Produção floral.
+
+- Resumo: Rosa branca natural 100 · Rosa rosê permanente 48 · Eucalipto 2 + 2
+  (cores diferentes) — nada somado indevidamente.
+- "Só orientação": campo some; ao desmarcar volta 3 (gravado no banco).
+- Salvar na Ficha Técnica sem mudar nada: cor, origem, distribuição e
+  orientação continuaram.
+- Ficha Técnica: "2 maço no total, distribuídos" e "orientação, fora dos
+  totais" na tela e no diálogo.
+- Foto da flor enviada pelo diálogo do material (aberto pelo id): aparece nos
+  dois cartões da rosa, com o aviso "pode não ser a cor pedida".
+- Referência do arranjo pela Galeria: sai no PDF com rótulo próprio.
+- PDF conferido na tela (3 páginas): nome longo quebra antes de "20
+  arranjos" e no aviso; frações e unidades certas; sem nome de cliente, sem
+  nota interna, sem valor. Dois defeitos achados aqui e corrigidos: título do
+  aviso que vazava a margem; nome do arquivo com acento ("anivers-rio").
+- Celular (iframe de 390 px no PC, não aparelho real): página e diálogos sem
+  rolagem lateral, altura em dvh.
+
+## Limitações conhecidas
+
+- O consolidado de COMPRA da Ficha Técnica continua por material + unidade
+  (Rosa 148 hastes): é a pergunta "quanto comprar desse cadastro". Separar por
+  cor/origem lá é decisão de produto à parte.
+- A miniatura dentro do diálogo do material não atualiza na hora do envio
+  (o cartão da ficha atualiza).
+- A ficha com dezenas de composições não foi medida (quebra de página).
+- Celular real não validado.

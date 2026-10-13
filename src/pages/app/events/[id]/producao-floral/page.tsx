@@ -231,7 +231,12 @@ export default function ProducaoFloralPage() {
                 {grupo.itens.map((c) => {
                   // A mesma regra das contas: ausente, negativo ou inválido = 1.
                   const unidades = unidadesDaComposicao({ quantidade: c.quantidade });
-                  const instrucoes = Object.entries(c.instrucoes).filter(([, v]) => v);
+                  // Na ORDEM da bancada (formato, altura, montagem…), a mesma do PDF.
+                  // `Object.entries(c.instrucoes)` saía em ordem alfabética: o
+                  // Convex devolve as chaves do objeto ordenadas.
+                  const instrucoes = (Object.keys(ROTULO_DA_INSTRUCAO) as (keyof typeof ROTULO_DA_INSTRUCAO)[])
+                    .map((chave) => [chave, c.instrucoes[chave]] as const)
+                    .filter(([, v]) => v);
                   return (
                     <div key={c._id} className="bg-card border border-border rounded-xl p-3">
                       <div className="flex items-start justify-between gap-2">

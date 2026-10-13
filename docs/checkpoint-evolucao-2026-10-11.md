@@ -244,3 +244,89 @@ testes citam `2026-10-10` e passam hoje — podem envelhecer do mesmo jeito.
 4. Ensaio com `docs/roteiro-live-2026-10-14.md`.
 5. Floral depois da live: corrigir as pendências acima e responder às três
    decisões.
+
+## 5ª rodada (13/10): publicação aguardando o clique, ensaio e decisões
+
+- **Publicação de pagamentos autorizada** (só frontend, `94df752`). Candidato:
+  `https://vercel.com/casando-assessoria/altar-app-sg8v/EaD83e9AJyLiLjszCVC3gbKBk2Q9`
+  (preview `altar-app-sg8v-jh445dpen…`, CSS `index-BCAFzw3P`). Production
+  atual = `5810dbd`, `altar-app-sg8v-453b2vsyt-casando-assessoria.vercel.app`
+  (CSS `index-DwvYhOS9`, JS `index-CMEgTZdv`) — é o caminho de volta.
+  **Ainda não promovido** em 13/10.
+- **CI do GitHub vermelho desde `1669295`** (inclusive em `5ec2c4c` e
+  `5810dbd`, que estão em PROD): `dialogo-altura.test.ts` faz `git grep` num
+  commit antigo e o checkout do CI não traz histórico. Próxima rodada:
+  `fetch-depth: 0` no `actions/checkout`.
+- **DEMO (`insightful-goldfish-950`) não tem o backend de Pagamentos**
+  (funções de parcelas e recebimentos ausentes; conferido por
+  `function-spec`). Datas reais lidas no banco: semente de 28/09; Sofia &
+  Tomás 19/10; Marina & Gabriel 10/10. O roteiro de 14/10 foi refeito para o
+  site oficial com a conta de demonstração.
+- **Divergência do DEV:** `healthy-pika-907` tem o backend da floral
+  (`setLinhasFlorais`, `fichaDoFlorista`); esta branch não tem
+  `convex/producaoFloral.ts` nem os campos florais no schema. **Não rodar
+  `convex dev` a partir de `feature/evolucao-14-10`**: tiraria as funções da
+  floral e tentaria um schema sem os campos que os dados do DEV já usam. Rodar
+  só da branch da floral ou da integração das duas.
+- **Decisão de produto para a próxima rodada (floral):** o consolidado de
+  COMPRAS da Ficha Técnica também deve distinguir cor e natural/permanente,
+  preservando unidades e variedades relevantes (hoje: Rosa 148 hastes somando
+  natural e permanente). Floral preservada em `ad73c75`, sem integrar.
+- **Cota do Convex:** aviso do CLI "Your projects are above the Free plan
+  limits…"; consumo não lido (painel pede login). Conferir em
+  `https://dashboard.convex.dev/t/evadelbiancoassessoria/settings/usage`.
+
+## 6ª rodada (13/10, tarde): live na conta oficial, cota e CI
+
+**Identificação dos SHAs — não confundir:**
+
+| O quê | SHA | Observação |
+|---|---|---|
+| Candidato de pagamentos (aprovado, aguardando promoção) | `94df7520f84e7eb09b2314f2b01503db5eca0a7c` | Deployment Ready: `https://vercel.com/casando-assessoria/altar-app-sg8v/EaD83e9AJyLiLjszCVC3gbKBk2Q9`; CSS esperado `index-BCAFzw3P.css` |
+| Correção do CI (só `.github/workflows/validacao.yml`) | `9e8f85ae607db9bd0c2e96e7b96f0d7b9ab9618a` | Não muda o app; não precisa ser publicada |
+| Documentos da live | o commit que traz esta seção | Só `docs/` |
+
+O que se promove no Vercel continua sendo o deployment do `94df752`. Os
+commits seguintes não mudam o aplicativo (`git diff 94df752..HEAD -- src
+convex public` sai vazio).
+
+### Ambiente da live
+Decidido: **site oficial, na conta própria**, com registros fictícios. A DEMO
+fica fora (o evento alternativo Sofia & Tomás da 4ª rodada não vale mais).
+Roteiro e checklist reescritos para os registros que existem na conta (lidos
+em 13/10, sem alterar nada): lead e evento Matheus e Eva, proposta em
+rascunho, Castiçais 14 e Vaso para Orquídea 20. O menu dessa conta mostra
+Campanha e Painel Admin — o roteiro manda não clicar.
+
+### Prontidão (por leitura, 13/10)
+- Site: CSS `index-DwvYhOS9`, JS `index-CMEgTZdv` (= `5810dbd`), JS aponta
+  para `mellow-goose-539.convex.cloud`/`.site`.
+- Backend PROD: 324 funções; presentes `financeiro:pagamentosDoEvento`,
+  `adicionarParcelas`, `registrarRecebimento`, `anularRecebimento`,
+  `anexarComprovanteAoRecebimento`, `funil:convertToEvent`, `acervo:reservar`.
+  Nenhuma da floral.
+
+### Cota do Convex (painel, leitura)
+Plano **Free**. Período **01/10–31/10/2026 (UTC)**. Excedido: **File Storage
+1,14 GB / 1 GB** — 100% do projeto `altar-app`. O resto está dentro: Function
+Calls 17K/1M; Database Storage 3,08 MB/512 MB; Database I/O 76,74 MB/1 GB;
+**Data Egress 413 MB/1 GB** (o próximo a vigiar); Action Compute 0,013/20
+GB-h; Deployments 4/40. O painel não mostra data de interrupção.
+
+O salto foi em **06–07/10** (de ~380 MB para ~1,1 GB). Soma dos tamanhos em
+`_storage` (CLI, só leitura):
+- **DEV** `healthy-pika-907`: 20 arquivos, **565 MB**, quase todos de
+  06/10 — os testes do teto de 100 MB (4 de 104,9 MB, 2 de 62,9 MB).
+- **PROD** `mellow-goose-539`: 330 arquivos, **653 MB** (182 MB enviados em
+  07/10).
+
+Saída sem contratar plano: apagar os arquivos de teste do DEV (~565 MB) traz
+o total para ~0,65 GB. **Não foi feito** — exige a sua autorização, porque é
+exclusão permanente.
+
+### CI
+Causa confirmada: `src/lib/dialogo-altura.test.ts` faz `git grep` em
+`b8a5cbe~1`; o `actions/checkout` padrão é raso (1 commit), o commit não
+existe e a busca volta vazia (reproduzido com `git clone --depth 1`: 1 linha
+de erro × 9 achados com histórico). Correção mínima: `fetch-depth: 0`. O
+teste não foi tocado.

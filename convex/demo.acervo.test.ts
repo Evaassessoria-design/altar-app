@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./auth", () => {
   const usuarioDaSessao = async (ctx: {
@@ -24,6 +24,7 @@ import schema from "./schema";
 import { modules } from "./test.setup";
 import { api, internal } from "./_generated/api";
 import { autenticarComo } from "./test.auth";
+import { DEMO_WEDDING } from "./lib/demoData";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // A DEMO CONTANDO A SEGUNDA-FEIRA PÓS-EVENTO
@@ -53,7 +54,27 @@ async function comADemo() {
   return { dona, eventId: r.eventId };
 }
 
+// O RELÓGIO DESTES TESTES. Marina & Gabriel tem data FIXA (2026-10-10) e a
+// janela de acervo dele também (09–11/10); o resto da demo é semeado relativo
+// a "agora". Com o relógio real, depois de 11/10 a reserva do herói virou
+// passado e "o herói continua coberto" falhou (confirmado com o relógio em
+// 05/10 e em 13/10). A referência é derivada da fixture: 5 dias antes do
+// herói. Não muda o banco já semeado da conta de demonstração.
+function diasAntesDoHeroi(dias: number): Date {
+  const d = new Date(`${DEMO_WEDDING.event.date}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - dias);
+  return d;
+}
+
 describe("/acervo — o bloco Pós-evento com a demo semeada", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(diasAntesDoHeroi(5));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("nomeia o que não voltou de Rafaela & Ian e o que está no conserto", async () => {
     const { dona } = await comADemo();
     const p = await dona.query(api.acervo.pendenciasPosEvento, {});

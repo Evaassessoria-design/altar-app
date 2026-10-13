@@ -175,6 +175,55 @@ Recomendo a **1** para 14/10 (risco zero) e a **3** depois da live, com calma.
 Salvar cor/origem pode recopiar custo e margem? Natural e permanente da
 mesma flor somam no resumo?
 
+## 4ª rodada (12–13/10): dois candidatos separados
+
+| Candidato | Branch | SHA final | Muda backend? |
+|---|---|---|---|
+| Pagamentos | `feature/evolucao-14-10` | o commit que traz esta seção (`git log -1`); código de produto = `a39539c`; depois só testes (`487544d`) e docs | não |
+| Produção floral corrigida | `feature/producao-floral-ajustes` | `ad73c756e66032fbcd68bcb7d225796916fff722` | **sim** (schema aditivo + funções) |
+
+A floral NÃO está nesta branch: ela é outra branch, a partir do `5810dbd`.
+`git merge-tree` dos dois candidatos sai limpo (sem conflito).
+
+**DEV (`healthy-pika-907`)** recebeu em 13/10 o backend da floral corrigida
+(com autorização). O candidato de pagamentos não muda backend e funciona com
+ele. **PROD não foi tocado.** O CLI avisou que a conta passou dos limites do
+plano Free do Convex.
+
+### Proposta de integração e publicação
+
+1. **Antes da live (14/10)** — só o candidato de pagamentos, se você aprovar
+   a conferência dele: publicar **só o frontend** (`docs/release-producao.md`),
+   conferir o CSS no site. Backend de PROD fica no `5ec2c4c`.
+2. **Floral fica para depois da live.** Ela exige deploy de backend em PROD
+   (schema novo + funções), e o roteiro não depende dela.
+3. **Depois da live**: integrar `feature/producao-floral-ajustes` em
+   `feature/evolucao-14-10` (merge sem conflito), rodar a bateria, validar no
+   DEV o conjunto, e publicar na ordem de `docs/release-producao.md`: backend
+   PROD (aditivo, sem backfill) → frontend → CSS.
+4. `main` só depois de PROD conferido.
+
+### Evento alternativo para a live
+
+O herói Marina & Gabriel (10/10) está como "já aconteceu". Sem mexer na DEMO:
+usar **Casamento Sofia & Tomás** (semente + 21 dias; confirmado; R$ 118 mil;
+acervo com 30 castiçais "vai faltar"; compras e checklist; segunda parcela
+vencida). Fallback: **Bodas de Prata — Célia & Amaro** (semente + 38 dias).
+Conferir na conta de demonstração, antes do ensaio, que a data mostrada é
+depois de 14/10 — a semente conta os dias a partir de quando rodou.
+
+### Teste dependente de data — o segundo
+
+`demo.acervo.test.ts > o herói continua coberto nos castiçais` começou a
+falhar depois de 11/10 (fim da janela de acervo do herói). Confirmado com o
+relógio em 05/10 (passa) e 13/10 (falha). Mesmo tratamento da jornada:
+relógio fixo derivado da fixture (`487544d`, também na floral). Outros
+testes citam `2026-10-10` e passam hoje — podem envelhecer do mesmo jeito.
+
+### Verificações desta rodada
+
+- PROD conferido em 13/10: CSS `index-DwvYhOS9` (= `5810dbd`), sem mudança.
+
 ## Verificações (11/10, depois da última mudança de código)
 
 - `pnpm test`: **5.987/5.987** (3ª rodada). Na 1ª execução, 3 testes de

@@ -7,6 +7,8 @@ import { formatEventDayOnly } from "./event-date.ts";
 import { agruparPorAmbiente } from "./decoration-project.ts";
 import {
   consolidarMateriais,
+  contaDaLinha,
+  textoDaConta,
   necessidadeDoComponente,
   quantidadeTexto,
   type ComposicaoNoEvento,
@@ -163,28 +165,30 @@ export async function generateFichaTecnicaPDF(data: FichaTecnicaPdfData): Promis
 
       doc.setFontSize(8);
       doc.setTextColor(110, 110, 110);
-      doc.text("POR UNIDADE", MARGIN + 2, y);
+      doc.text("MATERIAL E CONTA", MARGIN + 2, y);
       doc.text("TOTAL", PAGE_W - MARGIN, y, { align: "right" });
       doc.setTextColor(30, 30, 30);
       y += 4.5;
 
-      doc.setFontSize(9.5);
+      // A conta de cada linha em palavras (`textoDaConta`, a mesma da tela).
+      // Antes a coluna se chamava "POR UNIDADE" e recebia o total distribuído
+      // ("2 maços" que já eram o conjunto) e "0 un" para a orientação.
       for (const componente of linhas) {
-        garantirEspaco(6);
-        doc.text(
-          `${quantidadeTexto(componente.quantidade, componente.unidade)}  ${componente.nome}`,
-          MARGIN + 2,
-          y,
-        );
+        const conta = contaDaLinha(item, componente);
+        const total =
+          conta.tipo === "orientacao" ? "—" : quantidadeTexto(conta.total, componente.unidade);
         doc.setFont("helvetica", "bold");
-        doc.text(
-          quantidadeTexto(necessidadeDoComponente(item, componente), componente.unidade),
-          PAGE_W - MARGIN,
-          y,
-          { align: "right" },
-        );
+        doc.setFontSize(9.5);
+        const larguraTotal = doc.getTextWidth(total);
         doc.setFont("helvetica", "normal");
-        y += 5;
+        const texto = `${componente.nome}  ·  ${textoDaConta(conta, componente.unidade)}`;
+        const partes = doc.splitTextToSize(texto, PAGE_W - MARGIN * 2 - 6 - larguraTotal) as string[];
+        garantirEspaco(5 * partes.length + 1);
+        partes.forEach((parte, k) => doc.text(parte, MARGIN + 2, y + k * 4.6));
+        doc.setFont("helvetica", "bold");
+        doc.text(total, PAGE_W - MARGIN, y, { align: "right" });
+        doc.setFont("helvetica", "normal");
+        y += 4.6 * partes.length + 0.4;
       }
       y += 4;
     }

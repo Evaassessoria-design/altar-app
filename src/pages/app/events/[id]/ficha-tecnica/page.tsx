@@ -21,9 +21,9 @@ import { formatEventDateLong } from "@/lib/event-date.ts";
 import { agruparPorAmbiente, resolverAmbiente } from "@/lib/decoration-project.ts";
 import {
   ROTULO_DA_SITUACAO,
-  necessidadeDoComponente,
+  contaDaLinha,
   quantidadeTexto,
-  unidadesDaComposicao,
+  textoDaConta,
   type SituacaoDaCobertura,
 } from "@/convex/lib/fichaTecnica.ts";
 import { metaDoTipo, tipoEfetivo } from "@/convex/lib/materiais.ts";
@@ -65,7 +65,7 @@ function LinhaConsolidada({
     margemPercentual: number | null;
     sugerido: number;
     sugeridoOperacional: number;
-    origens: { composicao: string; area: string; ambiente?: string; unidades: number; porUnidade: number; necessario: number }[];
+    origens: { composicao: string; area: string; ambiente?: string; unidades: number; porUnidade: number; necessario: number; distribuido?: boolean }[];
     cobertura: {
       necessario: number;
       comprado: number;
@@ -329,8 +329,16 @@ function LinhaConsolidada({
               <span className="text-muted-foreground truncate">
                 {resolverAmbiente(o).label} · {o.composicao}
               </span>
+              {/* Total distribuído não é "× 20": a quantidade já é o total, e
+                  escrever "20 × 2 = 2" desmentia a própria conta. */}
               <span className="whitespace-nowrap text-muted-foreground">
-                {o.unidades} × {o.porUnidade} ={" "}
+                {o.distribuido ? (
+                  "total distribuído = "
+                ) : (
+                  <>
+                    {o.unidades} × {o.porUnidade} ={" "}
+                  </>
+                )}
                 <span className="text-foreground font-medium">
                   {quantidadeTexto(o.necessario, linha.unidade)}
                 </span>
@@ -707,15 +715,11 @@ export default function FichaTecnicaPage() {
                             {/* A multiplicação NÃO acontece aqui: vem do mesmo
                                 helper que o backend e o PDF usam. Uma conta
                                 repetida na tela é como 185 vira 180 no papel. */}
+                            {/* A frase vem de `textoDaConta`, a mesma do PDF:
+                                por unidade × N, total distribuído ou orientação
+                                (fora dos totais) — nunca "2 maços × 20 = 2". */}
                             <span className="whitespace-nowrap">
-                              {quantidadeTexto(c.quantidade, c.unidade)} ×{" "}
-                              {unidadesDaComposicao({ quantidade: item.quantity })} ={" "}
-                              <span className="text-foreground">
-                                {quantidadeTexto(
-                                  necessidadeDoComponente({ quantidade: item.quantity }, c),
-                                  c.unidade,
-                                )}
-                              </span>
+                              {textoDaConta(contaDaLinha({ quantidade: item.quantity }, c), c.unidade)}
                             </span>
                           </li>
                         ))}

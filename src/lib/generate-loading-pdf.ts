@@ -206,6 +206,32 @@ export async function generateLoadingPDF(data: LoadingPdfData): Promise<void> {
     y += 3;
   }
 
+  // ── O QUE NÃO VAI NO CAMINHÃO ─────────────────────────────────────────────
+  // Sem caixas: não sai nem volta do galpão. Está aqui para ninguém procurá-lo
+  // na prateleira — e para ser conferido na chegada ao local.
+  if (folha.chegamNoLocal.length > 0) {
+    garantirEspaco(18);
+    y += 2;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(30, 30, 30);
+    doc.text("CHEGA NO LOCAL — NÃO CARREGAR", MARGIN, y);
+    y += 6;
+    for (const item of folha.chegamNoLocal) {
+      garantirEspaco(7);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(30, 30, 30);
+      doc.text(doc.splitTextToSize(item.nome, X_QTD - X_ITEM - 4)[0] as string, X_ITEM, y);
+      doc.text(item.quantidade, X_QTD, y);
+      doc.setFontSize(7.5);
+      doc.setTextColor(120, 120, 120);
+      doc.text(item.origem, X_SIT, y);
+      y += 6;
+    }
+    y += 2;
+  }
+
   // ── AS PEÇAS DO ACERVO ────────────────────────────────────────────────────
   // Aqui os números são REAIS, não caixas de marcar: `saiu` e `voltou` estão
   // gravados na reserva, e a folha imprime o que já se sabe para quem estiver

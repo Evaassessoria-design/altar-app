@@ -10,6 +10,7 @@ import {
   resumirCarregamento,
   type AssemblyStatus,
 } from "@/convex/lib/assemblyStatus.ts";
+import { ROTULO_DA_ORIGEM, equipeCarrega, type OrigemDoItem } from "@/convex/lib/itemDoBriefing.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FOLHA DE CARREGAMENTO
@@ -42,6 +43,10 @@ export type ItemDeCarregamento = {
   operationalStatus?: string;
   /** "referencia" e "nao_incluso" não são objeto físico. */
   projectScope?: string;
+  /** "em_avaliacao" e "nao_se_aplica" também não vão. Ver `ehObrigacaoDeMontagem`. */
+  situacao?: string;
+  /** Do espaço, da cliente ou da locadora: não vai no caminhão. Ver `equipeCarrega`. */
+  origem?: string;
 };
 
 export type LinhaDaFolha = ItemDeCarregamento & {
@@ -120,6 +125,12 @@ export function montarPecasDoAcervo(
 
 export type FolhaDeCarregamento = {
   ambientes: GrupoDeAmbiente<LinhaDaFolha>[];
+  /**
+   * Itens do projeto que NÃO vão no caminhão — chegam pelo espaço, pela
+   * cliente ou pela locadora. A folha os lista à parte, sem caixa de saída e
+   * retorno, para a equipe saber que não precisa procurá-los no galpão.
+   */
+  chegamNoLocal: { nome: string; quantidade: string; origem: string }[];
   total: number;
   pendentes: number;
   /** Itens que saíram e não voltaram — a pergunta do dia seguinte. */
@@ -150,7 +161,18 @@ export function montarFolhaDeCarregamento(
   //
   // É a MESMA regra do Caderno de Montagem (`ehObrigacaoDeMontagem`): item sem
   // classificação continua entrando, porque sair exige escolha explícita.
-  const fisicos = itens.filter(ehObrigacaoDeMontagem);
+  const doProjeto = itens.filter(ehObrigacaoDeMontagem);
+  // ── SÓ ENTRA O QUE SAI DO GALPÃO ────────────────────────────────────────
+  // A origem que o briefing registra (14/10): cadeira do espaço não entra no
+  // caminhão. Item sem origem informada segue entrando, como sempre.
+  const fisicos = doProjeto.filter(equipeCarrega);
+  const chegamNoLocal = doProjeto
+    .filter((i) => !equipeCarrega(i))
+    .map((i) => ({
+      nome: i.name,
+      quantidade: quantidadeTexto(i),
+      origem: ROTULO_DA_ORIGEM[i.origem as OrigemDoItem] ?? "",
+    }));
 
   const linhas: LinhaDaFolha[] = fisicos.map((i) => {
     const situacao = effectiveAssemblyStatus(i);
@@ -166,6 +188,7 @@ export function montarFolhaDeCarregamento(
 
   return {
     ambientes: agruparPorAmbiente(linhas),
+    chegamNoLocal,
     total: resumo.total,
     pendentes: resumo.pendentes,
     naoVoltaram: resumo.foraDoGalpao,

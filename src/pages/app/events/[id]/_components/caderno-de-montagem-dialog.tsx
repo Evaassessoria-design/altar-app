@@ -203,6 +203,24 @@ function Previa({ c }: { c: CadernoMontado }) {
         </Secao>
       )}
 
+      {[
+        { titulo: "Prazos e responsáveis", origem: "Briefing", linhas: c.prazosEResponsaveis },
+        { titulo: "Iluminação e conexão elétrica", origem: "Briefing", linhas: c.conexaoEletrica },
+      ].map((bloco) =>
+        bloco.linhas.length > 0 ? (
+          <Secao key={bloco.titulo} titulo={bloco.titulo} origem={bloco.origem}>
+            <dl className="space-y-1 text-xs">
+              {bloco.linhas.map((l) => (
+                <div key={l.rotulo} className="grid grid-cols-[8rem_1fr] gap-2">
+                  <dt className="text-muted-foreground">{l.rotulo}</dt>
+                  <dd className="min-w-0 break-words">{l.valor}</dd>
+                </div>
+              ))}
+            </dl>
+          </Secao>
+        ) : null,
+      )}
+
       {c.equipeEscalada.length > 0 && (
         <Secao titulo="Equipe escalada" origem="Equipe do evento">
           <ul className="text-xs space-y-0.5">
@@ -239,7 +257,7 @@ function Previa({ c }: { c: CadernoMontado }) {
                 <Check className="mt-0.5 size-3.5 shrink-0 text-primary" />
                 <span className="min-w-0 break-words">
                   {it.nome}
-                  {[it.detalhe, it.fornecedor && `Fornecedor: ${it.fornecedor}`, it.observacao && `Obs.: ${it.observacao}`]
+                  {[it.detalhe, it.fornecedor && `Fornecedor: ${it.fornecedor}`, it.observacao && `Obs.: ${it.observacao}`, ...(it.operacional ?? [])]
                     .filter(Boolean)
                     .map((e) => (
                       <span key={String(e)} className="block text-[10px] text-muted-foreground">{e}</span>
@@ -314,6 +332,20 @@ function Previa({ c }: { c: CadernoMontado }) {
                 : `${c.foraDaMontagem} itens não entram na montagem por serem só referência visual.`}
             </p>
           )}
+        </Secao>
+      )}
+
+      {c.chegaNoLocal.length > 0 && (
+        <Secao titulo="Chega no local — não carregar" origem="Origem dos itens">
+          <ul className="text-xs space-y-0.5">
+            {c.chegaNoLocal.map((l, i) => (
+              <li key={i}>
+                {l.quantidade ? `${l.quantidade} · ` : ""}
+                {l.nome}
+                {l.detalhe ? <span className="text-muted-foreground"> · {l.detalhe}</span> : null}
+              </li>
+            ))}
+          </ul>
         </Secao>
       )}
 

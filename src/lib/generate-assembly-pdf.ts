@@ -578,6 +578,7 @@ function ficha(p: Pagina, f: FichaDeAmbiente, c: CadernoMontado, imagens: Imagen
         !it.fotoUrl && it.ehReferencia ? "referência visual" : undefined,
         equipe && it.fornecedor ? `Fornecedor: ${it.fornecedor}` : undefined,
         equipe && it.observacao ? `Obs.: ${it.observacao}` : undefined,
+        ...(equipe ? (it.operacional ?? []) : []),
       ].filter((e): e is string => !!e);
       // ── A FOTO DO ITEM, COM O NOME DO QUE ELA É ─────────────────────────
       // A precedência (contratado antes da referência) é de `fotoDoItem`, a
@@ -735,6 +736,19 @@ function tabelaDeCarga(p: Pagina, c: CadernoMontado) {
   p.y += 5;
 }
 
+/** O que não vai no caminhão: vem do espaço, da cliente ou da locadora. */
+function chegaNoLocal(p: Pagina, c: CadernoMontado) {
+  if (c.versao !== "equipe" || c.chegaNoLocal.length === 0) return;
+  listaRotulada(
+    p,
+    "Chega no local — não carregar",
+    c.chegaNoLocal.map((l) => ({
+      rotulo: l.quantidade ?? "—",
+      valor: [l.nome, l.detalhe].filter(Boolean).join(" · "),
+    })),
+  );
+}
+
 function pecasDoAcervo(p: Pagina, c: CadernoMontado) {
   if (c.versao !== "equipe" || c.pecasDoAcervo.length === 0) return;
   const colunas: [string, number][] = [
@@ -856,7 +870,11 @@ function molduras(doc: jsPDF, c: CadernoMontado, ctx: ContextoDoDesenho) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(6.8);
     doc.setTextColor(...MUTED);
-    doc.text(paraPdf(`${identidade.nome} · ${c.titulo}`).slice(0, 70), MARGIN, PAGE_H - 6.5);
+    // Cabe na terça parte da linha: nome de evento longo encavalava com
+    // "Caderno da equipe · Página X de Y" (homologação de 14/10).
+    const esquerda = paraPdf(`${identidade.nome} · ${c.titulo}`);
+    const linhaEsquerda = (doc.splitTextToSize(esquerda, PAGE_W / 2 - MARGIN - 32) as string[])[0] ?? "";
+    doc.text(linhaEsquerda.length < esquerda.length ? `${linhaEsquerda.replace(/\s+\S*$/, "")}…` : linhaEsquerda, MARGIN, PAGE_H - 6.5);
     doc.text(`${documento} · Página ${i} de ${total}`, PAGE_W / 2, PAGE_H - 6.5, { align: "center" });
     // Assinatura discreta: o documento é da empresa, não do ALTAR.
     doc.text(ASSINATURA_ALTAR, PAGE_W - MARGIN, PAGE_H - 6.5, { align: "right" });
@@ -877,6 +895,8 @@ export function desenharCaderno(c: CadernoMontado, ctx: ContextoDoDesenho): jsPD
   atencao(p, c);
   incluido(p, c);
   listaRotulada(p, "Informações do local", c.informacoesDoLocal);
+  listaRotulada(p, "Prazos e responsáveis", c.prazosEResponsaveis);
+  listaRotulada(p, "Iluminação e conexão elétrica", c.conexaoEletrica);
   equipeEscalada(p, c);
   layout(p, c, ctx.imagens);
   grade(p, "Referências de decoração", c.referencias, ctx.imagens);
@@ -884,6 +904,7 @@ export function desenharCaderno(c: CadernoMontado, ctx: ContextoDoDesenho): jsPD
   decisoes(p, c);
   opcionais(p, c);
   tabelaDeCarga(p, c);
+  chegaNoLocal(p, c);
   pecasDoAcervo(p, c);
   checklistDoEvento(p, c);
   fechamentoDaEquipe(p, c);

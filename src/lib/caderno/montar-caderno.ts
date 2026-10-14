@@ -1,7 +1,14 @@
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { parseEventDate } from "../event-date.ts";
-import { itemVisibleTo, type BriefingFields } from "../briefing-areas.ts";
+import {
+  BRIEFING_AREAS,
+  fieldVisibleTo,
+  itemVisibleTo,
+  rotuloDaEscolha,
+  type BriefingFields,
+} from "../briefing-areas.ts";
+import { ROTULO_DA_ORIGEM, ROTULO_DA_SITUACAO, equipeCarrega, type OrigemDoItem } from "@/convex/lib/itemDoBriefing.ts";
 import {
   agruparPorAmbiente,
   chaveDoAmbiente,
@@ -64,6 +71,16 @@ export type ItemDoCaderno = ItemDoProjeto & {
   checkOnAssembly: boolean;
   /** Só tem sentido no opcional. Ver `assemblyItems.valorOpcional`. */
   valorOpcional?: number;
+  // O item visto do briefing (14/10). Ver `convex/lib/itemDoBriefing.ts`.
+  bloco?: string;
+  situacao?: string;
+  origem?: string;
+  corAcabamento?: string;
+  medidas?: string;
+  posicao?: string;
+  responsavelMontagem?: string;
+  tipoFlor?: string;
+  reaproveitamento?: { ambiente: string; horario?: string; responsavel?: string };
 };
 
 export type PecaReservada = {
@@ -131,7 +148,14 @@ export type ImagemDoCaderno = {
 export type FichaDeAmbiente = {
   titulo: string;
   imagens: ImagemDoCaderno[];
-  itens: (LinhaDoCaderno & { fotoUrl?: string | null; ehReferencia?: boolean; fornecedor?: string; observacao?: string })[];
+  itens: (LinhaDoCaderno & {
+    fotoUrl?: string | null;
+    ehReferencia?: boolean;
+    fornecedor?: string;
+    observacao?: string;
+    /** Equipe: de onde vem, medidas, posição, quem monta, reaproveitamento. */
+    operacional?: string[];
+  })[];
   /** Equipe: opcionais deste ambiente — "só montar se confirmado". */
   opcionais: string[];
   /** Equipe: o que não levar para este ambiente. */
@@ -158,6 +182,15 @@ export type CadernoMontado = {
   /** Equipe: o que confirmar antes e o que não levar. */
   atencao: { confirmar: string[]; naoLevarSemConfirmar: string[]; naoIncluso: string[] };
   informacoesDoLocal: { rotulo: string; valor: string }[];
+  /** Equipe: prazos e responsáveis registrados no briefing. */
+  prazosEResponsaveis: { rotulo: string; valor: string }[];
+  /** Quem instala e quem conecta — as duas versões, cada uma com o que pode ver. */
+  conexaoEletrica: { rotulo: string; valor: string }[];
+  /**
+   * Equipe: o que NÃO vai no caminhão — vem do espaço, da cliente ou da
+   * locadora. Aparece para ser conferido na montagem, não carregado.
+   */
+  chegaNoLocal: LinhaDoCaderno[];
   layout?: { url: string; legenda: string };
   referencias: ImagemDoCaderno[];
   fichas: FichaDeAmbiente[];
@@ -248,6 +281,10 @@ export function montarCaderno(
   const paraIncluido = ehCliente ? montar.filter(itemVaiParaOsNoivos) : montar;
   const opcionaisItens = doDocumento.filter(ehOpcional);
   const naoInclusos = doDocumento.filter((i) => i.projectScope === "nao_incluso");
+  // Pedido que a cliente ainda não decidiu: fora da montagem, mas DITO.
+  const emAvaliacao = doDocumento.filter(
+    (i) => i.situacao === "em_avaliacao" && i.projectScope !== "opcional" && i.projectScope !== "nao_incluso",
+  );
 
   // Nomes de TODOS os itens cadastrados, qualquer escopo e visibilidade: o
   // texto do briefing não reapresenta como incluído o que já tem cadastro.
@@ -256,10 +293,12 @@ export function montarCaderno(
   const linhaDoItem = (i: ItemDoCaderno): LinhaDoCaderno => {
     const nome = conta(nomeSemValores(i.name)).texto!;
     const modelo = i.model?.trim();
-    const detalhe =
-      modelo && chaveDoNome(modelo) !== chaveDoNome(i.name)
-        ? conta(linhaSemValores(modelo)).texto
-        : undefined;
+    const partes = [
+      modelo && chaveDoNome(modelo) !== chaveDoNome(i.name) ? modelo : undefined,
+      i.corAcabamento?.trim(),
+      i.tipoFlor === "permanente" ? "permanente" : i.tipoFlor === "natural" ? "natural" : undefined,
+    ].filter((x): x is string => !!x);
+    const detalhe = partes.length > 0 ? conta(linhaSemValores(partes.join(" · "))).texto : undefined;
     return {
       nome,
       quantidade: quantidadeDe(i.quantity, i.unit),
@@ -359,6 +398,10 @@ export function montarCaderno(
         : `Decidir se vão contratar os opcionais (${opcionais.map((o) => o.nome).join(", ")})`,
     );
   }
+  if (ehCliente && emAvaliacao.length > 0) {
+    const nomes = emAvaliacao.filter((i) => itemVisibleTo(i.visibility, "cliente")).map((i) => conta(nomeSemValores(i.name)).texto!);
+    if (nomes.length > 0) pendencias.push(`Decidir sobre os itens em avaliação (${nomes.join(", ")})`);
+  }
   if (/\bopcion/i.test(briefing?.generalNotes ?? "") && opcionaisItens.length === 0) {
     avisos.push({
       texto:
@@ -366,6 +409,29 @@ export function montarCaderno(
       onde: "projeto",
     });
   }
+
+  // O que a equipe precisa saber do item além do nome: de onde ele vem, onde
+  // fica, quem monta — e, se a peça muda de ambiente, para onde e quando.
+  // A quantidade NÃO se repete aqui: a peça reaproveitada é a mesma.
+  const operacionalDoItem = (i: ItemDoCaderno): string[] | undefined => {
+    const r = i.reaproveitamento;
+    const linhas = [
+      i.origem && i.origem !== "a_definir" && !equipeCarrega(i)
+        ? `Vem ${({ espaco: "do espaço", cliente: "da cliente", locadora: "da locadora" } as Record<string, string>)[i.origem]} — não carregar`
+        : undefined,
+      i.medidas?.trim() && `Medidas: ${i.medidas.trim()}`,
+      i.posicao?.trim() && `Posição: ${i.posicao.trim()}`,
+      i.responsavelMontagem?.trim() && `Monta: ${i.responsavelMontagem.trim()}`,
+      r?.ambiente?.trim() &&
+        `Depois vai para ${r.ambiente.trim()}${r.horario?.trim() ? ` (${r.horario.trim()})` : ""}${
+          r.responsavel?.trim() ? ` — transfere: ${r.responsavel.trim()}` : ""
+        }. Mesma peça, não levar a mais.`,
+    ]
+      .filter((x): x is string => !!x)
+      .map((t) => conta(linhaSemValores(t)).texto)
+      .filter((x): x is string => !!x);
+    return linhas.length > 0 ? linhas : undefined;
+  };
 
   // ── Fotos, fichas e referências ──────────────────────────────────────────
   // Cliente: a regra do Projeto Visual, inteira (`montarApresentacao`).
@@ -436,6 +502,7 @@ export function montarCaderno(
             campoDoItemVisivelPara("notes", audiencia) && i.notes
               ? conta(paragrafoSemValores(i.notes)).texto
               : undefined,
+          operacional: operacionalDoItem(i),
         };
       }),
       opcionais: porAmbiente(opcionaisItens, a.key),
@@ -459,7 +526,7 @@ export function montarCaderno(
       f.imagens.length > 0 ||
       f.opcionais.length > 0 ||
       f.naoLevar.length > 0 ||
-      f.itens.some((i) => i.fotoUrl || i.observacao || i.fornecedor),
+      f.itens.some((i) => i.fotoUrl || i.observacao || i.fornecedor || (i.operacional?.length ?? 0) > 0),
   );
 
   // ── Layout ───────────────────────────────────────────────────────────────
@@ -485,7 +552,10 @@ export function montarCaderno(
     ? { confirmar: [], naoLevarSemConfirmar: [], naoIncluso: [] }
     : {
         confirmar: pendencias,
-        naoLevarSemConfirmar: opcionais.map((o) => o.nome),
+        naoLevarSemConfirmar: [
+          ...opcionais.map((o) => o.nome),
+          ...emAvaliacao.map((i) => `${conta(nomeSemValores(i.name)).texto!} (${ROTULO_DA_SITUACAO.em_avaliacao.toLowerCase()})`),
+        ],
         naoIncluso: semRepetir(naoInclusos.map((i) => conta(nomeSemValores(i.name)).texto!)),
       };
 
@@ -518,7 +588,53 @@ export function montarCaderno(
         },
       ];
 
-  const carga = ehCliente ? [] : incluido;
+  // ── O caminhão leva só o que sai do galpão ───────────────────────────────
+  // A mesma regra da Folha de Carregamento (`equipeCarrega`): peça do espaço,
+  // da cliente ou da locadora é conferida na montagem, não carregada.
+  const carregados = montar.filter(equipeCarrega);
+  const naoCarregados = montar.filter((i) => !equipeCarrega(i));
+  const carga = ehCliente
+    ? []
+    : [
+        ...agruparPorAmbiente(carregados).map((g) => ({
+          titulo: g.categoria ? `${g.label} · ${g.categoria}` : g.label,
+          linhas: g.itens.map(linhaDoItem),
+        })),
+        ...gruposDoTexto,
+      ].filter((g) => g.linhas.length > 0);
+  const chegaNoLocal: LinhaDoCaderno[] = ehCliente
+    ? []
+    : naoCarregados.map((i) => ({
+        ...linhaDoItem(i),
+        detalhe: [ROTULO_DA_ORIGEM[i.origem as OrigemDoItem], i.ambiente?.trim()].filter(Boolean).join(" · "),
+      }));
+
+  // ── Prazos e responsáveis (equipe) e conexão elétrica (as duas) ──────────
+  const doBriefing = (rotulo: string, chave: keyof BriefingFields) => {
+    const bruto = briefing?.[chave];
+    return typeof bruto === "string" && bruto.trim() ? campoDoLocal(rotulo, bruto) : null;
+  };
+  const prazosEResponsaveis = ehCliente
+    ? []
+    : [
+        doBriefing("Cerimônia pronta até", "ceremonySetupDeadline"),
+        briefing?.kidsCorner === "sim" ? doBriefing("Cantinho das crianças — local", "kidsCornerLocation") : null,
+        briefing?.kidsCorner === "sim" ? doBriefing("Cantinho das crianças — monta", "kidsCornerResponsible") : null,
+        doBriefing("Entrega do bolo e dos doces", "cakeDeliveryResponsible"),
+        doBriefing("Disposição dos doces", "sweetsLayoutResponsible"),
+        doBriefing("Finalização da mesa do bolo", "cakeFinishResponsible"),
+      ].filter((c): c is { rotulo: string; valor: string } => !!c);
+
+  const grupoDaConexao = BRIEFING_AREAS.find((a) => a.key === "lighting")?.groups.find((g) => g.key === "conexao");
+  const conexaoEletrica = (grupoDaConexao?.fields ?? [])
+    .filter((f) => fieldVisibleTo(f, audiencia))
+    .map((f) => {
+      const bruto = briefing?.[f.key];
+      if (typeof bruto !== "string" || !bruto.trim()) return null;
+      const valor = f.type === "escolha" ? rotuloDaEscolha(f, bruto.trim()) : bruto;
+      return campoDoLocal(f.label, valor);
+    })
+    .filter((c): c is { rotulo: string; valor: string } => !!c);
 
   const pecasDoAcervo = ehCliente
     ? []
@@ -598,6 +714,9 @@ export function montarCaderno(
     incluido,
     atencao,
     informacoesDoLocal,
+    prazosEResponsaveis,
+    conexaoEletrica,
+    chegaNoLocal,
     layout,
     referencias,
     fichas,

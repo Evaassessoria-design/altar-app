@@ -243,6 +243,8 @@ export const create = mutation({
     custoReferencia: v.optional(v.number()),
     margemPercentual: v.optional(v.number()),
     supplierId: v.optional(v.id("suppliers")),
+    /** Variedade da flor ("Avalanche"). Identidade do insumo — ver schema.ts. */
+    variedade: v.optional(v.string()),
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -283,6 +285,7 @@ export const create = mutation({
       custoReferencia: args.custoReferencia,
       margemPercentual: args.margemPercentual,
       supplierId: args.supplierId,
+      variedade: args.variedade?.trim() || undefined,
       notes: args.notes?.trim() || undefined,
       updatedAt: new Date().toISOString(),
     });
@@ -300,6 +303,8 @@ export const update = mutation({
     custoReferencia: v.optional(v.union(v.number(), v.null())),
     margemPercentual: v.optional(v.union(v.number(), v.null())),
     supplierId: v.optional(v.union(v.id("suppliers"), v.null())),
+    /** `null` limpa a variedade; ausente não mexe (lib/limparCampos.ts). */
+    variedade: v.optional(v.union(v.string(), v.null())),
     notes: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {

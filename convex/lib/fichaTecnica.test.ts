@@ -413,7 +413,17 @@ describe("a multiplicação existe em UM lugar só", () => {
     expect(fonte, `${arquivo} multiplica por conta própria`).not.toMatch(
       /quantidade\s*\*\s*\(?item\.quantity|c\.quantidade\s*\*/,
     );
-    expect(fonte).toMatch(/necessidadeDoComponente|consolidarMateriais/);
+    // `contaDaLinha` é a frase da conta (por unidade × N, distribuído,
+    // orientação) e DELEGA o total a `necessidadeDoComponente` — conferido
+    // logo abaixo.
+    expect(fonte).toMatch(/necessidadeDoComponente|consolidarMateriais|contaDaLinha/);
+  });
+
+  it("contaDaLinha não multiplica: o total vem de necessidadeDoComponente", () => {
+    const fonte = readFileSync("convex/lib/fichaTecnica.ts", "utf-8");
+    const corpo = fonte.slice(fonte.indexOf("export function contaDaLinha"), fonte.indexOf("export function textoDaConta"));
+    expect(corpo).toContain("necessidadeDoComponente(composicao, componente)");
+    expect(corpo).not.toMatch(/\*\s*unidades|quantidade\s*\*/);
   });
 });
 

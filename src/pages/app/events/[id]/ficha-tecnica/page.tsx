@@ -15,15 +15,15 @@ import {
 } from "@/components/ui/empty.tsx";
 import { toast } from "sonner";
 import { ConvexError } from "convex/values";
-import { ArrowLeft, ClipboardList, FileDown, Layers, Package, ShoppingCart, ArrowRight } from "lucide-react";
+import { ArrowLeft, ClipboardList, FileDown, Flower2, Layers, Package, ShoppingCart, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
 import { formatEventDateLong } from "@/lib/event-date.ts";
 import { agruparPorAmbiente, resolverAmbiente } from "@/lib/decoration-project.ts";
 import {
   ROTULO_DA_SITUACAO,
-  necessidadeDoComponente,
+  contaDaLinha,
   quantidadeTexto,
-  unidadesDaComposicao,
+  textoDaConta,
   type SituacaoDaCobertura,
 } from "@/convex/lib/fichaTecnica.ts";
 import { metaDoTipo, tipoEfetivo } from "@/convex/lib/materiais.ts";
@@ -65,7 +65,7 @@ function LinhaConsolidada({
     margemPercentual: number | null;
     sugerido: number;
     sugeridoOperacional: number;
-    origens: { composicao: string; area: string; ambiente?: string; unidades: number; porUnidade: number; necessario: number }[];
+    origens: { composicao: string; area: string; ambiente?: string; unidades: number; porUnidade: number; necessario: number; distribuido?: boolean }[];
     cobertura: {
       necessario: number;
       comprado: number;
@@ -329,8 +329,16 @@ function LinhaConsolidada({
               <span className="text-muted-foreground truncate">
                 {resolverAmbiente(o).label} · {o.composicao}
               </span>
+              {/* Total distribuído não é "× 20": a quantidade já é o total, e
+                  escrever "20 × 2 = 2" desmentia a própria conta. */}
               <span className="whitespace-nowrap text-muted-foreground">
-                {o.unidades} × {o.porUnidade} ={" "}
+                {o.distribuido ? (
+                  "total distribuído = "
+                ) : (
+                  <>
+                    {o.unidades} × {o.porUnidade} ={" "}
+                  </>
+                )}
                 <span className="text-foreground font-medium">
                   {quantidadeTexto(o.necessario, linha.unidade)}
                 </span>
@@ -617,6 +625,20 @@ export default function FichaTecnicaPage() {
               >
                 <FileDown className="size-3.5" /> PDF
               </Button>
+              {/* A Ficha Técnica responde "do que é feito"; a Produção Floral
+                  acrescenta o que só o florista precisa (cor, altura, montagem,
+                  horário) e gera o papel dele. Mesma receita, nenhum segundo
+                  cadastro — por isso o caminho é daqui. */}
+              <Button
+                asChild
+                size="sm"
+                variant="ghost"
+                className="cursor-pointer gap-1.5"
+              >
+                <Link to={`/eventos/${id}/producao-floral`}>
+                  <Flower2 className="size-3.5" /> Produção floral
+                </Link>
+              </Button>
               {/* As duas providências, lado a lado e na mesma ordem em que a
                   decoradora decide: primeiro o que já é dela, depois o que
                   precisa comprar. */}
@@ -693,15 +715,11 @@ export default function FichaTecnicaPage() {
                             {/* A multiplicação NÃO acontece aqui: vem do mesmo
                                 helper que o backend e o PDF usam. Uma conta
                                 repetida na tela é como 185 vira 180 no papel. */}
+                            {/* A frase vem de `textoDaConta`, a mesma do PDF:
+                                por unidade × N, total distribuído ou orientação
+                                (fora dos totais) — nunca "2 maços × 20 = 2". */}
                             <span className="whitespace-nowrap">
-                              {quantidadeTexto(c.quantidade, c.unidade)} ×{" "}
-                              {unidadesDaComposicao({ quantidade: item.quantity })} ={" "}
-                              <span className="text-foreground">
-                                {quantidadeTexto(
-                                  necessidadeDoComponente({ quantidade: item.quantity }, c),
-                                  c.unidade,
-                                )}
-                              </span>
+                              {textoDaConta(contaDaLinha({ quantidade: item.quantity }, c), c.unidade)}
                             </span>
                           </li>
                         ))}

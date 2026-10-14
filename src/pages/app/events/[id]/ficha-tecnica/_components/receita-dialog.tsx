@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { ConvexError } from "convex/values";
 import { Plus, Trash2, Loader2, BookMarked, Pencil } from "lucide-react";
 import { TIPOS_DE_MATERIAL, UNIDADES, aceitaDecimal, normalizeName } from "@/convex/lib/materiais.ts";
-import { necessidadeDoComponente, quantidadeTexto } from "@/convex/lib/fichaTecnica.ts";
+import { contaDaLinha, textoDaConta } from "@/convex/lib/fichaTecnica.ts";
 // Os dois diálogos são COMPARTILHADOS com a tela de Catálogo: corrigir um
 // material é a mesma ação venha ela da receita ou da biblioteca, e duas
 // cópias divergiriam na primeira correção.
@@ -36,12 +36,31 @@ import { ComposicaoDialog } from "@/components/catalogo/composicao-dialog.tsx";
 // antes de continuar é como catálogos ficam vazios.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * O que a linha carrega e ESTE diálogo não edita: a parte floral (cor,
+ * origem, distribuição, "só orientação", orientação para o florista) e a
+ * anotação interna. Volta intacta ao salvar.
+ *
+ * O defeito: o diálogo remontava cada linha só com material, nome, unidade e
+ * quantidade, e a `setReceita` grava a receita inteira — salvar aqui apagava
+ * tudo o que a Produção floral tinha gravado na mesma linha.
+ */
+type RestoDaLinha = {
+  notes?: string;
+  cor?: string;
+  origem?: "natural" | "permanente";
+  distribuicao?: "por_arranjo" | "total";
+  apenasOrientacao?: boolean;
+  orientacaoFlorista?: string;
+};
+
 type Linha = {
   materialId?: Id<"materials">;
   nome: string;
   unidade: string;
   quantidade: string;
   tipo?: string;
+  resto?: RestoDaLinha;
 };
 
 export function ReceitaDialog({
@@ -84,6 +103,14 @@ export function ReceitaDialog({
         unidade: c.unidade,
         quantidade: String(c.quantidade),
         tipo: c.tipo,
+        resto: {
+          notes: c.notes,
+          cor: c.cor,
+          origem: c.origem,
+          distribuicao: c.distribuicao,
+          apenasOrientacao: c.apenasOrientacao,
+          orientacaoFlorista: c.orientacaoFlorista,
+        },
       })),
     );
     setCarregada(true);
@@ -99,7 +126,15 @@ export function ReceitaDialog({
     const m = (materiais ?? []).find((x) => x._id === materialId);
     if (!m) return;
     // Nome, unidade e tipo vêm do catálogo — a receita não inventa nenhum deles.
-    alterar(i, { materialId: m._id, nome: m.nome, unidade: m.unidade, tipo: m.tipo });
+    // Trocou o MATERIAL: a cor e a orientação eram da flor anterior e saem
+    // junto; a anotação interna fica.
+    alterar(i, {
+      materialId: m._id,
+      nome: m.nome,
+      unidade: m.unidade,
+      tipo: m.tipo,
+      resto: { notes: linhas[i]?.resto?.notes },
+    });
   };
 
   /**
@@ -135,6 +170,7 @@ export function ReceitaDialog({
           materialId = r.materialId;
         }
         resolvidas.push({
+          ...l.resto,
           materialId,
           nome: l.nome.trim(),
           unidade: l.unidade as never,
@@ -379,19 +415,25 @@ export function ReceitaDialog({
                 </div>
               </div>
 
-              {/* O total desta linha, calculado pelo MESMO helper do backend. */}
-              {Number(linha.quantidade.replace(",", ".")) > 0 && (
+              {/* A conta desta linha, pelo MESMO helper do backend e do PDF —
+                  que sabe de total distribuído e de orientação. */}
+              {(Number(linha.quantidade.replace(",", ".")) > 0 || linha.resto?.apenasOrientacao) && (
                 <p className="text-xs text-muted-foreground">
-                  Total no evento:{" "}
+                  No evento:{" "}
                   <span className="text-foreground font-medium">
-                    {quantidadeTexto(
-                      necessidadeDoComponente(
+                    {textoDaConta(
+                      contaDaLinha(
                         { quantidade: item?.quantity },
-                        { quantidade: Number(linha.quantidade.replace(",", ".")) },
+                        {
+                          quantidade: Number(linha.quantidade.replace(",", ".")),
+                          distribuicao: linha.resto?.distribuicao,
+                          apenasOrientacao: linha.resto?.apenasOrientacao,
+                        },
                       ),
                       linha.unidade,
                     )}
                   </span>
+                  {linha.resto?.distribuicao === "total" && " (definido na Produção floral)"}
                 </p>
               )}
             </div>

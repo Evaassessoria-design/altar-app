@@ -56,6 +56,8 @@ export type MaterialEditavel = {
   tipo?: string;
   custoReferencia?: number;
   margemPercentual?: number;
+  /** Variedade da flor ("Avalanche"). Identidade do insumo, como o nome. */
+  variedade?: string;
   archived?: boolean;
   /** Resolvida por `materials.list`. Ausente = material sem foto. */
   fotoUrl?: string | null;
@@ -106,6 +108,7 @@ export function MaterialDialog({ material, onClose }: Props) {
 
   const [nome, setNome] = useState("");
   const [categoria, setCategoria] = useState("");
+  const [variedade, setVariedade] = useState("");
   const [tipo, setTipo] = useState("");
   const [custo, setCusto] = useState("");
   const [margem, setMargem] = useState("");
@@ -115,6 +118,7 @@ export function MaterialDialog({ material, onClose }: Props) {
     if (!material) return;
     setNome(material.nome);
     setCategoria(material.categoria ?? "");
+    setVariedade(material.variedade ?? "");
     setTipo(material.tipo ?? "");
     setCusto(material.custoReferencia?.toString() ?? "");
     setMargem(material.margemPercentual?.toString() ?? "");
@@ -164,6 +168,9 @@ export function MaterialDialog({ material, onClose }: Props) {
         // (lib/limparCampos.ts) e a tela precisa respeitá-la: mandar `""`
         // gravaria uma categoria vazia em vez de remover a categoria.
         categoria: categoria.trim() || null,
+        // Mesma regra do resto: `null` limpa, ausente não mexe. A variedade
+        // acompanha a foto — as duas respondem "é esta flor mesmo?".
+        variedade: variedade.trim() || null,
         tipo: (tipo || null) as never,
         custoReferencia: custoLido,
         margemPercentual: margemLida,
@@ -308,6 +315,23 @@ export function MaterialDialog({ material, onClose }: Props) {
               onChange={(e) => setNome(e.target.value)}
               className="mt-1"
             />
+          </div>
+
+          <div>
+            <Label htmlFor="mat-variedade" className="text-xs">
+              Variedade <span className="text-muted-foreground">(opcional)</span>
+            </Label>
+            <Input
+              id="mat-variedade"
+              value={variedade}
+              placeholder="Avalanche"
+              onChange={(e) => setVariedade(e.target.value)}
+              className="mt-1"
+            />
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Aparece na ficha do florista, junto da foto. A COR fica em cada
+              receita — a mesma rosa é branca num evento e rosê no outro.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-2">

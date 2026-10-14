@@ -26,6 +26,10 @@ const TELAS_OPERACIONAIS = [
   "src/pages/app/campanha/_components/pessoas-da-campanha.tsx",
   "src/pages/app/campanha/_components/fila-de-revisao.tsx",
   "src/pages/app/campanha/_components/comercial-hoje.tsx",
+  // A ficha do florista é montada na véspera e conferida na bancada, com o
+  // telefone na mão: os botões de instrução e de receita não podem sumir
+  // abaixo de `sm`.
+  "src/pages/app/events/[id]/producao-floral/page.tsx",
 ];
 
 /** Blocos `hidden sm:*` / `hidden md:*` e o que vem logo dentro deles. */

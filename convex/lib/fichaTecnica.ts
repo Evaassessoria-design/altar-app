@@ -60,7 +60,49 @@ export type ComponenteDaReceita = {
    * receita. Ver `SUGERIDO` abaixo: é snapshot, exatamente como o resto.
    */
   margemPercentual?: number;
+  // ── PRODUÇÃO FLORAL ───────────────────────────────────────────────────────
+  /** Cor desejada nesta receita. Não entra em nenhuma conta; é instrução. */
+  cor?: string;
+  /** Variedade da flor, copiada do catálogo. Instrução, não conta. */
+  variedade?: string;
+  /** Flor natural ou permanente. Instrução, não conta. */
+  origem?: string;
+  /**
+   * O que a `quantidade` significa. Ausente ou `por_arranjo`: consumo de UMA
+   * unidade da composição. `total`: a quantidade já é o total distribuído
+   * entre todas as unidades. Ver `necessidadeDoComponente`.
+   */
+  distribuicao?: string;
+  /** Linha de orientação, sem quantidade confiável. Não entra em total nenhum. */
+  apenasOrientacao?: boolean;
+  /** Observação INTERNA da linha. Nunca vai para papel de fornecedor. */
+  notes?: string;
+  /**
+   * Orientação desta linha PARA O FLORISTA ("abrir os botões na véspera").
+   * Campo próprio porque `notes` é anotação interna e pode ter fornecedor ou
+   * preço — o papel do florista só imprime o que foi escrito para ele.
+   */
+  orientacaoFlorista?: string;
 };
+
+/** A linha é instrução sem quantidade confiável? */
+export function ehApenasOrientacao(componente: {
+  apenasOrientacao?: boolean;
+}): boolean {
+  return componente.apenasOrientacao === true;
+}
+
+/**
+ * A quantidade desta linha é o TOTAL distribuído entre as unidades da
+ * composição, em vez do consumo de cada uma?
+ *
+ * Ausente é `por_arranjo` de propósito: é o que toda receita gravada antes
+ * deste campo significa, e ler diferente mudaria, em silêncio, o total de
+ * eventos já executados.
+ */
+export function ehTotalDistribuido(componente: { distribuicao?: string }): boolean {
+  return componente.distribuicao === "total";
+}
 
 // ── MARGEM DE SEGURANÇA ─────────────────────────────────────────────────────
 //
@@ -176,9 +218,17 @@ export function unidadesDaComposicao(c: { quantidade?: number }): number {
  */
 export function necessidadeDoComponente(
   composicao: { quantidade?: number },
-  componente: { quantidade: number },
+  componente: { quantidade: number; distribuicao?: string; apenasOrientacao?: boolean },
 ): number {
+  // Orientação não tem total. Devolver 0 é mais honesto do que devolver um
+  // número derivado de uma quantidade que ninguém garantiu — e quem consolida
+  // nem chega aqui, porque pula a linha antes.
+  if (ehApenasOrientacao(componente)) return 0;
   const porUnidade = Number.isFinite(componente.quantidade) ? componente.quantidade : 0;
+  // "2 maços distribuídos entre os 20 arranjos" JÁ É o total: multiplicar por
+  // 20 daria 40 maços e uma compra absurda. É o único caso em que a
+  // quantidade da composição não entra na conta.
+  if (ehTotalDistribuido(componente)) return quantidadeLimpa(porUnidade);
   return quantidadeLimpa(unidadesDaComposicao(composicao) * porUnidade);
 }
 
@@ -196,6 +246,12 @@ export type OrigemDaNecessidade = {
   porUnidade: number;
   /** O produto dos dois. */
   necessario: number;
+  /**
+   * `true` quando `porUnidade` é, na verdade, o total distribuído entre as
+   * unidades — aí `necessario === porUnidade` e a tela não pode escrever
+   * "× 20". Sem este campo o rastro mentiria sobre a própria conta.
+   */
+  distribuido?: boolean;
 };
 
 /**
@@ -289,6 +345,10 @@ export function consolidarMateriais(
     const unidades = unidadesDaComposicao(composicao);
 
     for (const componente of composicao.receita ?? []) {
+      // Orientação é instrução, não insumo: ela não vira linha do consolidado
+      // nem total de compra. Quem precisa dela é a ficha do florista, que a lê
+      // por `orientacoesDaComposicao`.
+      if (ehApenasOrientacao(componente)) continue;
       const unidade = componente.unidade ?? "";
       // A unidade entra na chave: somar haste com maço seria inventar uma
       // conversão que ninguém informou.
@@ -303,6 +363,7 @@ export function consolidarMateriais(
         unidades,
         porUnidade: componente.quantidade,
         necessario,
+        distribuido: ehTotalDistribuido(componente) ? true : undefined,
       };
 
       const existente = porChave.get(chave);
@@ -401,6 +462,47 @@ export function quantidadeTexto(quantidade: number, unidade: string): string {
     : limpo.toFixed(CASAS_DECIMAIS).replace(/0+$/, "").replace(".", ",");
   const un = abreviarUnidade(unidade);
   return un ? `${numero} ${un}` : numero;
+}
+
+/**
+ * A CONTA de uma linha, como a Ficha Técnica a escreve — na tela e no PDF.
+ *
+ * Existe porque as duas escreviam "porUnidade × unidades = total" para toda
+ * linha. Com a produção floral isso passou a mentir em dois casos:
+ *
+ *   · TOTAL DISTRIBUÍDO ("2 maços entre os 20 arranjos"): a tela dizia
+ *     "2 maços × 20 = 2 maços" e o PDF punha "2 maços" sob "POR UNIDADE";
+ *   · ORIENTAÇÃO ("folhagem a gosto"): saía "0 un", um número que ninguém
+ *     informou — e que, com a quantidade preservada, viraria um falso total.
+ *
+ * O total continua vindo de `necessidadeDoComponente`; aqui só se escolhe a
+ * frase.
+ */
+export type ContaDaLinha =
+  | { tipo: "orientacao" }
+  | { tipo: "distribuido"; total: number }
+  | { tipo: "por_unidade"; porUnidade: number; unidades: number; total: number };
+
+export function contaDaLinha(
+  composicao: { quantidade?: number },
+  componente: { quantidade: number; distribuicao?: string; apenasOrientacao?: boolean },
+): ContaDaLinha {
+  if (ehApenasOrientacao(componente)) return { tipo: "orientacao" };
+  const total = necessidadeDoComponente(composicao, componente);
+  if (ehTotalDistribuido(componente)) return { tipo: "distribuido", total };
+  return {
+    tipo: "por_unidade",
+    porUnidade: Number.isFinite(componente.quantidade) ? componente.quantidade : 0,
+    unidades: unidadesDaComposicao(composicao),
+    total,
+  };
+}
+
+/** "5 hastes × 20 = 100 hastes" · "2 maços no total, distribuídos" · "orientação, fora dos totais". */
+export function textoDaConta(conta: ContaDaLinha, unidade: string): string {
+  if (conta.tipo === "orientacao") return "orientação, fora dos totais";
+  if (conta.tipo === "distribuido") return `${quantidadeTexto(conta.total, unidade)} no total, distribuídos`;
+  return `${quantidadeTexto(conta.porUnidade, unidade)} × ${conta.unidades} = ${quantidadeTexto(conta.total, unidade)}`;
 }
 
 // ── PONTE COM AS COMPRAS ────────────────────────────────────────────────────

@@ -26,6 +26,7 @@ import { api } from "./_generated/api";
 import { autenticarComo } from "./test.auth";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
+import { paraCentavos, planejarParcelas, rotuloDaLeva, situacaoDaLeva } from "./lib/pagamentosDoEvento";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // PAGAMENTOS DO CLIENTE — NO BANCO, COM DUAS CONTAS
@@ -220,6 +221,38 @@ describe("o mesmo planejamento salvo de novo", () => {
     expect(r).toEqual({ criadas: 1, repetido: false, ignoradas: 1 });
   });
 
+  it("ACRESCENTAR uma leva igual à anterior cria — o nome \"adicional\" é o que a separa", async () => {
+    // O defeito: a decoradora acrescenta 2 parcelas com os mesmos valores e
+    // datas da leva anterior. Com o nome padrão ("Parcela 1/2"), a assinatura
+    // descrição|valor|vencimento batia e o servidor respondia "repetido" —
+    // nada era criado. A tela agora nomeia a leva nova como "adicional".
+    const c = await cenario();
+    await c.dona.mutation(api.financeiro.adicionarParcelas, plano("a", c.ids.evento));
+    const leva = (rotulo?: { parcela: string; entrada: string }) =>
+      planejarParcelas({ totalCentavos: 666_667, quantidade: 2, primeiroVencimento: "2027-01-10", rotulo }).map(
+        (p) => ({ descricao: p.descricao, valor: p.valorCentavos / 100, vencimento: p.vencimento }),
+      );
+    const semRotulo = await c.dona.mutation(api.financeiro.adicionarParcelas, {
+      eventId: c.ids.evento, chave: "b", parcelas: leva(),
+    });
+    expect(semRotulo).toEqual({ criadas: 0, repetido: true });
+    const comRotulo = await c.dona.mutation(api.financeiro.adicionarParcelas, {
+      eventId: c.ids.evento, chave: "c", parcelas: leva({ parcela: "Parcela adicional", entrada: "Entrada adicional" }),
+    });
+    expect(comRotulo).toEqual({ criadas: 2, repetido: false, ignoradas: 0 });
+    const d = await c.dona.query(api.financeiro.pagamentosDoEvento, { eventId: c.ids.evento });
+    expect(d!.parcelas.map((p) => p.description)).toEqual(
+      expect.arrayContaining(["Parcela 1/2", "Parcela 2/2", "Parcela adicional 1/2", "Parcela adicional 2/2"]),
+    );
+  });
+
+  it("a conta rival não acrescenta parcelas no evento da dona", async () => {
+    const c = await cenario();
+    await expect(
+      c.rival.mutation(api.financeiro.adicionarParcelas, plano("intrusa", c.ids.evento)),
+    ).rejects.toThrow(/NOT_FOUND|não encontrado/i);
+  });
+
   it("mesmo valor em OUTRO vencimento é parcela nova, não repetição", async () => {
     const c = await cenario();
     await c.dona.mutation(api.financeiro.adicionarParcelas, plano("a", c.ids.evento));
@@ -229,6 +262,166 @@ describe("o mesmo planejamento salvo de novo", () => {
       parcelas: [{ descricao: "Parcela 1/2", valor: 3333.34, vencimento: "2027-04-10" }],
     });
     expect(r.criadas).toBe(1);
+  });
+});
+
+describe("levas sucessivas, como a tela manda", () => {
+  // O que a tela faz ao abrir o diálogo: lê as descrições do evento, fixa o
+  // nome da leva e monta a prévia. Mesmos valores e datas em TODAS as levas —
+  // é o pior caso para a assinatura descrição|valor|vencimento.
+  async function abrirDialogo(c: Awaited<ReturnType<typeof cenario>>, eventId: Id<"events">) {
+    const d = await c.dona.query(api.financeiro.pagamentosDoEvento, { eventId });
+    const rotulo = rotuloDaLeva(d!.parcelas.map((p) => p.description));
+    return planejarParcelas({ totalCentavos: 30_000, quantidade: 3, primeiroVencimento: "2027-03-10", rotulo }).map(
+      (p) => ({ descricao: p.descricao, valor: p.valorCentavos / 100, vencimento: p.vencimento }),
+    );
+  }
+  async function eventoVazio(c: Awaited<ReturnType<typeof cenario>>) {
+    return c.t.run(async (ctx: MutationCtx) => {
+      const u = (await ctx.db.query("users").withIndex("by_better_auth_id", (q) => q.eq("betterAuthId", "auth|aurora")).unique())!;
+      return ctx.db.insert("events", {
+        userId: u._id, name: "Vazio", type: "wedding", date: "2027-06-01", location: "L", clientName: "C", status: "planning",
+      });
+    });
+  }
+  const descricoes = async (c: Awaited<ReturnType<typeof cenario>>, eventId: Id<"events">) =>
+    (await c.dona.query(api.financeiro.pagamentosDoEvento, { eventId }))!.parcelas.map((p) => p.description).sort();
+
+  it("original, 1ª adicional e 2ª adicional idênticas: as três são criadas", async () => {
+    const c = await cenario();
+    const ev = await eventoVazio(c);
+    for (const chave of ["original", "adicional-1", "adicional-2"]) {
+      const r = await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave, parcelas: await abrirDialogo(c, ev) });
+      expect(r).toEqual({ criadas: 3, repetido: false, ignoradas: 0 });
+    }
+    expect(await descricoes(c, ev)).toEqual([
+      "Parcela 1/3", "Parcela 2/3", "Parcela 3/3",
+      "Parcela adicional (leva 2) 1/3", "Parcela adicional (leva 2) 2/3", "Parcela adicional (leva 2) 3/3",
+      "Parcela adicional 1/3", "Parcela adicional 2/3", "Parcela adicional 3/3",
+    ]);
+  });
+
+  it("clique repetido na 2ª adicional (dois envios simultâneos, mesma chave) cria uma vez só", async () => {
+    const c = await cenario();
+    const ev = await eventoVazio(c);
+    await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "o", parcelas: await abrirDialogo(c, ev) });
+    await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "a1", parcelas: await abrirDialogo(c, ev) });
+    const parcelas = await abrirDialogo(c, ev);
+    const rs = await Promise.all([
+      c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "a2", parcelas }),
+      c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "a2", parcelas }),
+    ]);
+    expect(rs.map((r) => r.criadas).sort()).toEqual([0, 3]);
+    expect(await descricoes(c, ev)).toHaveLength(9);
+  });
+
+  it("resposta perdida na 1ª adicional: o reenvio (mesma prévia, mesma chave) não duplica nem vira leva 2", async () => {
+    const c = await cenario();
+    const ev = await eventoVazio(c);
+    await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "o", parcelas: await abrirDialogo(c, ev) });
+    const fixada = await abrirDialogo(c, ev); // o diálogo fixa a prévia ao abrir
+    await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "a1", parcelas: fixada });
+    // a tela não recebeu a resposta e reenvia
+    expect(await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "a1", parcelas: fixada })).toEqual({
+      criadas: 0,
+      repetido: true,
+    });
+    // mesmo que a prévia tivesse sido recalculada com a lista nova (leva 2),
+    // a chave do formulário já usada barra
+    const recalculada = await abrirDialogo(c, ev);
+    expect(recalculada[0].descricao).toBe("Parcela adicional (leva 2) 1/3");
+    expect(await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "a1", parcelas: recalculada })).toEqual({
+      criadas: 0,
+      repetido: true,
+    });
+    expect(await descricoes(c, ev)).toHaveLength(6);
+  });
+
+  it("o servidor sozinho NÃO distingue: chave nova depois de reabrir cria outra leva", async () => {
+    // O furo que existia: resposta perdida, a decoradora fecha e reabre; sem
+    // guardar a tentativa, o diálogo gerava outra chave e calculava o nome a
+    // partir da lista — que já trazia a leva gravada. Vira "(leva 2)",
+    // assinatura diferente, e o servidor cria tudo de novo. Por isso a tela
+    // RETOMA a chave guardada (caso 4, abaixo) — o servidor não muda.
+    const c = await cenario();
+    const ev = await eventoVazio(c);
+    await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "o", parcelas: await abrirDialogo(c, ev) });
+    await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "a1", parcelas: await abrirDialogo(c, ev) });
+    const r = await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "a1-reaberto", parcelas: await abrirDialogo(c, ev) });
+    expect(r.criadas).toBe(3);
+    expect(await descricoes(c, ev)).toHaveLength(9);
+  });
+
+  // A lista como a tela a recebe, e a prévia no formato da regra pura.
+  const listaDaTela = async (c: Awaited<ReturnType<typeof cenario>>, eventId: Id<"events">) =>
+    (await c.dona.query(api.financeiro.pagamentosDoEvento, { eventId }))!.parcelas.map((p) => ({
+      description: p.description,
+      valorCentavos: paraCentavos(p.amount),
+      date: p.date,
+    }));
+  const pura = (l: { descricao: string; valor: number; vencimento: string }[]) =>
+    l.map((p) => ({ descricao: p.descricao, valorCentavos: Math.round(p.valor * 100), vencimento: p.vencimento }));
+  const AD = { parcela: "Parcela adicional", entrada: "Entrada adicional" };
+
+  it("caso 4: resposta perdida, fechar e reabrir RETOMANDO a tentativa — nada duplica", async () => {
+    const c = await cenario();
+    const ev = await eventoVazio(c);
+    await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "o", parcelas: await abrirDialogo(c, ev) });
+    // 1ª adicional: o servidor grava, a resposta se perde; a tela guarda a tentativa
+    const guardada = { chave: "a1", previa: await abrirDialogo(c, ev) };
+    await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: guardada.chave, parcelas: guardada.previa });
+    // reabriu: a lista já traz a leva → "gravada": a tela descarta e diz, sem enviar
+    expect(situacaoDaLeva(pura(guardada.previa), AD, await listaDaTela(c, ev))).toBe("gravada");
+    // e mesmo que a lista ainda não mostrasse: o reenvio usa a MESMA chave
+    expect(await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: guardada.chave, parcelas: guardada.previa })).toEqual({
+      criadas: 0,
+      repetido: true,
+    });
+    expect(await descricoes(c, ev)).toHaveLength(6);
+    // uma nova leva INTENCIONAL depois disso (chave nova, leva 2) entra
+    const r = await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "a2", parcelas: await abrirDialogo(c, ev) });
+    expect(r.criadas).toBe(3);
+  });
+
+  it("caso 5: duas abas com a mesma lista — a 2ª, com a mesma leva, não duplica", async () => {
+    const c = await cenario();
+    const ev = await eventoVazio(c);
+    await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "o", parcelas: await abrirDialogo(c, ev) });
+    // as duas abas abrem com a mesma lista: mesmo nome de leva, chaves diferentes
+    const abaA = await abrirDialogo(c, ev);
+    const abaB = await abrirDialogo(c, ev);
+    expect(abaB.map((p) => p.descricao)).toEqual(abaA.map((p) => p.descricao));
+    expect((await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "aba-A", parcelas: abaA })).criadas).toBe(3);
+    // a aba B vê a lista mudar: a prévia dela já está lá → "gravada", botão desligado
+    expect(situacaoDaLeva(pura(abaB), AD, await listaDaTela(c, ev))).toBe("gravada");
+    // se enviasse mesmo assim, a assinatura do servidor barra
+    expect(await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "aba-B", parcelas: abaB })).toEqual({
+      criadas: 0,
+      repetido: true,
+    });
+    // a aba B com OUTROS valores: nome ocupado → a tela pede para reabrir,
+    // e a reabertura calcula a leva 2, que entra
+    const outra = abaB.map((p) => ({ ...p, valor: p.valor + 10 }));
+    expect(situacaoDaLeva(pura(outra), AD, await listaDaTela(c, ev))).toBe("ocupada");
+    const reaberta = await abrirDialogo(c, ev);
+    expect(reaberta[0].descricao).toBe("Parcela adicional (leva 2) 1/3");
+    expect((await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "aba-B-2", parcelas: reaberta })).criadas).toBe(3);
+    expect(await descricoes(c, ev)).toHaveLength(9);
+  });
+
+  it("falha ANTES de gravar (recusa): nada fica pela metade e a nova tentativa com a mesma chave cria", async () => {
+    const c = await cenario();
+    const ev = await eventoVazio(c);
+    await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "o", parcelas: await abrirDialogo(c, ev) });
+    const fixada = await abrirDialogo(c, ev);
+    const comErro = fixada.map((p, i) => (i === 2 ? { ...p, vencimento: "2027-02-31" } : p));
+    await expect(
+      c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "a1", parcelas: comErro }),
+    ).rejects.toThrow(/Vencimento inválido/);
+    expect(await descricoes(c, ev)).toHaveLength(3);
+    const r = await c.dona.mutation(api.financeiro.adicionarParcelas, { eventId: ev, chave: "a1", parcelas: fixada });
+    expect(r).toEqual({ criadas: 3, repetido: false, ignoradas: 0 });
+    expect(await descricoes(c, ev)).toHaveLength(6);
   });
 });
 

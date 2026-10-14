@@ -110,7 +110,11 @@ describe("o diálogo do Financeiro leva aos pagamentos do evento", () => {
 
 describe("o envio não se repete", () => {
   it("cada formulário tem UMA chave, gerada ao abrir", () => {
-    expect(fonte.match(/useMemo\(novaChave, \[\]\)/g)).toHaveLength(2);
+    // Uma por formulário, nunca por render. O planejamento usa o inicializador
+    // do useState porque pode RETOMAR a chave da tentativa sem resposta.
+    expect(fonte.match(/useMemo\(novaChave, \[\]\)/g)).toHaveLength(1);
+    expect(fonte).toContain("const [chave] = useState(() => retomada?.chave ?? novaChave());");
+    expect(fonte).not.toMatch(/const chave = novaChave\(\)/);
   });
 
   it("recebimento, anulação e planejamento travam por ref", () => {
@@ -180,5 +184,77 @@ describe("toda parcela se abre", () => {
   it("editar não deixa o valor abaixo do recebido", () => {
     expect(fluxo).toContain("centavos < recebido");
     expect(fluxo).toContain("api.financeiro.updateTransaction");
+  });
+});
+
+describe("planejar com parcelas existentes", () => {
+  const aba = readFileSync("src/pages/app/events/[id]/_components/pagamentos-da-cliente.tsx", "utf-8");
+
+  it("mostra o que já existe e chama de acrescentar — com nome próprio para as novas", () => {
+    expect(aba).toContain("existentes={dados.parcelas}");
+    expect(aba).toContain("Já lançadas:");
+    // o nome da leva vem da regra pura, fixado quando o diálogo abre
+    expect(aba).toContain("retomada ? retomada.rotulo : rotuloDaLeva(existentes.map((p) => p.description))");
+    expect(aba).toContain('{dados.parcelas.length > 0 ? "Acrescentar parcelas" : "Planejar parcelas"}');
+  });
+
+  it("diz quanto acrescenta e avisa — sem bloquear — quando passa do contratado", () => {
+    expect(aba).toContain("o total parcelado passa de");
+    expect(aba).toContain("passam{\" \"}");
+    expect(aba).toContain('" mesmo assim"');
+  });
+
+  it("editar fica na parcela; o planejamento não altera as existentes", () => {
+    expect(aba).toContain("Para mudar uma delas, feche e abra a parcela");
+  });
+});
+
+describe("correção cancelada no meio", () => {
+  const fluxo = readFileSync("src/components/financeiro/recebimentos.tsx", "utf-8");
+  it("avisa que não foi concluída — sem dizer 'corrigido'", () => {
+    expect(fluxo).toContain("Correção não concluída: o recebimento foi anulado e o valor certo não foi registrado.");
+    expect(fluxo).toContain("if (!registrado) {");
+    // só o sucesso chama com `true`
+    expect(fluxo).toContain("onClose(true);");
+  });
+});
+
+describe("detalhes da parcela sem rolagem lateral", () => {
+  const fluxo = readFileSync("src/components/financeiro/recebimentos.tsx", "utf-8");
+  it("o rodapé de três botões quebra linha em vez de alargar o diálogo", () => {
+    expect(fluxo).toContain('<DialogFooter className="gap-2 flex-col-reverse sm:flex-row sm:flex-wrap">');
+  });
+  it("o corpo do Acrescentar não alarga o grid do diálogo no celular", () => {
+    const aba = readFileSync("src/pages/app/events/[id]/_components/pagamentos-da-cliente.tsx", "utf-8");
+    const planejar = aba.slice(aba.indexOf("function PlanejarParcelas"));
+    expect(planejar).toContain('<div className="space-y-3 min-w-0">');
+  });
+});
+
+describe("a tentativa sem resposta é retomada, não refeita", () => {
+  const aba = readFileSync("src/pages/app/events/[id]/_components/pagamentos-da-cliente.tsx", "utf-8");
+  const planejar = aba.slice(aba.indexOf("function PlanejarParcelas"));
+  it("a chave não nasce a cada abertura quando há tentativa guardada", () => {
+    expect(planejar).toContain("const [chave] = useState(() => retomada?.chave ?? novaChave());");
+    expect(planejar).not.toContain("useMemo(novaChave");
+  });
+  it("a tentativa é guardada ANTES de enviar; sucesso e 'já gravada' descartam", () => {
+    const salvar = planejar.slice(planejar.indexOf("const salvar = async"));
+    expect(salvar.indexOf("guardarPendente(eventId, { chave, rotulo, previa });")).toBeGreaterThan(-1);
+    expect(salvar.indexOf("guardarPendente(eventId, { chave, rotulo, previa });")).toBeLessThan(salvar.indexOf("await adicionar("));
+    expect(salvar.indexOf("guardarPendente(eventId, null);")).toBeGreaterThan(salvar.indexOf("await adicionar("));
+    // descarte do "já gravada" só na REABERTURA, que avisa
+    expect(planejar).not.toContain('if (situacao === "gravada") guardarPendente(eventId, null);');
+    expect(planejar).toContain('if (p && situacaoDaLeva(p.previa, p.rotulo, existentesEmCentavos) === "gravada") {');
+    // resposta perdida não prende o diálogo quando a lista já mostra a leva
+    expect(planejar).toContain('const podeFechar = !salvando || situacao === "gravada";');
+    expect(planejar).toContain("onOpenChange={(o) => !o && podeFechar && onClose()}");
+    expect(aba).toContain("sessionStorage.setItem(chaveDoPendente(eventId)");
+  });
+  it("não envia quando a leva já entrou ou o nome foi usado por outra aba", () => {
+    expect(planejar).toContain('disabled={salvando || previa.length === 0 || invalida || situacao !== "livre"}');
+    expect(planejar).toContain('|| situacao !== "livre") return;');
+    expect(planejar).toContain("Outra janela acrescentou parcelas com este nome");
+    expect(planejar).toContain("A tentativa anterior foi gravada");
   });
 });

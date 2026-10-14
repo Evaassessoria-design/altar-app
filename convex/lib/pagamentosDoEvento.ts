@@ -145,6 +145,64 @@ export function somarMeses(data: string, n: number): string {
 
 export type ParcelaPlanejada = { descricao: string; valorCentavos: number; vencimento: string };
 
+// "Parcela adicional 1/3", "Entrada adicional", "Parcela adicional (leva 2) 1/3"…
+const DA_LEVA = /^(?:Parcela|Entrada) adicional(?: \(leva (\d+)\))?(?: \d+\/\d+)?$/;
+
+/**
+ * O nome da leva que vai ser criada, a partir das descrições que JÁ existem.
+ *
+ * Sem parcelas: `undefined` (o padrão "Parcela"/"Entrada"). Com parcelas: a
+ * 1ª leva acrescentada é "Parcela adicional"; as seguintes, "(leva 2)",
+ * "(leva 3)"…
+ *
+ * Por que numerar: `adicionarParcelas` trata descrição|valor|vencimento iguais
+ * como o MESMO planejamento salvo de novo. Uma 2ª leva adicional com os mesmos
+ * valores e datas da 1ª tinha a mesma assinatura e voltava "repetido" — nada
+ * era criado. O reenvio do MESMO formulário (clique duplo, rede) continua
+ * barrado pela `chave`, que o servidor confere antes da assinatura.
+ */
+export function rotuloDaLeva(descricoesExistentes: readonly string[]): { parcela: string; entrada: string } | undefined {
+  if (descricoesExistentes.length === 0) return undefined;
+  let ultima = 0;
+  for (const d of descricoesExistentes) {
+    const m = DA_LEVA.exec(d.trim());
+    if (m) ultima = Math.max(ultima, m[1] ? Number(m[1]) : 1);
+  }
+  const leva = ultima + 1;
+  const sufixo = leva === 1 ? "" : ` (leva ${leva})`;
+  return { parcela: `Parcela adicional${sufixo}`, entrada: `Entrada adicional${sufixo}` };
+}
+
+/**
+ * A prévia de um diálogo de planejamento comparada com a lista AO VIVO.
+ *
+ *   · "gravada": todas as parcelas da prévia já existem com o mesmo nome,
+ *     valor e vencimento — a tentativa entrou (resposta perdida, ou outra
+ *     aba enviou a mesma leva). Enviar de novo não cria nada; a tela diz isso.
+ *   · "ocupada": o NOME desta leva já foi usado por outras parcelas que não
+ *     são esta prévia — outra aba acrescentou uma leva enquanto este diálogo
+ *     estava aberto. Enviar criaria duas levas com o mesmo nome; a tela pede
+ *     para fechar e abrir de novo, o que calcula a leva seguinte.
+ *   · "livre": pode enviar.
+ *
+ * Os nomes de leva são únicos (ver rotuloDaLeva), e é isso que torna o nome
+ * uma prova de "já gravado". A garantia contra duplicar continua sendo a
+ * `chave` no servidor; isto é o que a tela mostra antes do clique.
+ */
+export function situacaoDaLeva(
+  previa: readonly ParcelaPlanejada[],
+  rotulo: { parcela: string; entrada: string } | undefined,
+  existentes: readonly { description: string; valorCentavos: number; date: string }[],
+): "gravada" | "ocupada" | "livre" {
+  if (previa.length === 0) return "livre";
+  const ja = new Set(existentes.map((e) => `${e.description.trim()}|${e.valorCentavos}|${e.date.slice(0, 10)}`));
+  if (previa.every((p) => ja.has(`${p.descricao}|${p.valorCentavos}|${p.vencimento}`))) return "gravada";
+  const r = rotulo ?? { parcela: "Parcela", entrada: "Entrada" };
+  const daLeva = (d: string) =>
+    d === r.entrada || (d.startsWith(`${r.parcela} `) && /^\d+\/\d+$/.test(d.slice(r.parcela.length + 1)));
+  return existentes.some((e) => daLeva(e.description.trim())) ? "ocupada" : "livre";
+}
+
 /**
  * A prévia do parcelamento: entrada opcional + N parcelas mensais.
  *
@@ -158,12 +216,19 @@ export function planejarParcelas(opcoes: {
   entrada?: { valorCentavos: number; vencimento: string } | null;
   quantidade: number;
   primeiroVencimento: string;
+  /**
+   * Como chamar as parcelas. Ausente = "Parcela" / "Entrada". Num evento que
+   * JÁ tem parcelas, um segundo planejamento com os mesmos nomes ("Parcela
+   * 1/3") se misturava às antigas na lista — a tela passa "adicional".
+   */
+  rotulo?: { parcela: string; entrada: string };
 }): ParcelaPlanejada[] {
   const { totalCentavos, entrada, quantidade, primeiroVencimento } = opcoes;
+  const rotulo = opcoes.rotulo ?? { parcela: "Parcela", entrada: "Entrada" };
   const plano: ParcelaPlanejada[] = [];
   let restante = totalCentavos;
   if (entrada && entrada.valorCentavos > 0) {
-    plano.push({ descricao: "Entrada", valorCentavos: entrada.valorCentavos, vencimento: entrada.vencimento });
+    plano.push({ descricao: rotulo.entrada, valorCentavos: entrada.valorCentavos, vencimento: entrada.vencimento });
     restante -= entrada.valorCentavos;
   }
   if (quantidade <= 0 || restante <= 0) return plano;
@@ -171,7 +236,7 @@ export function planejarParcelas(opcoes: {
   const sobra = restante - base * quantidade;
   for (let i = 0; i < quantidade; i++) {
     plano.push({
-      descricao: `Parcela ${i + 1}/${quantidade}`,
+      descricao: `${rotulo.parcela} ${i + 1}/${quantidade}`,
       valorCentavos: base + (i < sobra ? 1 : 0),
       vencimento: somarMeses(primeiroVencimento, i),
     });

@@ -5,6 +5,8 @@ import {
   estadoDaParcela,
   parcelaAtrasada,
   planejarParcelas,
+  rotuloDaLeva,
+  situacaoDaLeva,
   recebidoEmCentavos,
   resumirPagamentos,
   saldoEmCentavos,
@@ -191,5 +193,67 @@ describe("o resumo do evento", () => {
     expect(r.proxima).toBeNull();
     expect(r.vencidoCentavos).toBe(0);
     expect(r.saldoCentavos).toBe(1_000_000);
+  });
+});
+
+describe("planejar num evento que JÁ tem parcelas", () => {
+  it("o rótulo diferencia as novas das antigas, sem mudar valores nem datas", () => {
+    const base = { totalCentavos: 30000, quantidade: 3, primeiroVencimento: "2026-11-10" };
+    const padrao = planejarParcelas(base);
+    const adicional = planejarParcelas({ ...base, entrada: null, rotulo: { parcela: "Parcela adicional", entrada: "Entrada adicional" } });
+    expect(padrao.map((p) => p.descricao)).toEqual(["Parcela 1/3", "Parcela 2/3", "Parcela 3/3"]);
+    expect(adicional.map((p) => p.descricao)).toEqual(["Parcela adicional 1/3", "Parcela adicional 2/3", "Parcela adicional 3/3"]);
+    expect(adicional.map((p) => [p.valorCentavos, p.vencimento])).toEqual(padrao.map((p) => [p.valorCentavos, p.vencimento]));
+  });
+});
+
+describe("o nome de cada leva", () => {
+  const ad = (n?: number) => (n ? { parcela: `Parcela adicional (leva ${n})`, entrada: `Entrada adicional (leva ${n})` } : { parcela: "Parcela adicional", entrada: "Entrada adicional" });
+  it("sem parcelas: o nome padrão", () => {
+    expect(rotuloDaLeva([])).toBeUndefined();
+  });
+  it("só o planejamento original: 1ª adicional", () => {
+    expect(rotuloDaLeva(["Entrada", "Parcela 1/3", "Parcela 2/3"])).toEqual(ad());
+  });
+  it("depois da 1ª adicional vem a leva 2, depois a 3", () => {
+    expect(rotuloDaLeva(["Parcela 1/3", "Parcela adicional 1/2", "Parcela adicional 2/2"])).toEqual(ad(2));
+    expect(rotuloDaLeva(["Parcela 1/3", "Entrada adicional", "Parcela adicional (leva 2) 1/1"])).toEqual(ad(3));
+  });
+  it("conta pela MAIOR leva, mesmo com a do meio apagada", () => {
+    expect(rotuloDaLeva(["Parcela 1/3", "Parcela adicional (leva 4) 1/2"])).toEqual(ad(5));
+  });
+  it("descrição livre que só se parece não conta como leva", () => {
+    expect(rotuloDaLeva(["Parcela adicional do buffet", "Parcela 1/1"])).toEqual(ad());
+    expect(rotuloDaLeva(["  Parcela adicional 1/2  "])).toEqual(ad(2));
+  });
+});
+
+describe("a prévia contra a lista ao vivo", () => {
+  const ad2 = { parcela: "Parcela adicional (leva 2)", entrada: "Entrada adicional (leva 2)" };
+  const previa = planejarParcelas({ totalCentavos: 30000, quantidade: 3, primeiroVencimento: "2027-03-10", rotulo: ad2 });
+  const linha = (d: string, v: number, data: string) => ({ description: d, valorCentavos: v, date: data });
+  const original = [linha("Parcela 1/1", 12000, "2026-10-15"), linha("Parcela adicional 1/1", 5000, "2026-11-10")];
+  it("livre: o nome da leva ainda não existe", () => {
+    expect(situacaoDaLeva(previa, ad2, original)).toBe("livre");
+  });
+  it("gravada: a mesma leva já está na lista (resposta perdida, ou a outra aba mandou igual)", () => {
+    const depois = [...original, ...previa.map((p) => linha(p.descricao, p.valorCentavos, p.vencimento))];
+    expect(situacaoDaLeva(previa, ad2, depois)).toBe("gravada");
+  });
+  it("ocupada: outra aba usou o mesmo nome com outros valores", () => {
+    const outra = [...original, linha("Parcela adicional (leva 2) 1/2", 9000, "2027-05-10")];
+    expect(situacaoDaLeva(previa, ad2, outra)).toBe("ocupada");
+  });
+  it("planejamento original enquanto outra aba já lançou: ocupada", () => {
+    const p0 = planejarParcelas({ totalCentavos: 30000, quantidade: 3, primeiroVencimento: "2027-03-10" });
+    expect(situacaoDaLeva(p0, undefined, [])).toBe("livre");
+    expect(situacaoDaLeva(p0, undefined, [linha("Parcela 1/2", 1, "2027-01-01")])).toBe("ocupada");
+  });
+  it("só parte da leva na lista não é 'gravada'", () => {
+    const parte = [...original, linha(previa[0].descricao, previa[0].valorCentavos, previa[0].vencimento)];
+    expect(situacaoDaLeva(previa, ad2, parte)).toBe("ocupada");
+  });
+  it("nome de outra leva não ocupa esta", () => {
+    expect(situacaoDaLeva(previa, ad2, [linha("Parcela adicional (leva 3) 1/2", 1, "2027-01-01")])).toBe("livre");
   });
 });

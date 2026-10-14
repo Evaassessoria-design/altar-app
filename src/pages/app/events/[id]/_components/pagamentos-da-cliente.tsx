@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import { toast } from "sonner";
@@ -43,6 +43,8 @@ import {
   paraCentavos,
   parcelaAtrasada,
   planejarParcelas,
+  rotuloDaLeva,
+  situacaoDaLeva,
   recebidoEmCentavos,
   resumirPagamentos,
   saldoEmCentavos,
@@ -134,7 +136,7 @@ export function PagamentosDaCliente({ eventId }: { eventId: Id<"events"> }) {
           onClick={() => setAberto({ tipo: "planejar" })}
           className="cursor-pointer gap-1.5 h-9"
         >
-          <ListPlus className="size-4" /> Planejar parcelas
+          <ListPlus className="size-4" /> {dados.parcelas.length > 0 ? "Acrescentar parcelas" : "Planejar parcelas"}
         </Button>
       </div>
 
@@ -348,6 +350,7 @@ export function PagamentosDaCliente({ eventId }: { eventId: Id<"events"> }) {
           hoje={hoje}
           contratadoCentavos={resumo.contratadoCentavos}
           parceladoCentavos={resumo.parceladoCentavos}
+          existentes={dados.parcelas}
           onClose={() => setAberto(null)}
         />
       )}
@@ -506,21 +509,87 @@ function ValorContratado({ eventId, atual, onClose }: { eventId: Id<"events">; a
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// A TENTATIVA SEM RESPOSTA
+//
+// A chave do servidor só protege quem reenvia com a MESMA chave. Antes, ela
+// nascia a cada abertura do diálogo: o envio gravava, a resposta se perdia, a
+// decoradora fechava e abria de novo — chave nova, e a leva calculada da lista
+// (que já trazia a gravada) virava "(leva N+1)". O servidor criava tudo de
+// novo. Agora a tentativa que falhou fica guardada na aba (sessionStorage,
+// sobrevive a fechar o diálogo e a recarregar) e o diálogo a RETOMA: mesma
+// chave, mesmo nome, mesma prévia. Sai daqui quando grava ou quando a lista
+// mostra que já entrou.
+// ─────────────────────────────────────────────────────────────────────────────
+type Pendente = { chave: string; rotulo: { parcela: string; entrada: string } | undefined; previa: ParcelaPlanejada[] };
+const pendentesEmMemoria = new Map<string, Pendente>(); // se o navegador bloquear o sessionStorage
+const chaveDoPendente = (eventId: string) => `altar:planejamento-pendente:${eventId}`;
+
+function lerPendente(eventId: string): Pendente | null {
+  try {
+    const bruto = sessionStorage.getItem(chaveDoPendente(eventId));
+    if (bruto) return JSON.parse(bruto) as Pendente;
+  } catch {
+    /* sem armazenamento: vale a memória */
+  }
+  return pendentesEmMemoria.get(eventId) ?? null;
+}
+
+function guardarPendente(eventId: string, p: Pendente | null) {
+  if (p) pendentesEmMemoria.set(eventId, p);
+  else pendentesEmMemoria.delete(eventId);
+  try {
+    if (p) sessionStorage.setItem(chaveDoPendente(eventId), JSON.stringify(p));
+    else sessionStorage.removeItem(chaveDoPendente(eventId));
+  } catch {
+    /* sem armazenamento: vale a memória */
+  }
+}
+
 function PlanejarParcelas({
   eventId,
   hoje,
   contratadoCentavos,
   parceladoCentavos,
+  existentes,
   onClose,
 }: {
   eventId: Id<"events">;
   hoje: string;
   contratadoCentavos: number | null;
   parceladoCentavos: number;
+  /** As parcelas que JÁ existem — mostradas antes de criar, nunca alteradas aqui. */
+  existentes: readonly Parcela[];
   onClose: () => void;
 }) {
   const adicionar = useMutation(api.financeiro.adicionarParcelas);
-  const chave = useMemo(novaChave, []);
+  // Com parcelas lançadas, isto ACRESCENTA — e as novas ganham nome próprio
+  // ("Parcela adicional 1/2", depois "(leva 2)"…). Com os mesmos nomes das
+  // antigas, as levas se misturavam na lista e, com valores e datas iguais, o
+  // servidor as tomava por repetição e não criava nada (ver rotuloDaLeva).
+  const acrescentando = existentes.length > 0;
+  const existentesEmCentavos = existentes.map((p) => ({
+    description: p.description,
+    valorCentavos: paraCentavos(p.amount),
+    date: p.date,
+  }));
+  // Ao ABRIR: há tentativa sem resposta guardada? Se a lista mostra que ela
+  // entrou, é descartada (e dito). Se não, é retomada — mesma chave, nome e
+  // prévia —, e reenviar não duplica mesmo que ela tenha entrado e a lista
+  // ainda não mostre.
+  const [abertura] = useState(() => {
+    const p = lerPendente(eventId);
+    if (p && situacaoDaLeva(p.previa, p.rotulo, existentesEmCentavos) === "gravada") {
+      guardarPendente(eventId, null);
+      return { retomada: null, anteriorGravada: p.previa.length };
+    }
+    return { retomada: p, anteriorGravada: 0 };
+  });
+  const retomada = abertura.retomada;
+  // Nome e chave fixados ao abrir. O nome fixo é o que faz uma 2ª aba, aberta
+  // com a mesma lista, reconhecer a leva que a 1ª já enviou (ver situacao).
+  const [rotulo] = useState(() => (retomada ? retomada.rotulo : rotuloDaLeva(existentes.map((p) => p.description))));
+  const [chave] = useState(() => retomada?.chave ?? novaChave());
   const emCurso = useRef(false);
   const [salvando, setSalvando] = useState(false);
 
@@ -533,7 +602,7 @@ function PlanejarParcelas({
   const [quantidade, setQuantidade] = useState("3");
   const [primeiro, setPrimeiro] = useState(hoje);
   // A prévia editável. `null` = ainda segue o cálculo automático.
-  const [ajustes, setAjustes] = useState<ParcelaPlanejada[] | null>(null);
+  const [ajustes, setAjustes] = useState<ParcelaPlanejada[] | null>(retomada?.previa ?? null);
 
   const totalCentavos = paraCentavos(valorDigitado(total) ?? 0);
   const entradaCentavos = paraCentavos(valorDigitado(entrada) ?? 0);
@@ -545,20 +614,33 @@ function PlanejarParcelas({
           entrada: entradaCentavos > 0 ? { valorCentavos: entradaCentavos, vencimento: dataEntrada } : null,
           quantidade: n,
           primeiroVencimento: primeiro,
+          rotulo,
         })
       : [];
   const previa = ajustes ?? calculado;
   const somaPrevia = previa.reduce((s, p) => s + p.valorCentavos, 0);
   const depoisDoPlano = contratadoCentavos === null ? null : contratadoCentavos - parceladoCentavos - somaPrevia;
   const invalida = previa.some((p) => p.valorCentavos <= 0 || !dataValida(p.vencimento));
+  // A prévia contra a lista AO VIVO: já entrou (resposta perdida, ou outra aba
+  // enviou a mesma leva) ou o nome foi usado por outra aba nesse meio-tempo.
+  const situacao = situacaoDaLeva(previa, rotulo, existentesEmCentavos);
+  // A tentativa guardada NÃO é descartada aqui ao ver "gravada": é a
+  // reabertura que a descarta, dizendo "a tentativa anterior foi gravada" —
+  // senão o diálogo reaberto prepararia a leva seguinte sem explicação.
+  // Com a resposta perdida a promessa pode nunca voltar: se a lista já mostra
+  // a leva, fechar é permitido mesmo "Criando...".
+  const podeFechar = !salvando || situacao === "gravada";
 
   const ajustar = (i: number, mudanca: Partial<ParcelaPlanejada>) =>
     setAjustes(previa.map((p, j) => (j === i ? { ...p, ...mudanca } : p)));
 
   const salvar = async () => {
-    if (emCurso.current || previa.length === 0 || invalida) return;
+    if (emCurso.current || previa.length === 0 || invalida || situacao !== "livre") return;
     emCurso.current = true;
     setSalvando(true);
+    // Guardada ANTES de enviar: se a página recarregar com o envio em voo, o
+    // catch nunca roda — e a reabertura precisa saber desta chave.
+    guardarPendente(eventId, { chave, rotulo, previa });
     try {
       const r = await adicionar({
         eventId,
@@ -571,8 +653,11 @@ function PlanejarParcelas({
           : `${r.criadas} parcela(s) criada(s).` +
               (r.ignoradas ? ` ${r.ignoradas} já existia(m) e não foi(ram) repetida(s).` : ""),
       );
+      guardarPendente(eventId, null);
       onClose();
     } catch (e) {
+      // Sem resposta não se sabe se gravou: a tentativa continua guardada
+      // para o reenvio — aqui ou depois de fechar e abrir — usar a MESMA chave.
       toast.error(mensagem(e, "Não foi possível criar as parcelas."));
     } finally {
       emCurso.current = false;
@@ -581,18 +666,71 @@ function PlanejarParcelas({
   };
 
   return (
-    <Dialog open onOpenChange={(o) => !o && !salvando && onClose()}>
+    <Dialog open onOpenChange={(o) => !o && podeFechar && onClose()}>
       <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Planejar parcelas</DialogTitle>
+          <DialogTitle>{acrescentando ? "Acrescentar parcelas" : "Planejar parcelas"}</DialogTitle>
           <DialogDescription>
-            Cria parcelas NOVAS. As que já existem — inclusive as recebidas — não são alteradas.
+            {acrescentando
+              ? "Cria parcelas ADICIONAIS. As que já existem — inclusive as recebidas — continuam como estão."
+              : "Monte a entrada e as parcelas com prévia antes de salvar."}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
+        {/* min-w-0: o DialogContent é um grid, e a coluna cresce até a largura
+            mínima do filho — que conta o texto inteiro das linhas `truncate`
+            ("Parcela adicional (leva 2) 2/3 · vence…"). No celular (390 px) o
+            diálogo passava a 411 px de conteúdo, com rolagem lateral. */}
+        <div className="space-y-3 min-w-0">
+          {abertura.anteriorGravada > 0 && (
+            <p role="status" className="rounded-md bg-green-100 dark:bg-green-900/30 px-3 py-2 text-xs text-green-900 dark:text-green-200">
+              A tentativa anterior foi gravada: {abertura.anteriorGravada} parcela
+              {abertura.anteriorGravada === 1 ? "" : "s"} na lista abaixo. Nada foi duplicado.
+            </p>
+          )}
+          {retomada && situacao === "livre" && (
+            <p role="status" className="rounded-md bg-muted px-3 py-2 text-xs">
+              Retomando a tentativa que ficou sem resposta — com a mesma identificação. Se ela tiver
+              entrado, enviar de novo não cria nada repetido.
+            </p>
+          )}
+          {situacao === "gravada" && (
+            <p role="alert" className="rounded-md bg-green-100 dark:bg-green-900/30 px-3 py-2 text-xs text-green-900 dark:text-green-200">
+              Estas parcelas já estão lançadas — a tentativa anterior entrou, ou outra janela enviou a
+              mesma leva. Nada a enviar.
+            </p>
+          )}
+          {situacao === "ocupada" && (
+            <p role="alert" className="rounded-md bg-amber-100 dark:bg-amber-900/30 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
+              Outra janela acrescentou parcelas com este nome enquanto este diálogo estava aberto. Feche e
+              abra de novo para ver a lista atual e planejar a próxima leva.
+            </p>
+          )}
+          {/* O QUE JÁ EXISTE, antes de criar. Editar uma parcela não é aqui:
+              é na própria parcela (abrir → Editar valor e vencimento). */}
+          {acrescentando && (
+            <div className="rounded-lg border border-border bg-muted/40 p-3 space-y-1.5">
+              <p className="text-xs font-semibold">
+                Já lançadas: {existentes.length} parcela{existentes.length === 1 ? "" : "s"} · {reais(parceladoCentavos)}
+                {contratadoCentavos !== null && ` de ${reais(contratadoCentavos)} contratados`}
+              </p>
+              <ul className="max-h-28 overflow-y-auto space-y-0.5 text-xs text-muted-foreground">
+                {[...existentes]
+                  .sort((a, b) => a.date.localeCompare(b.date))
+                  .map((p) => (
+                    <li key={p._id} className="flex justify-between gap-2">
+                      <span className="truncate">{p.description} · vence {formatDateInput(p.date)}</span>
+                      <span className="flex-shrink-0">{reais(paraCentavos(p.amount))}</span>
+                    </li>
+                  ))}
+              </ul>
+              <p className="text-[11px] text-muted-foreground">
+                Para mudar uma delas, feche e abra a parcela → <strong>Editar valor e vencimento</strong>.
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="plano-total">Valor a parcelar (R$)</Label>
+              <Label htmlFor="plano-total">{acrescentando ? "Valor a acrescentar (R$)" : "Valor a parcelar (R$)"}</Label>
               <Input
                 id="plano-total"
                 inputMode="decimal"
@@ -695,11 +833,26 @@ function PlanejarParcelas({
                     <span className="text-amber-700 dark:text-amber-400"> (valor a parcelar: {reais(totalCentavos)})</span>
                   )}
                 </p>
-                {depoisDoPlano !== null && depoisDoPlano !== 0 && (
+                {acrescentando && (
+                  <p>
+                    Acrescenta <span className="font-semibold">{reais(somaPrevia)}</span>: o total parcelado passa de{" "}
+                    {reais(parceladoCentavos)} para{" "}
+                    <span className="font-semibold">{reais(parceladoCentavos + somaPrevia)}</span>.
+                  </p>
+                )}
+                {depoisDoPlano !== null && depoisDoPlano > 0 && (
                   <p className="text-amber-700 dark:text-amber-400">
-                    {depoisDoPlano > 0
-                      ? `Depois disto ainda faltarão ${reais(depoisDoPlano)} para cobrir o contratado.`
-                      : `Com isto as parcelas passam ${reais(-depoisDoPlano)} do contratado.`}
+                    Depois disto ainda faltarão {reais(depoisDoPlano)} para cobrir o contratado.
+                  </p>
+                )}
+                {/* Passar do contratado pode ser legítimo (um adicional
+                    combinado) — não é bloqueado, mas é dito com todas as
+                    letras antes do clique. */}
+                {depoisDoPlano !== null && depoisDoPlano < 0 && (
+                  <p role="alert" className="rounded-md bg-amber-100 dark:bg-amber-900/30 px-2 py-1.5 text-amber-900 dark:text-amber-200">
+                    Atenção: com isto as parcelas somam {reais(parceladoCentavos + somaPrevia)} e passam{" "}
+                    <strong>{reais(-depoisDoPlano)}</strong> do contratado ({reais(contratadoCentavos!)}). Se a cliente
+                    combinou um adicional, ajuste também o valor contratado.
                   </p>
                 )}
                 {depoisDoPlano === 0 && (
@@ -711,15 +864,21 @@ function PlanejarParcelas({
           </div>
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={onClose} disabled={salvando} className="cursor-pointer h-10 sm:h-9">
+          <Button variant="ghost" onClick={onClose} disabled={!podeFechar} className="cursor-pointer h-10 sm:h-9">
             Cancelar
           </Button>
           <Button
             onClick={() => void salvar()}
-            disabled={salvando || previa.length === 0 || invalida}
+            disabled={salvando || previa.length === 0 || invalida || situacao !== "livre"}
             className="cursor-pointer h-10 sm:h-9"
           >
-            {salvando ? "Criando..." : `Criar ${previa.length || ""} parcela${previa.length === 1 ? "" : "s"}`}
+            {salvando
+              ? "Criando..."
+              : situacao === "gravada"
+                ? "Já lançadas"
+                : `${acrescentando ? "Acrescentar" : "Criar"} ${previa.length || ""} parcela${previa.length === 1 ? "" : "s"}${
+                  depoisDoPlano !== null && depoisDoPlano < 0 ? " mesmo assim" : ""
+                }`}
           </Button>
         </DialogFooter>
       </DialogContent>

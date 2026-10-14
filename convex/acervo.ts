@@ -738,7 +738,7 @@ export const reservarDaFicha = mutation({
     const linhas = consolidarMateriais(
       itensDeMontagem.map((i) => ({
         _id: i._id, nome: i.name, area: i.area, ambiente: i.ambiente,
-        quantidade: i.quantity, projectScope: i.projectScope, receita: i.receita,
+        quantidade: i.quantity, projectScope: i.projectScope, situacao: i.situacao, receita: i.receita,
       })),
       ehObrigacaoDeMontagem,
     );

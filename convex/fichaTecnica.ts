@@ -38,7 +38,7 @@ import { normalizeName } from "./lib/materiais";
 /** Itens de montagem do evento, no formato que a regra de cálculo espera. */
 function paraCalculo(itens: readonly {
   _id: string; name: string; area: string; ambiente?: string;
-  quantity?: number; projectScope?: string;
+  quantity?: number; projectScope?: string; situacao?: string;
   receita?: readonly { materialId?: string; nome: string; unidade: string; quantidade: number; tipo?: string; custoReferencia?: number }[];
 }[]): ComposicaoNoEvento[] {
   return itens.map((i) => ({
@@ -48,6 +48,9 @@ function paraCalculo(itens: readonly {
     ambiente: i.ambiente,
     quantidade: i.quantity,
     projectScope: i.projectScope,
+    // Sem a situação, um item "em avaliação" escapava da regra e ia para as
+    // compras e o consolidado (`ehObrigacaoDeMontagem`).
+    situacao: i.situacao,
     receita: i.receita,
   }));
 }

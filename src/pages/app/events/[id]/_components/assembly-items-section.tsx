@@ -17,6 +17,15 @@ import {
 } from "@/convex/lib/assemblyStatus.ts";
 import { cn } from "@/lib/utils.ts";
 import { StatusSelect } from "@/components/status-select.tsx";
+import type { ItensDoBloco } from "@/lib/briefing-areas.ts";
+import { rotuloDaOrigem } from "@/lib/rotulos-do-item.ts";
+import {
+  ORIGENS,
+  ROTULO_DA_SITUACAO,
+  SITUACOES,
+  type OrigemDoItem,
+  type SituacaoDoItem,
+} from "@/convex/lib/itemDoBriefing.ts";
 
 /** Cores do trajeto: cinza no galpão, quente ao sair, verde ao voltar. */
 const TOM_CARREGAMENTO: Record<AssemblyStatus, string> = {
@@ -71,16 +80,48 @@ type Item = {
   contractedPhotoUrl?: string | null;
   /** A receita da Ficha Técnica. Só para avisar o que a exclusão leva junto. */
   receita?: unknown[];
+  visibility: string;
+  bloco?: string;
+  situacao?: SituacaoDoItem;
+  origem?: OrigemDoItem;
+  corAcabamento?: string;
+  medidas?: string;
+  posicao?: string;
+  responsavelMontagem?: string;
+  tipoFlor?: "natural" | "permanente";
+  reaproveitamento?: { ambiente: string; horario?: string; responsavel?: string };
 };
 
+export type ItemDaSecao = Item;
+
+/** As situações que o bloco oferece. Personalização não tem "a definir": nasce em avaliação. */
+function situacoesDo(tipo?: ItensDoBloco["tipo"]): SituacaoDoItem[] {
+  return tipo === "personalizacao"
+    ? ["em_avaliacao", "aprovado", "contratado", "nao_se_aplica"]
+    : [...SITUACOES];
+}
+
+// ── POR BLOCO (14/10) ───────────────────────────────────────────────────────
+// Com `bloco`, a seção mostra só os itens daquele bloco do briefing (Altar,
+// Bar, Cantinho das crianças…) e oferece as sugestões de um toque.
+//
+// Sem `bloco`, é a lista "Outros itens desta aba": tudo da área que NÃO está
+// num bloco conhecido — os itens cadastrados antes da reorganização, que não
+// têm `bloco`. Eles continuam aqui, editáveis, e continuam chegando ao Caderno
+// e ao Carregamento como sempre. Nenhum item some da tela.
 export function AssemblyItemsSection({
   eventId,
   area,
   areaLabel,
+  bloco,
+  blocosDaArea,
 }: {
   eventId: Id<"events">;
   area: string;
   areaLabel: string;
+  bloco?: ItensDoBloco;
+  /** Os blocos que a área tem. Sem `bloco`, a seção mostra o que sobra deles. */
+  blocosDaArea?: readonly string[];
 }) {
   const all = useQuery(api.assemblyItems.listByEvent, { eventId });
   const createItem = useMutation(api.assemblyItems.create);
@@ -91,15 +132,19 @@ export function AssemblyItemsSection({
   const [expandedId, setExpandedId] = useState<Id<"assemblyItems"> | null>(null);
   const [draftName, setDraftName] = useState("");
 
-  const items = (all ?? []).filter((i) => i.area === area) as Item[];
+  const daArea = (all ?? []).filter((i) => i.area === area) as Item[];
+  const conhecidos = new Set(blocosDaArea ?? []);
+  const items = bloco
+    ? daArea.filter((i) => i.bloco === bloco.bloco)
+    : daArea.filter((i) => !i.bloco || !conhecidos.has(i.bloco));
   const [filtroStatus, setFiltroStatus] = useState<AssemblyStatus | null>(null);
   const resumo = resumirCarregamento(items);
   const visiveis = filtroStatus
     ? items.filter((i) => effectiveAssemblyStatus(i) === filtroStatus)
     : items;
 
-  const handleAdd = async () => {
-    const name = draftName.trim();
+  const handleAdd = async (nomeSugerido?: string) => {
+    const name = (nomeSugerido ?? draftName).trim();
     if (!name) return;
     setAdding(true);
     try {
@@ -110,8 +155,13 @@ export function AssemblyItemsSection({
         includeInAssemblyReport: true,
         checkOnAssembly: true,
         visibility: "equipe",
+        bloco: bloco?.bloco,
+        ambiente: bloco?.ambiente,
+        // Pedido de personalização nasce EM AVALIAÇÃO: só vira obrigação de
+        // montagem quando ela muda para aprovado ou contratado.
+        situacao: bloco?.tipo === "personalizacao" ? "em_avaliacao" : undefined,
       });
-      setDraftName("");
+      if (!nomeSugerido) setDraftName("");
       toast.success("Item adicionado.");
     } catch (e) {
       toast.error(
@@ -124,19 +174,41 @@ export function AssemblyItemsSection({
     }
   };
 
+  // Sugestão que já virou item some da lista: tocar duas vezes não cria o
+  // segundo "Genuflexório" — a comparação ignora caixa e espaço.
+  const nomes = new Set(items.map((i) => i.name.trim().toLowerCase()));
+  const sugestoes = (bloco?.sugestoes ?? []).filter((s) => !nomes.has(s.trim().toLowerCase()));
+
+  // A lista de sobras só aparece quando há o que mostrar.
+  if (!bloco && (blocosDaArea?.length ?? 0) > 0 && items.length === 0) return null;
+
   return (
-    <div className="mt-8 border-t border-border pt-5">
-      <div className="flex items-center gap-2 mb-1">
-        <Package className="size-4 text-primary" />
-        <h3 className="font-semibold text-sm">Itens de montagem · {areaLabel}</h3>
-        {items.length > 0 && (
-          <span className="text-xs text-muted-foreground">({items.length})</span>
-        )}
-      </div>
-      <p className="text-xs text-muted-foreground mb-3">
-        Itens físicos que vão para o Caderno de Montagem. O briefing acima segue sendo o
-        combinado; aqui é o operacional.
-      </p>
+    <div className={bloco ? "mt-3" : "mt-8 border-t border-border pt-5"}>
+      {bloco ? (
+        <div className="flex items-center gap-2 mb-2">
+          <Package className="size-3.5 text-primary" />
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Itens {items.length > 0 && <span className="normal-case">({items.length})</span>}
+          </h4>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center gap-2 mb-1">
+            <Package className="size-4 text-primary" />
+            <h3 className="font-semibold text-sm">
+              {(blocosDaArea?.length ?? 0) > 0 ? `Outros itens · ${areaLabel}` : `Itens de montagem · ${areaLabel}`}
+            </h3>
+            {items.length > 0 && (
+              <span className="text-xs text-muted-foreground">({items.length})</span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            {(blocosDaArea?.length ?? 0) > 0
+              ? "Itens desta aba cadastrados antes dos blocos. Continuam valendo para o Caderno e o Carregamento."
+              : "Itens físicos que vão para o Caderno de Montagem. O briefing acima segue sendo o combinado; aqui é o operacional."}
+          </p>
+        </>
+      )}
 
       {/* Contagem por situação — números reais, sem percentual sintético.
           No dia da montagem é o que a equipe olha primeiro. */}
@@ -188,9 +260,26 @@ export function AssemblyItemsSection({
             onToggle={() => setExpandedId(expandedId === item._id ? null : item._id)}
             onUpdate={updateItem}
             onRemove={removeItem}
+            tipo={bloco?.tipo}
           />
         ))}
       </div>
+
+      {sugestoes.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-2" aria-label="Sugestões de itens">
+          {sugestoes.map((s) => (
+            <button
+              key={s}
+              type="button"
+              disabled={adding}
+              onClick={() => void handleAdd(s)}
+              className="text-xs px-2.5 py-1 rounded-full border border-dashed border-primary/50 text-primary hover:bg-primary/10 cursor-pointer disabled:opacity-50"
+            >
+              + {s}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="flex gap-2 mt-3">
         <Input
@@ -202,10 +291,11 @@ export function AssemblyItemsSection({
               void handleAdd();
             }
           }}
-          placeholder="Ex.: Cadeira Tiffany"
+          placeholder={bloco ? "Adicionar item" : "Ex.: Cadeira Tiffany"}
           className="flex-1"
         />
         <Button
+          type="button"
           onClick={() => void handleAdd()}
           disabled={adding || !draftName.trim()}
           className="cursor-pointer gap-1.5"
@@ -218,18 +308,20 @@ export function AssemblyItemsSection({
   );
 }
 
-function ItemCard({
+export function ItemCard({
   item,
   expanded,
   onToggle,
   onUpdate,
   onRemove,
+  tipo,
 }: {
   item: Item;
   expanded: boolean;
   onToggle: () => void;
   onUpdate: ReturnType<typeof useMutation<typeof api.assemblyItems.update>>;
   onRemove: ReturnType<typeof useMutation<typeof api.assemblyItems.remove>>;
+  tipo?: ItensDoBloco["tipo"];
 }) {
   const clearPhoto = useMutation(api.assemblyItems.clearPhoto);
   // Qual slot está com o seletor aberto. `null` = fechado.
@@ -284,8 +376,15 @@ function ItemCard({
             {item.name}
           </p>
           <p className="text-xs text-muted-foreground truncate">
-            {[item.model, item.ambiente, item.supplierName].filter(Boolean).join(" · ") ||
-              "Sem detalhes"}
+            {[
+              item.situacao && ROTULO_DA_SITUACAO[item.situacao],
+              item.model,
+              item.ambiente,
+              item.origem && rotuloDaOrigem(item.origem, tipo),
+              item.supplierName,
+            ]
+              .filter(Boolean)
+              .join(" · ") || "Sem detalhes"}
           </p>
         </button>
 
@@ -341,7 +440,60 @@ function ItemCard({
               }
               onDigitar={(v) => void patch({ supplierName: v, supplierId: null })}
             />
+            <Field
+              label="Cor / acabamento"
+              value={item.corAcabamento ?? ""}
+              onSave={(v) => void patch({ corAcabamento: v.trim() ? v : null })}
+            />
+            <Field
+              label="Medidas"
+              value={item.medidas ?? ""}
+              onSave={(v) => void patch({ medidas: v.trim() ? v : null })}
+            />
+            <Field
+              label="Posição no ambiente"
+              value={item.posicao ?? ""}
+              onSave={(v) => void patch({ posicao: v.trim() ? v : null })}
+            />
+            <Field
+              label="Responsável pela montagem"
+              value={item.responsavelMontagem ?? ""}
+              onSave={(v) => void patch({ responsavelMontagem: v.trim() ? v : null })}
+            />
+            <Escolha
+              label={tipo === "iluminacao" ? "De onde vem" : "Origem"}
+              value={item.origem ?? ""}
+              opcoes={ORIGENS.map((o) => ({ value: o, label: rotuloDaOrigem(o, tipo) }))}
+              onChange={(v) => void patch({ origem: v || null })}
+            />
+            <Escolha
+              label="Situação"
+              value={item.situacao ?? ""}
+              opcoes={situacoesDo(tipo).map((st) => ({ value: st, label: ROTULO_DA_SITUACAO[st] }))}
+              onChange={(v) => void patch({ situacao: v || null })}
+            />
+            {tipo === "flor" && (
+              <Escolha
+                label="Natural ou permanente"
+                value={item.tipoFlor ?? ""}
+                opcoes={[
+                  { value: "natural", label: "Natural" },
+                  { value: "permanente", label: "Permanente" },
+                ]}
+                onChange={(v) => void patch({ tipoFlor: v || null })}
+              />
+            )}
           </div>
+
+          {(item.situacao === "em_avaliacao" || item.situacao === "nao_se_aplica") && (
+            <p className="text-[11px] text-amber-700 dark:text-amber-400">
+              {item.situacao === "em_avaliacao"
+                ? "Em avaliação: não entra na montagem, nas compras nem no caminhão até ser aprovado."
+                : "Não se aplica: fica registrado, fora da montagem."}
+            </p>
+          )}
+
+          <Reaproveitamento item={item} onSalvar={(r) => void patch({ reaproveitamento: r })} />
 
           <div className="space-y-1.5">
             <Label className="text-xs">Observação</Label>
@@ -355,14 +507,16 @@ function ItemCard({
 
           {/* Fotos — da Galeria do evento, não de um upload paralelo. */}
           <div className="grid grid-cols-2 gap-3">
+            {/* "Inspiração" é a referência: NÃO é o contratado. "Modelo
+                aprovado" é o que foi fechado — o caderno o rotula CONTRATADO. */}
             <PhotoSlot
-              label="Referência aprovada"
+              label="Inspiração"
               foto={item.referenceFoto}
               onEscolher={() => setEscolhendo("reference")}
               onTirar={() => void tirarFoto("reference")}
             />
             <PhotoSlot
-              label="Item contratado"
+              label="Modelo aprovado"
               foto={item.contractedFoto}
               onEscolher={() => setEscolhendo("contracted")}
               onTirar={() => void tirarFoto("contracted")}
@@ -398,6 +552,21 @@ function ItemCard({
               />
               Conferir na montagem (☐ no PDF)
             </label>
+            {/* O item nasce para a equipe. Sem este controle, nenhum item
+                cadastrado pela tela chegava ao caderno dos noivos nem à
+                apresentação do Projeto Visual (homologação de 14/10). Item
+                marcado como interno continua interno até ela decidir. */}
+            {item.visibility === "interno" ? (
+              <p className="text-xs text-muted-foreground">Item interno: não sai em nenhum caderno.</p>
+            ) : (
+              <label className="flex items-center gap-2 cursor-pointer text-sm">
+                <Checkbox
+                  checked={item.visibility === "cliente"}
+                  onCheckedChange={(c) => void patch({ visibility: c === true ? "cliente" : "equipe" })}
+                />
+                Mostrar no caderno do cliente
+              </label>
+            )}
           </div>
 
           <Button
@@ -582,6 +751,99 @@ function CampoFornecedor({
             if (e.target.value !== (item.supplierName ?? "")) onDigitar(e.target.value);
           }}
         />
+      )}
+    </div>
+  );
+}
+
+/** `<select>` nativo, pelo mesmo motivo do fornecedor: no celular, a roda do sistema. */
+function Escolha({
+  label,
+  value,
+  opcoes,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  opcoes: { value: string; label: string }[];
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">{label}</Label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs md:text-sm cursor-pointer"
+      >
+        <option value="">Não informado</option>
+        {opcoes.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/**
+ * A MESMA peça num segundo ambiente — as cadeiras da cerimônia que vão para a
+ * festa. É uma transferência, não outra peça: a quantidade física é a do item
+ * e não se soma. O caderno da equipe mostra quem leva e quando.
+ */
+function Reaproveitamento({
+  item,
+  onSalvar,
+}: {
+  item: Item;
+  onSalvar: (r: { ambiente: string; horario?: string; responsavel?: string } | null) => void;
+}) {
+  const atual = item.reaproveitamento;
+  const [aberto, setAberto] = useState(!!atual);
+  const salvar = (campo: "ambiente" | "horario" | "responsavel", valor: string) => {
+    const proximo = { ...(atual ?? { ambiente: "" }), [campo]: valor.trim() || undefined };
+    if (!proximo.ambiente?.trim()) {
+      // Sem o ambiente de destino não há reaproveitamento: limpa em vez de
+      // gravar uma transferência para lugar nenhum.
+      if (atual) onSalvar(null);
+      return;
+    }
+    onSalvar({ ambiente: proximo.ambiente.trim(), horario: proximo.horario, responsavel: proximo.responsavel });
+  };
+  if (!aberto) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAberto(true)}
+        className="text-xs text-primary hover:underline cursor-pointer"
+      >
+        + Esta peça também é usada em outro ambiente
+      </button>
+    );
+  }
+  return (
+    <div className="rounded-md border border-border p-2.5 space-y-2">
+      <p className="text-xs font-medium">Reaproveitamento em outro ambiente</p>
+      <p className="text-[11px] text-muted-foreground">
+        A mesma peça, transferida — a quantidade não é somada duas vezes.
+      </p>
+      <div className="grid sm:grid-cols-3 gap-2">
+        <Field label="Para qual ambiente" value={atual?.ambiente ?? ""} onSave={(v) => salvar("ambiente", v)} />
+        <Field label="Horário da transferência" value={atual?.horario ?? ""} onSave={(v) => salvar("horario", v)} />
+        <Field label="Quem transfere" value={atual?.responsavel ?? ""} onSave={(v) => salvar("responsavel", v)} />
+      </div>
+      {atual && (
+        <button
+          type="button"
+          onClick={() => {
+            onSalvar(null);
+            setAberto(false);
+          }}
+          className="text-xs text-destructive hover:underline cursor-pointer"
+        >
+          Remover reaproveitamento
+        </button>
       )}
     </div>
   );

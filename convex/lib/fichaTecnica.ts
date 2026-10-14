@@ -137,6 +137,8 @@ export type ComposicaoNoEvento = {
   /** Quantas unidades desta composição o evento tem. Ausente = 1. */
   quantidade?: number;
   projectScope?: string;
+  /** A situação do briefing. Ver `ehObrigacaoDeMontagem`. */
+  situacao?: string;
   receita?: readonly ComponenteDaReceita[];
 };
 
@@ -275,7 +277,7 @@ export type LinhaConsolidada = {
  */
 export function consolidarMateriais(
   composicoes: readonly ComposicaoNoEvento[],
-  ehObrigacao: (item: { projectScope?: string }) => boolean,
+  ehObrigacao: (item: { projectScope?: string; situacao?: string }) => boolean,
 ): LinhaConsolidada[] {
   const porChave = new Map<string, LinhaConsolidada>();
 

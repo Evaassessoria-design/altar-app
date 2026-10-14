@@ -43,9 +43,14 @@ export function escopoDoItem(item: { projectScope?: string }): ItemScope | null 
  * explícita. O opcional sai porque ainda não foi contratado: entra na Folha,
  * na Ficha Técnica e nas compras no dia em que virar "incluso".
  */
-export function ehObrigacaoDeMontagem(item: { projectScope?: string }): boolean {
+export function ehObrigacaoDeMontagem(item: { projectScope?: string; situacao?: string }): boolean {
   const escopo = escopoDoItem(item);
-  return escopo !== "referencia" && escopo !== "nao_incluso" && escopo !== "opcional";
+  if (escopo === "referencia" || escopo === "nao_incluso" || escopo === "opcional") return false;
+  // A SITUAÇÃO que o briefing registra (14/10). "Em avaliação" é pedido que a
+  // cliente ainda não decidiu; "Não se aplica" é o que ficou de fora. Nenhum
+  // dos dois vira obrigação de montagem, de compra ou de caminhão. Ausente,
+  // "a definir", "aprovado" e "contratado" seguem como sempre.
+  return item.situacao !== "em_avaliacao" && item.situacao !== "nao_se_aplica";
 }
 
 /** Oferecido e ainda não contratado. Ver `ESCOPO_OPCIONAL`. */

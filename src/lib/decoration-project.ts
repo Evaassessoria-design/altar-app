@@ -75,7 +75,11 @@ export function labelDoAmbiente(area: string): { label: string; emoji?: string }
   // Ambiente personalizado é importante: a decoradora cria "Bem-casados",
   // "Ilha gastronômica", "Buquê"... e o sistema não pode chamar isso de
   // inválido nem esconder.
-  return conhecida ? { label: conhecida.label, emoji: conhecida.emoji } : { label: area };
+  // `rotuloDoAmbiente` é o nome de ESPAÇO da aba: "Iluminação e conexão
+  // elétrica" é o nome da aba, "Iluminação" é o do lugar no caderno.
+  return conhecida
+    ? { label: conhecida.rotuloDoAmbiente ?? conhecida.label, emoji: conhecida.emoji }
+    : { label: area };
 }
 
 // ── ESCOPO DO ITEM ──────────────────────────────────────────────────────────

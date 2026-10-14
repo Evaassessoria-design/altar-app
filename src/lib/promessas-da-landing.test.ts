@@ -1,3 +1,4 @@
+import { allBriefingFields } from "./briefing-areas.ts";
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
@@ -78,10 +79,17 @@ describe("a landing só promete o que existe", () => {
     expect(landing).toMatch(/sete estágios/i);
   });
 
-  it("os 61 campos do briefing são 61 de verdade", () => {
-    const campos = areasDoBriefing.match(/\{ key: "[a-zA-Z_]+", label:/g) ?? [];
-    expect(campos).toHaveLength(61);
-    expect(landing).toContain("61 campos");
+  it("os campos do briefing que a landing promete são os que existem", () => {
+    // Conta pela LISTA de campos (`allBriefingFields`), não por regex sobre o
+    // texto do arquivo: a reorganização de 14/10 escreveu campos em várias
+    // linhas, e a regex passou a contar menos do que existe. Eram 61; com os
+    // blocos novos (cerimônia, flores, bolo, conexão elétrica) são 83.
+    const campos = allBriefingFields();
+    expect(new Set(campos.map((c) => c.key)).size).toBe(campos.length);
+    expect(campos).toHaveLength(83);
+    expect(landing).toContain(`${campos.length} campos`);
+    expect(landing).not.toContain("61 campos");
+    expect(areasDoBriefing).toContain("allBriefingFields");
   });
 
   it("os 14 dias de teste são os 14 dias do servidor", () => {

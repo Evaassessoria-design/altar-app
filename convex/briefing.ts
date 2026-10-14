@@ -67,6 +67,29 @@ const briefingFields = {
   insuranceInfo: v.optional(v.string()),
   emergencyContact: v.optional(v.string()),
   otherNotes: v.optional(v.string()),
+  // Reorganização de 14/10 — ver convex/schema.ts.
+  ceremonyLocation: v.optional(v.string()),
+  ceremonySetupDeadline: v.optional(v.string()),
+  ceremonyReuse: v.optional(v.string()),
+  kidsCorner: v.optional(v.string()),
+  kidsCornerLocation: v.optional(v.string()),
+  kidsCornerResponsible: v.optional(v.string()),
+  flowersPreferred: v.optional(v.string()),
+  flowersAvoid: v.optional(v.string()),
+  flowerInspirations: v.optional(v.string()),
+  flowerSubstitutions: v.optional(v.string()),
+  cakeType: v.optional(v.string()),
+  cakeDimensions: v.optional(v.string()),
+  cakeSupport: v.optional(v.string()),
+  cakeDeliveryResponsible: v.optional(v.string()),
+  sweetsLayoutResponsible: v.optional(v.string()),
+  cakeFinishResponsible: v.optional(v.string()),
+  electricInstaller: v.optional(v.string()),
+  electricConnector: v.optional(v.string()),
+  electricianNeeded: v.optional(v.string()),
+  electricConfirmResponsible: v.optional(v.string()),
+  electricSchedule: v.optional(v.string()),
+  electricNotes: v.optional(v.string()),
 } as const;
 
 export const getBriefing = query({
@@ -126,6 +149,7 @@ export const upsertBriefingFields = mutation({
       "cakeDesign","sweetsIncluded","sweetsDescription","weddingFavors","drinkService","cakeNotes",
       "generalNotes","specialRequests","restrictions","vendorContacts","setupTime","teardownTime",
       "parkingInfo","accessibilityNeeds","insuranceInfo","emergencyContact","otherNotes",
+      "ceremonyLocation","ceremonySetupDeadline","ceremonyReuse","kidsCorner","kidsCornerLocation","kidsCornerResponsible","flowersPreferred","flowersAvoid","flowerInspirations","flowerSubstitutions","cakeType","cakeDimensions","cakeSupport","cakeDeliveryResponsible","sweetsLayoutResponsible","cakeFinishResponsible","electricInstaller","electricConnector","electricianNeeded","electricConfirmResponsible","electricSchedule","electricNotes",
     ]);
     const safeFields = Object.fromEntries(
       Object.entries(args.fields).filter(([k]) => allowedKeys.has(k)),

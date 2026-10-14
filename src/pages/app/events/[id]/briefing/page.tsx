@@ -10,13 +10,17 @@ import { Textarea } from "@/components/ui/textarea.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
 import { toast } from "sonner";
-import { ArrowLeft, Save, ChevronRight, Sparkles, FileDown, Loader2, Truck, ChevronDown } from "lucide-react";
+import { ArrowLeft, Save, ChevronRight, Sparkles, FileDown, Loader2, Truck, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
 import {
   BRIEFING_AREAS,
   areaTemTextoAntigo,
+  blocosDaArea,
   type BriefingFields,
+  type BriefingGroup,
 } from "@/lib/briefing-areas.ts";
+import { ConferenciaDeMobiliario } from "../_components/conferencia-de-mobiliario.tsx";
+import { ReferenciasDoBloco } from "../_components/referencias-do-bloco.tsx";
 
 import { AssemblyItemsSection } from "../_components/assembly-items-section.tsx";
 import { SuggestItemsDialog } from "../_components/suggest-items-dialog.tsx";
@@ -65,8 +69,16 @@ export default function EventBriefingPage() {
     register,
     handleSubmit,
     reset,
+    setValue,
+    watch,
     formState: { isDirty, isSubmitting },
   } = useForm<BriefingFields>({ defaultValues: {} });
+  // As respostas curtas (Sim / Não / A definir) e os blocos condicionais leem
+  // o valor ATUAL do formulário, não o salvo — o cantinho das crianças abre
+  // no toque em "Sim", antes de salvar.
+  const valores = watch();
+  // Bloco aberto/fechado pela decoradora. Ausente = a regra padrão (abaixo).
+  const [abertos, setAbertos] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (briefing !== undefined) {
@@ -299,7 +311,10 @@ export default function EventBriefingPage() {
             </div>
           ) : (
             <>
-              <form onSubmit={handleSubmit(onSave)}>
+              {/* Sem <form>: os blocos misturam campos e itens, e um Enter ou
+                  um botão de item dentro de um formulário submeteria o
+                  briefing inteiro. Salvar é sempre um gesto explícito. */}
+              <div>
                 <div className="mb-5 flex items-center gap-2">
                   <span className="text-2xl">{area.emoji}</span>
                   <h2 className="text-lg font-semibold">{area.label}</h2>
@@ -353,35 +368,63 @@ export default function EventBriefingPage() {
                   </p>
                 )}
 
-                <div className="space-y-6">
-                  {area.groups.map((group, gi) => (
-                    <div key={gi} className="space-y-4">
-                      {group.label && (
-                        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border pb-1.5">
-                          {group.label}
-                        </h3>
-                      )}
-                      {group.fields.map((field) => (
-                        <div key={field.key} className="space-y-1.5">
-                          <Label htmlFor={field.key}>{field.label}</Label>
-                          {field.type === "textarea" ? (
-                            <Textarea
-                              id={field.key}
-                              rows={3}
-                              placeholder={`${field.label}...`}
-                              {...register(field.key)}
-                            />
+                {area.conferenciaDeMobiliario && <ConferenciaDeMobiliario eventId={eventId} />}
+
+                <div className="space-y-3">
+                  {area.groups.map((group, gi) => {
+                    if (group.mostrarSe && valores[group.mostrarSe.campo] !== group.mostrarSe.valor) {
+                      return null;
+                    }
+                    const chave = `${area.key}:${group.key ?? gi}`;
+                    const conteudo = (
+                      <BlocoDoBriefing
+                        group={group}
+                        register={register}
+                        valores={valores}
+                        escolher={(campo, valor) =>
+                          setValue(campo, valor, { shouldDirty: true })
+                        }
+                      >
+                        {group.itens && (
+                          <AssemblyItemsSection
+                            eventId={eventId}
+                            area={area.key}
+                            areaLabel={area.label}
+                            bloco={group.itens}
+                          />
+                        )}
+                        {group.referencias && (
+                          <ReferenciasDoBloco eventId={eventId} ambiente={group.referencias.ambiente} />
+                        )}
+                      </BlocoDoBriefing>
+                    );
+                    // Grupo sem título (Informações Gerais) é o de sempre: aberto.
+                    if (!group.label) return <div key={chave}>{conteudo}</div>;
+                    const aberto = abertos[chave] ?? blocoComecaAberto(group, gi, valores, itensDaArea);
+                    return (
+                      <section key={chave} className="rounded-xl border border-border bg-card">
+                        <button
+                          type="button"
+                          onClick={() => setAbertos((a) => ({ ...a, [chave]: !aberto }))}
+                          aria-expanded={aberto}
+                          className="flex w-full items-start justify-between gap-2 px-4 py-3 text-left cursor-pointer"
+                        >
+                          <span className="min-w-0">
+                            <span className="block text-sm font-semibold">{group.label}</span>
+                            {group.descricao && (
+                              <span className="block text-xs text-muted-foreground">{group.descricao}</span>
+                            )}
+                          </span>
+                          {aberto ? (
+                            <ChevronUp className="mt-0.5 size-4 flex-shrink-0 text-muted-foreground" />
                           ) : (
-                            <Input
-                              id={field.key}
-                              placeholder={field.label}
-                              {...register(field.key)}
-                            />
+                            <ChevronDown className="mt-0.5 size-4 flex-shrink-0 text-muted-foreground" />
                           )}
-                        </div>
-                      ))}
-                    </div>
-                  ))}
+                        </button>
+                        {aberto && <div className="border-t border-border px-4 py-3">{conteudo}</div>}
+                      </section>
+                    );
+                  })}
                 </div>
 
                 <div className="flex justify-between mt-8 pt-4 border-t border-border">
@@ -407,7 +450,8 @@ export default function EventBriefingPage() {
                     </Button>
                   ) : (
                     <Button
-                      type="submit"
+                      type="button"
+                      onClick={handleSubmit(onSave)}
                       disabled={!isDirty || isSubmitting}
                       className="cursor-pointer flex items-center gap-1.5"
                     >
@@ -416,7 +460,7 @@ export default function EventBriefingPage() {
                     </Button>
                   )}
                 </div>
-              </form>
+              </div>
 
               {/* Itens operacionais da área (fora do <form> para não submeter junto) */}
               {area.supportsItems && (
@@ -424,6 +468,7 @@ export default function EventBriefingPage() {
                   eventId={eventId}
                   area={area.key}
                   areaLabel={area.label}
+                  blocosDaArea={blocosDaArea(area).map((b) => b.bloco)}
                 />
               )}
             </>
@@ -449,6 +494,83 @@ export default function EventBriefingPage() {
           onClose={() => setSuggesting(false)}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Um bloco começa aberto quando é o primeiro da aba ou quando já tem algo
+ * escrito ou cadastrado — quem volta ao briefing vê o que preencheu. Os
+ * complementares começam fechados: são o texto antigo, não o centro da aba.
+ */
+function blocoComecaAberto(
+  group: BriefingGroup,
+  indice: number,
+  valores: Partial<BriefingFields>,
+  itensDaArea: readonly { bloco?: string }[],
+): boolean {
+  if (group.complementar) return false;
+  if (indice === 0) return true;
+  const temTexto = group.fields.some((f) => {
+    const v = valores[f.key];
+    return typeof v === "string" && v.trim().length > 0;
+  });
+  const temItem = !!group.itens && itensDaArea.some((i) => i.bloco === group.itens!.bloco);
+  return temTexto || temItem;
+}
+
+function BlocoDoBriefing({
+  group,
+  register,
+  valores,
+  escolher,
+  children,
+}: {
+  group: BriefingGroup;
+  register: ReturnType<typeof useForm<BriefingFields>>["register"];
+  valores: Partial<BriefingFields>;
+  escolher: (campo: keyof BriefingFields, valor: string) => void;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-4">
+      {group.fields.map((field) => (
+        <div key={field.key} className="space-y-1.5">
+          <Label htmlFor={field.type === "escolha" ? undefined : field.key}>{field.label}</Label>
+          {field.dica && <p className="text-[11px] text-muted-foreground -mt-1">{field.dica}</p>}
+          {field.type === "escolha" ? (
+            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={field.label}>
+              {(field.opcoes ?? []).map((o) => {
+                const marcado = valores[field.key] === o.valor;
+                return (
+                  <button
+                    key={o.valor}
+                    type="button"
+                    role="radio"
+                    aria-checked={marcado}
+                    // Tocar de novo na resposta marcada a desfaz: "ninguém
+                    // respondeu" é diferente de "Não".
+                    onClick={() => escolher(field.key, marcado ? "" : o.valor)}
+                    className={cn(
+                      "rounded-full border px-3 py-1 text-xs cursor-pointer transition-colors",
+                      marcado
+                        ? "border-primary bg-primary/10 font-medium text-primary"
+                        : "border-border text-muted-foreground hover:bg-accent",
+                    )}
+                  >
+                    {o.rotulo}
+                  </button>
+                );
+              })}
+            </div>
+          ) : field.type === "textarea" ? (
+            <Textarea id={field.key} rows={3} placeholder={`${field.label}...`} {...register(field.key)} />
+          ) : (
+            <Input id={field.key} placeholder={field.label} {...register(field.key)} />
+          )}
+        </div>
+      ))}
+      {children}
     </div>
   );
 }

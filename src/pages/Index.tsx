@@ -30,7 +30,7 @@ const features = [
     icon: ClipboardList,
     title: "Briefing Completo",
     description:
-      "Questionário com 61 campos organizados por seção para capturar todos os detalhes do evento.",
+      "Questionário com 83 campos organizados por seção para capturar todos os detalhes do evento.",
   },
   {
     icon: Sparkles,
@@ -362,7 +362,7 @@ export default function Index() {
             <ul className="text-sm text-left space-y-3 mb-8">
               {[
                 "Eventos ilimitados",
-                "Briefing digital completo (61 campos)",
+                "Briefing digital completo (83 campos)",
                 "Checklist de carregamento com fotos",
                 "Gestão de equipe e compras",
                 "Dashboard financeiro",

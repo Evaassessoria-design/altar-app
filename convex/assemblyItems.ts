@@ -20,6 +20,7 @@ import {
 import { requireActiveAccess } from "./lib/accessGuard";
 import { limparCampos } from "./lib/limparCampos";
 import { exigirDinheiroGravavel, exigirQuantidadeGravavel } from "./lib/numeroGravavel";
+import { camposDoBriefingNoItem, camposDoBriefingNoItemEditaveis } from "./lib/itemDoBriefing";
 import { safeDeleteFile } from "./lib/cascade";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,6 +50,7 @@ const itemFields = {
   includeInAssemblyReport: v.boolean(),
   checkOnAssembly: v.boolean(),
   visibility,
+  ...camposDoBriefingNoItem,
 } as const;
 
 /**
@@ -229,7 +231,11 @@ export const update = mutation({
     // `null` = limpar. Ver convex/lib/limparCampos.ts.
     quantity: v.optional(v.union(v.number(), v.null())),
     unit: v.optional(v.string()),
-    supplierId: v.optional(v.id("eventSuppliers")),
+    // `null` = desfazer o vínculo com o fornecedor do evento. A tela já mandava
+    // `null` ao anotar um nome solto ou escolher "Sem fornecedor", e o
+    // validador recusava o pedido inteiro: o nome digitado nunca era gravado
+    // e aparecia "Erro ao salvar item" (homologação de 14/10).
+    supplierId: v.optional(v.union(v.id("eventSuppliers"), v.null())),
     supplierName: v.optional(v.string()),
     ambiente: v.optional(v.string()),
     notes: v.optional(v.string()),
@@ -258,6 +264,7 @@ export const update = mutation({
       ),
     ),
     visibility: v.optional(visibility),
+    ...camposDoBriefingNoItemEditaveis,
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
@@ -275,7 +282,7 @@ export const update = mutation({
     // O fornecedor precisa ser DESTE evento, e o evento é o do item — não o
     // que o navegador disser. Sem isto, `update` era a porta lateral que
     // escapava da guarda de `create`.
-    await requireEventSupplier(ctx, user._id, item.eventId, args.supplierId);
+    await requireEventSupplier(ctx, user._id, item.eventId, args.supplierId ?? undefined);
     const { id, ...fields } = args;
     await ctx.db.patch(id, {
       ...limparCampos(fields),

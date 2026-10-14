@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { camposDoBriefingNoItem } from "./lib/itemDoBriefing";
 
 // ── CENTRAL DE COMUNICAÇÕES ─────────────────────────────────────────────────
 // Os validadores vivem em convex/lib/central/validadores.ts — fonte única,
@@ -301,6 +302,31 @@ const briefingFields = {
   insuranceInfo: v.optional(v.string()),
   emergencyContact: v.optional(v.string()),
   otherNotes: v.optional(v.string()),
+  // ── Reorganização do briefing (14/10) — aditivos, sem backfill. AUSENTE =
+  // ninguém respondeu. As escolhas (Sim/Não/A definir) são gravadas como
+  // texto curto ("sim", "nao", "a_definir"…), como todo campo daqui.
+  ceremonyLocation: v.optional(v.string()),
+  ceremonySetupDeadline: v.optional(v.string()),
+  ceremonyReuse: v.optional(v.string()),
+  kidsCorner: v.optional(v.string()),
+  kidsCornerLocation: v.optional(v.string()),
+  kidsCornerResponsible: v.optional(v.string()),
+  flowersPreferred: v.optional(v.string()),
+  flowersAvoid: v.optional(v.string()),
+  flowerInspirations: v.optional(v.string()),
+  flowerSubstitutions: v.optional(v.string()),
+  cakeType: v.optional(v.string()),
+  cakeDimensions: v.optional(v.string()),
+  cakeSupport: v.optional(v.string()),
+  cakeDeliveryResponsible: v.optional(v.string()),
+  sweetsLayoutResponsible: v.optional(v.string()),
+  cakeFinishResponsible: v.optional(v.string()),
+  electricInstaller: v.optional(v.string()),
+  electricConnector: v.optional(v.string()),
+  electricianNeeded: v.optional(v.string()),
+  electricConfirmResponsible: v.optional(v.string()),
+  electricSchedule: v.optional(v.string()),
+  electricNotes: v.optional(v.string()),
 } as const;
 
 
@@ -1963,6 +1989,10 @@ export default defineSchema({
     // "Arranjo clássico" amanhã não pode recalcular, em silêncio, um evento
     // que já foi executado. AUSENTE = item sem ficha técnica, que é o estado
     // de todo item cadastrado antes desta rodada.
+    // ── O ITEM VISTO DO BRIEFING (14/10, aditivo) ───────────────────────────
+    // Bloco, situação, origem, conferência de mobiliário e reaproveitamento.
+    // AUSENTE = o que o item sempre foi. Ver `lib/itemDoBriefing.ts`.
+    ...camposDoBriefingNoItem,
     receita: v.optional(v.array(componenteDaReceita)),
     /**
      * Composição da biblioteca que originou esta receita, quando houve uma.

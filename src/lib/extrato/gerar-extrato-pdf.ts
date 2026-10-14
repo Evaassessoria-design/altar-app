@@ -164,7 +164,12 @@ export function desenharExtrato(d: DocumentoDoExtrato, empresa?: EmpresaLike | n
       paraPdf(x.fornecedor),
       brlDeCentavos(x.centavos),
     ]),
-    foot: [["", "", "A receber / a pagar", "", brlDeCentavos(d.totais.aReceberCentavos), brlDeCentavos(d.totais.aPagarCentavos)]],
+    // Dois totais em duas linhas, na coluna do valor: lado a lado, o "a pagar"
+    // caía embaixo de "Fornecedor" e parecia outra coisa.
+    foot: [
+      ["", "", "Total a receber", "", "", brlDeCentavos(d.totais.aReceberCentavos)],
+      ["", "", "Total a pagar", "", "", brlDeCentavos(d.totais.aPagarCentavos)],
+    ],
     columnStyles: {
       0: { cellWidth: 22 },
       1: { cellWidth: 20 },

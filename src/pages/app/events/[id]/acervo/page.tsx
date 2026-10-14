@@ -139,8 +139,14 @@ export default function AcervoDoEventoPage() {
         <ArrowLeft className="size-4" /> {event.name}
       </Link>
 
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
+      {/* `flex-wrap` + `min-w-0`: a 390 px o título e os DOIS botões não cabem
+          na mesma linha, e com o grupo de botões `flex-shrink-0` o último
+          ("Reservar peça") saía cortado na borda da tela — justamente a ação
+          principal, e justamente no aparelho em que ela é usada, no galpão.
+          Sem `min-w-0` o bloco do título também não cede espaço. O estado
+          vazio desta mesma página já usava `flex-wrap`. */}
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Boxes className="size-5 text-primary" /> Acervo do evento
           </h1>

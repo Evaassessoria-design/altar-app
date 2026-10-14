@@ -279,7 +279,17 @@ function ConvertDialog({
     resolver: zodResolver(convertSchema),
     defaultValues: {
       eventName: `${lead.clientName} - ${rotuloDoTipoDeEvento(lead.eventType) ?? "Evento"}`,
-      eventDate: lead.eventDate ?? "",
+      // ── A DATA DO LEAD CHEGA AQUI, E PRECISA CABER NO CAMPO ─────────────────
+      // O lead grava o DIA (`<input type="date">` → "2027-05-22"). Este campo
+      // era `datetime-local`, que SÓ aceita "AAAA-MM-DDTHH:mm": o navegador
+      // descartava o valor em silêncio e a decoradora via "Data *" VAZIA num
+      // lead que tinha data — e precisava redigitar na frente da cliente.
+      //
+      // Agora o campo é `type="date"`, que é o que `lib/dataDeEvento.ts`
+      // documenta como o caminho da conversão: na conversão existe o dia; o
+      // horário é combinado depois, no formulário do evento. `slice(0, 10)`
+      // porque um lead antigo pode ter sido gravado com horário.
+      eventDate: (lead.eventDate ?? "").slice(0, 10),
       // O local já foi anotado durante a negociação. Sem isto, a decoradora
       // redigitava a fazenda que ela mesma cadastrou no lead.
       location: lead.venue ?? "",
@@ -320,7 +330,10 @@ function ConvertDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Data *</Label>
-              <Input type="datetime-local" {...register("eventDate")} />
+              {/* `date`, não `datetime-local`: ver o comentário em
+                  `defaultValues.eventDate`. O horário entra depois, na tela do
+                  evento, que usa `datetime-local` de propósito. */}
+              <Input type="date" {...register("eventDate")} />
               {errors.eventDate && <p className="text-xs text-destructive">{errors.eventDate.message}</p>}
             </div>
             <div className="space-y-1.5">

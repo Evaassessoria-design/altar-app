@@ -91,7 +91,13 @@ mantém o comportamento de antes em todas as regras novas.
 
 ## 6. O que NÃO foi feito, e por quê
 
-**A publicação no DEV não aconteceu. A rede deste ambiente recusa o Convex.**
+**A publicação no DEV não aconteceu, nas duas tentativas (14/10, manhã e
+noite). A rede deste ambiente recusa o Convex.** A segunda sessão rodou na
+MESMA máquina da primeira — um container Linux na nuvem (`vm`, root), não o seu
+PC —, e por isso o bloqueio é o mesmo. Conferido também que este container não
+tem a configuração do DEV: o `.env.local` daqui aponta para um backend
+self-hosted local (`127.0.0.1:3210`), resquício de uma sessão antiga, e não há
+`CONVEX_DEPLOYMENT`. O arquivo com o alvo `healthy-pika-907` é o do seu PC.
 
 ```
 version.convex.dev:443          → CONNECT 403 (policy denial)
@@ -179,7 +185,75 @@ trabalha):
 **Ensaio:** rode a trilha escolhida inteira uma vez antes das 19h30. O item 12
 é o que ninguém viu em navegador depois da integração.
 
-## 9. Limitações desta entrega
+## 9. Os três defeitos apontados nominalmente (14/10, 2ª passada)
+
+A lista reconstruída no relatório anterior saiu dos relatórios das branches, e
+você avisou que ela não corresponde à homologação. Estes três foram conferidos
+**no código, um por um, sem presumir correção**:
+
+### 9.1 Data vazia ao converter lead em evento — ERA REAL, corrigido agora
+
+**Mecanismo.** O lead grava o DIA (`<input type="date">` → `"2027-05-22"`). O
+diálogo de conversão preenchia `defaultValues.eventDate = lead.eventDate` num
+`<input type="datetime-local">`, e esse campo só aceita
+`"AAAA-MM-DDTHH:mm"`: o navegador **descarta o valor em silêncio**. Resultado —
+lead com data, campo "Data *" vazio, e a decoradora redigitando na frente da
+cliente. Enviar vazio não corrompia nada (o zod barra com "Data obrigatória" e
+o servidor recusaria por `DATA_DE_EVENTO_INVALIDA`), mas o trabalho se perdia.
+
+**Correção (só tela):** o campo passou a `type="date"`, que é o que
+`convex/lib/dataDeEvento.ts` já documentava como o caminho da conversão — "na
+conversão existe o dia; o horário é combinado depois". O valor inicial é
+cortado no dia (`slice(0, 10)`) para um lead antigo gravado com horário também
+preencher. O formulário DO EVENTO continua com `datetime-local`: ali o horário
+faz parte do evento. Guardas em `src/lib/defeitos-homologacao-14-10.test.ts`.
+
+### 9.2 Proposta aceita não vinculada à Jornada do evento — ERA REAL, **continua presente**
+
+**Mecanismo.** A Jornada lê as propostas do evento por índice:
+`proposals.withIndex("by_event", eventId)` (`convex/health.ts`). Uma proposta
+criada no funil nasce com **`leadId`**, não com `eventId` — e
+`funil.convertToEvent` religa apenas o lead (`stage`, `convertedEventId`).
+Nenhum caminho passa o `eventId` para a proposta. Então, depois de converter um
+lead com proposta ACEITA, a etapa "Orçamento e proposta" da Jornada mostra
+**"Sem orçamento nem proposta"**.
+
+A regra que avalia a etapa está certa (`avaliarComercial` devolve "Proposta
+aprovada" quando há `status === "aceita"`): o que falta é a proposta chegar até
+ela. O dado não está errado nem perdido — a proposta aceita existe e aparece em
+Propostas e no funil. É a Jornada do evento que não a enxerga.
+
+**Por que NÃO corrigi agora.** Há três caminhos, e nenhum é de uma linha:
+
+| Caminho | Custo | Risco |
+| --- | --- | --- |
+| Religar na conversão (patch `eventId` na proposta do lead) | escrita nova em `convertToEvent` | a proposta passa a ter os DOIS vínculos; precisa conferir todo consumidor de `proposals` |
+| Buscar o lead de origem na leitura (como `leadDocuments.listForEvent` já faz) | varredura dos leads da conta **na consulta quente da tela do evento** | contraria as guardas de escala do repositório (40+ eventos) |
+| Índice novo `by_converted_event` em `leads` | schema deixa de ser idêntico ao do DEV | aditivo e seguro, mas amplia o diff na véspera |
+
+Minha recomendação é a primeira, com conferência dos consumidores — **depois**
+da live. Escolher isso a duas horas da demonstração é o tipo de decisão que
+produz o defeito seguinte.
+
+**Na demonstração:** a etapa "Orçamento e proposta" vai aparecer como não
+iniciada no evento recém-convertido. Ou não abra o cartão da Jornada nesse
+momento, ou diga que o vínculo proposta→jornada é a próxima correção.
+
+### 9.3 Botão "Reservar peça" cortado no celular — ERA REAL, corrigido agora
+
+**Mecanismo.** O cabeçalho do Acervo do evento era
+`flex items-start justify-between` **sem `flex-wrap`**, com o bloco do título
+sem `min-w-0` e o grupo de botões em `flex-shrink-0`. A 390 px, "Acervo do
+evento" (2xl) + "Reservar da ficha" + "Reservar peça" não cabem na linha: nada
+cede, e o último botão — a ação principal — sai pela borda. O estado vazio da
+MESMA página já usava `flex-wrap`; o cabeçalho ficou para trás.
+
+**Correção (só tela):** `flex-wrap` no cabeçalho e `min-w-0` no bloco do
+título. A trava `src/lib/mobile-controls.test.ts` não pegava isto porque ela
+procura controle escondido (`hidden sm:`), não controle que transborda — o novo
+guarda cobre o caso.
+
+## 10. Limitações desta entrega
 
 - **Nada validado em navegador depois do merge.** Os sete itens que você pediu
   continuam pendentes, todos pelo mesmo motivo da seção 6.

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { ExportarExtratoDialog } from "@/components/financeiro/exportar-extrato-dialog.tsx";
 import { AutoTextarea } from "@/components/ui/auto-textarea.tsx";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api.js";
@@ -46,6 +47,7 @@ import {
   HandCoins,
   History,
   MoreVertical,
+  FileDown,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -466,6 +468,8 @@ export default function FinanceiroPage() {
   // "Hoje" no fuso do NEGÓCIO, para a data padrão de recebimento e pagamento
   // (a mesma da aba Pagamentos da cliente).
   const hoje = dataDoDiaNoFuso(new Date(), livro?.fuso);
+  // O extrato abre no mês de hoje do NEGÓCIO (mesmo fuso do livro).
+  const [exportando, setExportando] = useState(false);
   const addTransaction = useMutation(api.financeiro.addTransaction);
   const updateTransaction = useMutation(api.financeiro.updateTransaction);
   const deleteTransaction = useMutation(api.financeiro.deleteTransaction);
@@ -573,10 +577,16 @@ export default function FinanceiroPage() {
           <h1 className="text-2xl font-bold">Financeiro</h1>
           <p className="text-sm text-muted-foreground">Controle de receitas e despesas</p>
         </div>
-        <Button onClick={() => setCreating(true)} className="cursor-pointer gap-2">
-          <Plus className="size-4" /> Lançamento
-        </Button>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button variant="secondary" onClick={() => setExportando(true)} className="cursor-pointer gap-2">
+            <FileDown className="size-4" /> Exportar extrato
+          </Button>
+          <Button onClick={() => setCreating(true)} className="cursor-pointer gap-2">
+            <Plus className="size-4" /> Lançamento
+          </Button>
+        </div>
       </div>
+      {exportando && <ExportarExtratoDialog hoje={hoje} onClose={() => setExportando(false)} />}
 
       {/* Summary cards */}
       {summary === undefined ? (

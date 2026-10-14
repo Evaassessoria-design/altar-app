@@ -1,4 +1,5 @@
 import { mutation, query, type MutationCtx } from "./_generated/server";
+import { paginationOptsValidator } from "convex/server";
 import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
@@ -1050,5 +1051,99 @@ export const anularRecebimento = mutation({
     const baixa = baixaDerivada({ ...tx, recebimentos: lista });
     await ctx.db.patch(args.id, { recebimentos: lista, isPaid: baixa.isPaid, paidAt: baixa.paidAt });
     return { anulado: true };
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXTRATO POR PERÍODO — A LEITURA (14/10)
+//
+// O extrato não pode ser "os últimos 500": precisa de TODO lançamento da conta
+// que toque o período. Um recebimento de outubro pode estar numa parcela que
+// vence em qualquer mês, então o vencimento não serve de corte e a consulta
+// lê a conta inteira — em PÁGINAS, pelo índice do dono. A tela pede página
+// após página até `isDone`, e só então monta (`lib/extrato.ts`).
+//
+// ── ISOLAMENTO ──────────────────────────────────────────────────────────────
+// Nenhum argumento diz de quem é o dado: o dono é a sessão (`requireUser`), e
+// o índice `by_user` só alcança as linhas dela. Não há caminho para ler outra
+// conta, nem consulta global.
+//
+// ── O QUE SAI ───────────────────────────────────────────────────────────────
+// Só o que o extrato usa. Nenhuma URL de arquivo: o comprovante vira "tem /
+// não tem" — um link permanente num PDF guardado contornaria o login.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Teto da página pedida pela tela. Mais que isso, recusa em vez de ler tudo. */
+const PAGINA_MAXIMA_DO_EXTRATO = 500;
+
+export const extratoPagina = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    if (args.paginationOpts.numItems > PAGINA_MAXIMA_DO_EXTRATO) {
+      throw new ConvexError({ code: "BAD_REQUEST", message: "Página grande demais para o extrato." });
+    }
+    const pagina = await ctx.db
+      .query("transactions")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .paginate(args.paginationOpts);
+    const linhas = await Promise.all(
+      pagina.page.map(async (t) => {
+        // Fornecedor da despesa: o da compra que a gerou, quando houver.
+        const compra =
+          t.type === "expense"
+            ? await ctx.db
+                .query("purchaseItems")
+                .withIndex("by_transaction", (q) => q.eq("transactionId", t._id))
+                .first()
+            : null;
+        return {
+          _id: t._id as string,
+          type: t.type,
+          description: t.description,
+          category: t.category,
+          amount: t.amount,
+          date: t.date,
+          isPaid: t.isPaid,
+          paidAt: t.paidAt,
+          paymentMethod: t.paymentMethod,
+          eventId: t.eventId as string | undefined,
+          temComprovante: (t.comprovantes?.length ?? 0) > 0,
+          fornecedor: compra && compra.userId === user._id ? compra.supplier?.trim() || undefined : undefined,
+          recebimentos: (t.recebimentos ?? []).map((r) => ({
+            id: r.id,
+            valor: r.valor,
+            data: r.data,
+            forma: r.forma,
+            // Presença, não o id: o extrato só diz se há comprovante.
+            comprovanteStorageId: r.comprovanteStorageId ? ("tem" as const) : undefined,
+            registradoEm: r.registradoEm,
+            chave: r.chave,
+            anulacao: r.anulacao,
+          })),
+        };
+      }),
+    );
+    return { ...pagina, page: linhas };
+  },
+});
+
+/**
+ * Nome e cliente dos eventos que aparecem no extrato. Só os da sessão: id de
+ * outra conta (ou apagado) simplesmente não volta.
+ */
+export const eventosDoExtrato = query({
+  args: { ids: v.array(v.id("events")) },
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx);
+    if (args.ids.length > 200) {
+      throw new ConvexError({ code: "BAD_REQUEST", message: "Peça os eventos em partes de até 200." });
+    }
+    const saida: { _id: string; name: string; clientName: string }[] = [];
+    for (const id of args.ids) {
+      const ev = await ctx.db.get(id);
+      if (ev && ev.userId === user._id) saida.push({ _id: ev._id, name: ev.name, clientName: ev.clientName });
+    }
+    return saida;
   },
 });

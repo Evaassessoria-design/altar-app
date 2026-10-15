@@ -1,5 +1,6 @@
 import jsPDF from "jspdf";
 import { entregarPdf } from "./pdf-delivery.ts";
+import { cabeNaLargura, nomeDeArquivo } from "./pdf-marca.ts";
 import { ASSINATURA_ALTAR, resolveIdentidade, type EmpresaLike } from "./brand.ts";
 import { formatEventDayOnly } from "./event-date.ts";
 import { chaveDoAmbiente } from "./decoration-project.ts";
@@ -323,10 +324,15 @@ export async function generateLoadingPDF(data: LoadingPdfData): Promise<void> {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     doc.setTextColor(150, 150, 150);
-    doc.text(`${identidade.nome} · ${data.event.name}`, MARGIN, PAGE_H - 6);
+    // Até a metade da linha, menos o "Página X de Y" centralizado.
+    doc.text(
+      cabeNaLargura(doc, `${identidade.nome} · ${data.event.name}`, PAGE_W / 2 - MARGIN - 14),
+      MARGIN,
+      PAGE_H - 6,
+    );
     doc.text(`Página ${i} de ${total}`, PAGE_W / 2, PAGE_H - 6, { align: "center" });
     doc.text(ASSINATURA_ALTAR, PAGE_W - MARGIN, PAGE_H - 6, { align: "right" });
   }
 
-  entregarPdf(doc, `carregamento-${data.event.name.replace(/[^\w\s-]/g, "").trim() || "evento"}.pdf`);
+  entregarPdf(doc, nomeDeArquivo("carregamento", data.event.name));
 }

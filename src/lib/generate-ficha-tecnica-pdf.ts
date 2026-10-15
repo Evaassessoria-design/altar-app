@@ -1,5 +1,6 @@
 import jsPDF from "jspdf";
 import { entregarPdf } from "./pdf-delivery.ts";
+import { nomeDeArquivo } from "./pdf-marca.ts";
 import { ASSINATURA_ALTAR, resolveIdentidade, type EmpresaLike } from "./brand.ts";
 import { formatEventDayOnly } from "./event-date.ts";
 // Mesma função que a tela da ficha, o Caderno e a Folha de Carregamento
@@ -280,5 +281,5 @@ export async function generateFichaTecnicaPDF(data: FichaTecnicaPdfData): Promis
     doc.text(`${p}/${paginas}`, PAGE_W - MARGIN, PAGE_H - 8, { align: "right" });
   }
 
-  entregarPdf(doc, `ficha-tecnica-${data.event.name.replace(/[^\w]+/g, "-").toLowerCase()}.pdf`);
+  entregarPdf(doc, nomeDeArquivo("ficha-tecnica", data.event.name));
 }

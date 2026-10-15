@@ -1369,7 +1369,9 @@ export default function FunilPage() {
             clientName: editing.clientName,
             clientPhone: editing.clientPhone,
             eventType: editing.eventType,
-            eventDate: editing.eventDate,
+            // O campo é `type="date"`: valor com horário (lead antigo) era descartado
+            // calado, e salvar a edição apagava a data.
+            eventDate: editing.eventDate?.slice(0, 10),
             budget: editing.budget?.toString(),
             stage: editing.stage,
             notes: editing.notes,

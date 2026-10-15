@@ -121,7 +121,8 @@ export function rodapeEmTodasAsPaginas({
 
     const esquerda = [identidade.nome, referencia].filter(Boolean).join("  ·  ");
     doc.setTextColor(150, 150, 150);
-    doc.text(esquerda, margem, A4_ALTURA - 12);
+    // Cortado antes do "p/N": nome de evento longo encavalava com ele.
+    doc.text(cabeNaLargura(doc, esquerda, A4_LARGURA - 2 * margem - 14), margem, A4_ALTURA - 12);
     doc.text(`${p}/${paginas}`, A4_LARGURA - margem, A4_ALTURA - 12, { align: "right" });
 
     if (audiencia === "interno") {
@@ -134,4 +135,41 @@ export function rodapeEmTodasAsPaginas({
     doc.setFontSize(6.5);
     doc.text(ASSINATURA_ALTAR, A4_LARGURA - margem, A4_ALTURA - 8, { align: "right" });
   }
+}
+
+/**
+ * O texto cortado para caber em `largura` (mm), com reticências na última
+ * palavra inteira.
+ *
+ * Existe porque o rodapé imprimia `empresa · nome do evento` sem limite e um
+ * nome longo ("Casamento de Maria Eduarda & João Pedro — Fazenda Santa
+ * Bárbara") encavalava com "Página X de Y" (homologação de 14/10). O caderno
+ * já cortava; a folha de carregamento e os documentos internos não.
+ */
+export function cabeNaLargura(doc: jsPDF, texto: string, largura: number): string {
+  if (doc.getTextWidth(texto) <= largura) return texto;
+  let corte = texto;
+  while (corte.length > 1 && doc.getTextWidth(`${corte}…`) > largura) {
+    const semUltimaPalavra = corte.replace(/\s+\S*$/, "");
+    corte = semUltimaPalavra.length < corte.length ? semUltimaPalavra : corte.slice(0, -1);
+  }
+  return `${corte.trimEnd()}…`;
+}
+
+/**
+ * Nome de arquivo legível a partir do nome do evento.
+ *
+ * Tira o ACENTO antes de trocar o resto por hífen. `/[^\w]+/` sozinho fazia
+ * "Aniversário" virar "anivers-rio", e `/[^\w\s-]/` fazia "João" virar "Joo"
+ * — a decoradora procurava o arquivo nos Downloads pelo nome da cliente e não
+ * achava.
+ */
+export function nomeDeArquivo(prefixo: string, nome: string): string {
+  const base = nome
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^\w]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+  return `${prefixo}-${base || "evento"}.pdf`;
 }

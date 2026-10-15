@@ -567,6 +567,14 @@ export function ItemCard({
                 Mostrar no caderno do cliente
               </label>
             )}
+            {/* O caderno só lê itens do relatório de montagem
+                (src/lib/caderno/montar-caderno.ts). Sem este aviso, marcar
+                "cliente" com o relatório desligado não fazia nada, calado. */}
+            {item.visibility === "cliente" && !item.includeInAssemblyReport && (
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                Para aparecer no caderno, marque também “Incluir no relatório de montagem”.
+              </p>
+            )}
           </div>
 
           <Button

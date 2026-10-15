@@ -33,7 +33,8 @@ export type TipoDeOperacao =
   | "desmontagem"
   | "evento"
   | "retirada"
-  | "devolucao";
+  | "devolucao"
+  | "reuniao";
 
 export const ROTULO_DA_OPERACAO: Record<TipoDeOperacao, string> = {
   montagem: "Montagem",
@@ -43,6 +44,7 @@ export const ROTULO_DA_OPERACAO: Record<TipoDeOperacao, string> = {
   evento: "Evento",
   retirada: "Retirada do acervo",
   devolucao: "Devolução do acervo",
+  reuniao: "Reunião",
 };
 
 export type EventoDaAgenda = {
@@ -68,6 +70,19 @@ export type ReservaDaAgenda = {
   voltou?: number;
 };
 
+/** Reunião do evento, como `agenda.listarOperacoes` devolve (já sem canceladas). */
+export type ReuniaoDaAgenda = {
+  _id: string;
+  eventoId: string;
+  evento: string;
+  titulo: string;
+  data: string;
+  horario?: string;
+  situacao: string;
+  link?: string;
+  participantes?: string;
+};
+
 export type Operacao = {
   /** Chave estável para o React. */
   chave: string;
@@ -83,6 +98,8 @@ export type Operacao = {
   pecas?: number;
   /** Aviso derivado com segurança. `null` quando não há o que dizer. */
   alerta: string | null;
+  /** Só em reunião: qual abrir, o título e a sala externa. */
+  reuniao?: { id: string; titulo: string; link?: string; participantes?: string };
 };
 
 export type DiaDaAgenda = {
@@ -276,11 +293,28 @@ export function montarAgenda(
   reservas: readonly ReservaDaAgenda[],
   de: string,
   ate: string,
+  reunioes: readonly ReuniaoDaAgenda[] = [],
 ): DiaDaAgenda[] {
   const todas: Operacao[] = [];
   for (const e of eventos) {
     todas.push(...operacoesDoEvento(e));
     todas.push(...operacoesDoAcervo(e, reservas));
+  }
+  // A reunião é da agenda da DECORADORA, não da operação de montagem: sem
+  // equipe, sem local do evento (ela acontece por link ou no estúdio).
+  for (const r of reunioes) {
+    todas.push({
+      chave: `${r.eventoId}:reuniao:${r._id}`,
+      data: diaCivil(r.data),
+      horario: parseTime(r.horario) ?? null,
+      tipo: "reuniao",
+      eventoId: r.eventoId,
+      evento: r.evento,
+      local: "",
+      equipe: [],
+      alerta: null,
+      reuniao: { id: r._id, titulo: r.titulo, link: r.link, participantes: r.participantes },
+    });
   }
 
   const noRecorte = todas.filter((o) => o.data >= de && o.data <= ate).sort(ordenar);

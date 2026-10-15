@@ -106,7 +106,14 @@ describe("nenhuma tabela paralela ao que já existe", () => {
     // canal, com id externo e carimbo da plataforma. Aqui não chegou nada.
     // Guardar as duas juntas faria a Central tratar como igualmente
     // verificados um dado de canal e um dado de memória de quem digitou.
-    expect(TABELAS.length).toBe(42);
+    //
+    // 42 → 43: `reunioes`, a reunião do evento e o que ficou decidido nela.
+    // É FONTE — data, ata, decisões e pendências não existem em outro lugar.
+    // Não é segunda agenda: a Agenda (`agenda.listarOperacoes`) LÊ esta
+    // tabela. Não é `checklistItems`: aquele é o Carregamento, e pendência de
+    // reunião sairia impressa na folha do galpão. Não é `assistantTasks`:
+    // aquela é o Escritório de IA, e a reunião é registro humano.
+    expect(TABELAS.length).toBe(43);
   });
 });
 

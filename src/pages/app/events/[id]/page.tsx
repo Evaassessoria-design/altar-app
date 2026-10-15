@@ -17,6 +17,7 @@ import { OperationalSummary } from "./_components/operational-summary.tsx";
 import { EventDocuments } from "./_components/event-documents.tsx";
 import { CartaoPagamentosDaCliente } from "./_components/pagamentos-da-cliente.tsx";
 import { PropostaDoEvento } from "./_components/proposta-do-evento.tsx";
+import { ReunioesDoEvento } from "./_components/reunioes-do-evento.tsx";
 import { ResponsavelSelect } from "@/components/responsavel-select.tsx";
 import { toast } from "sonner";
 import {
@@ -569,6 +570,9 @@ export default function EventDetailsPage() {
           onClose={() => setLayoutReview(null)}
         />
       )}
+
+      {/* Reuniões com a cliente — o que foi decidido, dentro do evento. */}
+      <ReunioesDoEvento eventId={id as Id<"events">} />
 
       {/* Checklists */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">

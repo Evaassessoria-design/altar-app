@@ -2700,4 +2700,57 @@ export default defineSchema({
     alteradoPorUserId: v.id("users"),
     alteradoEm: v.number(),
   }).index("by_vertical_channel_departamento", ["vertical", "channel", "departamento"]),
+
+  // ── REUNIÕES DO EVENTO ────────────────────────────────────────────────────
+  // A reunião com a cliente e o que foi DECIDIDO nela, dentro do evento. A
+  // chamada acontece onde já acontece (Meet, Zoom, presencial): aqui fica só o
+  // link, nunca a sala (docs/ideias-registradas.md, A e D4).
+  //
+  // É FONTE, não espelho: data e ata não existem em nenhum outro lugar. A
+  // Agenda LÊ esta tabela (agenda.listarOperacoes) — não há segunda agenda.
+  // A cliente é a do evento: nenhum cadastro de pessoa aqui, `participantes`
+  // é o texto que a decoradora informou.
+  //
+  // As pendências moram NA reunião, com responsável e prazo. Não viram item
+  // de `checklistItems`: aquele é o Carregamento (o que vai no caminhão), e
+  // "mandar a paleta para a cliente" sairia impresso na folha do galpão.
+  reunioes: defineTable({
+    userId: v.id("users"),
+    eventId: v.id("events"),
+    titulo: v.string(),
+    /** "AAAA-MM-DD" — dia civil, comparado como texto (lib/dataDoDia). */
+    data: v.string(),
+    /** "HH:MM". AUSENTE = horário não combinado; a tela diz isso, não inventa. */
+    horario: v.optional(v.string()),
+    /** Quem estava/estará, como ela escreveu. AUSENTE = não informado. */
+    participantes: v.optional(v.string()),
+    /** Endereço http(s) da sala externa. AUSENTE = presencial ou sem link. */
+    link: v.optional(v.string()),
+    situacao: v.union(v.literal("agendada"), v.literal("realizada"), v.literal("cancelada")),
+    pauta: v.optional(v.string()),
+    /** As notas ORIGINAIS. Nenhuma sugestão de IA as reescreve. */
+    anotacoes: v.optional(v.string()),
+    /** Resumo aceito pela pessoa (escrito por ela ou sugestão revisada). */
+    resumo: v.optional(v.string()),
+    /** AUSENTE = nenhuma decisão registrada (não é "nada foi decidido"). */
+    decisoes: v.optional(v.array(v.string())),
+    pendencias: v.optional(
+      v.array(
+        v.object({
+          texto: v.string(),
+          responsavel: v.optional(v.string()),
+          /** "AAAA-MM-DD". AUSENTE = sem prazo. */
+          prazo: v.optional(v.string()),
+          feita: v.boolean(),
+        }),
+      ),
+    ),
+    /** Dia combinado para a próxima. AUSENTE = não há próxima marcada. */
+    proximaData: v.optional(v.string()),
+    criadaEm: v.string(),
+    atualizadaEm: v.optional(v.string()),
+  })
+    .index("by_event", ["eventId"])
+    // A Agenda pergunta "o que a empresa tem entre tal e tal dia?".
+    .index("by_user_and_data", ["userId", "data"]),
 });

@@ -34,6 +34,7 @@ const Events = lazy(() => import("./pages/app/events/page.tsx"));
 const EventDetails = lazy(() => import("./pages/app/events/[id]/page.tsx"));
 const EventBriefing = lazy(() => import("./pages/app/events/[id]/briefing/page.tsx"));
 const EventChecklist = lazy(() => import("./pages/app/events/[id]/checklist/page.tsx"));
+const EventReunioes = lazy(() => import("./pages/app/events/[id]/reunioes/page.tsx"));
 const OrcamentoPage = lazy(() => import("./pages/app/events/[id]/orcamento/page.tsx"));
 const PagamentosDaClientePage = lazy(() => import("./pages/app/events/[id]/pagamentos/page.tsx"));
 const GaleriaPage = lazy(() => import("./pages/app/events/[id]/fotos/page.tsx"));
@@ -136,6 +137,7 @@ function AppRoutes() {
         <Route path="/eventos/:id" element={<EventDetails />} />
         <Route path="/eventos/:id/briefing" element={<EventBriefing />} />
         <Route path="/eventos/:id/checklist/:phase" element={<EventChecklist />} />
+        <Route path="/eventos/:id/reunioes" element={<EventReunioes />} />
         <Route path="/eventos/:id/orcamento" element={<OrcamentoPage />} />
         <Route path="/eventos/:id/pagamentos" element={<PagamentosDaClientePage />} />
         <Route path="/eventos/:id/fotos" element={<GaleriaPage />} />

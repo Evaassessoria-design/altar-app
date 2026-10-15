@@ -305,6 +305,16 @@ export async function deleteEventCascade(
     documents += 1;
   }
 
+  // Reuniões do evento: a ata é história DESTE evento, sem outro dono.
+  const reunioes = await ctx.db
+    .query("reunioes")
+    .withIndex("by_event", (q) => q.eq("eventId", eventId))
+    .collect();
+  for (const r of reunioes) {
+    await ctx.db.delete(r._id);
+    documents += 1;
+  }
+
   // ── 4. Referências ao evento em tabelas do usuário ───────────────────────
   const event = await ctx.db.get(eventId);
   if (event) {

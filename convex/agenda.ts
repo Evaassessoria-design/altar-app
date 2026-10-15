@@ -32,6 +32,9 @@ import { requireUser } from "./lib/identity";
  * @param de  primeiro dia do recorte, "AAAA-MM-DD" (inclusive)
  * @param ate último dia do recorte, "AAAA-MM-DD" (inclusive)
  */
+/** Teto de reuniões no recorte. A agenda mostra 30 dias; 200 é folga larga. */
+const LIMITE_DE_REUNIOES = 200;
+
 export const listarOperacoes = query({
   args: { de: v.string(), ate: v.string() },
   handler: async (ctx, args) => {
@@ -41,7 +44,42 @@ export const listarOperacoes = query({
     // listagem, e derrubar a tela por causa de um filtro é pior que não
     // mostrar nada. Mesmo padrão de `acervo.disponibilidade`.
     if (!args.de || !args.ate || args.de > args.ate) {
-      return { eventos: [], reservas: [] };
+      return { eventos: [], reservas: [], reunioes: [] };
+    }
+
+    // ── REUNIÕES ─────────────────────────────────────────────────────────────
+    // Lidas pela DATA DELAS, não pela do evento: a reunião de briefing é meses
+    // antes do casamento, e filtrar pelos eventos do recorte a esconderia.
+    // Cancelada não ocupa a agenda (mesma regra do evento cancelado).
+    const reunioesLidas = await ctx.db
+      .query("reunioes")
+      .withIndex("by_user_and_data", (q) =>
+        q.eq("userId", user._id).gte("data", args.de).lte("data", args.ate),
+      )
+      .take(LIMITE_DE_REUNIOES);
+    const nomeDoEvento = new Map<string, string>();
+    const reunioes = [];
+    for (const r of reunioesLidas) {
+      if (r.situacao === "cancelada") continue;
+      const chave = r.eventId as string;
+      if (!nomeDoEvento.has(chave)) {
+        const ev = await ctx.db.get(r.eventId);
+        nomeDoEvento.set(chave, ev && ev.userId === user._id ? ev.name : "");
+      }
+      const evento = nomeDoEvento.get(chave);
+      // Evento apagado ou alheio: a reunião não tem de quem ser na agenda.
+      if (!evento) continue;
+      reunioes.push({
+        _id: r._id as string,
+        eventoId: chave,
+        evento,
+        titulo: r.titulo,
+        data: r.data,
+        horario: r.horario,
+        situacao: r.situacao,
+        link: r.link,
+        participantes: r.participantes,
+      });
     }
 
     // ── events.date TEM DUAS FORMAS VÁLIDAS ──────────────────────────────────
@@ -74,7 +112,7 @@ export const listarOperacoes = query({
     if (eventos.length === 0) {
       // Sem evento no recorte não há agenda: reserva sempre pertence a um
       // evento, e sem o evento não há como dizer de quem ela é.
-      return { eventos: [], reservas: [] };
+      return { eventos: [], reservas: [], reunioes };
     }
 
     const idsNoRecorte = new Set(eventos.map((e) => e._id as string));
@@ -150,6 +188,7 @@ export const listarOperacoes = query({
           saiu: r.saiu,
           voltou: r.voltou,
         })),
+      reunioes,
     };
   },
 });

@@ -55,6 +55,7 @@ const TOM_DA_OPERACAO: Record<TipoDeOperacao, string> = {
   evento: "bg-muted text-foreground",
   retirada: "bg-muted text-muted-foreground",
   devolucao: "bg-muted text-muted-foreground",
+  reuniao: "bg-primary/10 text-primary",
 };
 
 export default function AgendaPage() {
@@ -69,7 +70,7 @@ export default function AgendaPage() {
 
   const dias = useMemo(() => {
     if (!dados) return null;
-    return montarAgenda(dados.eventos, dados.reservas, de, ate);
+    return montarAgenda(dados.eventos, dados.reservas, de, ate, dados.reunioes);
   }, [dados, de, ate]);
 
   const hoje = dataDoDia();
@@ -163,7 +164,11 @@ export default function AgendaPage() {
                 {dia.operacoes.map((op) => (
                   <Link
                     key={op.chave}
-                    to={`/eventos/${op.eventoId}`}
+                    to={
+                      op.reuniao
+                        ? `/eventos/${op.eventoId}/reunioes?reuniao=${op.reuniao.id}`
+                        : `/eventos/${op.eventoId}`
+                    }
                     className="flex items-start gap-3 px-4 py-3 hover:bg-muted/40 transition-colors"
                   >
                     {/* Horário à esquerda, largura fixa: as linhas alinham e o
@@ -196,7 +201,14 @@ export default function AgendaPage() {
                         )}
                       </div>
 
-                      <p className="text-sm font-medium mt-1 truncate">{op.evento}</p>
+                      <p className="text-sm font-medium mt-1 truncate">
+                        {op.reuniao ? `${op.reuniao.titulo} · ${op.evento}` : op.evento}
+                      </p>
+                      {op.reuniao?.participantes && (
+                        <p className="mt-0.5 text-xs text-muted-foreground truncate">
+                          {op.reuniao.participantes}
+                        </p>
+                      )}
 
                       <div className="mt-0.5 flex flex-col gap-0.5 text-xs text-muted-foreground">
                         {op.local && (

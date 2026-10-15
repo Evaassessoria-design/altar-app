@@ -331,6 +331,21 @@ export async function deleteEventCascade(
         await ctx.db.patch(lead._id, { convertedEventId: undefined });
       }
     }
+
+    // Proposta que veio do lead: VOLTA para o lead, não morre com o evento.
+    // A conversão passou a ligá-la ao evento (lib/propostasDoEvento.ts); sem
+    // isto, apagar o evento deixaria a proposta aceita apontando para o vazio.
+    // A que nasceu no próprio evento (sem lead) segue a regra de antes:
+    // continua existindo em Propostas, com o ponteiro velho.
+    const propostas = await ctx.db
+      .query("proposals")
+      .withIndex("by_event", (q) => q.eq("eventId", eventId))
+      .collect();
+    for (const p of propostas) {
+      if (p.userId === event.userId && p.leadId) {
+        await ctx.db.patch(p._id, { eventId: undefined });
+      }
+    }
   }
 
   await ctx.db.delete(eventId);

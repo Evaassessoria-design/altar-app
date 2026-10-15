@@ -621,7 +621,12 @@ export default defineSchema({
     updatedAt: v.optional(v.string()),
   })
     .index("by_user", ["userId"])
-    .index("by_user_stage", ["userId", "stage"]),
+    .index("by_user_stage", ["userId", "stage"])
+    // O evento acha o lead que o originou sem varrer o funil da conta. Existe
+    // para a proposta feita no lead aparecer na Jornada de eventos convertidos
+    // antes de a conversão passar a ligá-la (lib/propostasDoEvento.ts).
+    // Lead nunca convertido fica no trecho `undefined` do índice.
+    .index("by_converted_event", ["convertedEventId"]),
 
   // ── PROPOSTA COMERCIAL ────────────────────────────────────────────────────
   // O documento que a decoradora MANDA para a cliente.

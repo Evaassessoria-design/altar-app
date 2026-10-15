@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import { requireTeamMember, requireUser } from "./lib/identity";
 import { deleteLeadCascade } from "./lib/cascade";
+import { vincularPropostasDoLead } from "./lib/propostasDoEvento";
 import { comCarimbo } from "./lib/ultimaAtualizacao";
 import { dataDoDia } from "./lib/dataDoDia";
 import { requireActiveAccess } from "./lib/accessGuard";
@@ -274,6 +275,9 @@ export const convertToEvent = mutation({
     if (lead.convertedEventId) {
       const jaConvertido = await ctx.db.get(lead.convertedEventId);
       if (jaConvertido && jaConvertido.userId === user._id) {
+        // A repetição também liga a proposta que ficou para trás (feita no
+        // lead depois da conversão, ou antes desta correção). Idempotente.
+        await vincularPropostasDoLead(ctx, lead, jaConvertido._id);
         return jaConvertido._id;
       }
     }
@@ -321,6 +325,13 @@ export const convertToEvent = mutation({
     }
 
     await ctx.db.patch(leadId, comCarimbo({ stage: "contracted", convertedEventId: eventId }));
+
+    // ── A PROPOSTA VEM JUNTO ─────────────────────────────────────────────────
+    // A proposta aceita nasceu no lead, e a Jornada do evento lê por evento.
+    // Sem isto, o evento recém-convertido dizia "Sem orçamento nem proposta"
+    // com a proposta aprovada ali do lado (homologação de 14/10). O `leadId`
+    // da proposta fica: o funil continua contando, e a origem não se perde.
+    await vincularPropostasDoLead(ctx, lead, eventId);
 
     return eventId;
   },

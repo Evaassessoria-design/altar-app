@@ -36,7 +36,11 @@ export function PropostaDoEvento({ eventId }: { eventId: Id<"events"> }) {
 
   // Enquanto carrega, a linha existe sem afirmar nada sobre quantas são.
   const carregando = propostas === undefined;
-  const ultima = propostas?.[0];
+  // A ACEITA vem primeiro: com a proposta do lead chegando ao evento, um
+  // casamento pode ter a recusada de agosto e a aceita de setembro. O cartão
+  // mostrava a mais recente — e uma revisão em rascunho criada depois
+  // escondia o valor que a cliente aprovou.
+  const ultima = propostas?.find((p) => p.status === "aceita") ?? propostas?.[0];
 
   const descricao = carregando
     ? "O documento da cliente — escopo e investimento"

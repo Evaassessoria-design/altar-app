@@ -7,6 +7,7 @@ import { dataDoDia } from "./lib/dataDoDia";
 import { emCentavos, motivoDoValorInvalido } from "./lib/dinheiro";
 import { rotuloDoTipoDeEvento } from "./lib/tiposDeEvento";
 import { convidadosDoBriefing } from "./lib/convidados";
+import { propostasDoEvento } from "./lib/propostasDoEvento";
 import {
   estaVencida,
   faltaParaEnviar,
@@ -186,12 +187,10 @@ export const doEvento = query({
     const event = await getOwnedEvent(ctx, args.eventId);
     if (!event) return [];
     const hoje = dataDoDia();
-    const propostas = await ctx.db
-      .query("proposals")
-      .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
-      .collect();
+    // As ligadas ao evento E as do lead de origem ainda sem evento — o evento
+    // convertido antes de a conversão ligar a proposta também a enxerga.
+    const propostas = await propostasDoEvento(ctx, event);
     return propostas
-      .filter((p) => p.userId === event.userId)
       .map((p) => resumir(p, hoje))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   },
@@ -309,10 +308,21 @@ export const create = mutation({
     const clienteNome = event?.clientName ?? lead?.clientName ?? "";
     const titulo = args.titulo?.trim() || `Proposta — ${clienteNome || "novo evento"}`;
 
+    // ── PROPOSTA NOVA DE UM LEAD JÁ CONVERTIDO ───────────────────────────────
+    // O aditivo, a revisão depois do fechamento: ela abre o card do lead e cria
+    // outra proposta. Sem isto ela nascia só com `leadId` e não aparecia no
+    // evento que aquele lead já virou. Evento apagado ou de outra conta não
+    // vale — o ponteiro do lead pode estar velho.
+    let eventIdDaProposta = args.eventId;
+    if (!eventIdDaProposta && lead?.convertedEventId) {
+      const convertido = await ctx.db.get(lead.convertedEventId);
+      if (convertido && convertido.userId === user._id) eventIdDaProposta = convertido._id;
+    }
+
     return ctx.db.insert("proposals", {
       userId: user._id,
       leadId: args.leadId,
-      eventId: args.eventId,
+      eventId: eventIdDaProposta,
       titulo,
       clienteNome,
       // `events.type` é um SLUG ("wedding"). Sem esta tradução ele atravessava

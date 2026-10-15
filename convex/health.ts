@@ -14,6 +14,7 @@ import { diasEntre } from "./lib/attention";
 import { reservasDoItem } from "./lib/reservasDoAcervo";
 import { pecasForaDeUso, voltouComProblema } from "./lib/condicaoDoAcervo";
 import { estaVencida } from "./lib/propostaComercial";
+import { propostasDoEvento } from "./lib/propostasDoEvento";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SAÚDE DO EVENTO (CORE). Calculada SOMENTE a partir de dados reais já existentes
@@ -354,7 +355,9 @@ export const getEventJourney = query({
       await Promise.all([
         ctx.db.query("briefings").withIndex("by_event", (q) => q.eq("eventId", eventId)).unique(),
         ctx.db.query("budgetItems").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
-        ctx.db.query("proposals").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+        // A do lead de origem conta também: a proposta aceita no funil é a
+        // etapa "Orçamento e proposta" deste evento (lib/propostasDoEvento.ts).
+        propostasDoEvento(ctx, event),
         ctx.db.query("contracts").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
         ctx.db.query("eventPhotos").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
         ctx.db.query("eventSuppliers").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),

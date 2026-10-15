@@ -139,6 +139,7 @@ import type * as lib_projectScope from "../lib/projectScope.js";
 import type * as lib_prontidaoDaConta from "../lib/prontidaoDaConta.js";
 import type * as lib_prontidaoDoEvento from "../lib/prontidaoDoEvento.js";
 import type * as lib_propostaComercial from "../lib/propostaComercial.js";
+import type * as lib_propostasDoEvento from "../lib/propostasDoEvento.js";
 import type * as lib_proximaAcao from "../lib/proximaAcao.js";
 import type * as lib_purchaseStatus from "../lib/purchaseStatus.js";
 import type * as lib_receitaDoMes from "../lib/receitaDoMes.js";
@@ -304,6 +305,7 @@ declare const fullApi: ApiFromModules<{
   "lib/prontidaoDaConta": typeof lib_prontidaoDaConta;
   "lib/prontidaoDoEvento": typeof lib_prontidaoDoEvento;
   "lib/propostaComercial": typeof lib_propostaComercial;
+  "lib/propostasDoEvento": typeof lib_propostasDoEvento;
   "lib/proximaAcao": typeof lib_proximaAcao;
   "lib/purchaseStatus": typeof lib_purchaseStatus;
   "lib/receitaDoMes": typeof lib_receitaDoMes;

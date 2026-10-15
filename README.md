@@ -130,6 +130,8 @@ ALTAR_DEMO                               ← só no projeto de demonstração
 | Financeiro (livro-caixa) | `convex/financeiro.ts`, `lib/dinheiro.ts` |
 | Orçamento, galeria, planta por IA | `convex/orcamento.ts`, `gallery.ts`, `layoutRenders.ts`, `aiVisual.ts` |
 | Saúde do evento, dashboard, agenda | `convex/health.ts`, `dashboard.ts`, `agenda.ts` |
+| Reuniões do evento (ata, decisões, pendências; a Agenda lê daqui) | `convex/reunioes.ts`, `lib/reunioes.ts`, `reunioesIa.ts` (sugestão revisável, só com trecho das notas), `/eventos/:id/reunioes` |
+| Proposta do lead no evento (conversão liga; evento antigo lê pelo lead) | `lib/propostasDoEvento.ts`, índice `leads.by_converted_event` |
 | Notificações (com varredura diária) | `convex/notifications.ts`, `crons.ts` |
 | Assistente ALTAR (a IA da decoradora) | `convex/assistente.ts`, `assistenteExecutor.ts`, `lib/assistente/*` — veja `docs/assistente-e-escritorio.md` e `docs/comercial-ia.md` |
 | Briefing da manhã (o ALTAR olha antes de ser perguntado) | `convex/assistenteBriefing.ts`, `lib/assistente/briefing.ts` — derivado, nunca gravado |

@@ -37,6 +37,7 @@ import {
   Download,
   Building2,
   Wand2,
+  LayoutDashboard,
   Layers,
   Boxes,
   Phone,
@@ -497,6 +498,21 @@ export default function EventDetailsPage() {
                       (resumoDoAcervo.retornoPendente > 0 ? ` · ${resumoDoAcervo.retornoPendente} sem retorno` : "")
                     : "Quais peças suas saem do galpão para este evento"}
                 </p>
+              </div>
+            </div>
+            <ChevronRight className="size-4 text-muted-foreground" />
+          </Link>
+          {/* O Layout vem ANTES da Planta Premium: é a planta que ela edita e
+              envia aos clientes; a Premium é a imagem ilustrativa por IA. */}
+          <Link
+            to={`/eventos/${id}/layout`}
+            className="flex items-center justify-between px-5 py-3.5 hover:bg-accent/50 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-3">
+              <LayoutDashboard className="size-5 text-primary" />
+              <div>
+                <p className="font-medium text-sm">Layout do salão 2D + 3D</p>
+                <p className="text-xs text-muted-foreground">Planta em escala com mesas numeradas, vista 3D e PDF para os clientes</p>
               </div>
             </div>
             <ChevronRight className="size-4 text-muted-foreground" />

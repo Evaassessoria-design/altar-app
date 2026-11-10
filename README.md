@@ -122,6 +122,7 @@ ALTAR_DEMO                               ← só no projeto de demonstração
 | Compras e panorama | `convex/purchases.ts` |
 | Financeiro (livro-caixa) | `convex/financeiro.ts`, `lib/dinheiro.ts` |
 | Orçamento, galeria, planta por IA | `convex/orcamento.ts`, `gallery.ts`, `layoutRenders.ts`, `aiVisual.ts` |
+| **Layout do salão 2D + 3D** (planta em escala editável, IA de croqui, PDF dos clientes) | `convex/layoutSalao.ts`, `layoutSalaoIa.ts`, `lib/layoutSalao*.ts`, `src/components/layout-salao/*` — veja `docs/layout-do-salao.md` |
 | Saúde do evento, dashboard, agenda | `convex/health.ts`, `dashboard.ts`, `agenda.ts` |
 | Notificações (com varredura diária) | `convex/notifications.ts`, `crons.ts` |
 | Assistente ALTAR (a IA da decoradora) | `convex/assistente.ts`, `assistenteExecutor.ts`, `lib/assistente/*` — veja `docs/assistente-e-escritorio.md` e `docs/comercial-ia.md` |

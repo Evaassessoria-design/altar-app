@@ -26,6 +26,10 @@ import {
   tipoDeTrabalhoValidator as tipoDeTrabalho,
   verticalValidator as vertical,
 } from "./lib/central/validadores";
+// ── LAYOUT DO SALÃO ─────────────────────────────────────────────────────────
+// Mesma regra da Central: validador em um lugar só, importado pelo schema e
+// pelas funções (convex/layoutSalao.ts).
+import { dadosDoLayout, origemDoLayout } from "./lib/layoutSalao";
 
 
 // ─── Enum-like validators (mirror the unions used in the function args/frontend) ──
@@ -1827,6 +1831,31 @@ export default defineSchema({
     // A lista de eventos precisa da saúde de TODOS os eventos da conta. Sem
     // este índice, a resposta era uma consulta por evento — 40 eventos viravam
     // centenas de operações para desenhar uma tela. Ver lib/saudeDoEvento.ts.
+    .index("by_user", ["userId"]),
+
+  // ── LAYOUT DO SALÃO (2D + 3D) ──────────────────────────────────────────────
+  // A planta EDITÁVEL do evento, em metros. Não é `layoutRenders`: aquela guarda
+  // IMAGENS geradas por IA (cada geração é um arquivo novo, e nenhum sabe
+  // quantas mesas tem). Esta guarda DADOS — salão, aberturas, pilares,
+  // elementos e mesas — e a planta 2D, o 3D e o PDF são leituras dela.
+  //
+  // Várias por evento de propósito: "opção com ilha de frios" e "opção sem"
+  // são duas linhas, e a decoradora mostra as duas aos clientes.
+  //
+  // As listas internas têm teto conferido no servidor (lib/layoutSalao.ts,
+  // LIMITES) — é o que torna aceitável guardá-las dentro do documento, que é
+  // gravado inteiro a cada "Salvar".
+  eventLayouts: defineTable({
+    userId: v.id("users"),
+    eventId: v.id("events"),
+    nome: v.string(),
+    dados: dadosDoLayout,
+    /** De onde o layout nasceu. Só informativo; nada depende disso. */
+    origem: origemDoLayout,
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  })
+    .index("by_event", ["eventId"])
     .index("by_user", ["userId"]),
 
   // ── IA VISUAL / Planta Premium ─────────────────────────────────────────────

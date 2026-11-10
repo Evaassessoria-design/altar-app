@@ -50,6 +50,7 @@ const APAGAM_DE_VERDADE: readonly (readonly [string, string])[] = [
   // pedia para a maior.
   ["src/pages/app/compras/page.tsx", "purchases.deletePurchase"],
   ["src/pages/app/propostas/[id]/page.tsx", "propostas.remove"],
+  ["src/pages/app/events/[id]/layout/page.tsx", "layoutSalao.remover"],
 ];
 
 describe("nenhuma exclusão acontece sem pergunta", () => {

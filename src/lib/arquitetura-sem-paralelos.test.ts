@@ -106,7 +106,16 @@ describe("nenhuma tabela paralela ao que já existe", () => {
     // canal, com id externo e carimbo da plataforma. Aqui não chegou nada.
     // Guardar as duas juntas faria a Central tratar como igualmente
     // verificados um dado de canal e um dado de memória de quem digitou.
-    expect(TABELAS.length).toBe(42);
+    //
+    // 42 → 43: `eventLayouts`, o Layout do Salão (2D + 3D). NÃO é
+    // `layoutRenders`: aquela guarda IMAGENS geradas por IA, uma por geração,
+    // e nenhuma sabe quantas mesas tem nem onde está o bar. O layout é DADO —
+    // salão em metros, elementos e mesas com posição — editado à mão e lido
+    // pela planta 2D, pelo 3D e pelo PDF. Forçar os dois numa tabela exigiria
+    // `outputStorageId` vazio de um lado e `dados` vazio do outro. As fotos de
+    // referência continuam em `eventPhotos`, por ponteiro (`fotoId`), e a
+    // biblioteca de peças e os modelos são código, não tabela.
+    expect(TABELAS.length).toBe(43);
   });
 });
 

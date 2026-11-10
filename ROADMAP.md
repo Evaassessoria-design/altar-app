@@ -31,6 +31,9 @@ Para publicar no DEV e conferir o produto depois, veja
 - Cadastro, responsável, saúde do evento e resumo operacional
 - Briefing completo e checklist de pré e pós-evento
 - Orçamento, galeria por fase, agenda do dia
+- **Layout do salão 2D + 3D**: planta em escala editável, mesas numeradas,
+  biblioteca de peças, modelos, fotos de referência por peça, rascunho por IA
+  a partir do croqui e PDF para os clientes (`docs/layout-do-salao.md`)
 - Importação de contrato por IA (lê e propõe; quem aplica é a pessoa)
 
 **Produção**

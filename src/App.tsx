@@ -38,6 +38,7 @@ const OrcamentoPage = lazy(() => import("./pages/app/events/[id]/orcamento/page.
 const GaleriaPage = lazy(() => import("./pages/app/events/[id]/fotos/page.tsx"));
 const FornecedoresPage = lazy(() => import("./pages/app/events/[id]/fornecedores/page.tsx"));
 const PlantaPage = lazy(() => import("./pages/app/events/[id]/planta/page.tsx"));
+const LayoutDoSalaoPage = lazy(() => import("./pages/app/events/[id]/layout/page.tsx"));
 const ProjetoDecoracaoPage = lazy(() => import("./pages/app/events/[id]/projeto/page.tsx"));
 const FichaTecnicaPage = lazy(() => import("./pages/app/events/[id]/ficha-tecnica/page.tsx"));
 const AcervoPage = lazy(() => import("./pages/app/acervo/page.tsx"));
@@ -138,6 +139,7 @@ function AppRoutes() {
         <Route path="/eventos/:id/fotos" element={<GaleriaPage />} />
         <Route path="/eventos/:id/fornecedores" element={<FornecedoresPage />} />
         <Route path="/eventos/:id/planta" element={<PlantaPage />} />
+        <Route path="/eventos/:id/layout" element={<LayoutDoSalaoPage />} />
         <Route path="/eventos/:id/projeto" element={<ProjetoDecoracaoPage />} />
         <Route path="/eventos/:id/ficha-tecnica" element={<FichaTecnicaPage />} />
         <Route path="/eventos/:id/acervo" element={<AcervoDoEventoPage />} />

@@ -1,5 +1,10 @@
 # O que melhorar no ALTAR — proposta de novembro
 
+> **Estado em 24/11, fim do dia:** P1, P2 e P3 foram **implementados e
+> aprovados** (commits `80a9490`, `81ea795`, `6d089ea`) — ver a seção 6 no fim,
+> que registra o que de fato entrou, inclusive um defeito de telefone que
+> apareceu no caminho. O resto do documento continua sendo proposta.
+
 Escrito para decidir, não para implementar: **nada aqui foi começado.** Cada
 item diz o que a decoradora sente, qual é a evidência no código, o tamanho e o
 risco. A ordem recomendada está no fim.
@@ -211,3 +216,69 @@ antes de cinco contas reais rodarem 30 dias**. A recomendação se mantém.
 5. **As grandes, depois do beta.** O mapa do produto já diz isso, e o motivo
    continua valendo: cinco contas novas não pedem campo configurável, pedem que
    o que existe não erre.
+
+
+---
+
+## 6. O que foi feito depois desta proposta (24/11)
+
+### P1 — a barra de telas do evento · `80a9490`
+
+Mora no shell do aplicativo, decide sozinha se aparece pelo endereço, e **não
+aparece na capa** (que já desenha a Jornada inteira). Nenhuma consulta: é só
+caminho, então aparece antes de o conteúdo da tela chegar.
+
+A lista ficou em `src/lib/telas-do-evento.ts`, fora do componente, e
+`telas-do-evento.test.ts` confere três sentidos: toda rota `/eventos/:id/*` do
+`App.tsx` tem pastilha, toda pastilha tem rota, e **toda etapa da Jornada com
+tela própria tem pastilha**. O terceiro é o que pegaria o defeito desta
+integração — o Layout nasceu com rota, tela pronta e nenhum caminho até ela.
+
+### P2 — o cartão de primeiros passos · `81ea795`
+
+Com o essencial pronto, não aparece. Nada foi gravado: concluído é derivável.
+O X continua dispensando enquanto ainda falta algo. Quem apagar o único evento
+(o de teste da demonstração) vê o cartão voltar — é a verdade.
+
+### P3 — a cobrança no WhatsApp · `6d089ea`
+
+Além dos dois atalhos novos (pendência de reunião no painel, parcela vencida),
+apareceu um **defeito que já estava nas três telas antigas**: `wa.me/55${…}`
+com telefone salvo como "+55 11 99999-9999" — jeito normal de colar da agenda
+do celular — gerava `5555119999999999` e abria a conversa num número
+inexistente, sem erro nem aviso. `src/lib/whatsapp.ts` passou a ser o único
+lugar, e as três telas foram migradas.
+
+Duas regras que valem registrar porque são sobre dinheiro e sobre confiança:
+
+- a parcela cobra o **saldo**, nunca o valor cheio — cobrar R$ 2.500 de quem já
+  pagou R$ 1.000 custa a confiança da cliente;
+- o botão do painel **nomeia a destinatária** ("Cobrar Marina no WhatsApp"),
+  porque a pendência pode ser do florista e um botão anônimo faria ela mandar
+  para a pessoa errada.
+
+Continua não sendo envio: abre o WhatsApp dela, com o texto escrito, para ler e
+mandar com o dedo. `communicationsOutbox` segue fechado.
+
+### Validação desta rodada
+
+```
+pnpm test                                  6.444 testes, 290 arquivos — passou
+npx tsc -p tsconfig.app.json --noEmit      limpo
+npx tsc -p convex/tsconfig.json --noEmit   limpo
+pnpm lint                                  0 erros, 8 avisos (pré-existentes)
+pnpm build                                 ok (pedaço principal: 837 → 841 kB)
+```
+
+### O que isto NÃO muda
+
+Nenhum dos três depende de publicação para ser verdade no código, e nenhum foi
+visto em tela: continuam **NÃO TESTADOS no navegador**, junto com o resto da
+homologação. A barra do evento em especial pede olho no celular — ela rola na
+horizontal, e é o tipo de coisa que leitura de código não aprova.
+
+### Próximo da fila
+
+**M1, a entrega num lugar só** — estender "Pronto para mostrar?" para entregar
+os PDFs prontos e o texto de WhatsApp. Segue sendo o maior ganho percebido por
+esforço da lista.

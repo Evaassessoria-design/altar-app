@@ -17,6 +17,7 @@ import {
   Sparkles,
   AlertCircle,
   Handshake,
+  MessageCircle,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -38,6 +39,7 @@ import { toast } from "sonner";
 import type { Doc } from "@/convex/_generated/dataModel.d.ts";
 
 import { formatEventDateShort, parseEventDate } from "@/lib/event-date.ts";
+import { linkDeWhatsapp, primeiroNome, textoDaPendencia } from "@/lib/whatsapp.ts";
 const STATUS_COLORS: Record<string, string> = {
   planning: "bg-yellow-400",
   confirmed: "bg-blue-400",
@@ -465,30 +467,66 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="divide-y divide-border">
-            {stats.pendenciasDeReuniao.map((p) => (
-              <Link
-                key={`${p.reuniaoId}-${p.texto}`}
-                to={`/eventos/${p.eventId}/reunioes`}
-                className="flex items-start gap-3 px-5 py-3 hover:bg-accent/50 transition-colors cursor-pointer"
-              >
-                <div className="mt-0.5 size-4 rounded-sm border-2 border-muted-foreground/30 flex-shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{p.texto}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {p.eventName} · {p.reuniao}
-                    {p.responsavel ? ` · ${p.responsavel}` : ""}
-                    {/* "Sem prazo" é informação, não ausência: a tela nunca
-                        deixa em branco o que ela sabe que não foi combinado. */}
-                    {p.prazo ? ` · até ${formatEventDateShort(p.prazo)}` : " · sem prazo"}
-                  </p>
+            {stats.pendenciasDeReuniao.map((p) => {
+              // A cobrança vai para a CLIENTE do evento, e o rótulo diz o nome
+              // dela: a pendência pode ser do florista, e um botão que não
+              // dissesse para quem está mandando faria ela mandar errado.
+              //
+              // Sem telefone cadastrado não há botão — `linkDeWhatsapp`
+              // devolve `null` e a tela não oferece o que não funciona.
+              const cobrar = linkDeWhatsapp(
+                p.clienteTelefone,
+                textoDaPendencia({
+                  cliente: p.clienteNome,
+                  evento: p.eventName,
+                  texto: p.texto,
+                  prazo: p.prazo ? formatEventDateShort(p.prazo) : undefined,
+                }),
+              );
+              return (
+                // A linha não é mais UM link: o atalho do WhatsApp é um `a`
+                // irmão, porque link dentro de link não é HTML válido e o
+                // toque no celular acertaria o errado.
+                <div
+                  key={`${p.reuniaoId}-${p.texto}`}
+                  className="flex items-start gap-3 px-5 py-3 transition-colors hover:bg-accent/50"
+                >
+                  <Link
+                    to={`/eventos/${p.eventId}/reunioes`}
+                    className="flex min-w-0 flex-1 items-start gap-3 cursor-pointer"
+                  >
+                    <div className="mt-0.5 size-4 rounded-sm border-2 border-muted-foreground/30 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{p.texto}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {p.eventName} · {p.reuniao}
+                        {p.responsavel ? ` · ${p.responsavel}` : ""}
+                        {/* "Sem prazo" é informação, não ausência: a tela nunca
+                            deixa em branco o que ela sabe que não foi combinado. */}
+                        {p.prazo ? ` · até ${formatEventDateShort(p.prazo)}` : " · sem prazo"}
+                      </p>
+                    </div>
+                  </Link>
+                  {p.atrasada && (
+                    <span className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                      vencida
+                    </span>
+                  )}
+                  {cobrar && (
+                    <a
+                      href={cobrar}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={`Cobrar ${primeiroNome(p.clienteNome)} no WhatsApp`}
+                      aria-label={`Cobrar ${primeiroNome(p.clienteNome)} no WhatsApp`}
+                      className="flex-shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-emerald-600 dark:hover:text-emerald-400"
+                    >
+                      <MessageCircle className="size-4" />
+                    </a>
+                  )}
                 </div>
-                {p.atrasada && (
-                  <span className="ml-auto flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
-                    vencida
-                  </span>
-                )}
-              </Link>
-            ))}
+              );
+            })}
           </div>
           {stats.pendenciasDeReuniaoTotal > stats.pendenciasDeReuniao.length && (
             <p className="px-5 py-2.5 text-xs text-muted-foreground border-t border-border">

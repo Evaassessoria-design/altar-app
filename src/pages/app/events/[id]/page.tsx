@@ -43,6 +43,7 @@ import {
   Phone,
 } from "lucide-react";
 import { cn } from "@/lib/utils.ts";
+import { linkDeWhatsapp } from "@/lib/whatsapp.ts";
 import { sortEventTeam } from "@/lib/event-team.ts";
 import { labelDoTipoDeEvento } from "@/lib/event-types.ts";
 import { useRef, useState } from "react";
@@ -272,9 +273,10 @@ export default function EventDetailsPage() {
     }
   };
 
-  const whatsappUrl = event.clientPhone
-    ? `https://wa.me/55${event.clientPhone.replace(/\D/g, "")}`
-    : null;
+  // `linkDeWhatsapp` e não o `wa.me/55${...}` que estava aqui: telefone salvo
+  // como "+55 11 ..." ganhava um segundo DDI e o atalho abria um número
+  // inexistente. Ver src/lib/whatsapp.ts.
+  const whatsappUrl = linkDeWhatsapp(event.clientPhone);
 
   return (
     <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-4">

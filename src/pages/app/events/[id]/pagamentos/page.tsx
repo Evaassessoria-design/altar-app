@@ -46,7 +46,14 @@ export default function PagamentosDaClientePage() {
       >
         <ArrowLeft className="size-4" /> <span className="truncate">{event.name}</span>
       </Link>
-      <PagamentosDaCliente eventId={eventId} />
+      {/* O evento já está carregado aqui; a seção recebe a cliente por
+          propriedade para poder oferecer a cobrança no WhatsApp sem uma
+          segunda leitura do mesmo documento. */}
+      <PagamentosDaCliente
+        eventId={eventId}
+        evento={event.name}
+        cliente={{ nome: event.clientName, telefone: event.clientPhone }}
+      />
     </div>
   );
 }

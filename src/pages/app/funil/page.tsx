@@ -58,6 +58,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ConvexError } from "convex/values";
 import { cn } from "@/lib/utils.ts";
+import { linkDeWhatsapp } from "@/lib/whatsapp.ts";
 import { valorDigitado } from "@/lib/valor-digitado.ts";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -483,9 +484,11 @@ function LeadAberto({
 
         <section className="space-y-2">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Contato</h3>
+          {/* Mesmo motivo da capa do evento: o 55 à mão duplicava o DDI de
+              quem cola o telefone da agenda do celular. */}
           {lead.clientPhone ? (
             <a
-              href={`https://wa.me/55${lead.clientPhone.replace(/\D/g, "")}`}
+              href={linkDeWhatsapp(lead.clientPhone) ?? undefined}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 text-sm hover:underline"

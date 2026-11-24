@@ -25,9 +25,15 @@ const fonte = [
 describe("a aba é só da cliente", () => {
   it("rota própria no evento, com a seção inteira", () => {
     expect(readFileSync("src/App.tsx", "utf-8")).toContain('path="/eventos/:id/pagamentos"');
-    expect(readFileSync("src/pages/app/events/[id]/pagamentos/page.tsx", "utf-8")).toContain(
-      "<PagamentosDaCliente eventId={eventId} />",
-    );
+    // A trava é "a ABA desenha a seção INTEIRA" (e a capa, só o cartão
+    // compacto — teste abaixo). Era um casamento de texto exato, que quebrou
+    // quando a seção passou a receber a cliente por propriedade para oferecer
+    // a cobrança no WhatsApp. A regra protegida é a mesma; o que muda é que
+    // ela não exige mais a assinatura em uma linha só.
+    const aba = readFileSync("src/pages/app/events/[id]/pagamentos/page.tsx", "utf-8");
+    expect(aba).toContain("<PagamentosDaCliente");
+    expect(aba).toContain("eventId={eventId}");
+    expect(aba).not.toContain("<CartaoPagamentosDaCliente");
   });
 
   it("a página do evento mostra só o cartão compacto, com atalho para a aba", () => {

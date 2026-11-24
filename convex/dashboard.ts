@@ -181,6 +181,17 @@ export const getDashboardStats = query({
       responsavel?: string;
       prazo?: string;
       atrasada: boolean;
+      /**
+       * A cliente do evento, para o painel poder oferecer a cobrança no
+       * WhatsApp dela. Vêm do evento que JÁ foi lido para conferir o status —
+       * nenhuma leitura nova.
+       *
+       * `clienteTelefone` ausente = não cadastrado, e aí a tela não desenha o
+       * botão: atalho que abre conversa com número inválido é pior do que
+       * atalho nenhum.
+       */
+      clienteNome: string;
+      clienteTelefone?: string;
     }[] = [];
     for (const r of reunioesLidas.slice(0, TETO_DE_REUNIOES)) {
       // Reunião cancelada não cobra nada de ninguém.
@@ -200,6 +211,8 @@ export const getDashboardStats = query({
           prazo: p.prazo,
           // Sem prazo NÃO é atrasada: é pendência sem prazo, e a tela diz isso.
           atrasada: p.prazo !== undefined && p.prazo < hoje,
+          clienteNome: ev.clientName,
+          clienteTelefone: ev.clientPhone,
         });
       }
     }

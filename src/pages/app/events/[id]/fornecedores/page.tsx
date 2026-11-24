@@ -58,6 +58,7 @@ import { format } from "date-fns";
 import { formatDateInput, formatEventDayOnly } from "@/lib/event-date.ts";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils.ts";
+import { linkDeWhatsapp } from "@/lib/whatsapp.ts";
 import { SUPPLIER_STATUSES, type SupplierStatus } from "@/lib/supplier-status.ts";
 import {
   CATEGORIAS_DA_DECORACAO,
@@ -108,11 +109,10 @@ function templateFor(slug: string): OpItem[] {
 
 // ── Links clicáveis ───────────────────────────────────────────────────────────
 
-function whatsappHref(phone?: string) {
-  if (!phone) return null;
-  const d = phone.replace(/\D/g, "");
-  return d.length >= 8 ? `https://wa.me/55${d}` : null;
-}
+// O mínimo de oito dígitos aceitava telefone sem DDD, e o 55 à mão duplicava
+// o DDI de quem colou da agenda. As duas regras agora vivem em
+// src/lib/whatsapp.ts, com teste.
+const whatsappHref = (phone?: string) => linkDeWhatsapp(phone);
 function telHref(phone?: string) {
   if (!phone) return null;
   const d = phone.replace(/\D/g, "");

@@ -9,6 +9,7 @@ import {
   CalendarClock,
   ChevronRight,
   HandCoins,
+  MessageCircle,
   ListPlus,
   Paperclip,
   Pencil,
@@ -35,6 +36,7 @@ import { FORMAS_DE_PAGAMENTO, MIMES_DE_COMPROVANTE, TIPOS_DE_COMPROVANTE } from 
 import { formatDateInput } from "@/lib/event-date.ts";
 import { dataDoDiaNoFuso } from "@/convex/lib/dataDoDia.ts";
 import { valorDigitado } from "@/lib/valor-digitado.ts";
+import { linkDeWhatsapp, primeiroNome, textoDaParcela } from "@/lib/whatsapp.ts";
 import { cn } from "@/lib/utils.ts";
 import {
   dataValida,
@@ -95,7 +97,28 @@ const COR_DO_ESTADO = {
   recebida: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
 } as const;
 
-export function PagamentosDaCliente({ eventId }: { eventId: Id<"events"> }) {
+/**
+ * A cliente do evento, só o que a cobrança precisa.
+ *
+ * Chega por PROPRIEDADE e não por consulta: quem desenha esta seção (a aba de
+ * pagamentos e a capa do evento) já leu o evento. Uma `useQuery` aqui seria a
+ * segunda leitura do mesmo documento na mesma tela.
+ *
+ * Ausente = quem chamou não tem (ou não quer oferecer) a cobrança; a seção
+ * funciona igual, sem o atalho.
+ */
+export type ClienteDaCobranca = { nome: string; telefone?: string };
+
+export function PagamentosDaCliente({
+  eventId,
+  evento,
+  cliente,
+}: {
+  eventId: Id<"events">;
+  /** Nome do evento, para a mensagem dizer de qual casamento se trata. */
+  evento?: string;
+  cliente?: ClienteDaCobranca;
+}) {
   const dados = useQuery(api.financeiro.pagamentosDoEvento, { eventId });
   const [aberto, setAberto] = useState<Aberto>(null);
 
@@ -307,6 +330,38 @@ export function PagamentosDaCliente({ eventId }: { eventId: Id<"events"> }) {
                         <HandCoins className="size-4" /> Registrar recebimento
                       </Button>
                     )}
+                    {/* ── COBRAR NO WHATSAPP ────────────────────────────────
+                        Só na parcela ATRASADA, e só quando há telefone: a
+                        cobrança é o trabalho de segunda-feira de manhã, e um
+                        botão em toda parcela (inclusive nas que nem venceram)
+                        viraria ruído em cima de dinheiro.
+
+                        O valor cobrado é o SALDO, nunca o valor da parcela:
+                        cobrar R$ 2.500 de quem já pagou R$ 1.000 custa a
+                        confiança da cliente. `reais` e `formatDateInput` são
+                        os mesmos formatadores que a linha acima mostra — o
+                        texto não refaz conta nenhuma. */}
+                    {atrasada && cliente && (() => {
+                      const cobrar = linkDeWhatsapp(
+                        cliente.telefone,
+                        textoDaParcela({
+                          cliente: cliente.nome,
+                          evento: evento ?? "evento",
+                          descricao: p.description,
+                          valor: reais(saldo),
+                          vencimento: formatDateInput(p.date),
+                        }),
+                      );
+                      if (!cobrar) return null;
+                      return (
+                        <Button asChild size="sm" variant="outline" className="cursor-pointer gap-1.5 h-9">
+                          <a href={cobrar} target="_blank" rel="noopener noreferrer">
+                            <MessageCircle className="size-4" />
+                            Cobrar {primeiroNome(cliente.nome)}
+                          </a>
+                        </Button>
+                      );
+                    })()}
                     <Button
                       size="sm"
                       variant="outline"

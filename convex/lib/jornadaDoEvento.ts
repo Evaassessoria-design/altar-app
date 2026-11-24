@@ -31,6 +31,13 @@ export const ETAPAS_DO_PROJETO = [
   "ficha",
   "acervo",
   "projeto",
+  // O Layout do salão vem ANTES do croqui e da Planta Premium, e é etapa
+  // própria: é a planta que ela DESENHA e manda para os clientes, em escala e
+  // com as mesas numeradas. O croqui é o papel que a cliente mandou; a Planta
+  // Premium é a imagem ilustrativa que a IA gera. Três coisas diferentes, três
+  // etapas — juntá-las faria a jornada dizer "planta pronta" para quem só tem
+  // a foto de um guardanapo.
+  "layout",
   "croqui",
   "planta",
 ] as const;
@@ -71,6 +78,8 @@ export type FatosDaJornada = {
   ficha: { itens: number; itensComMateriais: number };
   acervo: { reservas: number; comDeficit: number };
   projeto: { apresentavel: boolean; prontos: number; totalDeItens: number };
+  /** Quantas opções de layout do salão foram salvas neste evento. */
+  layout: { opcoes: number };
   croqui: { enviados: number };
   planta: { geradas: number; gerando: boolean };
 };
@@ -174,6 +183,21 @@ function avaliarCroqui(f: FatosDaJornada["croqui"]): Avaliacao {
     : { status: "nao_iniciado", detalhe: "Nenhum croqui enviado" };
 }
 
+/**
+ * O layout do salão. Uma opção salva já é a etapa cumprida: a decoradora
+ * desenhou o salão. Mais de uma é o caso normal dela ("com ilha de frios" /
+ * "sem"), e o número aparece porque "concluído" sozinho não diz nada.
+ */
+function avaliarLayout(f: FatosDaJornada["layout"]): Avaliacao {
+  if (f.opcoes > 0) {
+    return {
+      status: "concluido",
+      detalhe: plural(f.opcoes, "opção de layout", "opções de layout"),
+    };
+  }
+  return { status: "nao_iniciado", detalhe: "Salão ainda não desenhado" };
+}
+
 function avaliarPlanta(f: FatosDaJornada["planta"]): Avaliacao {
   if (f.geradas > 0) return { status: "concluido", detalhe: `${plural(f.geradas, "planta gerada", "plantas geradas")}` };
   if (f.gerando) return { status: "em_andamento", detalhe: "Planta sendo gerada" };
@@ -189,6 +213,7 @@ const DEFINICAO: Record<ChaveDaEtapa, { rotulo: string; rota: string; dependeDe?
   ficha: { rotulo: "Ficha técnica", rota: "ficha-tecnica" },
   acervo: { rotulo: "Acervo do evento", rota: "acervo" },
   projeto: { rotulo: "Projeto visual", rota: "projeto" },
+  layout: { rotulo: "Layout do salão", rota: "layout" },
   croqui: { rotulo: "Croqui", rota: "planta" },
   planta: { rotulo: "Planta premium", rota: "planta", dependeDe: "croqui" },
 };
@@ -203,6 +228,7 @@ export function jornadaDoEvento(f: FatosDaJornada): Jornada {
     ficha: avaliarFicha(f.ficha),
     acervo: avaliarAcervo(f.acervo),
     projeto: avaliarProjeto(f.projeto),
+    layout: avaliarLayout(f.layout),
     croqui: avaliarCroqui(f.croqui),
     planta: avaliarPlanta(f.planta),
   };

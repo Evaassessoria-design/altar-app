@@ -60,7 +60,8 @@ const jornada = jornadaDoEvento({
   ficha: { itens: 0, itensComMateriais: 0 },
   acervo: { reservas: 0, comDeficit: 0 },
   projeto: { apresentavel: true, prontos: 11, totalDeItens: 11 },
-  croqui: { enviados: 0 },
+  layout: { opcoes: 0 },
+    croqui: { enviados: 0 },
   planta: { geradas: 0, gerando: false },
 });
 
@@ -68,7 +69,9 @@ describe("Jornada do projeto", () => {
   it("as dez etapas são links ABERTOS, inclusive as adiantadas e as pendentes", () => {
     naRota(<JornadaDoProjeto eventId="e1" {...jornada} />);
     const links = screen.getAllByRole("link");
-    expect(links).toHaveLength(10);
+    // 11 etapas desde a integração de 24/11: o Layout do salão entrou
+    // entre o Projeto visual e o Croqui.
+    expect(links).toHaveLength(11);
     expect(links.map((l) => l.getAttribute("href"))).toContain("/eventos/e1/projeto");
     expect(links.map((l) => l.getAttribute("href"))).toContain("/eventos/e1#contrato");
     for (const l of links) expect(l).not.toHaveAttribute("aria-disabled");

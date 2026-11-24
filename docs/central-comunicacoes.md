@@ -218,6 +218,11 @@ ser chamadas por ninguém.
 
 O BLOCO 2 é a mesa de operação: rota própria `/central`, admin-only.
 
+O Escritório do dono (`/escritorio`) não mantém uma segunda mesa. Ele lê as
+mesmas tarefas, aprovações, conversas e sinais para mostrar pressão operacional,
+próximas tarefas e atalhos. A edição continua em `/central`; por isso responsável,
+prazo e histórico nunca divergem entre duas listas.
+
 ## 1. O que a tela mostra, e o que ela pode afirmar
 
 ```

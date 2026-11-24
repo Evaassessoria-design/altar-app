@@ -129,6 +129,7 @@ ALTAR_DEMO                               ← só no projeto de demonstração
 | Compras e panorama | `convex/purchases.ts` |
 | Financeiro (livro-caixa) | `convex/financeiro.ts`, `lib/dinheiro.ts` |
 | Orçamento, galeria, planta por IA | `convex/orcamento.ts`, `gallery.ts`, `layoutRenders.ts`, `aiVisual.ts` |
+| **Layout do salão 2D + 3D** (planta em escala editável, IA de croqui, PDF dos clientes) | `convex/layoutSalao.ts`, `layoutSalaoIa.ts`, `lib/layoutSalao*.ts`, `src/components/layout-salao/*` — veja `docs/layout-do-salao.md` |
 | Saúde do evento, dashboard, agenda | `convex/health.ts`, `dashboard.ts`, `agenda.ts` |
 | Reuniões do evento (ata, decisões, pendências; a Agenda lê daqui) | `convex/reunioes.ts`, `lib/reunioes.ts`, `reunioesIa.ts` (sugestão revisável, só com trecho das notas), `/eventos/:id/reunioes` |
 | Proposta do lead no evento (conversão liga; evento antigo lê pelo lead) | `lib/propostasDoEvento.ts`, índice `leads.by_converted_event` |

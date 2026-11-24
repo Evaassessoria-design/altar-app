@@ -113,7 +113,20 @@ describe("nenhuma tabela paralela ao que já existe", () => {
     // tabela. Não é `checklistItems`: aquele é o Carregamento, e pendência de
     // reunião sairia impressa na folha do galpão. Não é `assistantTasks`:
     // aquela é o Escritório de IA, e a reunião é registro humano.
-    expect(TABELAS.length).toBe(43);
+    //
+    // 43 → 44: `eventLayouts`, o Layout do Salão (2D + 3D). NÃO é
+    // `layoutRenders`: aquela guarda IMAGENS geradas por IA, uma por geração,
+    // e nenhuma sabe quantas mesas tem nem onde está o bar. O layout é DADO —
+    // salão em metros, elementos e mesas com posição — editado à mão e lido
+    // pela planta 2D, pelo 3D e pelo PDF. Forçar os dois numa tabela exigiria
+    // `outputStorageId` vazio de um lado e `dados` vazio do outro. As fotos de
+    // referência continuam em `eventPhotos`, por ponteiro (`fotoId`), e a
+    // biblioteca de peças e os modelos são código, não tabela.
+    //
+    // As duas chegaram por caminhos separados (Reuniões em 15/10, Layout em
+    // 10/11) e cada uma contou "42 → 43" na própria branch. Quem integra soma:
+    // são DUAS tabelas novas, e o número aqui é o de agora.
+    expect(TABELAS.length).toBe(44);
   });
 });
 

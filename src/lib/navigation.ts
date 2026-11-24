@@ -113,6 +113,7 @@ export const ROTAS_SEM_MENU: Readonly<Record<string, string>> = {
   "/eventos/:id/fotos": "acessada de dentro do evento",
   "/eventos/:id/fornecedores": "acessada de dentro do evento",
   "/eventos/:id/planta": "acessada de dentro do evento",
+  "/eventos/:id/layout": "acessada de dentro do evento",
   "/eventos/:id/projeto": "acessada de dentro do evento",
   "/eventos/:id/ficha-tecnica": "acessada de dentro do evento",
   // A ficha do florista continua a Ficha Técnica: mesma receita, acrescida do

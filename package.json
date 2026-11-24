@@ -41,6 +41,7 @@
     "recharts": "3.8.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
+    "three": "^0.170.0",
     "use-debounce": "^10.1.1",
     "vaul": "^1.1.2",
     "zod": "^3.25.76"
@@ -57,6 +58,7 @@
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@types/three": "^0.170.0",
     "@usehercules/eslint-plugin": "^1.0.41",
     "@usehercules/vite": "^1.0.42",
     "@vitejs/plugin-react-swc": "^4.3.1",

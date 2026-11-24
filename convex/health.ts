@@ -351,7 +351,7 @@ export const getEventJourney = query({
     const eventId = event._id;
     const hoje = dataDoDia();
 
-    const [briefing, orcamento, propostas, documentos, fotos, fornecedores, itens, reservas, renders] =
+    const [briefing, orcamento, propostas, documentos, fotos, fornecedores, itens, reservas, renders, layouts] =
       await Promise.all([
         ctx.db.query("briefings").withIndex("by_event", (q) => q.eq("eventId", eventId)).unique(),
         ctx.db.query("budgetItems").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
@@ -364,6 +364,10 @@ export const getEventJourney = query({
         ctx.db.query("assemblyItems").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
         ctx.db.query("collectionReservations").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
         ctx.db.query("layoutRenders").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
+        // Rodada de integração (11/26): o Layout do salão é etapa da jornada,
+        // e a tela do evento precisa saber se existe. Leitura por índice, como
+        // as outras nove — nenhuma varredura nova.
+        ctx.db.query("eventLayouts").withIndex("by_event", (q) => q.eq("eventId", eventId)).collect(),
       ]);
 
     // ── Acervo: déficit por reserva e o que a conferência deixou fora de uso ──
@@ -433,6 +437,7 @@ export const getEventJourney = query({
         prontos: prontidao.pronto,
         totalDeItens: prontidao.itens.length,
       },
+      layout: { opcoes: layouts.filter((l) => l.userId === event.userId).length },
       croqui: { enviados: renders.filter((r) => !!r.originalSketchStorageId).length },
       planta: {
         geradas: renders.filter((r) => r.status === "done" && !!r.outputStorageId).length,

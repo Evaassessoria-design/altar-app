@@ -22,6 +22,7 @@ const nada: FatosDaJornada = {
   ficha: { itens: 0, itensComMateriais: 0 },
   acervo: { reservas: 0, comDeficit: 0 },
   projeto: { apresentavel: false, prontos: 0, totalDeItens: 11 },
+  layout: { opcoes: 0 },
   croqui: { enviados: 0 },
   planta: { geradas: 0, gerando: false },
 };
@@ -35,6 +36,7 @@ const tudo: FatosDaJornada = {
   ficha: { itens: 5, itensComMateriais: 5 },
   acervo: { reservas: 3, comDeficit: 0 },
   projeto: { apresentavel: true, prontos: 11, totalDeItens: 11 },
+  layout: { opcoes: 2 },
   croqui: { enviados: 1 },
   planta: { geradas: 1, gerando: false },
 };
@@ -43,10 +45,10 @@ const status = (f: FatosDaJornada) =>
   Object.fromEntries(jornadaDoEvento(f).etapas.map((e) => [e.chave, e.status]));
 
 describe("a jornada do projeto", () => {
-  it("são dez etapas, na ordem recomendada, numeradas", () => {
+  it("são onze etapas, na ordem recomendada, numeradas", () => {
     const j = jornadaDoEvento(nada);
     expect(j.etapas.map((e) => e.chave)).toEqual([...ETAPAS_DO_PROJETO]);
-    expect(j.etapas.map((e) => e.numero)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(j.etapas.map((e) => e.numero)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
   });
 
   it("evento vazio: 'você está aqui' é o briefing, o próximo é o comercial", () => {
@@ -54,8 +56,8 @@ describe("a jornada do projeto", () => {
     expect(j).toMatchObject({ atual: "briefing", proxima: "comercial", concluidas: 0 });
   });
 
-  it("tudo feito: nenhum ponteiro e dez concluídas", () => {
-    expect(jornadaDoEvento(tudo)).toMatchObject({ atual: null, proxima: null, concluidas: 10 });
+  it("tudo feito: nenhum ponteiro e onze concluídas", () => {
+    expect(jornadaDoEvento(tudo)).toMatchObject({ atual: null, proxima: null, concluidas: 11 });
   });
 
   it("fora da ordem: projeto visual pronto antes do contrato não é bloqueado nem apagado", () => {

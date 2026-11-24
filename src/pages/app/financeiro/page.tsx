@@ -143,6 +143,8 @@ const txSchema = z.object({
   date: z.string().min(1, "Data obrigatória"),
   isPaid: z.boolean(),
   notes: z.string().optional(),
+  /** A quem ela pagou. Só a despesa tem — ver o schema de `transactions`. */
+  supplier: z.string().optional(),
 });
 
 type TxFormValues = z.infer<typeof txSchema>;
@@ -385,6 +387,30 @@ function TxDialog({
             </div>
           )}
 
+          {/* ── A QUEM ELA PAGOU ────────────────────────────────────────────
+              Só na despesa: do outro lado de uma receita está a cliente, que
+              vem do evento. Até 24/11 este dado só existia na despesa que
+              NASCEU de uma compra, e a despesa lançada à mão — o eletricista,
+              o motoboy, a van — saía sem fornecedor no extrato que ela manda
+              para a contadora. Texto livre, como na compra: metade dos
+              pagamentos é para quem nunca vai virar cadastro. */}
+          {txType === "expense" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="tx-supplier">
+                Fornecedor <span className="text-muted-foreground">(opcional)</span>
+              </Label>
+              <Input
+                id="tx-supplier"
+                placeholder="Eletricista, van, floricultura…"
+                {...register("supplier")}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Aparece no extrato. A despesa que nasce de uma compra já traz o
+                fornecedor dela.
+              </p>
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <Label>Observações</Label>
             <AutoTextarea minRows={2} placeholder="Notas adicionais..." {...register("notes")} />
@@ -502,6 +528,7 @@ export default function FinanceiroPage() {
         ...values,
         amount,
         notes: values.notes || undefined,
+        supplier: values.supplier?.trim() || undefined,
         ...extras,
       });
       toast.success(extras.anexo ? "Lançamento adicionado com o anexo." : "Lançamento adicionado!");
@@ -527,6 +554,9 @@ export default function FinanceiroPage() {
         ...values,
         amount,
         notes: values.notes || undefined,
+        // Apagar o campo é `null`, não `""`: string vazia gravaria um
+        // fornecedor em branco em vez de remover o dado (lib/limparCampos.ts).
+        supplier: values.supplier?.trim() || null,
       });
       toast.success("Lançamento atualizado!");
       setEditing(null);
@@ -1082,6 +1112,7 @@ export default function FinanceiroPage() {
             date: editing.date,
             isPaid: editing.isPaid,
             notes: editing.notes,
+            supplier: editing.supplier,
           }}
           onSubmit={handleEdit}
         />

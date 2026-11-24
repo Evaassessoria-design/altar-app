@@ -1086,6 +1086,21 @@ export default defineSchema({
     category: v.string(),
     description: v.string(),
     amount: v.number(),
+    /**
+     * A QUEM ela pagou — texto livre, como em `purchaseItems.supplier`.
+     *
+     * Até 24/11 só a despesa NASCIDA DE UMA COMPRA tinha fornecedor, e ele
+     * vinha por caminho de volta (`purchaseItems.by_transaction`). A despesa
+     * lançada à mão — o eletricista, o motoboy, a van — não tinha onde guardar
+     * isso, e o extrato que ela manda para a contadora saía com a coluna
+     * vazia. Texto livre e não `v.id("suppliers")` pelo mesmo motivo da
+     * compra: metade dos pagamentos é para quem nunca vai virar cadastro.
+     *
+     * AUSENTE = não informado, que é o estado de todo lançamento já gravado.
+     * Sem backfill. O extrato prefere este campo e cai no da compra quando ele
+     * não existe.
+     */
+    supplier: v.optional(v.string()),
     /** VENCIMENTO. Quando foi pago de verdade e `paidAt`, abaixo. */
     date: v.string(),
     isPaid: v.boolean(),

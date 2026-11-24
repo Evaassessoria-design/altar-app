@@ -57,11 +57,18 @@ export function AgendaSection({ eventId, eventDate, briefing, team, suppliers }:
         <h2 className="font-semibold flex items-center gap-2">
           <CalendarClock className="size-4 text-primary" /> Agenda do Evento
         </h2>
-        <span className="text-xs text-muted-foreground flex items-center gap-1.5 flex-shrink-0">
-          <span className="hidden sm:inline">Google Agenda</span>
-          <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
-            Em breve
-          </span>
+        {/* ── A PROMESSA QUE SAIU DAQUI ───────────────────────────────────
+            Até 24/11 este canto dizia "Google Agenda · Em breve". Não há
+            OAuth, não há API, não há credencial e não há sincronização —
+            `src/lib/agenda.ts` afirma isso no topo do arquivo, e o
+            `ROADMAP.md` lista a integração em "Não existe". Uma etiqueta de
+            "em breve" que não tem data é promessa que o produto não cumpre, e
+            quem lê acha que é questão de semanas.
+            No lugar dela, o que a agenda É: a consolidação dos horários que a
+            decoradora já preencheu. Isso é informação útil — ensina de onde
+            vem cada linha — e não promete nada. */}
+        <span className="text-xs text-muted-foreground flex-shrink-0 text-right">
+          Montada com os horários que você já preencheu
         </span>
       </div>
 

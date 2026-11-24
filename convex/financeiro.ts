@@ -235,6 +235,8 @@ export const addTransaction = mutation({
     date: v.string(),
     isPaid: v.boolean(),
     notes: v.optional(v.string()),
+    /** A quem ela pagou. Só a despesa tem fornecedor — ver o schema. */
+    supplier: v.optional(v.string()),
     eventId: v.optional(v.id("events")),
     /** Quando o dinheiro entrou/saiu — só faz sentido com `isPaid`. */
     paidAt: v.optional(v.string()),
@@ -285,8 +287,13 @@ export const addTransaction = mutation({
     const comprovantes = args.anexo
       ? [await comprovanteValidado(ctx, args.anexo)]
       : undefined;
-    const { anexo: _anexo, chave: _chave, paidAt, paymentMethod, ...campos } = args;
+    const { anexo: _anexo, chave: _chave, paidAt, paymentMethod, supplier, ...campos } = args;
     const forma = paymentMethod?.trim() || undefined;
+    // Receita não tem fornecedor: do outro lado dela está a cliente, que vem
+    // do evento. Guardar o campo numa receita criaria um dado que nenhuma tela
+    // sabe ler.
+    const fornecedor =
+      args.type === "expense" ? supplier?.trim() || undefined : undefined;
 
     // ── RECEITA DE EVENTO "JÁ RECEBIDA" VIRA UM RECEBIMENTO ───────────────
     // Receita de evento só se baixa por recebimento (ver `exigirBaixaPorRecebimento`).
@@ -310,6 +317,7 @@ export const addTransaction = mutation({
       return ctx.db.insert("transactions", {
         userId: user._id,
         ...campos,
+        supplier: fornecedor,
         amount: valor,
         isPaid: baixa.isPaid,
         paidAt: baixa.paidAt,
@@ -323,6 +331,7 @@ export const addTransaction = mutation({
     return ctx.db.insert("transactions", {
       userId: user._id,
       ...campos,
+      supplier: fornecedor,
       amount: emCentavos(args.amount),
       // Data e forma só valem para o que JÁ foi pago: num pendente seriam a
       // tela afirmando um pagamento que não aconteceu.
@@ -344,6 +353,8 @@ export const updateTransaction = mutation({
     date: v.optional(v.string()),
     isPaid: v.optional(v.boolean()),
     notes: v.optional(v.string()),
+    /** `null` limpa o fornecedor; ausente não mexe (lib/limparCampos.ts). */
+    supplier: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
     const user = await requireUser(ctx);
@@ -374,7 +385,14 @@ export const updateTransaction = mutation({
       comRecebimentos && fields.amount !== undefined
         ? baixaDerivada({ ...tx, amount: fields.amount })
         : null;
-    await ctx.db.patch(id, baixa ? { ...fields, isPaid: baixa.isPaid, paidAt: baixa.paidAt } : fields);
+    // `limparCampos` traduz a convenção do produto para a do banco: `null`
+    // significa "apague este campo" e ausente significa "não mexa". Sem isto,
+    // um `null` de fornecedor seria recusado pelo validador da tabela.
+    const paraGravar = limparCampos(fields);
+    await ctx.db.patch(
+      id,
+      baixa ? { ...paraGravar, isPaid: baixa.isPaid, paidAt: baixa.paidAt } : paraGravar,
+    );
   },
 });
 
@@ -1109,7 +1127,13 @@ export const extratoPagina = query({
           paymentMethod: t.paymentMethod,
           eventId: t.eventId as string | undefined,
           temComprovante: (t.comprovantes?.length ?? 0) > 0,
-          fornecedor: compra && compra.userId === user._id ? compra.supplier?.trim() || undefined : undefined,
+          // O que ela digitou no lançamento manda; a compra que o gerou é o
+          // caminho de volta, para a despesa que nasceu de lá.
+          fornecedor:
+            t.supplier?.trim() ||
+            (compra && compra.userId === user._id
+              ? compra.supplier?.trim() || undefined
+              : undefined),
           recebimentos: (t.recebimentos ?? []).map((r) => ({
             id: r.id,
             valor: r.valor,

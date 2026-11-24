@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { buildAgenda, parseTime } from "./agenda";
 
@@ -225,5 +226,40 @@ describe("buildAgenda — estado vazio e ausências", () => {
     const agenda = buildAgenda({ briefing: {}, team: [], suppliers: [] });
     expect(agenda.onTheDay).toHaveLength(0);
     expect(agenda.before).toHaveLength(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A TELA NÃO PROMETE INTEGRAÇÃO QUE NÃO EXISTE
+//
+// A Agenda do evento exibia "Google Agenda · Em breve" desde antes do beta.
+// Não há OAuth, API, credencial nem sincronização em lugar nenhum do projeto —
+// o topo de `src/lib/agenda.ts` diz isso, e o `ROADMAP.md` lista a integração
+// em "Não existe". "Em breve" sem data é promessa que não se cumpre.
+//
+// Este guarda não proíbe construir a integração: proíbe ANUNCIAR antes.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("a agenda não anuncia o que não tem", () => {
+  // A fonte SEM comentário. O comentário no lugar da etiqueta EXPLICA a
+  // etiqueta que saiu — e cita o texto dela. Um guarda que lê a prosa acusaria
+  // a própria explicação; é a armadilha que este repositório já pisou várias
+  // vezes, sempre com comentário de bloco JSX (`{/* … */}`), que não começa
+  // com `//` nem com `*`.
+  const TELA = readFileSync(
+    "src/pages/app/events/[id]/_components/agenda-section.tsx",
+    "utf-8",
+  )
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
+    .join("\n");
+
+  it("não existe etiqueta de 'Em breve' na agenda", () => {
+    expect(TELA).not.toContain("Em breve");
+  });
+
+  it("e a agenda continua dizendo de onde vêm os horários", () => {
+    expect(TELA).toContain("horários que você já preencheu");
   });
 });

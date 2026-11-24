@@ -133,7 +133,7 @@ describe("pendências de reunião no painel", () => {
     expect(stats.pendenciasDeReuniao[0].atrasada).toBe(true);
     // Sem prazo vai para o fim da fila — não para o meio, que é onde ninguém
     // olha — e NÃO é atraso: ausência de prazo não é prazo perdido.
-    const semPrazo = stats.pendenciasDeReuniao.at(-1)!;
+    const semPrazo = stats.pendenciasDeReuniao[stats.pendenciasDeReuniao.length - 1];
     expect(semPrazo.texto).toBe("Sem prazo combinado");
     expect(semPrazo.prazo).toBeUndefined();
     expect(semPrazo.atrasada).toBe(false);

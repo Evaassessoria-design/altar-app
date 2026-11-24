@@ -98,7 +98,6 @@ Funções que existem, são testadas e ninguém consegue chamar pelo aplicativo:
 - Ficha técnica: `limparReceita`. Apagar TODAS as linhas da receita e salvar já
   esvazia o item; o que `limparReceita` faz a mais é também soltar a
   procedência (`compositionId`)
-- Notificações: `generateMyAlerts`
 - *(Saiu: `asaas.getCustomerPortalUrl` foi REMOVIDO. Era uma action pública sem
   guarda e sem chamador, que montava a URL do portal a partir de um id vindo do
   navegador. Quando o portal do assinante ganhar tela, ele nasce com
@@ -109,6 +108,11 @@ Saiu desta lista porque foi REMOVIDO: `supplierCatalog.get` — quando
 continuou sem chamador. Query pública que ninguém chama é superfície que
 ninguém revisa. *(A rodada anterior registrou aqui que ele tinha ganhado tela;
 não tinha. A correção é esta linha.)*
+
+Saiu porque ganhou caminho na tela: `notifications.generateMyAlerts` — o sino
+a chama na primeira abertura, uma vez por montagem. O cron das 8h UTC continua
+sendo a varredura de todo mundo; esta é só a de quem acabou de entrar e não
+pode esperar até amanhã.
 
 Saíram porque ganharam caminho na tela: `acervo.reservar` e
 `acervo.disponibilidade` ("Reservar peça", no acervo do evento),
@@ -125,8 +129,12 @@ O mapa completo, com evidência, impacto e esforço de cada um, está em
 - **Multiempresa.** O modelo é por usuário; a migração para multi-tenant foi
   revertida antes de virar produto.
 - **Planos, cupons, convites.** Existe um preço e uma assinatura.
-- **Integração com Google Agenda.** A tela diz "Em breve" e o módulo
-  `src/lib/agenda.ts` afirma no topo que não há OAuth, API nem sincronização.
+- **Integração com Google Agenda.** O módulo `src/lib/agenda.ts` afirma no topo
+  que não há OAuth, API nem sincronização. A tela **não promete mais**: o selo
+  "Em breve" saiu (era promessa sem data, no ar desde agosto) e deu lugar ao que
+  a Agenda realmente é — montada com os horários que ela já preencheu.
+  `src/lib/agenda.test.ts` trava o texto para a promessa não voltar por
+  descuido.
 - **Envio externo pela Central.** O número comercial não está integrado; o
   portão de saída recusa por construção.
 - **Aplicativo nativo.** É um PWA.

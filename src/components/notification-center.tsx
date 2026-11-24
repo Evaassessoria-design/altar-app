@@ -63,6 +63,18 @@ export function NotificationCenter() {
   const markRead = useMutation(api.notifications.markRead);
   const markAllRead = useMutation(api.notifications.markAllRead);
   const remove = useMutation(api.notifications.remove);
+  const gerarMeusAvisos = useMutation(api.notifications.generateMyAlerts);
+
+  // A varredura que enche o sino roda uma vez por dia, às 5h da manhã
+  // (`crons.ts`). Quem cria a conta às 10h, cadastra o casamento de sábado e
+  // abre o sino vê um sino VAZIO — e conclui que o aviso não existe. Esta
+  // mutation já era feita para isso ("so the current user can trigger their
+  // own alerts immediately") e não tinha quem a chamasse.
+  //
+  // Ela não duplica: cada aviso confere se já existe antes de inserir. Roda uma
+  // vez por montagem do componente, na PRIMEIRA abertura do sino — não a cada
+  // render, e não ao carregar a página de quem nem olhou o sino.
+  const jaGerou = useRef(false);
 
   // Close on outside click
   useEffect(() => {
@@ -90,7 +102,15 @@ export function NotificationCenter() {
     <div className="relative" ref={panelRef}>
       {/* Bell button */}
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          setOpen((o) => !o);
+          if (!jaGerou.current) {
+            jaGerou.current = true;
+            // Sem `await`: o painel abre na hora e os avisos aparecem quando
+            // a consulta reativa os trouxer. Falha aqui não pode travar o sino.
+            void gerarMeusAvisos({}).catch(() => {});
+          }
+        }}
         className="relative p-2 rounded-lg hover:bg-accent transition-colors cursor-pointer"
         aria-label="Notificações"
       >

@@ -204,6 +204,31 @@ function avaliarPlanta(f: FatosDaJornada["planta"]): Avaliacao {
   return { status: "nao_iniciado", detalhe: "Nenhuma planta gerada" };
 }
 
+/**
+ * A rota de cada etapa, para quem precisa SÓ do caminho e não da avaliação.
+ *
+ * Existe para a barra de telas do evento poder ser conferida contra a Jornada:
+ * `src/lib/telas-do-evento.test.ts` prova que nenhuma etapa com rota ficou
+ * fora da barra. Sem isso, uma etapa nova nasceria inalcançável — foi
+ * exatamente o que aconteceu com o Layout do salão na integração de novembro,
+ * e o que custou uma rodada para descobrir.
+ *
+ * Vazia significa "não tem tela própria": o contrato vive na capa do evento.
+ */
+export const ROTA_DA_ETAPA: Record<ChaveDaEtapa, string> = {
+  briefing: "briefing",
+  comercial: "orcamento",
+  contrato: "",
+  inspiracoes: "fotos",
+  fornecedores: "fornecedores",
+  ficha: "ficha-tecnica",
+  acervo: "acervo",
+  projeto: "projeto",
+  layout: "layout",
+  croqui: "planta",
+  planta: "planta",
+};
+
 const DEFINICAO: Record<ChaveDaEtapa, { rotulo: string; rota: string; dependeDe?: ChaveDaEtapa }> = {
   briefing: { rotulo: "Briefing", rota: "briefing" },
   comercial: { rotulo: "Orçamento e proposta", rota: "orcamento" },

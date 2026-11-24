@@ -37,6 +37,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet.tsx";
 import { NotificationCenter } from "@/components/notification-center.tsx";
+import { BarraDoEvento } from "@/components/barra-do-evento.tsx";
 import { useLastSeen } from "@/hooks/use-last-seen.ts";
 import { OnboardingModal } from "@/components/onboarding-modal.tsx";
 import { ErrorBoundary } from "@/components/error-boundary.tsx";
@@ -315,6 +316,13 @@ function AppLayoutInner() {
             <NotificationCenter />
           </div>
         </header>
+
+        {/* A barra de telas do evento, FORA do `Suspense` e antes do
+            conteúdo: ela é só caminho (nenhuma consulta), então pode aparecer
+            enquanto a tela ainda carrega — que é justamente quando a pessoa
+            já sabe para onde quer ir depois. Decide sozinha se aparece, pelo
+            endereço (ver components/barra-do-evento.tsx). */}
+        <BarraDoEvento />
 
         <main className="flex-1 overflow-y-auto pb-20 md:pb-6">
           {/* Estado de cobrança, FORA do `Suspense` da tela: uma conta vencida

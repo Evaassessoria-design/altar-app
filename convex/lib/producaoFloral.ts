@@ -48,6 +48,29 @@ export function rotuloDaOrigem(origem: string | undefined): string | null {
 }
 
 /**
+ * O detalhamento de uma fatia da linha consolidada, em texto — "branca ·
+ * natural", "rosê", "permanente".
+ *
+ * Mora aqui porque é o MESMO vocabulário da ficha do florista (cor e origem
+ * nasceram nela), e porque a tela da Ficha Técnica e o PDF precisam dizer a
+ * mesma coisa: duas formatações divergiriam na primeira mudança de rótulo.
+ *
+ * `null` quando não há nada a dizer — e aí quem chama não desenha fatia
+ * nenhuma, em vez de desenhar um rótulo vazio. Ausência de cor NÃO é "cor
+ * não definida" inventada aqui: quem decide esse texto é a tela, que sabe se
+ * existe outra fatia com cor para contrastar.
+ */
+export function detalheDaVariacao(variacao: {
+  cor: string | null;
+  origem: string | null;
+}): string | null {
+  const partes = [variacao.cor?.trim() || null, rotuloDaOrigem(variacao.origem ?? undefined)].filter(
+    (p): p is string => Boolean(p),
+  );
+  return partes.length ? partes.join(" · ") : null;
+}
+
+/**
  * As duas quantidades que o florista precisa ler juntas, e que a decoradora
  * hoje calcula de cabeça:
  *

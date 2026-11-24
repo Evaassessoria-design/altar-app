@@ -26,6 +26,7 @@ import {
   textoDaConta,
   type SituacaoDaCobertura,
 } from "@/convex/lib/fichaTecnica.ts";
+import { detalheDaVariacao } from "@/convex/lib/producaoFloral.ts";
 import { metaDoTipo, tipoEfetivo } from "@/convex/lib/materiais.ts";
 import { resumoVisivel } from "@/lib/ficha-cobertura.ts";
 import { ReceitaDialog } from "./_components/receita-dialog.tsx";
@@ -66,6 +67,8 @@ function LinhaConsolidada({
     sugerido: number;
     sugeridoOperacional: number;
     origens: { composicao: string; area: string; ambiente?: string; unidades: number; porUnidade: number; necessario: number; distribuido?: boolean }[];
+    /** Cor × natural/permanente da MESMA linha. Vazia = não distingue nada. */
+    variacoes: { cor: string | null; origem: string | null; necessario: number }[];
     cobertura: {
       necessario: number;
       comprado: number;
@@ -164,6 +167,29 @@ function LinhaConsolidada({
           <p className="mt-1 text-xs text-muted-foreground">
             Inclui {linha.margemPercentual}% de margem de segurança
           </p>
+        )}
+
+        {/* ── A MESMA FLOR, EM CORES DIFERENTES ─────────────────────────────
+            "100 hastes de rosa" é o número da compra e está certo. Na banca
+            ela precisa saber que são 40 brancas e 60 rosê — e isso estava só
+            na ficha do florista. A soma das fatias é o "Precisa"; a margem
+            não é repartida, porque é da linha inteira. */}
+        {linha.variacoes.length > 0 && (
+          <div className="mt-1.5 flex items-center gap-x-3 gap-y-1 flex-wrap text-xs">
+            {linha.variacoes.map((v, i) => {
+              const detalhe = detalheDaVariacao(v);
+              return (
+                <span key={`${v.cor ?? ""}|${v.origem ?? ""}|${i}`} className="text-muted-foreground">
+                  <span className="font-medium text-foreground">
+                    {quantidadeTexto(v.necessario, linha.unidade)}
+                  </span>{" "}
+                  {/* Sem cor nem origem informadas, a tela diz que não sabe —
+                      e não escolhe uma cor por ela. */}
+                  {detalhe ?? "sem cor definida"}
+                </span>
+              );
+            })}
+          </div>
         )}
 
         {/* ── A CONTA, EM QUATRO NÚMEROS ────────────────────────────────────

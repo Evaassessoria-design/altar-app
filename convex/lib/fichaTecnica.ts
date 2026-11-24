@@ -321,6 +321,42 @@ export type LinhaConsolidada = {
   /** Custo estimado — só quando TODAS as origens tinham custo de referência. */
   custoEstimado: number | null;
   origens: OrigemDaNecessidade[];
+  /**
+   * O MESMO material pedido em cores (ou origens) diferentes.
+   *
+   * "100 hastes de rosa" é o número da COMPRA e está certo — mas a decoradora
+   * chega na banca e precisa saber que são 40 brancas naturais e 60 rosê
+   * permanentes. Ela sabia: está na ficha do florista
+   * (`producaoFloral.resumoDeMateriais`, que agrupa por variedade, cor e
+   * origem). Quem compra lê a lista da Ficha Técnica, e nela a distinção
+   * sumia na soma.
+   *
+   * ── POR QUE NÃO ENTROU NA CHAVE ───────────────────────────────────────────
+   * Separar a linha por cor mudaria `chaveDeConsolidacao`, e com ela a
+   * cobertura, as compras vinculadas e o custo de TODO evento já cadastrado:
+   * uma compra de "rosa" feita antes desta rodada deixaria de cobrir a linha
+   * que virou duas. A quantidade a comprar continua sendo uma só — é a mesma
+   * rosa, no mesmo fornecedor, na mesma unidade. O que faltava era o
+   * detalhamento, e detalhamento é derivado.
+   *
+   * VAZIA quando não há nada a dizer: nenhuma receita informou cor nem origem,
+   * ou todas informaram a mesma. Ausência de cor não é uma cor.
+   */
+  variacoes: VariacaoDoMaterial[];
+};
+
+/**
+ * Uma fatia da linha consolidada: o quanto deste material é desta cor e desta
+ * origem. A soma das fatias é sempre o `necessario` da linha — nunca o
+ * sugerido, porque a margem é da linha inteira e repartir margem por cor
+ * inventaria arredondamento em cada fatia.
+ */
+export type VariacaoDoMaterial = {
+  /** Cor pedida na receita. `null` = não informada; a tela diz "cor não definida". */
+  cor: string | null;
+  /** `"natural"` | `"permanente"`. `null` = não informada. */
+  origem: string | null;
+  necessario: number;
 };
 
 /**
@@ -336,6 +372,9 @@ export function consolidarMateriais(
   ehObrigacao: (item: { projectScope?: string; situacao?: string }) => boolean,
 ): LinhaConsolidada[] {
   const porChave = new Map<string, LinhaConsolidada>();
+  // Cor × origem de cada linha, somada à parte. Fica fora de `LinhaConsolidada`
+  // enquanto soma para que o campo público só exista quando tiver o que dizer.
+  const variacoesPorChave = new Map<string, Map<string, VariacaoDoMaterial>>();
 
   for (const composicao of composicoes) {
     // Referência visual e "não incluso" não consomem material nenhum: são
@@ -354,6 +393,23 @@ export function consolidarMateriais(
       // conversão que ninguém informou.
       const chave = chaveDeConsolidacao({ ...componente, unidade });
       const necessario = necessidadeDoComponente(composicao, componente);
+
+      // A fatia de cor/origem é somada para TODA linha; no fecho, as que não
+      // distinguem nada são descartadas.
+      const cor = componente.cor?.trim() || null;
+      const origemDaFlor = componente.origem ?? null;
+      const chaveDaVariacao = `${normalizeName(cor ?? "")}|${origemDaFlor ?? ""}`;
+      let variacoes = variacoesPorChave.get(chave);
+      if (!variacoes) {
+        variacoes = new Map();
+        variacoesPorChave.set(chave, variacoes);
+      }
+      const fatia = variacoes.get(chaveDaVariacao);
+      if (fatia) {
+        fatia.necessario = quantidadeLimpa(fatia.necessario + necessario);
+      } else {
+        variacoes.set(chaveDaVariacao, { cor, origem: origemDaFlor, necessario });
+      }
 
       const origem: OrigemDaNecessidade = {
         composicaoId: composicao._id,
@@ -411,6 +467,7 @@ export function consolidarMateriais(
             ? quantidadeLimpa(necessario * componente.custoReferencia)
             : null,
         origens: [origem],
+        variacoes: [], // preenchido no fecho, quando se sabe se distingue algo
       });
     }
   }
@@ -420,6 +477,20 @@ export function consolidarMateriais(
   for (const linha of porChave.values()) {
     linha.sugerido = sugeridoParaProvidenciar(linha.necessario, linha.margemPercentual);
     linha.sugeridoOperacional = sugeridoOperacional(linha.sugerido, linha.unidade);
+
+    const fatias = [...(variacoesPorChave.get(linha.chave)?.values() ?? [])];
+    // Uma fatia só, e sem cor nem origem informadas, não é detalhamento: é a
+    // própria linha repetida. A tela não ganharia nada e passaria a sugerir
+    // que existe uma distinção que ninguém fez.
+    const distingueAlgo =
+      fatias.length > 1 || fatias.some((f) => f.cor !== null || f.origem !== null);
+    linha.variacoes = distingueAlgo
+      ? fatias.sort(
+          (a, b) =>
+            (a.cor ?? "").localeCompare(b.cor ?? "", "pt-BR") ||
+            (a.origem ?? "").localeCompare(b.origem ?? ""),
+        )
+      : [];
   }
 
   return [...porChave.values()].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));

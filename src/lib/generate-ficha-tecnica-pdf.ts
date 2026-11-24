@@ -6,6 +6,7 @@ import { formatEventDayOnly } from "./event-date.ts";
 // Mesma função que a tela da ficha, o Caderno e a Folha de Carregamento
 // usam. Era aqui que morava a segunda cópia da regra de ambiente.
 import { agruparPorAmbiente } from "./decoration-project.ts";
+import { detalheDaVariacao } from "@/convex/lib/producaoFloral.ts";
 import {
   consolidarMateriais,
   contaDaLinha,
@@ -226,7 +227,17 @@ export async function generateFichaTecnicaPDF(data: FichaTecnicaPdfData): Promis
       for (const linha of linhas) {
         // Uma linha "necessário/margem/sugerido" ocupa três alturas.
         const temMargem = linha.margemPercentual !== null && linha.margemPercentual > 0;
-        garantirEspaco(temMargem ? 13 : 7);
+        // "100 hastes de rosa" é o número da compra e está certo; na banca ela
+        // precisa saber que são 40 brancas e 60 rosê. Vazio quando a receita
+        // não distingue nada — e aí o papel não inventa uma fatia.
+        const fatias = linha.variacoes
+          .map((v) => {
+            const detalhe = detalheDaVariacao(v);
+            const quanto = quantidadeTexto(v.necessario, linha.unidade);
+            return detalhe ? `${quanto} ${detalhe}` : `${quanto} (sem cor definida)`;
+          })
+          .join("  ·  ");
+        garantirEspaco((temMargem ? 13 : 7) + (fatias ? 4.5 : 0));
 
         doc.setFont("helvetica", "normal");
         doc.setFontSize(9.5);
@@ -252,6 +263,21 @@ export async function generateFichaTecnicaPDF(data: FichaTecnicaPdfData): Promis
           );
           doc.setTextColor(30, 30, 30);
           y += 4.5;
+        }
+
+        if (fatias) {
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(8);
+          doc.setTextColor(110, 110, 110);
+          // Quebra em várias linhas quando a lista de cores é longa: texto
+          // estourando a margem é informação perdida no papel da compra.
+          for (const pedaco of doc.splitTextToSize(fatias, PAGE_W - 2 * MARGIN - 4) as string[]) {
+            garantirEspaco(5);
+            doc.text(pedaco, MARGIN + 2, y);
+            y += 4;
+          }
+          doc.setTextColor(30, 30, 30);
+          y += 0.5;
         }
 
         // A equipe NÃO pode receber instrução falsa de retorno/consumo. Quando

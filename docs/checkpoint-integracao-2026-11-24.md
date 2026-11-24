@@ -19,7 +19,7 @@ Duas linhas de desenvolvimento viviam separadas e agora são uma:
 | Consolidação + Reuniões | `feature/consolidacao-reunioes-15-10` | a reunião dentro do evento, com ata, decisões e pendências |
 | Layout do salão | `feat/layout-2d-3d` | planta 2D editável, visão 3D, biblioteca de peças, modelos e PDF |
 
-Mais três melhorias feitas nesta rodada (seção 4).
+Mais quatro melhorias feitas nesta rodada (seção 4).
 
 Commits, do mais antigo para o mais novo:
 
@@ -28,6 +28,7 @@ Commits, do mais antigo para o mais novo:
 469614f  feat(painel)       — pendência de reunião no painel
 fe085c4  feat(financeiro)   — fornecedor na despesa à mão; Agenda para de prometer
 8955c8a  feat(sino)         — o aviso não espera até as 5h da manhã
+ec9afa5  feat(ficha)        — a compra diz quantas são brancas e quantas são rosê
 ```
 
 ## 2. Os três conflitos, e por que foram resolvidos assim
@@ -71,11 +72,13 @@ consolidação, 273 funções):
   `layoutSalaoIa.rascunhoPorIa`, `escritorio.comando`
 - **1** tabela nova: `eventLayouts`
 - campos novos, todos opcionais e sem backfill: `transactions.supplier`
+- `LinhaConsolidada.variacoes` é **derivado**, não campo de tabela: não há
+  migração nem backfill para a separação por cor
 
 Nada que exista hoje no DEV deixa de existir. Publicar o backend desta branch
 não pede migração nem apaga dado de ensaio.
 
-## 4. As três melhorias desta rodada
+## 4. As quatro melhorias desta rodada
 
 Critério: coisa que a decoradora percebe no mesmo dia, sem funcionalidade nova
 para aprender.
@@ -104,6 +107,18 @@ sábado e abria o sino via vazio. `notifications.generateMyAlerts` existia para
 exatamente isso e não tinha um único chamador; agora o sino a chama na
 primeira abertura. 5 testes adversariais (`convex/notifications.sino.test.ts`).
 
+**A lista de compras separada por cor × natural/permanente** (`ec9afa5`).
+"100 hastes de rosa" é o número certo da compra e insuficiente na banca: são
+40 brancas naturais do altar e 60 rosê permanentes das mesas. A ficha do
+florista sempre soube separar; quem compra lê a lista consolidada da Ficha
+Técnica, e nela a distinção sumia na soma. A chave de consolidação **não**
+mudou — separar a linha por cor reclassificaria cobertura, compras vinculadas
+e custo de todo evento já cadastrado. O detalhamento é derivado
+(`LinhaConsolidada.variacoes`), somado no mesmo laço, sem leitura nova, e
+aparece na tela e no PDF com o mesmo texto. A soma das fatias é o `necessario`,
+nunca o sugerido: margem é da linha inteira. Fatia só existe quando distingue
+algo. 9 testes (`convex/lib/fichaTecnica.variacoes.test.ts`).
+
 No mesmo commit do financeiro: a Agenda do evento parou de prometer
 "Google Agenda · Em breve". A promessa não tem data e estava na tela desde
 agosto; agora o selo diz o que a Agenda realmente é — montada com os horários
@@ -113,7 +128,7 @@ promessa não volte por descuido.
 ## 5. Validação
 
 ```
-pnpm test                                  6.400 testes, 287 arquivos — passou
+pnpm test                                  6.409 testes, 288 arquivos — passou
 npx tsc -p tsconfig.app.json --noEmit      limpo
 npx tsc -p convex/tsconfig.json --noEmit   limpo
 pnpm lint                                  0 erros, 8 avisos (pré-existentes)
@@ -138,10 +153,16 @@ abaixo deve ser lido como aprovado em tela.
 Os dois são projeto, não ajuste — cada um muda regra de posse ou de cobrança e
 não cabe num candidato que vai para PROD.
 
-**Ficou na fila** (nada iniciado): lista de compras consolidada separada por
-cor × natural/permanente; peças do Acervo na biblioteca do Layout; anexo por
-reunião (precisa de upload com guarda de acesso e cascata de exclusão — é
-médio, não pequeno).
+**Ficou na fila** (nada iniciado, e por quê):
+
+- *Peças do Acervo na biblioteca do Layout.* A biblioteca de peças é código
+  (sem tabela), e o Acervo não guarda largura e profundidade das peças. Jogar
+  a cadeira do galpão na planta com tamanho padrão desenharia uma planta que
+  mente sobre o espaço — o problema que o Layout existe para resolver. Pede
+  primeiro medida no Acervo.
+- *Anexo por reunião.* Precisa de upload com guarda de acesso e de cascata na
+  exclusão (arquivo órfão é classe de defeito que este repositório já pagou).
+  É médio, não pequeno, e os anexos continuam na Pasta do Evento.
 
 ## 7. Para publicar
 

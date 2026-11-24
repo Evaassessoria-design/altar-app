@@ -153,6 +153,65 @@ export const getDashboardStats = query({
       }
     }
 
+    // ── PENDÊNCIAS DE REUNIÃO ────────────────────────────────────────────────
+    // "A noiva manda a lista de convidados até sexta" fica anotada na reunião,
+    // e só quem abre AQUELA reunião vê. O dia da decoradora começa aqui: sem
+    // isto, a pendência que ela mesma escreveu some de vista até alguém
+    // lembrar dela.
+    //
+    // UMA leitura, pelo índice `by_user_and_data` — não uma por evento. A
+    // janela olha para TRÁS (180 dias) porque pendência nasce de reunião que
+    // já aconteceu, e para frente sem limite, porque reunião agendada também
+    // pode trazer pendência combinada por WhatsApp.
+    const DESDE = dataEmDias(-180, now);
+    const TETO_DE_REUNIOES = 500;
+    const reunioesLidas = await ctx.db
+      .query("reunioes")
+      .withIndex("by_user_and_data", (q) => q.eq("userId", user._id).gte("data", DESDE))
+      .take(TETO_DE_REUNIOES + 1);
+    const haMaisReunioes = reunioesLidas.length > TETO_DE_REUNIOES;
+
+    const eventosPorId = new Map(allEvents.map((e) => [e._id as string, e]));
+    const pendenciasDeReuniao: {
+      eventId: Id<"events">;
+      eventName: string;
+      reuniaoId: Id<"reunioes">;
+      reuniao: string;
+      texto: string;
+      responsavel?: string;
+      prazo?: string;
+      atrasada: boolean;
+    }[] = [];
+    for (const r of reunioesLidas.slice(0, TETO_DE_REUNIOES)) {
+      // Reunião cancelada não cobra nada de ninguém.
+      if (r.situacao === "cancelada") continue;
+      const ev = eventosPorId.get(r.eventId as string);
+      // Evento cancelado ou realizado não entra: o painel é do que exige algo.
+      if (!ev || ev.status === "cancelled" || ev.status === "completed") continue;
+      for (const p of r.pendencias ?? []) {
+        if (p.feita) continue;
+        pendenciasDeReuniao.push({
+          eventId: ev._id,
+          eventName: ev.name,
+          reuniaoId: r._id,
+          reuniao: r.titulo,
+          texto: p.texto,
+          responsavel: p.responsavel,
+          prazo: p.prazo,
+          // Sem prazo NÃO é atrasada: é pendência sem prazo, e a tela diz isso.
+          atrasada: p.prazo !== undefined && p.prazo < hoje,
+        });
+      }
+    }
+    // Prazo mais apertado primeiro; sem prazo por último — nunca no meio, que
+    // é onde ninguém olha.
+    pendenciasDeReuniao.sort((a, b) => {
+      if (a.prazo === b.prazo) return 0;
+      if (a.prazo === undefined) return 1;
+      if (b.prazo === undefined) return -1;
+      return a.prazo.localeCompare(b.prazo);
+    });
+
     return {
       totalEvents: allEvents.length,
       upcomingCount: upcoming.length,
@@ -170,6 +229,13 @@ export const getDashboardStats = query({
       ate30Dias: in30Days,
       checklistPorEvento,
       comprasPorEvento,
+      // Pendências de reunião em aberto. O total é o de verdade; a lista é a
+      // que cabe no cartão.
+      pendenciasDeReuniaoTotal: pendenciasDeReuniao.length,
+      pendenciasDeReuniaoAtrasadas: pendenciasDeReuniao.filter((p) => p.atrasada).length,
+      pendenciasDeReuniao: pendenciasDeReuniao.slice(0, 6),
+      /** Bateu o teto de leitura: a tela não pode afirmar que são todas. */
+      haMaisReunioes,
     };
   },
 });

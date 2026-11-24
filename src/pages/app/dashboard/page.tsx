@@ -16,6 +16,7 @@ import {
   BarChart3,
   Sparkles,
   AlertCircle,
+  Handshake,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -434,6 +435,69 @@ export default function Dashboard() {
           )}
         </div>
       </motion.div>
+
+      {/* ── PENDÊNCIAS DE REUNIÃO ──────────────────────────────────────────
+          O que ela combinou com a cliente e anotou na ata. Ficava só dentro
+          daquela reunião: quem não abrisse a reunião não sabia que a lista de
+          convidados tinha prazo. Aparece antes de "o que falta fazer" porque é
+          compromisso com outra pessoa, e não tarefa interna.
+          A linha só existe quando há pendência — painel vazio não vira cartão
+          vazio. */}
+      {stats !== undefined && stats.pendenciasDeReuniaoTotal > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, delay: 0.3, ease: "easeOut" }}
+          className="bg-card rounded-xl border border-border overflow-hidden"
+        >
+          <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 min-w-0">
+              <Handshake className="size-4 text-primary" />
+              <h2 className="font-semibold">Combinado nas reuniões</h2>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {stats.pendenciasDeReuniaoTotal}{" "}
+              {stats.pendenciasDeReuniaoTotal === 1 ? "pendência" : "pendências"}
+              {stats.pendenciasDeReuniaoAtrasadas > 0
+                ? ` · ${stats.pendenciasDeReuniaoAtrasadas} com prazo vencido`
+                : ""}
+              {stats.haMaisReunioes ? " (há mais reuniões do que o painel leu)" : ""}
+            </p>
+          </div>
+          <div className="divide-y divide-border">
+            {stats.pendenciasDeReuniao.map((p) => (
+              <Link
+                key={`${p.reuniaoId}-${p.texto}`}
+                to={`/eventos/${p.eventId}/reunioes`}
+                className="flex items-start gap-3 px-5 py-3 hover:bg-accent/50 transition-colors cursor-pointer"
+              >
+                <div className="mt-0.5 size-4 rounded-sm border-2 border-muted-foreground/30 flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{p.texto}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {p.eventName} · {p.reuniao}
+                    {p.responsavel ? ` · ${p.responsavel}` : ""}
+                    {/* "Sem prazo" é informação, não ausência: a tela nunca
+                        deixa em branco o que ela sabe que não foi combinado. */}
+                    {p.prazo ? ` · até ${formatEventDateShort(p.prazo)}` : " · sem prazo"}
+                  </p>
+                </div>
+                {p.atrasada && (
+                  <span className="ml-auto flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                    vencida
+                  </span>
+                )}
+              </Link>
+            ))}
+          </div>
+          {stats.pendenciasDeReuniaoTotal > stats.pendenciasDeReuniao.length && (
+            <p className="px-5 py-2.5 text-xs text-muted-foreground border-t border-border">
+              Mostrando {stats.pendenciasDeReuniao.length} de{" "}
+              {stats.pendenciasDeReuniaoTotal} — as de prazo mais apertado.
+            </p>
+          )}
+        </motion.div>
+      )}
 
       {/* Urgent tasks + Quick actions */}
       <div className="grid md:grid-cols-2 gap-4">

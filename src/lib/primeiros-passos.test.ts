@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { primeirosPassos, resumoDoProgresso } from "./primeiros-passos.ts";
+import {
+  avisoDosPrimeirosPassos,
+  primeirosPassos,
+  resumoDoProgresso,
+} from "./primeiros-passos.ts";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // OS PRIMEIROS PASSOS — três defeitos, três travas
@@ -10,6 +14,9 @@ import { primeirosPassos, resumoDoProgresso } from "./primeiros-passos.ts";
 //    exigido lia "2 de 3", 67%, e um botão de continuar — para sempre.
 // 3. "Continuar configuração" reabria o modal de boas-vindas no passo UM, com
 //    o nome do estúdio em branco por cima do que já estava salvo.
+// 4. Com tudo pronto, o cartão ainda pedia um "Dispensar": um toque para sair
+//    de uma tarefa já terminada, em TODA conta nova. Agora ele não aparece —
+//    e nada foi gravado para isso, porque concluído é derivável.
 // ═════════════════════════════════════════════════════════════════════════════
 
 const carregado = { studioName: "Ateliê Eva", eventos: 1, equipe: 1 };
@@ -124,6 +131,70 @@ describe("a frase de progresso", () => {
   });
 });
 
+describe("avisoDosPrimeirosPassos — as quatro razões para não aparecer", () => {
+  const faltandoEvento = { studioName: "Eva Decor", eventos: 0, equipe: 0 };
+  const tudoPronto = { studioName: "Eva Decor", eventos: 1, equipe: 0 };
+
+  it("desenha enquanto falta um passo exigido", () => {
+    const r = avisoDosPrimeirosPassos(faltandoEvento, {
+      onboardingCompleted: false,
+      dispensado: false,
+    });
+    expect(r?.proximo?.id).toBe("event");
+  });
+
+  it("não desenha quando o essencial está pronto, mesmo sem equipe", () => {
+    // O passo opcional em aberto NÃO segura o cartão na tela.
+    expect(
+      avisoDosPrimeirosPassos(tudoPronto, { onboardingCompleted: false, dispensado: false }),
+    ).toBeNull();
+  });
+
+  it("não desenha para quem já dispensou — antes ou agora", () => {
+    expect(
+      avisoDosPrimeirosPassos(faltandoEvento, { onboardingCompleted: true, dispensado: false }),
+    ).toBeNull();
+    expect(
+      avisoDosPrimeirosPassos(faltandoEvento, { onboardingCompleted: false, dispensado: true }),
+    ).toBeNull();
+  });
+
+  it("não desenha enquanto o sistema não sabe", () => {
+    expect(
+      avisoDosPrimeirosPassos(
+        { studioName: "Eva Decor", eventos: undefined, equipe: 0 },
+        { onboardingCompleted: false, dispensado: false },
+      ),
+    ).toBeNull();
+    // `onboardingCompleted` indefinido é usuário ainda carregando: não é
+    // "false" e não autoriza desenhar por omissão... mas também não esconde
+    // um cartão legítimo, porque o progresso é quem manda.
+    expect(
+      avisoDosPrimeirosPassos(faltandoEvento, {
+        onboardingCompleted: undefined,
+        dispensado: false,
+      })?.proximo?.id,
+    ).toBe("event");
+  });
+
+  it("apagar o único evento traz o cartão de volta — é a verdade", () => {
+    // Consequência aceita de propósito de derivar em vez de gravar: quem apaga
+    // o evento de teste da demonstração realmente não tem evento nenhum.
+    expect(
+      avisoDosPrimeirosPassos(
+        { studioName: "Eva Decor", eventos: 0, equipe: 0 },
+        { onboardingCompleted: false, dispensado: false },
+      )?.proximo?.id,
+    ).toBe("event");
+  });
+
+  it("nada é gravado para concluir: não existe mutation de carimbo", () => {
+    const fonte = readFileSync("src/lib/primeiros-passos.ts", "utf-8");
+    expect(fonte).not.toContain("useMutation");
+    expect(fonte).not.toContain("api.");
+  });
+});
+
 describe("o aviso não desenha o que não sabe", () => {
   const fonte = readFileSync("src/components/onboarding-banner.tsx", "utf-8");
 
@@ -141,13 +212,26 @@ describe("o aviso não desenha o que não sabe", () => {
     expect(dashboard).not.toContain("onOpenOnboarding");
   });
 
-  it("com o essencial pronto, o botão é dispensar — e não o passo opcional", () => {
-    // Continuar oferecendo "Abrir equipe" a quem trabalha sozinha é um aviso
-    // que não sai, e aviso que não sai ensina a ignorar aquele pedaço da tela.
-    // O passo opcional continua clicável na lista.
-    expect(fonte).toContain("{progresso.completo ? (");
-    const depois = fonte.slice(fonte.indexOf("{progresso.completo ? ("));
-    expect(depois.slice(0, depois.indexOf(") : ("))).toContain("Dispensar");
+  it("com o essencial pronto, o cartão NÃO aparece — nem para ser dispensado", () => {
+    // Esta regra substitui a anterior, e por isso o histórico fica escrito:
+    //
+    // antes, com tudo pronto, o cartão dizia "Configuração concluída" e o
+    // botão virava "Dispensar". Isso já era melhor do que continuar oferecendo
+    // "Abrir equipe" a quem trabalha sozinha (aviso que não sai ensina a
+    // ignorar aquele pedaço da tela) — mas ainda cobrava um toque para sair de
+    // uma tarefa que ela já tinha terminado.
+    //
+    // Agora quem decide é `avisoDosPrimeirosPassos`, e o componente não tem
+    // regra: não há ramo de `completo` no desenho, e nenhum botão de dispensar
+    // fora do X.
+    expect(fonte).toContain("avisoDosPrimeirosPassos(");
+    expect(fonte).not.toContain("progresso.completo");
+    expect(fonte).not.toContain("Configuração concluída");
+  });
+
+  it("o X continua existindo enquanto AINDA falta algo — dispensar é decisão dela", () => {
+    expect(fonte).toContain("completeOnboarding");
+    expect(fonte).toContain('title="Dispensar"');
   });
 
   it("o modal continua existindo para a primeira entrada", () => {

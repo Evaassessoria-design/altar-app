@@ -6,7 +6,7 @@ import { Check, Sparkles, X } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { cn } from "@/lib/utils.ts";
 import { useState } from "react";
-import { primeirosPassos, resumoDoProgresso } from "@/lib/primeiros-passos.ts";
+import { avisoDosPrimeirosPassos, resumoDoProgresso } from "@/lib/primeiros-passos.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // O AVISO DE PRIMEIROS PASSOS.
@@ -19,6 +19,10 @@ import { primeirosPassos, resumoDoProgresso } from "@/lib/primeiros-passos.ts";
 // único botão reabria o modal de boas-vindas, que recomeça no passo um com os
 // campos em branco: quem já tinha nomeado o estúdio era convidada a nomeá-lo
 // de novo, por cima.
+//
+// E quando não falta mais nada, o cartão simplesmente NÃO APARECE — nem com
+// parabéns, nem com um "Dispensar" para ela apertar. Quem decide isso é
+// `avisoDosPrimeirosPassos`; este arquivo não tem regra.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function OnboardingBanner() {
@@ -28,15 +32,19 @@ export function OnboardingBanner() {
   const completeOnboarding = useMutation(api.users.completeOnboarding);
   const [dismissed, setDismissed] = useState(false);
 
-  if (!user || user.onboardingCompleted || dismissed) return null;
+  if (!user) return null;
 
-  // `null` = ainda carregando. Nada é desenhado: um aviso que aparece dizendo
-  // "0 de 2" e se corrige meio segundo depois ensina a não confiar no número.
-  const progresso = primeirosPassos({
-    studioName: user.studioName,
-    eventos: events?.length,
-    equipe: teamMembers?.length,
-  });
+  // `null` = não desenhar. Pode ser "ainda carregando" (um aviso que aparece
+  // dizendo "0 de 2" e se corrige meio segundo depois ensina a não confiar no
+  // número), pode ser dispensado, e pode ser que não falte mais nada.
+  const progresso = avisoDosPrimeirosPassos(
+    {
+      studioName: user.studioName,
+      eventos: events?.length,
+      equipe: teamMembers?.length,
+    },
+    { onboardingCompleted: user.onboardingCompleted, dispensado: dismissed },
+  );
   if (!progresso) return null;
 
   const encerrar = async () => {
@@ -57,9 +65,8 @@ export function OnboardingBanner() {
           <div className="flex items-center gap-2">
             <Sparkles className="size-4 text-primary flex-shrink-0" />
             <div>
-              <p className="font-semibold text-sm">
-                {progresso.completo ? "Configuração concluída" : "Conclua a configuração inicial"}
-              </p>
+              {/* Sem ternário: o cartão só existe enquanto FALTA algo. */}
+              <p className="font-semibold text-sm">Conclua a configuração inicial</p>
               <p className="text-xs text-muted-foreground">{resumoDoProgresso(progresso)}</p>
             </div>
           </div>
@@ -134,32 +141,19 @@ export function OnboardingBanner() {
           })}
         </div>
 
-        {/* Enquanto falta algo EXIGIDO, o botão leva ao próximo passo — o
-            lugar onde ele acontece, e não de volta ao começo de um formulário
-            já preenchido.
+        {/* O botão leva ao próximo passo — o lugar onde ele acontece, e não
+            de volta ao começo de um formulário já preenchido.
 
-            Assim que o essencial está pronto, o botão vira "Dispensar", mesmo
-            com o passo opcional em aberto. Continuar oferecendo "Abrir equipe"
-            a quem trabalha sozinha é transformar o cartão num aviso que não
-            sai — e um aviso que não sai ensina a ignorar aquele pedaço da
-            tela. O passo opcional continua clicável na lista, para quem
-            quiser. */}
-        {progresso.completo ? (
-          <Button
-            size="sm"
-            variant="secondary"
-            className="cursor-pointer gap-1.5"
-            onClick={() => void encerrar()}
-          >
-            <Check className="size-3.5" />
-            Dispensar
+            Não existe mais o botão "Dispensar" de quando tudo está pronto:
+            nesse caso o cartão não é desenhado. Continuar oferecendo "Abrir
+            equipe" a quem trabalha sozinha transformaria o cartão num aviso
+            que não sai — e um aviso que não sai ensina a ignorar aquele pedaço
+            da tela. O passo opcional continua clicável na lista, para quem
+            quiser, e o X continua dispensando enquanto ainda falta algo. */}
+        {progresso.proximo && (
+          <Button asChild size="sm" className="cursor-pointer gap-1.5">
+            <Link to={progresso.proximo.destino}>{progresso.proximo.acao}</Link>
           </Button>
-        ) : (
-          progresso.proximo && (
-            <Button asChild size="sm" className="cursor-pointer gap-1.5">
-              <Link to={progresso.proximo.destino}>{progresso.proximo.acao}</Link>
-            </Button>
-          )
         )}
       </motion.div>
     </AnimatePresence>

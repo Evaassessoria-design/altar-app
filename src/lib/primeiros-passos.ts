@@ -117,7 +117,50 @@ export function primeirosPassos(sinais: SinaisDoComeco): PrimeirosPassos | null 
   };
 }
 
-/** A frase de progresso. Nunca inventa porcentagem de passo opcional. */
+/**
+ * O QUE O AVISO DEVE DESENHAR — ou `null` para não desenhar nada.
+ *
+ * Quatro razões para não aparecer, e é aqui que elas vivem, juntas, para o
+ * componente não ter regra nenhuma:
+ *
+ *   1. o sistema ainda não sabe (`primeirosPassos` devolveu `null`);
+ *   2. a pessoa dispensou agora, neste carregamento;
+ *   3. a pessoa dispensou antes (`onboardingCompleted` gravado);
+ *   4. **o essencial está pronto.**
+ *
+ * A quarta é a nova, e corrige o último clique que sobrava no começo de toda
+ * conta: com estúdio configurado e primeiro evento criado, o cartão dizia
+ * "Configuração concluída" e ficava na tela esperando um **Dispensar**. Um
+ * aviso que já não pede nada e ainda cobra um toque é tarefa, não ajuda.
+ *
+ * Não ficou gravado nada para isso. "Concluído" é estado DERIVÁVEL — estúdio
+ * com nome e um evento na conta —, e a regra da casa é derivar, não gravar: um
+ * carimbo de "configuração terminada" passaria a existir como segunda verdade,
+ * capaz de discordar dos fatos. O `Dispensar` continua existindo enquanto AINDA
+ * FALTA algo, que é quando dispensar é uma decisão de verdade: "não quero
+ * configurar agora".
+ *
+ * Consequência aceita de propósito: quem apagar o único evento (o de teste da
+ * demonstração, por exemplo) vê o cartão voltar pedindo o primeiro evento. É a
+ * verdade — ela realmente não tem evento nenhum.
+ */
+export function avisoDosPrimeirosPassos(
+  sinais: SinaisDoComeco,
+  estado: { onboardingCompleted: boolean | undefined; dispensado: boolean },
+): PrimeirosPassos | null {
+  if (estado.dispensado || estado.onboardingCompleted === true) return null;
+  const progresso = primeirosPassos(sinais);
+  if (!progresso) return null;
+  return progresso.completo ? null : progresso;
+}
+
+/**
+ * A frase de progresso. Nunca inventa porcentagem de passo opcional.
+ *
+ * O ramo do `completo` continua aqui porque a função responde por QUALQUER
+ * `PrimeirosPassos` — mas o aviso não o alcança mais: completo não desenha
+ * (ver `avisoDosPrimeirosPassos`).
+ */
 export function resumoDoProgresso(p: PrimeirosPassos): string {
   if (p.completo) {
     const opcionaisPendentes = p.passos.filter((s) => s.opcional && !s.feito).length;
